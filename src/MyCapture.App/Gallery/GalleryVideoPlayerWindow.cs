@@ -109,7 +109,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         controls.Children.Add(_playButton);
         controls.Children.Add(_fullScreenButton);
         InitializeFrameCapture(controls);
-        _status.Text = UiText.Get("Text_6E86D1A85620");
+        KoreanWordWrap.Show(_status, UiText.Get("Text_6E86D1A85620"));
         controls.Children.Add(_status);
         controls.Children.Add(_time);
 
@@ -379,7 +379,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         _playing = false;
         _timer.Stop();
         SetStatusPlaying(false);
-        _status.Text = UiText.Get("Text_875917AFD6EF");
+        KoreanWordWrap.Show(_status, UiText.Get("Text_875917AFD6EF"));
     }
 
     private void SetPlayback(bool playing, bool seekTransition = false)

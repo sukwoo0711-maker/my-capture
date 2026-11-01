@@ -42,17 +42,17 @@ internal sealed class UnappliedChangesDialog : Window
         AutomationProperties.SetName(this, UiText.Get("SettingsUx_CloseTitle"));
 
         var panel = new StackPanel { Margin = new Thickness(24) };
-        Heading = new TextBlock
+        Heading = KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Get("SettingsUx_CloseTitle"), FontSize = 20, FontWeight = FontWeights.SemiBold,
+            FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
-        };
+        }, UiText.Get("SettingsUx_CloseTitle"));
         panel.Children.Add(Heading);
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Get("SettingsUx_CloseMessage"), TextWrapping = TextWrapping.Wrap,
+            TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 20),
-        });
+        }, UiText.Get("SettingsUx_CloseMessage")));
 
         var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         ApplyButton = MakeButton("SettingsUx_CloseApply", "Button.Primary", SettingsCloseChoice.Apply);

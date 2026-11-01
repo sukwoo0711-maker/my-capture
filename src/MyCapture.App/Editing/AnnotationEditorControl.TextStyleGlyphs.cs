@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,7 +35,7 @@ internal sealed partial class AnnotationEditorControl
     {
         var letter = new FormattedText("A", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-            18, Brushes.Black, 1);
+            TypeScale.Content.TextStyleGlyph, Brushes.Black, 1);
         Geometry geometry = letter.BuildGeometry(new Point((20 - letter.WidthIncludingTrailingWhitespace) / 2,
             (20 - letter.Height) / 2));
         geometry.Freeze();
@@ -59,7 +60,7 @@ internal sealed partial class AnnotationEditorControl
             var letter = new TextBlock
             {
                 Text = kind == TextStyleGlyphKind.Bold ? "B" : "A",
-                FontFamily = new FontFamily("Segoe UI"), FontSize = kind == TextStyleGlyphKind.Bold ? 18 : 14,
+                FontFamily = new FontFamily("Segoe UI"), FontSize = kind == TextStyleGlyphKind.Bold ? TypeScale.Content.TextStyleGlyph : TypeScale.Body,
                 FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };

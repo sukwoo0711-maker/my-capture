@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Ocr;
 using Xunit;
@@ -62,7 +63,7 @@ public sealed class OcrResultSummaryTests
             window.ShowResult(OcrResult.Success("첫 줄\n둘째 줄", "ko", lines: [], elapsed: TimeSpan.Zero), "Capture");
             // The accuracy selector is built after the first render; this window is never shown.
             window.CompleteAccuracyPresentation();
-            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.Text == "한국어 · 2줄");
+            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "한국어 · 2줄");
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.Text.Contains("· ko", StringComparison.Ordinal));
 
             Button copy = Descendants(window).OfType<Button>().Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_20CF6A996B4D"));

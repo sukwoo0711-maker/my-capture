@@ -51,10 +51,10 @@ internal sealed class GalleryFolderEditDialog : Window
             _saving = true; input.IsEnabled = SaveButton.IsEnabled = CancelButton.IsEnabled = false;
             bool saved = false;
             try { await save(); saved = true; }
-            catch (ArgumentException) { error.Text = UiText.Get(invalidKey); }
+            catch (ArgumentException) { KoreanWordWrap.Show(error, UiText.Get(invalidKey)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
                 or AggregateException)
-            { error.Text = UiText.Get("Folder410.OperationFailed"); }
+            { KoreanWordWrap.Show(error, UiText.Get("Folder410.OperationFailed")); }
             finally { _saving = false; input.IsEnabled = SaveButton.IsEnabled = CancelButton.IsEnabled = true; }
             if (saved) DialogResult = true;
         };

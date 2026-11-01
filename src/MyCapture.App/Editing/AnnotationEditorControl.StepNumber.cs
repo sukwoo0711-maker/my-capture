@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
@@ -53,7 +54,7 @@ internal sealed partial class AnnotationEditorControl
 
         _stepRenumberButton = new Button
         {
-            Content = UiText.Get("EditorStep_Renumber"), MinHeight = 32, Padding = new Thickness(8, 2, 8, 2), FontSize = 12,
+            Content = UiText.Get("EditorStep_Renumber"), MinHeight = 32, Padding = new Thickness(8, 2, 8, 2), FontSize = TypeScale.Caption,
         };
         _stepRenumberButton.SetResourceReference(StyleProperty, "Button.Compact");
         AutomationName(_stepRenumberButton, UiText.Get("EditorStep_Renumber"));
@@ -70,7 +71,7 @@ internal sealed partial class AnnotationEditorControl
     {
         var input = new TextBox
         {
-            Width = 52, MinHeight = 32, FontSize = 12,
+            Width = 52, MinHeight = 32, FontSize = TypeScale.Caption,
             VerticalContentAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Right, Padding = new Thickness(4, 2, 4, 2),
         };

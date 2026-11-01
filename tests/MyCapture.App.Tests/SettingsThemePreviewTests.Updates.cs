@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Settings;
 using MyCapture.App.Store;
+using MyCapture.App.Themes;
 using MyCapture.App.Updates;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -78,7 +79,7 @@ public sealed partial class SettingsThemePreviewTests
                         UpdateChannel.Portable => "Update_OpenReleaseHelp",
                         _ => "Update_InstallHelp",
                     }), AutomationProperties.GetHelpText(action));
-                    Assert.Equal(SettingsWindow.UpdateCheckSummary(StoreUpdatePhase.Available, checkedAt), state.Text);
+                    Assert.Equal(SettingsWindow.UpdateCheckSummary(StoreUpdatePhase.Available, checkedAt), KoreanWordWrap.Strip(state.Text));
                     Assert.True(action.IsEnabled);
                     if (channel == UpdateChannel.Portable)
                     {
@@ -87,7 +88,7 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(0, github.Downloads);
                     }
                     if (channel is UpdateChannel.GitHubInstall or UpdateChannel.Portable)
-                        Assert.Equal(UiText.Get("Update_UnpackagedDescription"), ((TextBlock)window.FindName("UpdateDescription")).Text);
+                        Assert.Equal(UiText.Get("Update_UnpackagedDescription"), KoreanWordWrap.Strip(((TextBlock)window.FindName("UpdateDescription")).Text));
                     automatic.BringIntoView(); Drain(window); AssertFits(window, automatic);
                     SaveStoreUpdateEvidence(window, $"update-tab-shared-{channel}-{locale}-glass-940x700.png");
                 }

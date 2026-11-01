@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -90,7 +91,7 @@ internal static class TimelineVisuals
                 _pixelsPerDip = pixelsPerDip;
                 _maxWidth = maxWidth;
                 _text = new FormattedText(label, culture, FlowDirection.LeftToRight,
-                    Typeface, 10, foreground, pixelsPerDip)
+                    Typeface, TypeScale.Caption, foreground, pixelsPerDip)
                 {
                     MaxTextWidth = maxWidth, MaxLineCount = 1,
                     Trimming = TextTrimming.CharacterEllipsis,

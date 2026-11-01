@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -93,7 +94,7 @@ internal sealed partial class OcrResultWindow
             VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
         AccuracySuggestion = suggestion;
         AccuracySuggestionText = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 560,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 12, 4), FontSize = 12 };
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 12, 4), FontSize = TypeScale.Caption };
         AccuracySuggestionText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(AccuracySuggestionText, AutomationLiveSetting.Polite);
         suggestion.Children.Add(AccuracySuggestionText);
@@ -221,9 +222,9 @@ internal sealed partial class OcrResultWindow
         string key = ready ? "Ocr_AccurateAgain" : "Ocr_DownloadAccurateAgain";
         AccuracyAction.Content = UiText.Get(key);
         AutomationProperties.SetName(AccuracyAction, UiText.Get(key));
-        AccuracySuggestionText.Text = UiText.Get("Ocr_AccuracySuggestion") + (ready ? string.Empty : " " +
+        KoreanWordWrap.Show(AccuracySuggestionText, UiText.Get("Ocr_AccuracySuggestion") + (ready ? string.Empty : " " +
             UiText.Format("Ocr_AccuracyDownloadSize", Math.Ceiling(accuracy.Model.DownloadBytes / 1_000_000d)) +
-            (accuracy.Model.IsMetered ? " " + UiText.Get("Ocr_AccuracyMetered") : string.Empty));
+            (accuracy.Model.IsMetered ? " " + UiText.Get("Ocr_AccuracyMetered") : string.Empty)));
     }
 
     private void DismissAccuracySuggestion()
@@ -264,9 +265,9 @@ internal sealed partial class OcrResultWindow
         AccuracyProgress.Value = 0;
         AccuracyProgress.IsIndeterminate = !downloading;
         AccuracyProgress.Visibility = Visibility.Visible;
-        AccuracySuggestionText.Text = UiText.Get(downloading ? "Ocr_ModelDownloading" : "Ocr_RecognizingAgain");
+        KoreanWordWrap.Show(AccuracySuggestionText, UiText.Get(downloading ? "Ocr_ModelDownloading" : "Ocr_RecognizingAgain"));
         if (downloading && _accuracy?.Model.IsMetered == true)
-            AccuracySuggestionText.Text += " " + UiText.Get("Ocr_AccuracyMetered");
+            KoreanWordWrap.Show(AccuracySuggestionText, KoreanWordWrap.Strip(AccuracySuggestionText.Text) + (" " + UiText.Get("Ocr_AccuracyMetered")));
     }
 
     internal void ReportQualityProgress(double progress)
@@ -274,7 +275,7 @@ internal sealed partial class OcrResultWindow
         if (!_qualityOperation) return;
         AccuracyProgress.IsIndeterminate = false;
         AccuracyProgress.Value = Math.Clamp(progress, 0, 1);
-        AccuracySuggestionText.Text = UiText.Format("Ocr_ModelDownloadProgress", Math.Round(AccuracyProgress.Value * 100));
+        KoreanWordWrap.Show(AccuracySuggestionText, UiText.Format("Ocr_ModelDownloadProgress", Math.Round(AccuracyProgress.Value * 100)));
     }
 
     internal void EndQualityOperation()
@@ -292,7 +293,7 @@ internal sealed partial class OcrResultWindow
         EndQualityOperation();
         ++_accuracyRefreshVersion;
         AccuracySuggestion.Visibility = Visibility.Visible;
-        AccuracySuggestionText.Text = text;
+        KoreanWordWrap.Show(AccuracySuggestionText, text);
     }
 
     private void SetRecognitionOperation(bool active)

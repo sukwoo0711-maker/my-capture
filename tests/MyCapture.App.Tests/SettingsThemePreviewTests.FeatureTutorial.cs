@@ -110,7 +110,7 @@ public sealed partial class SettingsThemePreviewTests
 
             // Every step is fully on screen, above the Close button, without scrolling.
             TextBlock[] steps = TutorialCatalog.Get(feature).StepsFor(keys)
-                .Select(step => Descendants(window).OfType<TextBlock>().Single(text => text.Text == step)).ToArray();
+                .Select(step => Descendants(window).OfType<TextBlock>().Single(text => KoreanWordWrap.Strip(text.Text) == step)).ToArray();
             var scroller = (ScrollViewer)Descendants(window).OfType<ScrollViewer>().Single(viewer => viewer.Content is StackPanel panel
                 && panel.Children.Contains(steps[0]));
             Assert.InRange(scroller.ExtentHeight, 0, scroller.ViewportHeight + 0.5);

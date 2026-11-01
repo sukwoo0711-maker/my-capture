@@ -159,43 +159,43 @@ public sealed class FeatureTutorialTests
                 TextBlock label = Assert.Single(title.Children.OfType<TextBlock>());
                 WrapPanel keycaps = Assert.Single(row.Children.OfType<WrapPanel>());
                 Assert.Empty(keycaps.Children.OfType<Button>());
-                if (label.Text == UiText.Get("MediaInfo.Title"))
+                if (KoreanWordWrap.Strip(label.Text) == UiText.Get("MediaInfo.Title"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
                     Assert.Equal("Alt+Enter", AutomationProperties.GetName(keycaps));
                     continue;
                 }
-                if (label.Text == UiText.Get("Text_976A6C92B870"))
+                if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Text_976A6C92B870"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
                     Assert.Equal("Ctrl+C / " + UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
                     continue;
                 }
-                if (label.Text == UiText.Get("Pin_SelectText"))
+                if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Pin_SelectText"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
                     Assert.Equal("F2", AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 // The selector's ratio key has no tutorial animation yet; the row only names the key.
-                if (label.Text == UiText.Get("CaptureRatio_HelpLabel"))
+                if (KoreanWordWrap.Strip(label.Text) == UiText.Get("CaptureRatio_HelpLabel"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
                     Assert.Equal("R / Shift+R", AutomationProperties.GetName(keycaps));
                     continue;
                 }
-                if (label.Text == UiText.Get("Gallery.Float") || label.Text == UiText.Get("LibraryUx_KeepToggleName")
-                    || label.Text == UiText.Get("Stamp_Place"))
+                if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Gallery.Float") || KoreanWordWrap.Strip(label.Text) == UiText.Get("LibraryUx_KeepToggleName")
+                    || KoreanWordWrap.Strip(label.Text) == UiText.Get("Stamp_Place"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
-                    Assert.Equal(label.Text == UiText.Get("Gallery.Float") ? "P" : label.Text == UiText.Get("Stamp_Place") ? "S" : "K",
+                    Assert.Equal(KoreanWordWrap.Strip(label.Text) == UiText.Get("Gallery.Float") ? "P" : KoreanWordWrap.Strip(label.Text) == UiText.Get("Stamp_Place") ? "S" : "K",
                         AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 TabItem owner = tabs.Items.Cast<TabItem>().Single(tab =>
                     ((StackPanel)((ScrollViewer)tab.Content).Content).Children.Contains(row));
                 FeatureTutorial? expected = TutorialCatalog.All.SingleOrDefault(feature =>
-                    UiText.Get(feature.CategoryKey) == (string)owner.Header && feature.HelpActions.Any(action => UiText.Get(action) == label.Text));
+                    UiText.Get(feature.CategoryKey) == (string)owner.Header && feature.HelpActions.Any(action => UiText.Get(action) == KoreanWordWrap.Strip(label.Text)));
                 if (expected is null)
                 {
                     Assert.Empty(title.Children.OfType<Button>());
@@ -701,15 +701,15 @@ public sealed class FeatureTutorialTests
     private static void AssertFallback(FeatureTutorialWindow window, string statusKey, IEnumerable<string> steps)
     {
         TextBlock[] texts = FirstRunWelcomeTests.Descendants(window).OfType<TextBlock>().ToArray();
-        Assert.All(steps, step => Assert.Contains(texts, text => text.Text == step && text.IsVisible));
-        Assert.Contains(texts, text => text.Text == UiText.Get(statusKey) && text.IsVisible);
+        Assert.All(steps, step => Assert.Contains(texts, text => KoreanWordWrap.Strip(text.Text) == step && text.IsVisible));
+        Assert.Contains(texts, text => KoreanWordWrap.Strip(text.Text) == UiText.Get(statusKey) && text.IsVisible);
         Button[] buttons = FirstRunWelcomeTests.Descendants(window).OfType<Button>().ToArray();
         Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("GifPreview_Play"))).IsEnabled);
         Assert.False(buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay"))).IsEnabled);
     }
 
     private static bool LoadingTextVisible(FeatureTutorialWindow window) => FirstRunWelcomeTests.Descendants(window).OfType<TextBlock>()
-        .Any(text => text.Text == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
+        .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
 
     private static FeatureTutorialWindow Offscreen(string id, FakeTutorialMedia media, string assets) =>
         new(new HotkeySettings(), id, () => media) { AssetDirectory = assets, WindowStartupLocation = WindowStartupLocation.Manual,

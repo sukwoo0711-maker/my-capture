@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -32,7 +33,7 @@ internal sealed class PinPreviewWindow : Window
         var instruction = Text("다른 앱에서 복사한 텍스트나 이미지를 핀으로 띄웁니다.");
         layout.Children.Add(instruction);
         _shortcut = Text(string.Empty);
-        _shortcut.FontSize = 22;
+        _shortcut.FontSize = TypeScale.Subtitle;
         _shortcut.FontWeight = FontWeights.SemiBold;
         _shortcut.Margin = new Thickness(0, 16, 0, 12);
         AutomationProperties.SetAutomationId(_shortcut, "PreviewActiveShortcut");
@@ -74,17 +75,17 @@ internal sealed class PinPreviewWindow : Window
 
     private void Refresh()
     {
-        _shortcut.Text = "활성 단축키 · " + _input.ShortcutText;
-        _notice.Text = _input.ShortcutNotice;
-        _notice.Visibility = _notice.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        KoreanWordWrap.Show(_shortcut, "활성 단축키 · " + _input.ShortcutText);
+        KoreanWordWrap.Show(_notice, _input.ShortcutNotice);
+        _notice.Visibility = KoreanWordWrap.Strip(_notice.Text).Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         _retry.Visibility = _notice.Visibility;
-        _status.Text = _input.StatusText;
+        KoreanWordWrap.Show(_status, _input.StatusText);
         _pin.IsEnabled = !_input.IsBusy;
     }
 
     private static TextBlock Text(string value)
     {
-        var text = new TextBlock { Text = value, FontSize = 14, TextWrapping = TextWrapping.Wrap };
+        var text = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Body, TextWrapping = TextWrapping.Wrap }, value);
         text.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         return text;
     }

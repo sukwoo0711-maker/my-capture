@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -62,7 +63,7 @@ internal sealed partial class AnnotationEditorControl
 
     private static TextBox CropDimensionInput()
     {
-        var box = new TextBox { MinHeight = 32, Width = 64, FontSize = 12 };
+        var box = new TextBox { MinHeight = 32, Width = 64, FontSize = TypeScale.Caption };
         InputMethod.SetIsInputMethodEnabled(box, false);
         return box;
     }

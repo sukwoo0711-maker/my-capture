@@ -390,11 +390,11 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(window.NavigateToSection(SettingsSection.Storage));
                     Drain(window);
                     var summary = Assert.IsType<TextBlock>(window.FindName("RetentionSummary"));
-                    Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(168)), summary.Text);
+                    Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(168)), KoreanWordWrap.Strip(summary.Text));
                     Draft(window).ImageRetentionHours = "36";
-                    Assert.Contains(SettingsUxText.Duration(36), summary.Text, StringComparison.Ordinal);
+                    Assert.Contains(SettingsUxText.Duration(36), KoreanWordWrap.Strip(summary.Text), StringComparison.Ordinal);
                     Draft(window).ImageRetentionHours = "0";
-                    Assert.Equal(UiText.Get("SettingsUx_RetentionRange"), summary.Text);
+                    Assert.Equal(UiText.Get("SettingsUx_RetentionRange"), KoreanWordWrap.Strip(summary.Text));
                     SettingsWindow.CancelCommand.Execute(null, window);
                 }
                 finally
@@ -620,7 +620,7 @@ public sealed partial class SettingsThemePreviewTests
                         double[] lefts = buttons.Select(button => button.TranslatePoint(new Point(), dialog).X).ToArray();
                         Assert.True(lefts[0] < lefts[1] && lefts[1] < lefts[2]);
                         foreach (Button button in buttons) Assert.True(button.ActualWidth >= Descendants(button).OfType<TextBlock>().Max(text => text.ActualWidth));
-                        Assert.Equal(UiText.Get("SettingsUx_CloseTitle"), dialog.Heading.Text);
+                        Assert.Equal(UiText.Get("SettingsUx_CloseTitle"), KoreanWordWrap.Strip(dialog.Heading.Text));
                         if (expected == SettingsCloseChoice.Cancel)
                         {
                             foreach (AppTheme theme in SettingsUxEvidenceThemes)

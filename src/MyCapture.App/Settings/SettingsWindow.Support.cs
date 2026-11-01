@@ -27,13 +27,13 @@ internal sealed partial class SettingsWindow
 
     private void InitializeAbout()
     {
-        PrivacyModelText.Text = UiText.Format("About_PrivacyModel", OcrModelMegabytes);
-        PrivacyTranslationText.Text = UiText.Format("About_PrivacyTranslation", TranslationModelCatalog.TotalMegabytes);
-        OcrQualityHintText.Text = OcrQualityDescription;
+        KoreanWordWrap.Show(PrivacyModelText, UiText.Format("About_PrivacyModel", OcrModelMegabytes));
+        KoreanWordWrap.Show(PrivacyTranslationText, UiText.Format("About_PrivacyTranslation", TranslationModelCatalog.TotalMegabytes));
+        KoreanWordWrap.Show(OcrQualityHintText, OcrQualityDescription);
         if (AppArchitecture.IsX86)
         {
-            PrivacyModelText.Text = OcrQualityDescription;
-            PrivacyTranslationText.Text = UiText.Get("Settings.TranslationUnavailable.X86");
+            KoreanWordWrap.Show(PrivacyModelText, OcrQualityDescription);
+            KoreanWordWrap.Show(PrivacyTranslationText, UiText.Get("Settings.TranslationUnavailable.X86"));
             foreach (System.Windows.Controls.ComboBoxItem item in OcrQualitySelector.Items.OfType<System.Windows.Controls.ComboBoxItem>())
                 if (Equals(item.Tag, "accurate")) item.Content = UiText.Get("Settings.OcrQualityAccurate.X86");
         }

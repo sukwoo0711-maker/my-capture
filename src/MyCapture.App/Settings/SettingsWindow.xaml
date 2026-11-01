@@ -169,11 +169,11 @@
                             <TextBlock x:Name="FieldLabel" Style="{StaticResource Settings.Label}"
                                        Margin="0,0,16,0" MaxWidth="240" TextWrapping="Wrap"
                                        VerticalAlignment="Center"
-                                       Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" />
+                                       themes:KoreanWordWrap.Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" />
                             <ContentPresenter Grid.Column="1" VerticalAlignment="Center" />
                             <TextBlock x:Name="FieldHint" Grid.Column="2" Style="{StaticResource Settings.Description}"
                                        Margin="8,0,0,0" VerticalAlignment="Center"
-                                       Text="{TemplateBinding Hint}" />
+                                       themes:KoreanWordWrap.Text="{TemplateBinding Hint}" />
                             <!-- Text notes take the description look; an element note (a named
                                  TextBlock kept current by code-behind) is shown as it is. -->
                             <ContentPresenter x:Name="FieldNote" Grid.Row="1" Grid.ColumnSpan="3" Margin="0,4,0,0"
@@ -334,7 +334,7 @@
             <Setter Property="ContentTemplate">
                 <Setter.Value>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                        <TextBlock themes:KoreanWordWrap.Text="{Binding}" TextWrapping="Wrap" />
                     </DataTemplate>
                 </Setter.Value>
             </Setter>

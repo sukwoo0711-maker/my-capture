@@ -82,7 +82,7 @@ public sealed class PracticeJourneyPlaybackTests
             preview.SelectFeature(id);
             Assert.True(preview.HasPoster);
             Assert.True(preview.IsFallback);
-            string[] text = FirstRunWelcomeTests.Descendants(preview).OfType<System.Windows.Controls.TextBlock>().Select(t => t.Text).ToArray();
+            string[] text = FirstRunWelcomeTests.Descendants(preview).OfType<System.Windows.Controls.TextBlock>().Select(t => KoreanWordWrap.Strip(t.Text)).ToArray();
             foreach (string scene in TutorialCatalog.Get(id).Steps)
             {
                 Assert.DoesNotContain("?", scene);

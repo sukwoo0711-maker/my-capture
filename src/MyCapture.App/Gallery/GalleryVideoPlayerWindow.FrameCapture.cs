@@ -113,7 +113,7 @@ internal sealed partial class GalleryVideoPlayerWindow
                 _frameSeekFailed = true;
                 _resumeAfterFrameSeek = false;
                 SetStatusPlaying(false);
-                _status.Text = UiText.Get("VideoMulticut_PreviewSeekFailed");
+                KoreanWordWrap.Show(_status, UiText.Get("VideoMulticut_PreviewSeekFailed"));
                 UpdateFrameCaptureState();
                 _log?.LogWarning(error, "Could not settle the library video seek");
             }
@@ -195,7 +195,7 @@ internal sealed partial class GalleryVideoPlayerWindow
         _playButton.IsEnabled = false;
         _seek.IsEnabled = false;
         UpdateFrameCaptureState();
-        _status.Text = UiText.Get("VideoFrame_Saving");
+        KoreanWordWrap.Show(_status, UiText.Get("VideoFrame_Saving"));
         _showFrameButton.Visibility = Visibility.Collapsed;
         using var cancellation = new CancellationTokenSource();
         _frameCaptureCts = cancellation;
@@ -205,7 +205,7 @@ internal sealed partial class GalleryVideoPlayerWindow
             if (!_frameClosed && version == _frameOpenVersion)
             {
                 _lastFrameId = saved.Id;
-                _status.Text = UiText.Format("VideoFrame_Saved", saved.Title);
+                KoreanWordWrap.Show(_status, UiText.Format("VideoFrame_Saved", saved.Title));
                 _showFrameButton.Visibility = _showFrameInLibrary is null ? Visibility.Collapsed : Visibility.Visible;
             }
             return saved;
@@ -214,7 +214,7 @@ internal sealed partial class GalleryVideoPlayerWindow
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "Could not save a library video frame");
-            if (!_frameClosed && version == _frameOpenVersion) _status.Text = UiText.Get("VideoFrame_SaveFailed");
+            if (!_frameClosed && version == _frameOpenVersion) KoreanWordWrap.Show(_status, UiText.Get("VideoFrame_SaveFailed"));
             return null;
         }
         finally

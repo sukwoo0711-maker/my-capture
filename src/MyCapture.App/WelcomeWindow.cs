@@ -130,7 +130,7 @@ internal sealed class WelcomeWindow : Window
         UseLayoutRounding = true;
         StandardWindowTheme.Apply(this);
         ContentRendered += (_, _) => { if (ShowActivated) WindowForeground.BringForward(this); };
-        FontSize = 14 * _textScale;
+        FontSize = TypeScale.Body * _textScale;
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         SourceInitialized += (_, _) =>
@@ -149,11 +149,11 @@ internal sealed class WelcomeWindow : Window
             { UiText.Get("Onboarding.TableStorage"), "512 GB" },
         };
 
-        ConfigureText(_progress, 13, secondary: true);
+        ConfigureText(_progress, TypeScale.Caption, secondary: true);
         _progress.TextWrapping = TextWrapping.NoWrap;
         _progress.TextTrimming = TextTrimming.CharacterEllipsis;
         _progress.VerticalAlignment = VerticalAlignment.Center;
-        ConfigureText(_status, 15);
+        ConfigureText(_status, TypeScale.BodyLarge);
         _status.FontWeight = FontWeights.SemiBold;
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
@@ -161,17 +161,17 @@ internal sealed class WelcomeWindow : Window
         _statusRow.Margin = new Thickness(0, 0, 0, 12);
         _statusRow.Visibility = Visibility.Collapsed;
         ConfigureSuccessChip();
-        ConfigureText(_title, 25);
+        ConfigureText(_title, TypeScale.Title);
         _title.FontWeight = FontWeights.SemiBold;
         _title.Margin = new Thickness(0, 16, 0, 8);
         AutomationProperties.SetLiveSetting(_title, AutomationLiveSetting.Polite);
-        ConfigureText(_instruction, 16);
+        ConfigureText(_instruction, TypeScale.BodyLarge);
         _instruction.Margin = new Thickness(0, 0, 0, 14);
         _instruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         _keyDisplay.HorizontalAlignment = HorizontalAlignment.Left;
         _keyDisplay.Margin = new Thickness(0, 0, 0, 14);
 
-        ConfigureText(_hint, 16);
+        ConfigureText(_hint, TypeScale.BodyLarge);
         _hint.FontWeight = FontWeights.SemiBold;
         AutomationProperties.SetLiveSetting(_hint, AutomationLiveSetting.Polite);
         _notice = new Border
@@ -228,7 +228,7 @@ internal sealed class WelcomeWindow : Window
         StartAtSignInCheck = new CheckBox
         {
             Content = UiText.Get("Onboard_StartAtSignIn"), ContentTemplate = WrappingLabelTemplate(),
-            IsChecked = _options.StartAtSignIn ?? true, MinHeight = 32, FontSize = 14 * _textScale,
+            IsChecked = _options.StartAtSignIn ?? true, MinHeight = 32, FontSize = TypeScale.Body * _textScale,
             ToolTip = UiText.Get("Onboard_StartAtSignInHelp"), HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -238,14 +238,14 @@ internal sealed class WelcomeWindow : Window
         {
             Content = UiText.Get("Welcome_AccurateOcr"), ContentTemplate = WrappingLabelTemplate(),
             IsChecked = _options.UseAccurateOcr ?? FirstRunOcrChoice.ShouldPreselect(ocrEnvironment ?? new WindowsOcrDownloadEnvironment()),
-            MinHeight = 32, FontSize = 14 * _textScale, Margin = new Thickness(0, 10, 0, 0), ToolTip = FirstRunOcrChoice.Description,
+            MinHeight = 32, FontSize = TypeScale.Body * _textScale, Margin = new Thickness(0, 10, 0, 0), ToolTip = FirstRunOcrChoice.Description,
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationProperties.SetName(AccurateOcrCheck, UiText.Get("Welcome_AccurateOcr"));
         AutomationProperties.SetHelpText(AccurateOcrCheck, FirstRunOcrChoice.Description);
         // Wraps between words: WPF otherwise breaks between any two Hangul syllables.
         AccurateOcrHelp = WrappedLabel(FirstRunOcrChoice.Description);
-        AccurateOcrHelp.FontSize = 13 * _textScale;
+        AccurateOcrHelp.FontSize = TypeScale.Caption * _textScale;
         AccurateOcrHelp.Margin = new Thickness(28, 0, 0, 0);
         AccurateOcrHelp.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
@@ -254,11 +254,11 @@ internal sealed class WelcomeWindow : Window
         ShortcutsLink.Click += (_, _) => CloseWith(WelcomeOutcome.OpenSettings);
         var linkText = new TextBlock(ShortcutsLink)
         {
-            VerticalAlignment = VerticalAlignment.Center, FontSize = 13 * _textScale, MinHeight = 32,
+            VerticalAlignment = VerticalAlignment.Center, FontSize = TypeScale.Caption * _textScale, MinHeight = 32,
             LineHeight = 32 * _textScale, LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             Margin = new Thickness(16, 0, 0, 0),
         };
-        var replayNote = WrappedLabel(UiText.Get("Onboarding.ReplayNote"), 13);
+        var replayNote = WrappedLabel(UiText.Get("Onboarding.ReplayNote"), TypeScale.Caption);
         replayNote.Margin = new Thickness(0, 22, 0, 0);
         replayNote.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
 
@@ -285,7 +285,7 @@ internal sealed class WelcomeWindow : Window
         ChangeShortcutLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         ChangeShortcutLink.Click += (_, _) => RequestShortcutChange();
         _changeKeyRow.Inlines.Add(ChangeShortcutLink);
-        _changeKeyRow.FontSize = 13 * _textScale;
+        _changeKeyRow.FontSize = TypeScale.Caption * _textScale;
         _changeKeyRow.Margin = new Thickness(0, 0, 0, 10);
         TextBlock conflictText = WrappedLabel(UiText.Get("Practice.KeyConflict"));
         conflictText.SetResourceReference(TextBlock.ForegroundProperty, "State.Danger");
@@ -299,7 +299,7 @@ internal sealed class WelcomeWindow : Window
         SkipStepButton.Click += (_, _) => SkipCurrentStep();
         foreach (Button button in new[] { ChangeShortcutButton })
         {
-            button.FontSize = 14 * _textScale;
+            button.FontSize = TypeScale.Body * _textScale;
             button.MinHeight = 36 * _textScale;
             AutomationProperties.SetName(button, (string)button.Content);
             conflictActions.Children.Add(button);
@@ -765,7 +765,7 @@ internal sealed class WelcomeWindow : Window
 
     private void ConfigureSuccessChip()
     {
-        ConfigureText(_successText, 13);
+        ConfigureText(_successText, TypeScale.Caption);
         _successText.TextWrapping = TextWrapping.NoWrap;
         _successText.TextTrimming = TextTrimming.CharacterEllipsis;
         _successText.VerticalAlignment = VerticalAlignment.Center;
@@ -912,7 +912,7 @@ internal sealed class WelcomeWindow : Window
 
     private void EmphasizeInstruction()
     {
-        string display = _instruction.Text;
+        string display = KoreanWordWrap.Strip(_instruction.Text);
         _instruction.Inlines.Clear();
         int start = 0;
         for (int index = 0; index < display.Length; index++)
@@ -928,6 +928,7 @@ internal sealed class WelcomeWindow : Window
             start = end; index = end;
         }
         _instruction.Inlines.Add(new Run(display[start..]));
+        KoreanWordWrap.ShowInlines(_instruction);
     }
 
     private void RenderProgress(bool pageChanged)
@@ -1025,11 +1026,11 @@ internal sealed class WelcomeWindow : Window
     {
         var text = new FrameworkElementFactory(typeof(TextBlock));
         text.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
-        text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding());
+        text.SetBinding(KoreanWordWrap.TextProperty, new System.Windows.Data.Binding());
         return new DataTemplate { VisualTree = text };
     }
 
-    private TextBlock WrappedLabel(string value, double size = 14)
+    private TextBlock WrappedLabel(string value, double size = TypeScale.Body)
     {
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = size * _textScale };
         SetText(text, value);
@@ -1041,7 +1042,7 @@ internal sealed class WelcomeWindow : Window
         CommandButtonPresentation.Apply(button);
         // The shared command size is a fixed height in the base font; a larger text size needs room to grow.
         button.ClearValue(HeightProperty);
-        button.FontSize = 15 * _textScale;
+        button.FontSize = TypeScale.Body * _textScale;
         button.MinHeight = 44 * _textScale;
         button.MinWidth = minWidth;
         button.Padding = new Thickness(18, 8, 18, 8);
@@ -1060,7 +1061,7 @@ internal sealed class WelcomeWindow : Window
             if (_keyPressed) cap.SetResourceReference(Border.BackgroundProperty, "Text.Primary");
             if (cap.Child is TextBlock label)
             {
-                label.FontSize = 22 * _textScale;
+                label.FontSize = TypeScale.Subtitle * _textScale;
                 label.HorizontalAlignment = HorizontalAlignment.Center;
                 label.VerticalAlignment = VerticalAlignment.Center;
                 label.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Mono");
@@ -1071,7 +1072,7 @@ internal sealed class WelcomeWindow : Window
         for (int index = keys.Children.Count - 1; index >= 1; index--)
         {
             if (keys.Children[index] is not Border || keys.Children[index - 1] is not Border) continue;
-            var plus = new TextBlock { Text = "+", FontSize = 20 * _textScale, FontWeight = FontWeights.SemiBold,
+            var plus = new TextBlock { Text = "+", FontSize = TypeScale.Subtitle * _textScale, FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
             plus.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
             keys.Children.Insert(index, plus);
@@ -1107,7 +1108,7 @@ internal sealed class WelcomeWindow : Window
         {
             PracticeStep step = PracticeSession.Steps[index];
             PracticeStepResult result = Session.Results[step];
-            var row = WrappedLabel((result == PracticeStepResult.Completed ? "✓ " : "– ") + UiText.Get($"Journey.{step}.Title") + " · " + UiText.Get($"Journey.{result}"), 13);
+            var row = WrappedLabel((result == PracticeStepResult.Completed ? "✓ " : "– ") + UiText.Get($"Journey.{step}.Title") + " · " + UiText.Get($"Journey.{result}"), TypeScale.Caption);
             row.Margin = new Thickness(index / rows > 0 ? 12 : 0, 2, 0, 2);
             Grid.SetRow(row, index % rows);
             Grid.SetColumn(row, index / rows);
@@ -1119,7 +1120,7 @@ internal sealed class WelcomeWindow : Window
     private FrameworkElement MakePracticeTable()
     {
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
-        TextBlock label = WrappedLabel(UiText.Get("Onboarding.PracticeLabel"), 13);
+        TextBlock label = WrappedLabel(UiText.Get("Onboarding.PracticeLabel"), TypeScale.Caption);
         label.FontWeight = FontWeights.SemiBold;
         label.Margin = new Thickness(0, 0, 0, 6);
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
@@ -1132,7 +1133,7 @@ internal sealed class WelcomeWindow : Window
             table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             for (int column = 0; column < 2; column++)
             {
-                TextBlock text = WrappedLabel(_practiceCells[row, column], 16);
+                TextBlock text = WrappedLabel(_practiceCells[row, column], TypeScale.BodyLarge);
                 if (row == 0) text.FontWeight = FontWeights.SemiBold;
                 var cell = new Border
                 {
@@ -1224,7 +1225,7 @@ internal sealed class WelcomeWindow : Window
         Grid.SetRow(apps, 2); Grid.SetColumn(apps, 0);
         grid.Children.Add(apps);
 
-        var chevron = new TextBlock { Text = "^", FontSize = 32, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center,
+        var chevron = new TextBlock { Text = "^", FontSize = TypeScale.Title, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
         AutomationProperties.SetName(chevron, "^");
         Border chevronRing = Ring(chevron, slot - 4);
@@ -1240,16 +1241,16 @@ internal sealed class WelcomeWindow : Window
         system.Children.Add(Placeholder(22));
         Grid.SetRow(system, 2); Grid.SetColumn(system, 2);
         grid.Children.Add(system);
-        var clock = new TextBlock { Text = "12:00", FontSize = 15, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 14, 0) };
+        var clock = new TextBlock { Text = "12:00", FontSize = TypeScale.Body, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 14, 0) };
         clock.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         Grid.SetRow(clock, 2); Grid.SetColumn(clock, 3);
         grid.Children.Add(clock);
         layout.Children.Add(grid);
 
-        TextBlock location = WrappedLabel(UiText.Get("Onboarding.TrayLocation"), 15);
+        TextBlock location = WrappedLabel(UiText.Get("Onboarding.TrayLocation"), TypeScale.Body);
         location.FontWeight = FontWeights.SemiBold;
         layout.Children.Add(location);
-        TextBlock actions = WrappedLabel(UiText.Get("Onboard_TrayTipActions"), 14);
+        TextBlock actions = WrappedLabel(UiText.Get("Onboard_TrayTipActions"), TypeScale.Body);
         actions.Margin = new Thickness(0, 4, 0, 0);
         actions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         layout.Children.Add(actions);

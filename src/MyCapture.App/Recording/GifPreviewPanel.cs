@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -167,21 +168,21 @@ internal sealed class GifPreviewPanel : Border
 
     internal BitmapSource? OriginalFrame => _original.Source as BitmapSource;
 
-    internal string InfoText => _info.Text;
+    internal string InfoText => KoreanWordWrap.Strip(_info.Text);
 
-    internal string MessageText => _message.Visibility == Visibility.Visible ? _message.Text : string.Empty;
+    internal string MessageText => _message.Visibility == Visibility.Visible ? KoreanWordWrap.Strip(_message.Text) : string.Empty;
 
     internal void ShowPreparing()
     {
         Detach();
-        _info.Text = string.Empty;
+        KoreanWordWrap.Show(_info, string.Empty);
         ShowMessage(UiText.Get("GifPreview_Preparing"));
     }
 
     internal void ShowFailure(string message)
     {
         Detach();
-        _info.Text = string.Empty;
+        KoreanWordWrap.Show(_info, string.Empty);
         ShowMessage(UiText.Format("GifPreview_Failed", message));
     }
 
@@ -200,7 +201,7 @@ internal sealed class GifPreviewPanel : Border
         _syncingSlider = false;
         string info = UiText.Format("GifPreview_Info", sample.Window.StartMs / 1000, sample.Window.EndMs / 1000,
             frames.PixelWidth, frames.PixelHeight, frames.Frames.Count, frames.Timeline.TotalMs / 1000);
-        _info.Text = autoplay ? info : info + Environment.NewLine + UiText.Get("GifPreview_MotionReduced");
+        KoreanWordWrap.Show(_info, autoplay ? info : info + Environment.NewLine + UiText.Get("GifPreview_MotionReduced"));
         SetControlsEnabled(true);
         _player.Load(frames.Timeline);
         ApplyLayout();
@@ -257,7 +258,7 @@ internal sealed class GifPreviewPanel : Border
 
     private void ShowMessage(string text)
     {
-        _message.Text = text;
+        KoreanWordWrap.Show(_message, text);
         _message.Visibility = Visibility.Visible;
         _pair.Visibility = Visibility.Hidden;
     }
