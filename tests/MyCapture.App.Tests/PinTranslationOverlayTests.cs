@@ -519,6 +519,35 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
     }
 
     [Theory]
+    [InlineData(MyCapture.Core.Settings.OcrQuality.Fast)]
+    [InlineData(MyCapture.Core.Settings.OcrQuality.Balanced)]
+    [InlineData(MyCapture.Core.Settings.OcrQuality.Accurate)]
+    [InlineData(MyCapture.Core.Settings.OcrQuality.Enhanced)]
+    public async Task PictureTranslationReadsAtTheMeasuredStageWhateverTheOcrQuality(MyCapture.Core.Settings.OcrQuality quality)
+    {
+        // Accurate merged PP-OCR, whose most tilted word box made upright screenshots fall back to the document.
+        var settings = new MyCapture.Core.Settings.OcrSettings
+        {
+            Quality = quality,
+            UpscaleFactor = MyCapture.Core.Settings.OcrQualityProfile.UpscaleFactor(quality),
+            PreferredLanguages = ["en-US", "ko-KR"],
+        };
+        var ocr = new RecordingOcr();
+        Action<OcrResult> windowsReading = _ => { };
+        _ = await PinTranslationEngines.RecognizeResultAsync(ocr, Bitmap(40, 20), settings, CancellationToken.None, windowsReading);
+        OcrRequest request = Assert.Single(ocr.Requests);
+        Assert.False(request.UseNeuralModel);
+        Assert.False(request.EnhanceContrast);
+        Assert.False(request.SearchRotatedOrientations);
+        Assert.Equal(1.0, request.UpscaleFactor);
+        Assert.True(request.RecoverLatinIntrusions);
+        Assert.Same(windowsReading, request.BeforeLatinRecovery);
+        Assert.Equal(new[] { "en-US", "ko-KR" }, request.PreferredLanguages);
+        Assert.Equal(quality, settings.Quality);
+        Assert.Equal(MyCapture.Core.Settings.OcrQualityProfile.UpscaleFactor(quality), settings.UpscaleFactor);
+    }
+
+    [Theory]
     [InlineData(120)]
     [InlineData(128)]
     public void PlateContrastIncludesUnderlyingBlackAndWhitePixels(byte gray)
@@ -611,6 +640,17 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         byte[] pixels = new byte[source.PixelWidth * source.PixelHeight * 4];
         source.CopyPixels(pixels, source.PixelWidth * 4, 0);
         return pixels;
+    }
+    private sealed class RecordingOcr : IOcrService
+    {
+        internal List<OcrRequest> Requests { get; } = [];
+        public bool IsAvailable => true;
+        public IReadOnlyList<string> SupportedLanguages => ["en-US", "ko-KR"];
+        public Task<OcrResult> RecognizeAsync(OcrRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(OcrResult.Unavailable());
+        }
     }
     internal sealed class FakeTranslator(Func<string, string> translate) : ITextTranslator
     {

@@ -41,13 +41,26 @@ internal sealed class PinTranslationEngines(TextTranslationService englishToKore
 
     /// <summary>
     /// Keeps the original-pixel geometry and angle for an in-place translation. <paramref name="windowsReading"/>
-    /// receives the Windows reading before the Latin recovery reads its suspect rows again.
+    /// receives the Windows reading before the Latin recovery reads its suspect rows again. The picture is read at
+    /// <see cref="OverlayReading"/>, whatever stage the OCR window uses.
     /// </summary>
     internal static Task<OcrResult> RecognizeResultAsync(IOcrService? ocr, BitmapSource image,
         MyCapture.Core.Settings.OcrSettings settings, CancellationToken cancellationToken,
         Action<OcrResult>? windowsReading = null) =>
         ocr is null ? Task.FromResult(OcrResult.Unavailable())
-            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, settings).WithLatinRecovery(windowsReading), cancellationToken);
+            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, OverlayReading(settings)).WithLatinRecovery(windowsReading), cancellationToken);
+
+    /// <summary>
+    /// The Fast stage the in-place translation was measured with, in the user's languages. Accurate also reads with
+    /// PP-OCR and takes its most tilted word box as the picture's angle, so an upright screenshot often measured past
+    /// the overlay's 2° limit and fell back to the translated document.
+    /// </summary>
+    internal static MyCapture.Core.Settings.OcrSettings OverlayReading(MyCapture.Core.Settings.OcrSettings settings) => new()
+    {
+        PreferredLanguages = settings.PreferredLanguages,
+        Quality = MyCapture.Core.Settings.OcrQuality.Fast,
+        UpscaleFactor = MyCapture.Core.Settings.OcrQualityProfile.UpscaleFactor(MyCapture.Core.Settings.OcrQuality.Fast),
+    };
 
     public void Dispose()
     {
