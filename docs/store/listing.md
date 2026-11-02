@@ -103,10 +103,11 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.13.0)
+### 이 버전의 새로운 기능 (4.13.1)
 
 입력 한도는 1,500자입니다.
 
+- 인식 품질을 ‘정확’으로 두면 그림 핀의 ‘번역’이 그림 위에 덧씌워지지 않고 번역문 문서로 열리던 문제를 고쳤습니다.
 - 그림 핀의 ‘번역’이 번역문을 원래 그림 위 같은 자리에 덧씌웁니다. 원래 글자의 색과 크기에 맞춰 그리고, ‘번역’을 다시 누르면 원본으로 돌아갑니다.
 - 핀 메뉴의 ‘번역문 문서로 보기’와 ‘번역 그림으로 보기’로 두 보기를 오갑니다. 덧씌운 상태에서 Ctrl+C를 누르면 그림과 번역문을 함께 복사합니다.
 - 번역이 빨라지고 메모리를 덜 씁니다.
@@ -198,10 +199,11 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.13.0)
+### What's new in this version (4.13.1)
 
 Limit: 1,500 characters.
 
+- Fixed Translate on an image pin opening the translation as text instead of drawing it on the picture when Recognition quality was set to Accurate.
 - Translate on an image pin now draws the translation over the original text, in the same place and in a matching color and size. Click Translate again to see the original.
 - Switch views with Show translation as text and Show translation on picture in the pin menu. Ctrl+C on a translated picture copies the picture together with the translated text.
 - Translation is faster and uses less memory.
