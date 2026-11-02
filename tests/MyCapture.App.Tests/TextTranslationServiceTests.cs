@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr.Translation;
@@ -33,7 +34,7 @@ public sealed class TextTranslationServiceTests
     }
 
     [Fact]
-    public async Task FortyLineScreenTakesOneModelCallAndLittleTimeAroundIt()
+    public async Task FortyLineScreenTakesLittleTimeAroundTheModel()
     {
         using var fixture = new ServiceFixture();
         string[] screen = [.. TranslationLiveModelTests.ProbeTranslations().Take(40).Select(item => item.Text)];
@@ -44,9 +45,45 @@ public sealed class TextTranslationServiceTests
         watch.Stop();
 
         Assert.Equal(40, results.Count);
-        Assert.Equal([1, 40], fixture.Engine.Batches.Select(batch => batch.Count));
+        Assert.Equal(40, fixture.Engine.Batches.Skip(1).Sum(batch => batch.Count));
         // Segmenting, repairing and checking 40 datasheet lines; the model itself takes about 0.8 s.
         Assert.True(watch.ElapsedMilliseconds < 250, $"{watch.ElapsedMilliseconds} ms around the model");
+    }
+
+    [Fact]
+    public async Task AFewLongSentencesAmongShortLabelsGetACallOfTheirOwn()
+    {
+        using var fixture = new ServiceFixture();
+        string[] labels = [.. Enumerable.Range(1, 20).Select(index => $"Label {index}")];
+        string[] sentences = [.. Enumerable.Range(1, 2).Select(index => string.Join(" ",
+            Enumerable.Repeat($"Sentence {index} keeps the decoder busy", 6)))];
+        string[] sources = [labels[0], sentences[0], .. labels[1..], sentences[1]];
+
+        IReadOnlyList<TranslatedText> results = await fixture.Service.TranslateAsync(sources, null, CancellationToken.None);
+
+        Assert.Equal([2, 20], fixture.Engine.Batches.Select(batch => batch.Count));
+        Assert.Equal(sentences, fixture.Engine.Batches[0]);
+        Assert.Equal(sources.Select(source => "KO " + source), results.Select(result => result.Text));
+    }
+
+    [Fact]
+    public void SimilarLengthsStayInOneCallInTheirOrder()
+    {
+        string[] segments = ["Save the file now", "Open a new window", "Close this dialog", "Print the page"];
+
+        Assert.Equal(segments, Assert.Single(TextTranslationService.PlanBatches(segments, segment => segment.Length)));
+    }
+
+    [Fact]
+    public void MoreSegmentsThanOneCallTakesSplitIntoCallsWithinTheBatchSize()
+    {
+        string[] segments = [.. Enumerable.Range(1, 90).Select(index => $"Line {index:D2} of the screen.")];
+
+        List<List<string>> batches = TextTranslationService.PlanBatches(segments, segment => segment.Length);
+
+        Assert.Equal(3, batches.Count);
+        Assert.All(batches, batch => Assert.InRange(batch.Count, 1, TextTranslationService.BatchSize));
+        Assert.Equal(segments.Order(StringComparer.Ordinal), batches.SelectMany(batch => batch).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -99,10 +136,13 @@ public sealed class TextTranslationServiceTests
     public async Task ReleasesTheModelWhenIdleAndLoadsItAgainOnTheNextRequest()
     {
         using var fixture = new ServiceFixture(idleRelease: TimeSpan.FromMilliseconds(50));
+        int released = 0;
+        fixture.Service.EngineReleased += () => Interlocked.Increment(ref released);
 
         await fixture.Service.TranslateAsync(["First sentence to translate."], null, CancellationToken.None);
         FakeEngine first = fixture.Engine;
-        Assert.True(SpinWait.SpinUntil(() => !fixture.Service.IsEngineLoaded, TimeSpan.FromSeconds(5)));
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref released) == 1, TimeSpan.FromSeconds(5)));
+        Assert.False(fixture.Service.IsEngineLoaded);
         Assert.True(first.Disposed);
 
         await fixture.Service.TranslateAsync(["Second sentence to translate."], null, CancellationToken.None);
@@ -160,14 +200,81 @@ public sealed class TextTranslationServiceTests
         Assert.Single(fixture.Engine.Batches);
     }
 
+    [Fact]
+    public async Task WarmingUpLoadsAnInstalledModelOnceForTheTranslation()
+    {
+        using var fixture = new ServiceFixture(installed: true);
+
+        await fixture.Service.WarmUpAsync(CancellationToken.None);
+        Assert.True(fixture.Service.IsEngineLoaded);
+        await fixture.Service.WarmUpAsync(CancellationToken.None);
+        await fixture.Service.TranslateAsync(["Translate this sentence."], null, CancellationToken.None);
+
+        Assert.Equal(1, fixture.Loads);
+    }
+
+    [Fact]
+    public async Task WarmingUpNeverLoadsAMissingModel()
+    {
+        using var fixture = new ServiceFixture();
+
+        await fixture.Service.WarmUpAsync(CancellationToken.None);
+
+        Assert.False(fixture.Service.IsEngineLoaded);
+        Assert.Equal(0, fixture.Loads);
+    }
+
+    [Fact]
+    public async Task AFailedWarmUpIsLeftToTheTranslation()
+    {
+        int attempts = 0;
+        using var fixture = new ServiceFixture(installed: true, load: () =>
+        {
+            if (++attempts == 1) throw new InvalidDataException("broken model");
+            return new FakeEngine(source => "KO " + source);
+        });
+
+        await fixture.Service.WarmUpAsync(CancellationToken.None);
+        Assert.False(fixture.Service.IsEngineLoaded);
+        TranslatedText result = Assert.Single(await fixture.Service.TranslateAsync(["Translate this sentence."], null,
+            CancellationToken.None));
+
+        Assert.Equal("KO Translate this sentence.", result.Text);
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task AWarmedModelThatIsNotUsedLeavesAfterTheQuietTime()
+    {
+        using var fixture = new ServiceFixture(idleRelease: TimeSpan.FromMilliseconds(50), installed: true);
+
+        await fixture.Service.WarmUpAsync(CancellationToken.None);
+        FakeEngine warmed = fixture.Engine;
+
+        Assert.True(SpinWait.SpinUntil(() => !fixture.Service.IsEngineLoaded, TimeSpan.FromSeconds(5)));
+        Assert.True(warmed.Disposed);
+    }
+
     private sealed class ServiceFixture : IDisposable
     {
         private readonly string _root = OwnedTestDirectory.Create("translate-service-");
         private readonly HttpClient _http = new(new RejectingHandler());
 
-        internal ServiceFixture(Func<string, string>? map = null, TimeSpan? idleRelease = null, Func<FakeEngine>? load = null)
+        internal ServiceFixture(Func<string, string>? map = null, TimeSpan? idleRelease = null, Func<FakeEngine>? load = null,
+            bool installed = false)
         {
-            var store = new TranslationModelStore(AppPaths.CreateForRoot(_root), _http, NullLogger.Instance);
+            AppPaths paths = AppPaths.CreateForRoot(_root);
+            TranslationModelFile[]? files = null;
+            if (installed)
+            {
+                // One small file with a real pin stands in for an installed model.
+                byte[] model = [1, 2, 3, 4];
+                files = [new("model.bin", "https://example.test/models/model.bin", Convert.ToHexString(SHA256.HashData(model)), model.Length)];
+                string directory = Path.Combine(paths.TranslationModelsRoot, TranslationModelCatalog.FolderName);
+                Directory.CreateDirectory(directory);
+                File.WriteAllBytes(Path.Combine(directory, files[0].FileName), model);
+            }
+            var store = new TranslationModelStore(paths, _http, NullLogger.Instance, files);
             Service = new TextTranslationService(store, () =>
             {
                 Loads++;

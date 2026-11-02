@@ -22,6 +22,9 @@ internal interface ITextTranslator
 
     Task<IReadOnlyList<TranslatedText>> TranslateAsync(IReadOnlyList<string> sources,
         IProgress<TranslationProgress>? progress, CancellationToken cancellationToken);
+
+    /// <summary>Loads an installed model ahead of a translation that is about to start; it never asks for one.</summary>
+    Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>
@@ -37,11 +40,18 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
     internal const int MaxSegmentTokens = 64;
 
     /// <summary>
-    /// Segments per model call: a whole screen at once, which beat three calls of 16 for the same
-    /// 40 lines. The int8 model quantizes activations per call, so a batch can word a sentence a
-    /// little differently than translating it alone.
+    /// Segments per model call at most: a whole screen of similar lines at once, which beat three
+    /// calls of 16 for the same 40 lines. The int8 model quantizes activations per call, so a batch
+    /// can word a sentence a little differently than translating it alone.
     /// </summary>
     internal const int BatchSize = 40;
+
+    // Fitted to 33 calls of the int8 tc-big model on four threads: a call costs about 2.5 ms and each
+    // decoding step 2.2 ms plus 0.29 ms per row, a row's attention adding about two thirds of that at
+    // 100 tokens. In row-steps, a step is worth 7.5 rows and a call 8 row-steps.
+    private const double StepRows = 7.5;
+    private const double CallRowSteps = 8;
+    private const double AttentionTokens = 150;
 
     private const int CacheLimit = 4096;
 
@@ -82,6 +92,9 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
 
     internal bool IsEngineLoaded => Volatile.Read(ref _engine) is not null;
 
+    /// <summary>Raised on the releasing thread after the model has left; part of what it freed only a collection returns.</summary>
+    internal event Action? EngineReleased;
+
     public Task<bool> IsModelInstalledAsync(CancellationToken cancellationToken) =>
         _store.IsInstalledAsync(cancellationToken);
 
@@ -101,6 +114,35 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Loads an installed model while the text it will translate is still being read. A missing
+    /// model is neither requested nor downloaded, and an unused one leaves after the quiet minute.
+    /// A failure is left to the translation itself, which loads the model again and reports it.
+    /// </summary>
+    public async Task WarmUpAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (_disposed || IsEngineLoaded || !await _store.IsInstalledAsync(cancellationToken).ConfigureAwait(false)) return;
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_disposed || _engine is not null) return;
+                SetIdleTimer(Timeout.InfiniteTimeSpan);
+                await Task.Run(() => _engine ??= LoadEngine(), cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (_disposed || !SetIdleTimer(_idleRelease)) ReleaseEngine();
+                _gate.Release();
+            }
+        }
+        catch (Exception)
+        {
+            // LoadEngine has logged a failed load; cancellation and disposal need nothing here.
         }
     }
 
@@ -154,10 +196,9 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
             .Distinct(StringComparer.Ordinal).ToList();
         int completed = CompletedBlocks(segments, 0);
         if (completed > 0) progress?.Report(new(completed, sources.Count));
-        for (int start = 0; start < pending.Count; start += BatchSize)
+        foreach (List<string> batch in PlanBatches(pending, engine.CountTokens))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            List<string> batch = pending.GetRange(start, Math.Min(BatchSize, pending.Count - start));
             IReadOnlyList<string> translated = engine.Translate(batch, cancellationToken);
             for (int index = 0; index < batch.Count; index++) _cache[batch[index]] = translated[index];
             int now = CompletedBlocks(segments, completed);
@@ -182,6 +223,42 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
                 [.. missing.Distinct(StringComparer.Ordinal)], [.. invented.Distinct(StringComparer.Ordinal)]));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Splits the segments into model calls, longest first. A call decodes as many steps as its
+    /// longest segment needs and computes every row at each step, so a few long sentences among
+    /// short labels get a call of their own instead of keeping the labels decoding; similar lengths
+    /// stay together, which also keeps the model's working memory down. A screen that stays in one
+    /// call keeps its order and translates exactly as before.
+    /// </summary>
+    internal static List<List<string>> PlanBatches(IReadOnlyList<string> segments, Func<string, int> countTokens)
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        ArgumentNullException.ThrowIfNull(countTokens);
+        if (segments.Count == 0) return [];
+        var sorted = segments.Select(segment => (Segment: segment, Tokens: countTokens(segment)))
+            .OrderByDescending(item => item.Tokens).ToArray();
+        // cost[end]: the cheapest calls for the longest `end` segments; first[end] starts the last of them.
+        var cost = new double[sorted.Length + 1];
+        var first = new int[sorted.Length + 1];
+        for (int end = 1; end <= sorted.Length; end++)
+        {
+            cost[end] = double.MaxValue;
+            for (int start = Math.Max(0, end - BatchSize); start < end; start++)
+            {
+                // Sorted longest first: the first segment sets the steps the call decodes.
+                int steps = sorted[start].Tokens, rows = end - start;
+                double candidate = cost[start] + CallRowSteps + steps * (StepRows + rows * (1 + steps / AttentionTokens));
+                if (candidate < cost[end]) (cost[end], first[end]) = (candidate, start);
+            }
+        }
+        var batches = new List<List<string>>();
+        for (int end = sorted.Length; end > 0; end = first[end])
+            batches.Add([.. sorted[first[end]..end].Select(item => item.Segment)]);
+        if (batches.Count == 1) return [[.. segments]];
+        batches.Reverse();
+        return batches;
     }
 
     private int CompletedBlocks(List<string>[] segments, int from)
@@ -217,7 +294,12 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         }
     }
 
-    private void ReleaseEngine() => Interlocked.Exchange(ref _engine, null)?.Dispose();
+    private void ReleaseEngine()
+    {
+        if (Interlocked.Exchange(ref _engine, null) is not { } engine) return;
+        engine.Dispose();
+        EngineReleased?.Invoke();
+    }
 
     public void Dispose()
     {

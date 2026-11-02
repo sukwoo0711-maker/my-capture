@@ -132,6 +132,10 @@ public static class WindowStyleFacade
         return target != IntPtr.Zero && NativeMethods.GetAncestor(target, NativeMethods.GA_ROOT) == hwnd;
     }
 
+    /// <summary>Resizes a window to a square of <paramref name="size"/> physical pixels where it stands, without activating or reordering it.</summary>
+    public static bool ResizeSquare(IntPtr hwnd, int size) => hwnd != IntPtr.Zero && NativeMethods.SetWindowPos(hwnd, IntPtr.Zero,
+        0, 0, size, size, NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
     /// <summary>
     /// The physical-pixel bounds of <paramref name="hwnd"/>, or all zeros if unavailable.
     /// </summary>

@@ -73,6 +73,8 @@ public static class TypeScale
         public const double TimedOverlayEditor = 18;
         /// <summary>Maximum source-window title printed into a captured image.</summary>
         public const double SourceWindowTitle = 13;
+        /// <summary>Smallest translated text drawn over a picture pin, in source pixels.</summary>
+        public const double TranslationOverlayMinimum = 9;
         /// <summary>Countdown numeral drawn inside its fixed animation ring.</summary>
         public const double CountdownDigit = 54;
         /// <summary>Single digit drawn inside the step tool cursor badge.</summary>

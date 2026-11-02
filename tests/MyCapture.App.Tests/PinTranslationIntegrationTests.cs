@@ -14,7 +14,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 // No user clipboard, visible windows, model, network, or filesystem operations.
-public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
+public sealed partial class PinTranslationIntegrationTests : KoreanCaptionTest
 {
     private const string English = "Save the document before closing the window.";
     private const string Korean = "창을 닫기 전에 문서를 저장합니다.";
@@ -396,6 +396,7 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
             await pin.TranslationWork;
             Assert.Equal(PinTranslationState.Disabled, pin.TranslationState);
             Assert.Equal(0, translator.InstallChecks);
+            Assert.Equal(0, translator.WarmUps);
             Assert.False(pin.IsShowingTranslation);
         }
         finally { manager.CloseAll(); }
@@ -478,6 +479,7 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
         internal int Downloads;
         internal int Translations;
         internal int InstallChecks;
+        internal int WarmUps;
         internal TaskCompletionSource<bool>? Delayed;
         internal TaskCompletionSource<bool> Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public long ModelDownloadBytes => 246_256_561;
@@ -485,6 +487,11 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
         {
             InstallChecks++;
             return Task.FromResult(Installed);
+        }
+        public Task WarmUpAsync(CancellationToken cancellationToken)
+        {
+            WarmUps++;
+            return Task.CompletedTask;
         }
         public Task DownloadModelAsync(IProgress<TranslationDownloadProgress>? progress, CancellationToken cancellationToken)
         {
