@@ -91,7 +91,8 @@ public partial class App
     {
         void Post() => _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => ShowQuickAccessFirstCard(first, copy)));
 
-        TimeSpan wait = QuickAccessFirstCopyWaitForTest ?? QuickAccessFirstCopyWait;
+        TimeSpan wait = QuickAccessFirstCopyWaitForTest
+            ?? (s_residentProbe?.Has("no-copy-wait") == true ? TimeSpan.Zero : QuickAccessFirstCopyWait);
         if (copy.IsCompleted || wait <= TimeSpan.Zero)
         {
             Post();
@@ -119,11 +120,13 @@ public partial class App
         // The newer card replaces the older one at once, without its exit.
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, first.Image) ? lifted : null;
-        bool? copied = copy.IsCompleted ? copy.IsCompletedSuccessfully && copy.Result : null;
         QuickAccessWindow? card = null;
         try
         {
-            card = QuickAccessWindow.ForPendingCapture(first.Image, copied, first.Region, first.Monitor,
+            // Made waiting for the copy even when it has finished; its result reaches the card as it
+            // shows, before the first frame. A card made at 복사됨 kept about 5 MB more per capture
+            // through captures in a row (resident probe capture-30: 583 against 421 MB after 30).
+            card = QuickAccessWindow.ForPendingCapture(first.Image, copiedToClipboard: null, first.Region, first.Monitor,
                 _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"), _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             QuickAccessWindow shown = card;
@@ -142,11 +145,6 @@ public partial class App
             _quickAccess = shown;
             first.Card = shown;
             first.Phase = QuickAccessFirstPhase.Shown;
-            if (copied is { } result)
-            {
-                first.CopyReported = true;
-                first.CopyFailureShown = !result;
-            }
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(shown);
             ReceiptTimeline.Mark?.Invoke("card-show");
@@ -157,7 +155,8 @@ public partial class App
                 first.DeferredSaveFailure = null;
                 ShowQuickAccessFirstFailure(first, failure.Title, failure.Message);
             }
-            if (copied is null) _ = ObserveQuickAccessFirstCopyAsync(first, copy);
+            // At once when the copy has finished, as the card waits for it (ScheduleQuickAccessFirstCard).
+            _ = ObserveQuickAccessFirstCopyAsync(first, copy);
         }
         catch (Exception ex)
         {
