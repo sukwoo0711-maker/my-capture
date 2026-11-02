@@ -239,6 +239,109 @@ public sealed class CaptureFlightTests
     });
 
     [Fact]
+    public void TheFirstLiftAnswersWhetherLayeredWindowsAreKeptOutOfCaptures() => RunFlight(motion: true, (_, clock, image, _) =>
+    {
+        bool real = NativeExclusion.SupportsLayeredWindows;
+        Func<bool> original = CaptureWindowExclusion.LayeredWindowProbe;
+        try
+        {
+            // The app's own reading and exclusion, before anything has asked: no probe window of its own.
+            NativeExclusion.ResetAppProbe();
+            CaptureFlight.ReadLayeredSupport = () => CaptureWindowExclusion.MayTryLayeredWindow;
+            CaptureFlightDecoration.ApplyCaptureExclusion = CaptureWindowExclusion.TryApplyLayered;
+            int probes = CaptureWindowExclusion.ProbeWindowsForTest;
+            CaptureFlight? flight = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now);
+            try
+            {
+                // A lift window a capture could see never shows, and the capture does not fly.
+                Assert.Equal(real, flight is not null);
+                Assert.Equal(real, CaptureWindowExclusion.SupportsLayeredWindows);
+                Assert.Equal(probes, CaptureWindowExclusion.ProbeWindowsForTest);
+            }
+            finally { flight?.Finish(); }
+        }
+        finally { CaptureWindowExclusion.LayeredWindowProbe = original; }
+    });
+
+    [Fact]
+    public void ALiftLoadsTheSpareWindowMadeAheadAtItsScale() => RunFlight(motion: true, (monitor, clock, image, _) =>
+        WithSpareScale(_ => monitor.ScaleFactor, () =>
+        {
+            var spare = new CaptureFlightSpare();
+            var at = new PointD(monitor.Bounds.Left, monitor.Bounds.Top);
+            Assert.True(spare.Prepare(at, monitor.ScaleFactor));
+            CaptureFlightDecoration made = Assert.IsType<CaptureFlightDecoration>(spare.WindowForTest);
+            // One at a time: the ready one stays.
+            Assert.False(spare.Prepare(at, monitor.ScaleFactor));
+            Assert.Same(made, spare.WindowForTest);
+            // Made ahead with its HWND, click-through and capture exclusion, but never shown.
+            Assert.NotEqual(IntPtr.Zero, new WindowInteropHelper(made).Handle);
+            Assert.True(made.IsCaptureExcluded);
+            Assert.False(made.IsVisible);
+
+            CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now, spare));
+            try
+            {
+                Assert.Same(made, flight.WindowForTest);
+                Assert.False(spare.IsReady);
+                Assert.True(made.IsVisible);
+                // The same window and drawing a new lift window would have.
+                Assert.Equal(ToRect(SourceOn()), made.Frame.Image);
+                Assert.Equal(PhysicalBounds(made), made.Bounds);
+                Assert.True(made.Bounds.Left < SourceOn().Left && made.Bounds.Bottom > SourceOn().Bottom);
+                AssertPassive(made);
+            }
+            finally { flight.Finish(); }
+            Assert.True(made.IsClosed);
+        }));
+
+    [Fact]
+    public void ASpareAtAnotherScaleIsClosedAndTheLiftMakesItsOwnWindow() => RunFlight(motion: true, (monitor, clock, image, _) =>
+        WithSpareScale(_ => monitor.ScaleFactor * 2, () =>
+        {
+            var spare = new CaptureFlightSpare();
+            Assert.True(spare.Prepare(new PointD(monitor.Bounds.Left, monitor.Bounds.Top), monitor.ScaleFactor));
+            CaptureFlightDecoration made = Assert.IsType<CaptureFlightDecoration>(spare.WindowForTest);
+            CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now, spare));
+            try
+            {
+                // Windows would resize a window moved to another scale; the lift's own window is exact.
+                Assert.NotSame(made, flight.WindowForTest);
+                Assert.True(made.IsClosed);
+                Assert.False(made.WasShown);
+                Assert.False(spare.IsReady);
+                Assert.Equal(PhysicalBounds(flight.WindowForTest!), flight.WindowForTest!.Bounds);
+            }
+            finally { flight.Finish(); }
+        }));
+
+    [Fact]
+    public void ACaptureThatDoesNotFlyLeavesTheSpareForTheNextOne() => RunFlight(motion: false, (monitor, _, image, _) =>
+        WithSpareScale(_ => monitor.ScaleFactor, () =>
+        {
+            var spare = new CaptureFlightSpare();
+            Assert.True(spare.Prepare(new PointD(monitor.Bounds.Left, monitor.Bounds.Top), monitor.ScaleFactor));
+            CaptureFlightDecoration made = Assert.IsType<CaptureFlightDecoration>(spare.WindowForTest);
+            Assert.Null(CaptureFlight.TryLift(image, SourceOn(), () => 0, spare));
+            Assert.Same(made, spare.WindowForTest);
+            Assert.True(spare.IsReady);
+            spare.Release();
+            Assert.True(made.IsClosed);
+            Assert.False(made.WasShown);
+            Assert.False(spare.IsReady);
+        }));
+
+    [Fact]
+    public void NoSpareIsKeptWhenCapturesCouldSeeIt() => RunFlight(motion: true, (monitor, _, _, _) =>
+    {
+        CaptureFlightDecoration.ApplyCaptureExclusion = _ => false;
+        var spare = new CaptureFlightSpare();
+        Assert.False(spare.Prepare(new PointD(monitor.Bounds.Left, monitor.Bounds.Top), monitor.ScaleFactor));
+        Assert.False(spare.IsReady);
+        Assert.Null(spare.WindowForTest);
+    });
+
+    [Fact]
     public void LiftsOnItsSourceAndFliesIntoTheLandingCard() => RunFlight(motion: true, (monitor, clock, image, router) =>
     {
         CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now));
@@ -504,6 +607,16 @@ public sealed class CaptureFlightTests
         public void Unregister(int id)
         {
         }
+    }
+
+    // The window's own scale comes from the real display under the test display; the spare's choice
+    // between its window and a new one is under test here.
+    private static void WithSpareScale(Func<Window, double> scale, Action body)
+    {
+        Func<Window, double> previous = CaptureFlightSpare.ReadScale;
+        CaptureFlightSpare.ReadScale = scale;
+        try { body(); }
+        finally { CaptureFlightSpare.ReadScale = previous; }
     }
 
     private static void RunFlight(bool motion, Action<MonitorInfo, ManualClock, BitmapSource, ReceiptKeyboardRouter> body) =>

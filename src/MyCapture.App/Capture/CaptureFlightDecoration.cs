@@ -19,14 +19,19 @@ namespace MyCapture.App.Capture;
 /// </remarks>
 internal sealed class CaptureFlightDecoration : Window
 {
-    internal static Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
+    internal static Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApplyLayered;
 
     private readonly FlightSurface _surface;
     private HwndSource? _source;
 
     internal CaptureFlightDecoration(BitmapSource image, RectD bounds, double scale)
+        : this()
     {
-        Bounds = bounds;
+        Load(image, bounds, scale);
+    }
+
+    private CaptureFlightDecoration()
+    {
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -37,19 +42,45 @@ internal sealed class CaptureFlightDecoration : Window
         Topmost = true;
         Focusable = false;
         IsHitTestVisible = false;
+        FluidMotion.SetWindowEntrance(this, false);
+        _surface = new FlightSurface();
+        Content = _surface;
+        SourceInitialized += OnSourceInitialized;
+    }
+
+    /// <summary>
+    /// A hidden 1 x 1 window at <paramref name="at"/> (physical pixels) with its HWND, click-through
+    /// and capture exclusion already in place, for a later capture to <see cref="Load"/>
+    /// (<see cref="CaptureFlightSpare"/>). Never shown, it holds no surface.
+    /// </summary>
+    internal static CaptureFlightDecoration CreateSpare(PointD at, double scale)
+    {
+        var window = new CaptureFlightDecoration();
+        window.Place(new RectD(at.X, at.Y, 1, 1), scale);
+        _ = new WindowInteropHelper(window).EnsureHandle();
+        return window;
+    }
+
+    /// <summary>Gives the window, not shown yet, its image and its rectangle in physical pixels.</summary>
+    internal CaptureFlightDecoration Load(BitmapSource image, RectD bounds, double scale)
+    {
+        Place(bounds, scale);
+        _surface.Load(image, new Point(bounds.Left, bounds.Top));
+        return this;
+    }
+
+    private void Place(RectD bounds, double scale)
+    {
+        Bounds = bounds;
         scale = double.IsFinite(scale) && scale > 0 ? scale : 1;
         Left = bounds.Left / scale;
         Top = bounds.Top / scale;
         Width = Math.Max(1, bounds.Width / scale);
         Height = Math.Max(1, bounds.Height / scale);
-        FluidMotion.SetWindowEntrance(this, false);
-        _surface = new FlightSurface(image, new Point(bounds.Left, bounds.Top));
-        Content = _surface;
-        SourceInitialized += OnSourceInitialized;
     }
 
     /// <summary>The window's virtual-desktop rectangle in physical pixels.</summary>
-    internal RectD Bounds { get; }
+    internal RectD Bounds { get; private set; }
 
     internal bool IsCaptureExcluded { get; private set; }
 
@@ -139,15 +170,19 @@ internal sealed class CaptureFlightDecoration : Window
     private sealed class FlightSurface : FrameworkElement
     {
         private BitmapSource? _image;
-        private readonly Point _origin;
+        private Point _origin;
         private readonly DrawingVisual _drawing = new();
 
-        internal FlightSurface(BitmapSource image, Point origin)
+        internal FlightSurface()
+        {
+            IsHitTestVisible = false;
+            AddVisualChild(_drawing);
+        }
+
+        internal void Load(BitmapSource image, Point origin)
         {
             _image = image;
             _origin = origin;
-            IsHitTestVisible = false;
-            AddVisualChild(_drawing);
         }
 
         protected override int VisualChildrenCount => 1;

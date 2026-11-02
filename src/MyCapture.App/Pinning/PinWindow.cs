@@ -205,6 +205,8 @@ internal sealed partial class PinWindow : Window
         AutomationProperties.SetName(_feedbackDismiss, UiText.Get("Feedback.Dismiss"));
         _feedbackDismiss.Click += (_, _) => DismissFeedback();
         DockPanel.SetDock(_feedbackDismiss, Dock.Right);
+        // A translation's message carries its progress bar under the text.
+        DockPanel.SetDock(_translationStrip, Dock.Bottom);
         _feedback = new Border
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -213,7 +215,7 @@ internal sealed partial class PinWindow : Window
             Padding = new Thickness(10, 5, 10, 5),
             CornerRadius = new CornerRadius(6),
             Background = ThemeBrushes.Follow("Surface.Floating", Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
-            Child = new DockPanel { Children = { _feedbackDismiss, _feedbackText } },
+            Child = new DockPanel { Children = { _feedbackDismiss, _translationStrip, _feedbackText } },
             Visibility = Visibility.Collapsed,
         };
 
@@ -1058,6 +1060,7 @@ internal sealed partial class PinWindow : Window
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
+        ReleaseTranslationProgress();
         _ctrlClickTimer.Stop();
         _zoomSettleTimer.Stop();
         _hoverHideTimer.Stop();
@@ -2110,6 +2113,8 @@ internal sealed partial class PinWindow : Window
             _feedback.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
+        _feedbackShowsTranslation = kind == FeedbackKind.Progress && text == _translationProgressLine;
+        SyncTranslationStrip();
         // Every message restarts the countdown, so the latest text gets its full display time.
         _feedbackCountdown.Start(FeedbackTiming.DisplayTime(kind, overContent: true));
         if (announce && IsVisible) AnnounceFeedback(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
@@ -2142,6 +2147,9 @@ internal sealed partial class PinWindow : Window
         int generation = ++_feedbackGeneration;
         _feedbackKind = FeedbackKind.Echo;
         _feedbackDismiss.Visibility = Visibility.Collapsed;
+        // A fading message keeps its height; its bar stops at once.
+        _feedbackShowsTranslation = false;
+        _translationStrip.Hide(keepSpace: true);
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
         if (immediate || !FluidMotion.AnimationsEnabled || _isClosed)
         {
@@ -2358,6 +2366,7 @@ internal sealed partial class PinWindow : Window
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
+        ReleaseTranslationProgress();
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
         _zoomSettleTimer.Stop();

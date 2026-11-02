@@ -25,7 +25,7 @@ internal enum EditorCursorKind
     /// <summary>Central locator; the surface shows the actual circular pen footprint.</summary>
     Pen,
 
-    /// <summary>Central locator; the surface shows the actual circular highlighter footprint.</summary>
+    /// <summary>The edit icon with the hot spot on its nib; the surface shows the actual circular highlighter footprint there.</summary>
     Highlighter,
 
     /// <summary>Crosshair with the number the next click adds.</summary>

@@ -5277,6 +5277,12 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   <data name="Pin_Translating" xml:space="preserve">
     <value>번역 중</value>
   </data>
+  <data name="Pin_TranslationSecondsLeft" xml:space="preserve">
+    <value>{0} · 약 {1}초 남음</value>
+  </data>
+  <data name="Pin_TranslationMinutesLeft" xml:space="preserve">
+    <value>{0} · 약 {1}분 남음</value>
+  </data>
   <data name="Pin_TranslationDownloading" xml:space="preserve">
     <value>번역 모델 설치 중</value>
   </data>

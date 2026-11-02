@@ -12,6 +12,14 @@ internal interface ISentenceTranslator : IDisposable
     int CountTokens(string text);
 
     IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The same translation, calling <paramref name="sentenceDone"/> on the translating thread with a sentence's index
+    /// as soon as its decoding has ended. A call decodes until its longest sentence ends, so shorter ones end first;
+    /// a sentence that runs to the length limit is not reported, and the call's return covers it.
+    /// </summary>
+    IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, Action<int>? sentenceDone,
+        CancellationToken cancellationToken) => Translate(sentences, cancellationToken);
 }
 
 /// <summary>File names of one Marian model inside its folder.</summary>
@@ -115,12 +123,16 @@ internal sealed class MarianTranslator : ISentenceTranslator
 
     public int CountTokens(string text) => _source.EncodeToIds(text).Length + 1;
 
-    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken)
+    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken) =>
+        Translate(sentences, null, cancellationToken);
+
+    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, Action<int>? sentenceDone,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sentences);
         if (sentences.Count == 0) return [];
         int[][] sources = [.. sentences.Select(EncodeSource)];
-        return [.. Generate(sources, cancellationToken).Select(Decode)];
+        return [.. Generate(sources, sentenceDone, cancellationToken).Select(Decode)];
     }
 
     private int[] EncodeSource(string text)
@@ -133,7 +145,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
         return ids;
     }
 
-    private List<int>[] Generate(IReadOnlyList<int[]> sources, CancellationToken cancellationToken)
+    private List<int>[] Generate(IReadOnlyList<int[]> sources, Action<int>? sentenceDone, CancellationToken cancellationToken)
     {
         int batch = sources.Count;
         int sourceLength = sources.Max(source => source.Length);
@@ -199,7 +211,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
                 var byName = new Dictionary<string, OrtValue>(outputNames.Length, StringComparer.Ordinal);
                 for (int index = 0; index < outputNames.Length; index++) byName[outputNames[index]] = result[index];
 
-                bool done = PickNextTokens(byName["logits"], next, finished, outputs);
+                bool done = PickNextTokens(byName["logits"], next, finished, outputs, sentenceDone);
                 if (step == 0)
                 {
                     first = result;
@@ -224,8 +236,8 @@ internal sealed class MarianTranslator : ISentenceTranslator
         return outputs;
     }
 
-    /// <summary>Greedy choice per unfinished row; the padding token is never generated.</summary>
-    private bool PickNextTokens(OrtValue logitsValue, long[] next, bool[] finished, List<int>[] outputs)
+    /// <summary>Greedy choice per unfinished row; the padding token is never generated. A row that ends is reported once.</summary>
+    private bool PickNextTokens(OrtValue logitsValue, long[] next, bool[] finished, List<int>[] outputs, Action<int>? rowDone)
     {
         ReadOnlySpan<float> logits = logitsValue.GetTensorDataAsSpan<float>();
         long[] shape = logitsValue.GetTensorTypeAndShape().Shape;
@@ -255,6 +267,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
             {
                 finished[row] = true;
                 next[row] = _pad;
+                rowDone?.Invoke(row);
             }
             else
             {
