@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace MyCapture.Ocr.Translation;
@@ -8,7 +9,7 @@ internal sealed record TranslatedText(string Source, string Text, IReadOnlyList<
     internal bool NeedsReview => Missing.Count > 0 || Invented.Count > 0;
 }
 
-/// <summary>Blocks finished so far, in reading order.</summary>
+/// <summary>Blocks finished so far, wherever they are in the reading order, out of all blocks of the request.</summary>
 internal readonly record struct TranslationProgress(int Completed, int Total);
 
 /// <summary>What the OCR result window uses: the model on disk, then translation.</summary>
@@ -89,6 +90,12 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
     }
 
     public long ModelDownloadBytes => _store.TotalBytes;
+
+    /// <summary>
+    /// The shortest time between two progress reports inside one model call. A block counts as soon as the model has
+    /// finished its last sentence, and every call still ends with a report, so the last one always gives the total.
+    /// </summary>
+    internal TimeSpan ProgressInterval { get; init; } = TimeSpan.FromMilliseconds(100);
 
     internal bool IsEngineLoaded => Volatile.Read(ref _engine) is not null;
 
@@ -194,15 +201,15 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         if (_cache.Count > CacheLimit) _cache.Clear();
         var pending = segments.SelectMany(block => block).Where(segment => !_cache.ContainsKey(segment))
             .Distinct(StringComparer.Ordinal).ToList();
-        int completed = CompletedBlocks(segments, 0);
-        if (completed > 0) progress?.Report(new(completed, sources.Count));
+        BlockProgress? blocks = progress is null ? null : new BlockProgress(segments, _cache, progress, ProgressInterval);
         foreach (List<string> batch in PlanBatches(pending, engine.CountTokens))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<string> translated = engine.Translate(batch, cancellationToken);
+            // A short sentence of the call counts once the model has ended it, before the longest one has.
+            IReadOnlyList<string> translated = engine.Translate(batch,
+                blocks is null ? null : row => blocks.Finish(batch[row]), cancellationToken);
             for (int index = 0; index < batch.Count; index++) _cache[batch[index]] = translated[index];
-            int now = CompletedBlocks(segments, completed);
-            if (now > completed) progress?.Report(new(completed = now, sources.Count));
+            blocks?.FinishCall(batch);
         }
 
         var results = new List<TranslatedText>(sources.Count);
@@ -261,11 +268,74 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         return batches;
     }
 
-    private int CompletedBlocks(List<string>[] segments, int from)
+    /// <summary>
+    /// Counts the blocks whose every segment is translated, from the cache or from a model call, and reports the
+    /// count when it grows: at once after a call, and at most once per interval while a call is still decoding.
+    /// It lives on the translating thread, where the model also reports its finished sentences.
+    /// </summary>
+    private sealed class BlockProgress
     {
-        int completed = from;
-        while (completed < segments.Length && segments[completed].All(_cache.ContainsKey)) completed++;
-        return completed;
+        private readonly IProgress<TranslationProgress> _progress;
+        private readonly TimeSpan _interval;
+        private readonly int _total;
+        private readonly int[] _unfinished;
+        // Each segment still to translate, with the block of each of its occurrences.
+        private readonly Dictionary<string, List<int>> _waiting = new(StringComparer.Ordinal);
+        private int _completed;
+        private int _reported;
+        private long _reportedAt;
+
+        internal BlockProgress(List<string>[] segments, Dictionary<string, string> cache, IProgress<TranslationProgress> progress,
+            TimeSpan interval)
+        {
+            _progress = progress;
+            _interval = interval;
+            _total = segments.Length;
+            _unfinished = new int[segments.Length];
+            for (int block = 0; block < segments.Length; block++)
+            {
+                foreach (string segment in segments[block])
+                {
+                    if (cache.ContainsKey(segment)) continue;
+                    _unfinished[block]++;
+                    if (!_waiting.TryGetValue(segment, out List<int>? blocks)) _waiting[segment] = blocks = [];
+                    blocks.Add(block);
+                }
+                if (_unfinished[block] == 0) _completed++;
+            }
+            Report(call: true);
+        }
+
+        /// <summary>A sentence the model has ended while its call still decodes others.</summary>
+        internal void Finish(string segment)
+        {
+            Mark(segment);
+            Report(call: false);
+        }
+
+        /// <summary>The end of a call: every segment it carried is translated.</summary>
+        internal void FinishCall(IEnumerable<string> batch)
+        {
+            foreach (string segment in batch) Mark(segment);
+            Report(call: true);
+        }
+
+        private void Mark(string segment)
+        {
+            if (!_waiting.Remove(segment, out List<int>? blocks)) return;
+            foreach (int block in blocks)
+                if (--_unfinished[block] == 0) _completed++;
+        }
+
+        private void Report(bool call)
+        {
+            if (_completed <= _reported) return;
+            long now = Stopwatch.GetTimestamp();
+            if (!call && _reportedAt != 0 && Stopwatch.GetElapsedTime(_reportedAt, now) < _interval) return;
+            _reported = _completed;
+            _reportedAt = now;
+            _progress.Report(new(_completed, _total));
+        }
     }
 
     private ISentenceTranslator LoadEngine()

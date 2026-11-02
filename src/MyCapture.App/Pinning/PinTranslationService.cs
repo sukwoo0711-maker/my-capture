@@ -31,6 +31,12 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
 
     internal PinTranslationDirection Direction { get; } = direction;
 
+    /// <summary>
+    /// Receives the translated sentences of each translator call and how many it sends: the count when the call
+    /// starts, then as the translator finishes sentences, then all of them when it returns. Counts only grow.
+    /// </summary>
+    internal IProgress<TranslationProgress>? Progress { get; init; }
+
     internal static bool CanTranslate(PinContent content, PinTranslationDirection direction = PinTranslationDirection.EnglishToKorean)
     {
         ArgumentNullException.ThrowIfNull(content);
@@ -137,8 +143,7 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
             }
         }
 
-        IReadOnlyList<TranslatedText> translated = await _translator.TranslateAsync(units, null, cancellationToken)
-            .ConfigureAwait(false);
+        IReadOnlyList<TranslatedText> translated = await TranslateUnitsAsync(units, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (translated.Count != units.Count || translated.All(static result => string.IsNullOrWhiteSpace(result.Text)))
             throw new InvalidOperationException("The translator returned an incomplete pin result.");

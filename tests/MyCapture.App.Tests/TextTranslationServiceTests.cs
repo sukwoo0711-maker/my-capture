@@ -34,6 +34,58 @@ public sealed class TextTranslationServiceTests
     }
 
     [Fact]
+    public async Task ABlockCountsOnceTheModelEndsItsLastSentenceWhileTheCallStillDecodes()
+    {
+        var log = new List<string>();
+        using var fixture = new ServiceFixture(progressInterval: TimeSpan.Zero, load: () => new FakeEngine(source => "KO " + source)
+        {
+            // Batched decoding ends rows as their outputs end, not in reading order.
+            EndOrder = EndsLastLetterFirst,
+            Returning = () => log.Add("returned"),
+        });
+
+        IReadOnlyList<TranslatedText> results = await fixture.Service.TranslateAsync(SplitAndSingleSentences,
+            new SyncProgress<TranslationProgress>(update => log.Add($"{update.Completed}/{update.Total}")), CancellationToken.None);
+
+        // One call for four sentences of one length: the first block has two of them.
+        Assert.Equal([4], fixture.Engine.Batches.Select(batch => batch.Count));
+        Assert.Equal(3, results.Count);
+        Assert.Equal("KO " + SplitAndSingleSentences[2], results[2].Text);
+        // Delta and Charlie end the third and the second block before the first one is complete.
+        Assert.Equal(["0/3", "1/3", "2/3", "3/3", "returned"], log);
+    }
+
+    [Fact]
+    public async Task WhileACallDecodesCountsWaitForTheIntervalAndTheCallEndsWithItsCount()
+    {
+        var log = new List<string>();
+        using var fixture = new ServiceFixture(progressInterval: TimeSpan.FromHours(1), load: () => new FakeEngine(source => "KO " + source)
+        {
+            EndOrder = EndsLastLetterFirst,
+            Returning = () => log.Add("returned"),
+        });
+
+        await fixture.Service.TranslateAsync(SplitAndSingleSentences,
+            new SyncProgress<TranslationProgress>(update => log.Add($"{update.Completed}/{update.Total}")), CancellationToken.None);
+
+        // The first count shows at once; the next ones of the same call wait, and its end reports the total.
+        Assert.Equal(["0/3", "1/3", "returned", "3/3"], log);
+    }
+
+    // A paragraph of two sentences that splits in two segments, then two blocks of one sentence; all of one length.
+    private static readonly string[] SplitAndSingleSentences =
+    [
+        Sentence("Alpha") + " " + Sentence("Bravo"),
+        Sentence("Charlie"),
+        Sentence("Delta"),
+    ];
+
+    private static string Sentence(string first) => first + " " + string.Join(" ", Enumerable.Repeat("word", 32)) + ".";
+
+    private static IEnumerable<int> EndsLastLetterFirst(IReadOnlyList<string> batch) =>
+        Enumerable.Range(0, batch.Count).OrderByDescending(row => batch[row][0]);
+
+    [Fact]
     public async Task FortyLineScreenTakesLittleTimeAroundTheModel()
     {
         using var fixture = new ServiceFixture();
@@ -261,7 +313,7 @@ public sealed class TextTranslationServiceTests
         private readonly HttpClient _http = new(new RejectingHandler());
 
         internal ServiceFixture(Func<string, string>? map = null, TimeSpan? idleRelease = null, Func<FakeEngine>? load = null,
-            bool installed = false)
+            bool installed = false, TimeSpan? progressInterval = null)
         {
             AppPaths paths = AppPaths.CreateForRoot(_root);
             TranslationModelFile[]? files = null;
@@ -280,7 +332,10 @@ public sealed class TextTranslationServiceTests
                 Loads++;
                 Engine = load?.Invoke() ?? new FakeEngine(map ?? (source => "KO " + source));
                 return Engine;
-            }, NullLogger.Instance, idleRelease ?? TimeSpan.FromMinutes(5));
+            }, NullLogger.Instance, idleRelease ?? TimeSpan.FromMinutes(5))
+            {
+                ProgressInterval = progressInterval ?? TimeSpan.FromMilliseconds(100),
+            };
         }
 
         internal TextTranslationService Service { get; }
@@ -303,12 +358,28 @@ public sealed class TextTranslationServiceTests
 
         internal bool Disposed { get; private set; }
 
+        /// <summary>The rows a call ends before it returns, in the order the model ends them; none by default.</summary>
+        internal Func<IReadOnlyList<string>, IEnumerable<int>>? EndOrder { get; init; }
+
+        /// <summary>Runs as a call returns, after the rows it ended.</summary>
+        internal Action? Returning { get; init; }
+
         public int CountTokens(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length + 1;
 
         public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken)
         {
             Batches.Add([.. sentences]);
             return [.. sentences.Select(map)];
+        }
+
+        public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, Action<int>? sentenceDone,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<string> translated = Translate(sentences, cancellationToken);
+            if (sentenceDone is not null && EndOrder is { } order)
+                foreach (int row in order(sentences)) sentenceDone(row);
+            Returning?.Invoke();
+            return translated;
         }
 
         public void Dispose() => Disposed = true;
