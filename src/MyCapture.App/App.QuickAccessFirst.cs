@@ -101,6 +101,7 @@ public partial class App
         var deadline = new CancellationTokenSource();
         _ = Task.WhenAny(copy, Task.Delay(wait, deadline.Token)).ContinueWith(_ =>
         {
+            ReceiptTimeline.Mark?.Invoke(copy.IsCompleted ? "card-copy-done" : "card-copy-wait-over");
             deadline.Cancel();
             deadline.Dispose();
             Post();

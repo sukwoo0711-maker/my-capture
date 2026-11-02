@@ -234,9 +234,9 @@ public partial class App
             gen0 = GC.CollectionCount(0);
             gen1 = GC.CollectionCount(1);
             gen2 = GC.CollectionCount(2);
+            // Through the dwell: a card that receives the flight stays clear until the image starts flying.
             ReceiptTimeline.Mark = stage =>
             {
-                if (cardMs >= 0) return;
                 double at = Stopwatch.GetElapsedTime(selected).TotalMilliseconds;
                 lock (receiptMarks) receiptMarks.Add(new ResidentProbeRecorder.Mark(stage, Math.Round(at, 2), Environment.CurrentManagedThreadId));
             };
@@ -255,18 +255,30 @@ public partial class App
                     "card-first-rendering", Math.Round(cardMs, 2), Environment.CurrentManagedThreadId));
             }
         };
-        CompositionTarget.Rendering += rendering;
         try
         {
-            overlay.CompleteSelection(new RectD(160, 120, 1280, 720));
-            await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
+            CompositionTarget.Rendering += rendering;
+            try
+            {
+                overlay.CompleteSelection(new RectD(160, 120, 1280, 720));
+                await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
+            }
+            finally
+            {
+                CompositionTarget.Rendering -= rendering;
+            }
+            recorder.Time(name + ": selection → card shown", cardMs);
+            recorder.Track(name, "card", _quickAccess);
+            recorder.Track(name, "card image", _quickAccess?.PreviewForTest.Source);
+            recorder.Track(name, "flight", _captureFlight);
+            recorder.Track(name, "flight window", _captureFlight?.WindowForTest);
+
+            await Task.Delay(dwellMs);
         }
         finally
         {
-            CompositionTarget.Rendering -= rendering;
             if (receiptMarks is not null) ReceiptTimeline.Mark = previousReceiptMark;
         }
-        recorder.Time(name + ": selection → card shown", cardMs);
         if (receiptMarks is not null)
         {
             int index = _probeReceiptIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
@@ -274,12 +286,6 @@ public partial class App
             lock (receiptMarks) recorder.AddReceiptBreakdown(new ResidentProbeRecorder.ReceiptBreakdown(
                 name, index, Math.Round(cardMs, 2), collected0, collected1, collected2, receiptMarks.ToArray()));
         }
-        recorder.Track(name, "card", _quickAccess);
-        recorder.Track(name, "card image", _quickAccess?.PreviewForTest.Source);
-        recorder.Track(name, "flight", _captureFlight);
-        recorder.Track(name, "flight window", _captureFlight?.WindowForTest);
-
-        await Task.Delay(dwellMs);
         _quickAccess?.RequestClose();
         await ProbeWaitAsync(() => _quickAccess is null && _overlay?.IsActive != true && _capturePersistenceTask.IsCompleted,
             10_000, "card closed");

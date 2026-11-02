@@ -70,7 +70,7 @@ internal sealed class CaptureFlight
     private const double ShadowLeaveFrom = 0.6;
 
     internal static Func<bool> ReadRemoteSession { get; set; } = () => SystemParameters.IsRemoteSession;
-    internal static Func<bool> ReadLayeredSupport { get; set; } = () => CaptureWindowExclusion.SupportsLayeredWindows;
+    internal static Func<bool> ReadLayeredSupport { get; set; } = () => CaptureWindowExclusion.MayTryLayeredWindow;
     internal static Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
 
     internal static bool UseLegacyBoundsForProbe { get; set; }
@@ -90,6 +90,9 @@ internal sealed class CaptureFlight
 
     /// <summary>Actual capture exclusion of each decoration that has left the screen.</summary>
     internal event Action<bool>? SurfaceDismissed;
+
+    /// <summary>The flight has ended (<see cref="Finish"/>): none of its windows is on screen.</summary>
+    internal event Action? Ended;
 
     private CaptureFlight(BitmapSource image, RectD source, CaptureFlightDecoration window, double scale, Func<double> clock)
     {
@@ -124,20 +127,24 @@ internal sealed class CaptureFlight
 
     /// <summary>
     /// Lifts <paramref name="image"/>, taken from <paramref name="source"/> (physical pixels), off
-    /// the screen. Null when the capture cannot fly; nothing is shown then.
+    /// the screen, in the window <paramref name="spare"/> has ready when it is at the right scale.
+    /// Null when the capture cannot fly; nothing is shown then.
     /// </summary>
-    internal static CaptureFlight? TryLift(BitmapSource image, RectD source, Func<double>? clock = null)
+    internal static CaptureFlight? TryLift(BitmapSource image, RectD source, Func<double>? clock = null, CaptureFlightSpare? spare = null)
     {
         if (!IsEligible(FluidMotion.AnimationsEnabled, ReadRemoteSession(), ReadLayeredSupport())) return null;
         RectD pixels = source.ToPixelBounds();
         // The image must be the source pixels one to one, or it would not look like the screen.
         if (pixels.IsEmpty || pixels.Width != image.PixelWidth || pixels.Height != image.PixelHeight) return null;
+        ReceiptTimeline.Mark?.Invoke("lift-eligible");
         if (PlanBounds(ToRect(pixels), ReadMonitors()) is not { } plan) return null;
 
         CaptureFlightDecoration? window = null;
         try
         {
-            window = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
+            window = spare?.Take(plan.Scale)?.Load(image, plan.Bounds, plan.Scale);
+            ReceiptTimeline.Mark?.Invoke(window is null ? "lift-new-window" : "lift-spare-window");
+            window ??= new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
             Stopwatch? watch = clock is null ? Stopwatch.StartNew() : null;
             var flight = new CaptureFlight(image, pixels, window, plan.Scale, clock ?? (() => watch!.Elapsed.TotalMilliseconds));
             flight.Draw(flight.LiftFrame(0, 1));
@@ -210,6 +217,7 @@ internal sealed class CaptureFlight
         _window = null;
         _card = null;
         Image = null;
+        Ended?.Invoke();
     }
 
     /// <summary>Applies the frame for the clock's current time; the live clock calls this every frame.</summary>
@@ -291,6 +299,7 @@ internal sealed class CaptureFlight
                 return;
             }
 
+            // Made while the lift window keeps WPF's layered-window resources, a new window is quick here.
             var successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
             successor.Closed += OnDecorationClosed;
             successor.Draw(lifted.Frame);
