@@ -12,16 +12,21 @@ using MyCapture.Platform.Shell;
 namespace MyCapture.App;
 
 /// <summary>
-/// Card first: a still capture's quick access card shows on the dispatcher turn after the capture
-/// lifts off the screen, while the capture is still being saved and copied, instead of after both.
+/// Card first: a still capture's quick access card shows on the dispatcher turn after the automatic
+/// copy reports, while the capture may still be saved, instead of after both.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The card shows the captured image at once and takes the flight as before. Its actions that need
-/// the saved capture (edit, pin, save, library, copy, copy text, dragging the preview) stay disabled
-/// until the save succeeds; then the record, the latest receipt, the card's eviction lease and its
-/// actions are bound (<see cref="BindQuickAccessFirst"/>). Its status says 복사 중… until the
-/// automatic copy reports, unless the copy had already finished when it showed.
+/// The card says the capture is on the clipboard, so a paste right after it appears must paste this
+/// capture: it waits for the copy, at most <see cref="QuickAccessFirstCopyWait"/>. Meanwhile the lifted
+/// capture holds still where it was taken. A copy still running after that (a very large capture) gets
+/// its card anyway, whose status says 복사 중… until the copy reports.
+/// </para>
+/// <para>
+/// The card shows the captured image and takes the flight as before. Its actions that need the saved
+/// capture (edit, pin, save, library, copy, copy text, dragging the preview) stay disabled until the
+/// save succeeds; then the record, the latest receipt, the card's eviction lease and its actions are
+/// bound (<see cref="BindQuickAccessFirst"/>), at once when the save finished while the card waited.
 /// </para>
 /// <para>
 /// A failed save turns the card on screen into the failure, with today's reason, instead of the
@@ -39,6 +44,12 @@ public partial class App
     /// </summary>
     internal bool ShowsCardAfterSaveForTest { get; set; }
 
+    /// <summary>The longest the card shown first waits for the automatic copy before it shows anyway.</summary>
+    internal static readonly TimeSpan QuickAccessFirstCopyWait = TimeSpan.FromSeconds(1);
+
+    /// <summary>Test-only: replaces <see cref="QuickAccessFirstCopyWait"/>; zero shows the card on the turn after the lift.</summary>
+    internal TimeSpan? QuickAccessFirstCopyWaitForTest { get; set; }
+
     /// <summary>Test hook: each notification the still capture handler shows, with its title and message.</summary>
     internal Action<string, string>? CaptureNoticeForTest { get; set; }
 
@@ -52,8 +63,8 @@ public partial class App
     }
 
     /// <summary>
-    /// Schedules the card of a capture that will show one, on the turn after its lift; null when the
-    /// capture shows no card first (another mode, a text capture, no library).
+    /// Schedules the card of a capture that will show one, on the turn after its copy reports; null when
+    /// the capture shows no card first (another mode, a text capture, no library).
     /// </summary>
     private QuickAccessFirst? ShowQuickAccessFirst(CaptureSelectionCompletedEventArgs e, Task<bool> copy, bool preserveEditor = false)
     {
@@ -66,11 +77,34 @@ public partial class App
         var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
             { PreserveEditor = preserveEditor };
         _quickAccessFirst = first;
-        // Posted after the lift at the same priority, so the card follows it on the next turn, before the
-        // save's and the copy's continuations (Normal priority).
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => ShowQuickAccessFirstCard(first, copy)));
+        ScheduleQuickAccessFirstCard(first, copy);
         ReceiptTimeline.Mark?.Invoke("card-first-scheduled");
         return first;
+    }
+
+    /// <summary>
+    /// Posts the card at the lift's priority once the copy has reported, or once it has run for
+    /// <see cref="QuickAccessFirstCopyWait"/>: the card then shows before the save's and the copy's own
+    /// continuations (Normal priority), and after the lift when the copy has already reported.
+    /// </summary>
+    private void ScheduleQuickAccessFirstCard(QuickAccessFirst first, Task<bool> copy)
+    {
+        void Post() => _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => ShowQuickAccessFirstCard(first, copy)));
+
+        TimeSpan wait = QuickAccessFirstCopyWaitForTest ?? QuickAccessFirstCopyWait;
+        if (copy.IsCompleted || wait <= TimeSpan.Zero)
+        {
+            Post();
+            return;
+        }
+
+        var deadline = new CancellationTokenSource();
+        _ = Task.WhenAny(copy, Task.Delay(wait, deadline.Token)).ContinueWith(_ =>
+        {
+            deadline.Cancel();
+            deadline.Dispose();
+            Post();
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private void ShowQuickAccessFirstCard(QuickAccessFirst first, Task<bool> copy)
@@ -199,7 +233,7 @@ public partial class App
         switch (first.Phase)
         {
             case QuickAccessFirstPhase.Scheduled:
-                // Its turn has not come yet: the card shows the usual way once saved and copied.
+                // Its turn, once the copy reports, has not come yet: the card shows the usual way once saved and copied.
                 first.Phase = QuickAccessFirstPhase.Cancelled;
                 return false;
             case QuickAccessFirstPhase.NotShown:
@@ -259,7 +293,7 @@ public partial class App
 
     private enum QuickAccessFirstPhase
     {
-        /// <summary>Its turn, right after the lift, has not come yet.</summary>
+        /// <summary>Its turn, once the copy reports (or has run for <see cref="QuickAccessFirstCopyWait"/>), has not come yet.</summary>
         Scheduled,
 
         /// <summary>The card is on screen, or was until closed or replaced.</summary>
