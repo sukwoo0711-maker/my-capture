@@ -35,18 +35,18 @@ internal static partial class PinTranslationOverlay
             ? TextAlignment.Right : TextAlignment.Left;
     }
 
-    private static OcrRect EstablishedColumnLimits(OcrRect limits, IReadOnlyList<PinOverlayTranslation> translations,
+    private static OcrRect EstablishedColumnLimits(OcrRect limits, IReadOnlyList<PinOverlayBlock> blocks,
         IReadOnlyList<double> fontSizes, int index, TextAlignment alignment)
     {
-        PinOverlayBlock block = translations[index].Block;
+        PinOverlayBlock block = blocks[index];
         if (block.Lines.Count < 2 || alignment != TextAlignment.Left) return limits;
         double tolerance = Math.Max(2, Median(block.Lines.Select(line => line.Bounds.Height)) * .5);
         int peers = 0;
         double right = block.Bounds.Right;
-        for (int otherIndex = 0; otherIndex < translations.Count; otherIndex++)
+        for (int otherIndex = 0; otherIndex < blocks.Count; otherIndex++)
         {
             if (otherIndex == index) continue;
-            PinOverlayBlock other = translations[otherIndex].Block;
+            PinOverlayBlock other = blocks[otherIndex];
             if (other.PreservePixels || other.Lines.Count < 2 || Math.Abs(other.Bounds.X - block.Bounds.X) > tolerance
                 || Math.Max(fontSizes[index], fontSizes[otherIndex]) > Math.Min(fontSizes[index], fontSizes[otherIndex]) * 1.2
                 || InferAlignment(other.Lines) != TextAlignment.Left) continue;
@@ -62,7 +62,7 @@ internal static partial class PinTranslationOverlay
     /// Source ink belongs to this block; every other pixel occupied by its text or plate must
     /// match its ring. A graphics edge is a boundary even when OCR did not report any text there.
     /// </summary>
-    private sealed class BackgroundSurface
+    internal sealed class BackgroundSurface
     {
         private const int Tolerance = 18;
         private readonly byte[] pixels;
@@ -71,6 +71,7 @@ internal static partial class PinTranslationOverlay
         private readonly OcrRect[] sourceInk;
         private readonly OcrRect[] occupiedLines;
         private readonly Color background;
+        private readonly int backgroundR, backgroundG, backgroundB;
         private readonly int backgroundTolerance = Tolerance;
         private readonly bool noisySurface;
         private readonly bool texturedSurface;
@@ -81,6 +82,7 @@ internal static partial class PinTranslationOverlay
         private readonly int continuousLeft, continuousRight;
         private readonly OcrRect[] extraInk;
         private readonly OcrRect[] preservedInk;
+        private readonly OcrRect[] decorations;
 
         internal IReadOnlyList<OcrRect> ExtraInk => extraInk;
         internal IReadOnlyList<OcrRect> TextExclusions => preservedInk;
@@ -98,6 +100,7 @@ internal static partial class PinTranslationOverlay
             this.height = height;
             this.stride = stride;
             this.background = background;
+            (backgroundR, backgroundG, backgroundB) = (background.R, background.G, background.B);
             bounds = Clamp(block.Bounds, width, height);
             static OcrRect PixelBounds(OcrRect ink) => new(Math.Floor(ink.X), Math.Floor(ink.Y),
                 Math.Ceiling(ink.Right) - Math.Floor(ink.X), Math.Ceiling(ink.Bottom) - Math.Floor(ink.Y));
@@ -141,7 +144,7 @@ internal static partial class PinTranslationOverlay
             }
             if (!gradient) backgroundTolerance = EstimateNoiseTolerance(out noisySurface, out texturedSurface);
             OcrRect[] protection = protectedRectangles.Concat(block.ProtectedRegions).Distinct().ToArray();
-            OcrRect[] decorations = FindUnderlines(block.Lines, protection);
+            decorations = FindUnderlines(block.Lines, protection);
             Underline = block.Lines.Count == 1 && decorations.Any(rect => rect.Width >= block.Bounds.Width * .9);
             decorations = decorations.Concat(FindWordSurfaces(block.Lines, protection)).ToArray();
             if (decorations.Length > 0)
@@ -169,29 +172,48 @@ internal static partial class PinTranslationOverlay
                 .Select(rect => Math.Max(0, rect.Right - bounds.X + 2)).DefaultIfEmpty(0).Max();
         }
 
+        /// <summary>
+        /// True when this surface, built beside <paramref name="prepared"/>, is also the surface beside
+        /// <paramref name="actual"/>. An obstacle changes it only by vetoing an underline or word surface
+        /// it touches or by reaching into the block, where it bounds the search for unread ink.
+        /// </summary>
+        internal bool Admits(IReadOnlyList<OcrRect> prepared, IReadOnlyList<OcrRect> actual)
+        {
+            var current = new HashSet<OcrRect>(actual);
+            if (!current.IsSupersetOf(prepared)) return false;
+            current.ExceptWith(prepared);
+            foreach (OcrRect added in current)
+            {
+                if (Intersects(added, bounds)) return false;
+                foreach (OcrRect decoration in decorations)
+                    if (Intersects(added, decoration)) return false;
+            }
+            return true;
+        }
+
         internal OcrRect HorizontalLimits(TextAlignment alignment)
         {
             double left = 0, right = width;
+            int top = (int)bounds.Y, bottom = (int)Math.Ceiling(bounds.Bottom);
+            // The nearest column beside the block with a pixel that is neither background nor its source ink.
+            // Rows are read in memory order, each only as far as the nearest column found so far.
             if (alignment != TextAlignment.Right)
             {
-                for (int x = (int)Math.Ceiling(bounds.Right); x < width; x++)
-                    if (!MatchingColumn(x, (int)bounds.Y, (int)Math.Ceiling(bounds.Bottom)))
-                    { right = Math.Max(bounds.Right, x); break; }
+                int start = (int)Math.Ceiling(bounds.Right), nearest = width;
+                for (int y = top; y < bottom; y++)
+                    for (int x = start; x < nearest; x++)
+                        if (!Matches(x, y) && !Contains(sourceInk, x, y)) { nearest = x; break; }
+                if (nearest < width) right = Math.Max(bounds.Right, nearest);
             }
             if (alignment != TextAlignment.Left)
             {
-                for (int x = (int)bounds.X - 1; x >= 0; x--)
-                    if (!MatchingColumn(x, (int)bounds.Y, (int)Math.Ceiling(bounds.Bottom)))
-                    { left = Math.Min(bounds.X, x + 1); break; }
+                int nearest = -1;
+                for (int y = top; y < bottom; y++)
+                    for (int x = (int)bounds.X - 1; x > nearest; x--)
+                        if (!Matches(x, y) && !Contains(sourceInk, x, y)) { nearest = x; break; }
+                if (nearest >= 0) left = Math.Min(bounds.X, nearest + 1);
             }
             return new(left, bounds.Y, Math.Max(0, right - left), bounds.Height);
-        }
-
-        private bool MatchingColumn(int x, int top, int bottom)
-        {
-            for (int y = top; y < bottom; y++)
-                if (!Matches(y * stride + x * 4) && !Contains(sourceInk, x, y)) return false;
-            return true;
         }
 
         private static bool Contains(IReadOnlyList<OcrRect> rectangles, int x, int y)
@@ -313,9 +335,7 @@ internal static partial class PinTranslationOverlay
                             || !((minX <= ink.X - 2 && maxX + 1 >= ink.Right + 2)
                                 || (minY <= ink.Y - 2 && maxY + 1 >= ink.Bottom + 2))) continue;
                         OcrRect area = new(minX, minY, maxX - minX + 1, maxY - minY + 1);
-                        if (protectedRectangles.Any(rect => Intersects(rect, area))
-                            || lines.SelectMany(sourceLine => sourceLine.Words).Any(other => !ReferenceEquals(other, word)
-                                && Intersects(other.Bounds, area))) continue;
+                        if (IntersectsAny(protectedRectangles, area) || IntersectsOtherWord(lines, word, area)) continue;
                         int upper = 0, lower = 0, first = 0, last = 0;
                         for (int x = minX; x <= maxX; x++) { if (Same(x, minY)) upper++; if (Same(x, maxY)) lower++; }
                         for (int y = minY; y <= maxY; y++) { if (Same(minX, y)) first++; if (Same(maxX, y)) last++; }
@@ -339,7 +359,6 @@ internal static partial class PinTranslationOverlay
             if (columns <= 0 || bottom <= top) return [];
             if (lines.Count == 1 && lines[0].Words.Count <= 1
                 && sourceInk.Any(rect => rect.X <= left && rect.Right >= right && rect.Y <= top && rect.Bottom >= bottom)) return [];
-            bool[] visited = new bool[checked(columns * (bottom - top))];
             var component = new List<int>();
             var found = new List<OcrRect>();
             var punctuation = new List<OcrRect>();
@@ -347,20 +366,41 @@ internal static partial class PinTranslationOverlay
             var incompleteLeadingLines = new HashSet<int>();
             double inkHeight = Median(lines.Select(line => line.Bounds.Height));
             OcrRect[] nearbyProtected = protectedRectangles.Where(rect => Intersects(rect, bounds)).ToArray();
+            // One byte per pixel of the block: visited, and whether Contains would find the pixel in the source ink
+            // or the nearby protected rectangles, worked out once instead of per pixel.
+            const byte Visited = 1, InSource = 2, InProtected = 4;
+            byte[] flags = new byte[checked(columns * (bottom - top))];
+            void Mark(OcrRect[] rectangles, byte flag)
+            {
+                foreach (OcrRect rect in rectangles)
+                {
+                    // For whole numbers, x >= X && x < X + Width holds exactly for ceil(X) <= x < ceil(X + Width).
+                    double fromX = Math.Ceiling(rect.X), toX = Math.Ceiling(rect.Right);
+                    double fromY = Math.Ceiling(rect.Y), toY = Math.Ceiling(rect.Bottom);
+                    if (!(toX > fromX && toY > fromY)) continue;
+                    int startX = (int)Math.Clamp(fromX, left, right), endX = (int)Math.Clamp(toX, left, right);
+                    int startY = (int)Math.Clamp(fromY, top, bottom), endY = (int)Math.Clamp(toY, top, bottom);
+                    for (int y = startY; y < endY; y++)
+                        for (int x = startX; x < endX; x++) flags[(y - top) * columns + x - left] |= flag;
+                }
+            }
+            Mark(sourceInk, InSource);
+            Mark(nearbyProtected, InProtected);
             bool InLineBand(int y)
             {
                 for (int index = 0; index < lines.Count; index++)
                     if (y >= lines[index].Bounds.Y - inkHeight * .65 && y < lines[index].Bounds.Bottom + inkHeight * .2) return true;
                 return false;
             }
-            bool Background(int x, int y) => Matches(y * stride + x * 4);
+            bool Background(int x, int y) => Matches(x, y);
             for (int y = top; y < bottom; y++)
+            {
+                if (!InLineBand(y)) continue;
                 for (int x = left; x < right; x++)
                 {
                     int offset = (y - top) * columns + x - left;
-                    if (visited[offset] || Contains(sourceInk, x, y)
-                        || Contains(nearbyProtected, x, y) || Background(x, y) || !InLineBand(y)) continue;
-                    component.Clear(); component.Add(y * width + x); visited[offset] = true;
+                    if (flags[offset] != 0 || Background(x, y)) continue;
+                    component.Clear(); component.Add(y * width + x); flags[offset] |= Visited;
                     int minX = x, maxX = x, minY = y, maxY = y;
                     int maximumContrast = 0;
                     bool touchesProtected = false, touchesSource = false, clippedComponent = false;
@@ -372,7 +412,7 @@ internal static partial class PinTranslationOverlay
                         clippedComponent |= currentX == 0 || currentX == width - 1 || currentY == 0 || currentY == height - 1;
                         maximumContrast = Math.Max(maximumContrast, ColorDistance(Pixel(pixels, stride, currentX, currentY),
                             gradient ? GradientColor(currentX, currentY) : background));
-                        touchesSource |= Contains(sourceInk, currentX, currentY);
+                        touchesSource |= (flags[(currentY - top) * columns + currentX - left] & InSource) != 0;
                         // A large graphic is a barrier. Stop before its flood can allocate an
                         // image-sized list; abandoning recovery preserves every original pixel.
                         if (maxX - minX + 1 > inkHeight * 8 || maxY - minY + 1 > inkHeight * 1.8
@@ -388,9 +428,9 @@ internal static partial class PinTranslationOverlay
                                     continue;
                                 }
                                 int next = (nextY - top) * columns + nextX - left;
-                                if (visited[next] || Background(nextX, nextY)) continue;
-                                visited[next] = true;
-                                if (Contains(nearbyProtected, nextX, nextY)) { touchesProtected = true; continue; }
+                                if ((flags[next] & Visited) != 0 || Background(nextX, nextY)) continue;
+                                flags[next] |= Visited;
+                                if ((flags[next] & InProtected) != 0) { touchesProtected = true; continue; }
                                 component.Add(nextY * width + nextX);
                             }
                     }
@@ -407,9 +447,7 @@ internal static partial class PinTranslationOverlay
                     if (touchesSource) { found.Add(recovered); continue; }
                     // A narrow detached raster fragment just beyond an OCR edge still has a
                     // word owner. Whole glyphs and separated words do not receive that grant.
-                    if ((componentWidth <= inkHeight * .25 || componentHeight <= inkHeight * .25)
-                        && sourceInk.Any(ink => recovered.X >= ink.X - 2 && recovered.Right <= ink.Right + 2
-                            && recovered.Y >= ink.Y - 2 && recovered.Bottom <= ink.Bottom + 2))
+                    if ((componentWidth <= inkHeight * .25 || componentHeight <= inkHeight * .25) && WithinSourceInk(recovered))
                     { found.Add(recovered); continue; }
                     for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                     {
@@ -443,6 +481,7 @@ internal static partial class PinTranslationOverlay
                         break;
                     }
                 }
+            }
             var kept = new List<(OcrRect Bounds, int Line)>();
             foreach (var candidate in candidates)
             {
@@ -487,7 +526,7 @@ internal static partial class PinTranslationOverlay
                     for (int yy = (int)line.Bounds.Y; yy < Math.Ceiling(line.Bounds.Bottom); yy++)
                         for (int xx = gapLeft; xx < gapRight; xx++)
                         {
-                            if (Matches(yy * stride + xx * 4) || ColorDistance(Pixel(pixels, stride, xx, yy),
+                            if (Matches(xx, yy) || ColorDistance(Pixel(pixels, stride, xx, yy),
                                 gradient ? GradientColor(xx, yy) : background) < 100) continue;
                             minX = Math.Min(minX, xx); maxX = Math.Max(maxX, xx);
                             minY = Math.Min(minY, yy); maxY = Math.Max(maxY, yy);
@@ -498,6 +537,34 @@ internal static partial class PinTranslationOverlay
             }
             preservedLeading = preserved.ToArray();
             return found.ToArray();
+        }
+
+        // Loops, not lambdas: these run inside the per-seed and per-pixel loops above, where a lambda over
+        // the loop's locals makes C# allocate their closure on every iteration, taken or not.
+        private static bool IntersectsAny(IReadOnlyList<OcrRect> rectangles, OcrRect area)
+        {
+            for (int index = 0; index < rectangles.Count; index++)
+                if (Intersects(rectangles[index], area)) return true;
+            return false;
+        }
+
+        private static bool IntersectsOtherWord(IReadOnlyList<OcrLine> lines, OcrWord word, OcrRect area)
+        {
+            for (int line = 0; line < lines.Count; line++)
+            {
+                IReadOnlyList<OcrWord> words = lines[line].Words;
+                for (int index = 0; index < words.Count; index++)
+                    if (!ReferenceEquals(words[index], word) && Intersects(words[index].Bounds, area)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Whether <paramref name="area"/> lies within one recognized word's ink, give or take two pixels.</summary>
+        private bool WithinSourceInk(OcrRect area)
+        {
+            foreach (OcrRect ink in sourceInk)
+                if (area.X >= ink.X - 2 && area.Right <= ink.Right + 2 && area.Y >= ink.Y - 2 && area.Bottom <= ink.Bottom + 2) return true;
+            return false;
         }
 
         private bool HasSeparateGlyphColumns(OcrRect area)
@@ -533,11 +600,11 @@ internal static partial class PinTranslationOverlay
                     if (y < owned.Y || y >= owned.Bottom || owned.Right <= x || owned.X >= right) continue;
                     int end = Math.Min(right, (int)owned.X);
                     for (; x < end; x++)
-                        if (!Matches(y * stride + x * 4)) return false;
+                        if (!Matches(x, y)) return false;
                     x = Math.Max(x, Math.Min(right, (int)owned.Right));
                 }
                 for (; x < right; x++)
-                    if (!Matches(y * stride + x * 4)) return false;
+                    if (!Matches(x, y)) return false;
             }
             return true;
         }
@@ -560,7 +627,7 @@ internal static partial class PinTranslationOverlay
                     {
                         bool allowed = x < right && !Contains(preservedInk, x, y)
                             && (Contains(sourceInk, x, y)
-                            || Matches(y * stride + x * 4));
+                            || Matches(x, y));
                         if (allowed && start < 0) start = x;
                         if (allowed || start < 0) continue;
                         geometry.BeginFigure(new Point(start, y), true, true);
@@ -621,13 +688,13 @@ internal static partial class PinTranslationOverlay
             return Tolerance;
         }
 
-        private bool Matches(int index)
+        private bool Matches(int x, int y)
         {
-            int x = index % stride / 4, y = index / stride;
+            int index = y * stride + x * 4;
             bool matches = gradient ? MatchesGradient(x, y, Tolerance)
-                : Math.Abs(pixels[index] - background.B) <= backgroundTolerance
-                    && Math.Abs(pixels[index + 1] - background.G) <= backgroundTolerance
-                    && Math.Abs(pixels[index + 2] - background.R) <= backgroundTolerance;
+                : Math.Abs(pixels[index] - backgroundB) <= backgroundTolerance
+                    && Math.Abs(pixels[index + 1] - backgroundG) <= backgroundTolerance
+                    && Math.Abs(pixels[index + 2] - backgroundR) <= backgroundTolerance;
             return matches || IsCompressionResidual(x, y, index) || IsSourceFringe(x, y, index);
         }
 
@@ -640,12 +707,14 @@ internal static partial class PinTranslationOverlay
 
         private bool IsCompressionResidual(int x, int y, int index)
         {
-            if (!noisySurface || gradient || Math.Min(background.R, Math.Min(background.G, background.B)) < 230) return false;
-            int contrast = Math.Max(Math.Abs(pixels[index] - background.B),
-                Math.Max(Math.Abs(pixels[index + 1] - background.G), Math.Abs(pixels[index + 2] - background.R)));
+            if (!noisySurface || gradient || Math.Min(backgroundR, Math.Min(backgroundG, backgroundB)) < 230) return false;
+            int contrast = Math.Max(Math.Abs(pixels[index] - backgroundB),
+                Math.Max(Math.Abs(pixels[index + 1] - backgroundG), Math.Abs(pixels[index + 2] - backgroundR)));
             if (contrast > 64) return false;
             foreach (OcrRect ink in sourceInk)
             {
+                // The source ink is ordered by X, so no later rectangle comes near either.
+                if (x < ink.X - 8) break;
                 if (x >= ink.X - 8 && x < ink.Right + 8 && y >= ink.Y - 8 && y < ink.Bottom + 8
                     && !ContinuesAsRule(x, y, ink, background))
                 {
@@ -671,7 +740,8 @@ internal static partial class PinTranslationOverlay
             Span<int> queue = stackalloc int[49];
             foreach (OcrRect ink in sourceInk)
             {
-                if (x < ink.X - 3 || x >= ink.Right + 3 || y < ink.Y - 3 || y >= ink.Bottom + 3) continue;
+                if (x < ink.X - 3) break;
+                if (x >= ink.Right + 3 || y < ink.Y - 3 || y >= ink.Bottom + 3) continue;
                 if (x >= ink.X && x < ink.Right && y >= ink.Y && y < ink.Bottom) continue;
                 if (ContinuesAsRule(x, y, ink, expected)) continue;
                 int count = 1;

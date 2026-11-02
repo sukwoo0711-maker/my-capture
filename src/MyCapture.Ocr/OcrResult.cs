@@ -181,7 +181,7 @@ public sealed class OcrResult
     public OcrQuality? Quality { get; private init; }
 
     public OcrResult WithQuality(OcrQuality quality) =>
-        new(Status, Text, LanguageTag, Lines, Elapsed, Message, ReadingOrientation)
+        new(Status, Text, LanguageTag, Lines, Elapsed, Message, ReadingOrientation, TextAngle)
         { Quality = OcrQualityNames.Normalize(quality) };
 
     /// <summary>Recognised text, newline-joined by line. Empty unless <see cref="OcrStatus.Success"/>.</summary>

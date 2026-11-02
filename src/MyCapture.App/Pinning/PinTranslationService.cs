@@ -8,7 +8,11 @@ using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Pinning;
 
-internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview, PinContent? Document = null);
+/// <param name="DocumentView">A picture translation's text view, rendered on the thread that first asks for it.</param>
+internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview, Lazy<PinContent>? DocumentView = null)
+{
+    internal PinContent? Document => DocumentView?.Value;
+}
 
 /// <summary>Whether a pin can be translated into the target language, and in which direction.</summary>
 internal readonly record struct PinTranslationDecision(PinTranslationAvailability Availability, PinTranslationDirection Direction);

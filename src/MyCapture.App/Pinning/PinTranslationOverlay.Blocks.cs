@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text.RegularExpressions;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -9,24 +8,30 @@ namespace MyCapture.App.Pinning;
 internal static partial class PinTranslationOverlay
 {
     /// <summary>Reading order with protected syntax, table cells and source-supported paragraph gaps.</summary>
-    internal static IReadOnlyList<PinOverlayBlock> BuildBlocks(OcrResult result, BitmapSource? source = null)
+    internal static IReadOnlyList<PinOverlayBlock> BuildBlocks(OcrResult result, BitmapSource? source = null) =>
+        BuildBlocks(result, source, out _);
+
+    /// <summary>
+    /// Also hands back the Bgra32 copy of <paramref name="source"/> that the scan sampled, so the
+    /// layout step can take it over instead of converting the picture again.
+    /// </summary>
+    internal static IReadOnlyList<PinOverlayBlock> BuildBlocks(OcrResult result, BitmapSource? source, out byte[]? pixels)
     {
+        pixels = null;
         OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
         if (!extraction.HasGeometry) return [];
-        byte[]? pixels = null;
-        int width = source?.PixelWidth ?? 0, height = source?.PixelHeight ?? 0;
-        try
-        {
-            if (source is not null)
-            {
-                BitmapSource converted = source.Format == PixelFormats.Bgra32 ? source
-                    : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-                pixels = ArrayPool<byte>.Shared.Rent(checked(width * height * 4));
-                converted.CopyPixels(pixels, checked(width * 4), 0);
-            }
-            return BuildBlocksCore(result, extraction, pixels, width, height);
-        }
-        finally { if (pixels is not null) ArrayPool<byte>.Shared.Return(pixels); }
+        if (source is not null) pixels = Bgra32Pixels(source);
+        return BuildBlocksCore(result, extraction, pixels, source?.PixelWidth ?? 0, source?.PixelHeight ?? 0);
+    }
+
+    /// <summary>
+    /// The same scan on a picture already converted to Bgra32 rows of width × 4 bytes. It touches no WPF
+    /// object, so it runs on any thread.
+    /// </summary>
+    internal static IReadOnlyList<PinOverlayBlock> BuildBlocks(OcrResult result, byte[] pixels, int width, int height)
+    {
+        OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
+        return extraction.HasGeometry ? BuildBlocksCore(result, extraction, pixels, width, height) : [];
     }
 
     private static IReadOnlyList<PinOverlayBlock> BuildBlocksCore(OcrResult result, OcrExtraction extraction,
@@ -409,6 +414,9 @@ internal static partial class PinTranslationOverlay
         var rules = new List<OcrRect>();
         bool menuRow = words.Count(word => IsChevron(word.Text)) >= 2;
         Color? previousBackground = null;
+        // Every gap of the line compares against the same ring; it is read once, when a gap first needs it.
+        Color? lineRing = null;
+        Color LineRing() => lineRing ??= EstimateBackground(pixels!, width, height, width * 4, line.Bounds).Color;
         foreach (OcrWord word in words)
         {
             // Repeated dropdown controls divide a navigation row even though their
@@ -423,7 +431,7 @@ internal static partial class PinTranslationOverlay
             }
             Color? background = pixels is null ? null : EstimateBackground(pixels, width, height, width * 4, word.Bounds).Color;
             OcrRect? rule = run.Count == 0 || pixels is null ? null
-                : FindVerticalRule(pixels, width, height, line.Bounds, run[^1].Bounds.Right, word.Bounds.X);
+                : FindVerticalRule(pixels, width, height, line.Bounds, run[^1].Bounds.Right, word.Bounds.X, LineRing);
             bool wideGap = run.Count > 0 && word.Bounds.X - run[^1].Bounds.Right > gap
                 && !SpannedByAdjacentLine(line, run[^1].Bounds.Right, word.Bounds.X, sourceLines);
             bool changedSurface = previousBackground is { } previous && background is { } current
@@ -728,13 +736,14 @@ internal static partial class PinTranslationOverlay
         return words.Count == 0 ? null : MakeLine(words);
     }
 
-    private static OcrRect? FindVerticalRule(byte[] pixels, int width, int height, OcrRect line, double left, double right)
+    private static OcrRect? FindVerticalRule(byte[] pixels, int width, int height, OcrRect line, double left, double right,
+        Func<Color> lineRing)
     {
         int first = Math.Max(1, (int)Math.Ceiling(left)), last = Math.Min(width - 2, (int)Math.Floor(right) - 1);
         int extension = Math.Max(2, (int)Math.Ceiling(line.Height * .25));
         int top = (int)Math.Floor(line.Y) - extension, bottom = (int)Math.Ceiling(line.Bottom) + extension;
         if (last < first || line.Height < 4 || top < 0 || bottom > height) return null;
-        Color ring = EstimateBackground(pixels, width, height, width * 4, line).Color;
+        Color ring = lineRing();
         const int maxThickness = 2;
         bool Similar(Color a, Color b, int tolerance) => Math.Abs(a.R - b.R) <= tolerance
             && Math.Abs(a.G - b.G) <= tolerance && Math.Abs(a.B - b.B) <= tolerance;

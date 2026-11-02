@@ -283,8 +283,12 @@ public partial class App : Application
         {
             _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
             // A picture pin reads its text with the app's recognizer when the user asks to translate it.
-            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeResultAsync(
-                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
+            _pins.ConfigureImageTranslation((image, windowsReading, token) => PinTranslationEngines.RecognizeResultAsync(
+                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token, windowsReading));
+            // A model that leaves on its idle timer frees memory the next idle collection hands back.
+            void ModelLeft() => Dispatcher.InvokeAsync(ScheduleIdleMemoryReclamation);
+            _services.GetRequiredService<PinTranslationEngines>().ModelReleased += ModelLeft;
+            _services.GetRequiredService<NeuralOcrEngine>().RowReaderReleased += ModelLeft;
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;

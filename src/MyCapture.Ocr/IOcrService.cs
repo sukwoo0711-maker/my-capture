@@ -81,8 +81,14 @@ public sealed class OcrRequest
     /// </summary>
     public bool RecoverLatinIntrusions { get; init; }
 
+    /// <summary>
+    /// With <see cref="RecoverLatinIntrusions"/>, receives the Windows reading when its suspect rows are about
+    /// to be read again, so work that the reading already settles can start in the meantime.
+    /// </summary>
+    public Action<OcrResult>? BeforeLatinRecovery { get; init; }
+
     /// <summary>Returns a copy of this request with <see cref="RecoverLatinIntrusions"/> set.</summary>
-    public OcrRequest WithLatinRecovery() => new(EncodedImage, FilePath, Bitmap)
+    public OcrRequest WithLatinRecovery(Action<OcrResult>? beforeRecovery = null) => new(EncodedImage, FilePath, Bitmap)
     {
         UpscaleFactor = UpscaleFactor,
         PreferredLanguages = PreferredLanguages,
@@ -92,6 +98,7 @@ public sealed class OcrRequest
         LocalCorrection = LocalCorrection,
         UseSuperResolution = UseSuperResolution,
         RecoverLatinIntrusions = true,
+        BeforeLatinRecovery = beforeRecovery,
     };
 
     public static OcrRequest FromBytes(

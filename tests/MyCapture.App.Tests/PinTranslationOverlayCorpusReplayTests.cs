@@ -96,7 +96,7 @@ public sealed class PinTranslationOverlayCorpusReplayTests(ITestOutputHelper out
         object surface = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
             [pixels, width, height, stride, block, background], CultureInfo.InvariantCulture)!;
         var canOccupy = type.GetMethod("CanOccupy", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<OcrRect, bool>>(surface);
-        var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, bool>>(surface);
+        var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, int, bool>>(surface);
         var ink = (OcrRect[])type.GetField("sourceInk", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(surface)!;
         bool gradient = (bool)type.GetField("gradient", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(surface)!;
         TextAlignment alignment = PinTranslationOverlay.InferAlignment(block.Lines);
@@ -126,7 +126,7 @@ public sealed class PinTranslationOverlayCorpusReplayTests(ITestOutputHelper out
             {
                 if (ink.Any(owned => x >= owned.X && x < owned.Right && y >= owned.Y && y < owned.Bottom)) continue;
                 int index = y * stride + x * 4;
-                if (matches(index)) continue;
+                if (matches(x, y)) continue;
                 output.WriteLine($"  first pixel outside source ink: ({x},{y}) RGB({pixels[index + 2]},{pixels[index + 1]},{pixels[index]})");
                 return;
             }

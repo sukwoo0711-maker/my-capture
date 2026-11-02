@@ -90,30 +90,49 @@ internal static class OcrLatinWordRecovery
         return source with { Text = text.ToString(), Words = changed };
     }
 
-    internal static IEnumerable<OcrRect> RetryRegions(OcrResult result)
+    /// <summary>
+    /// The words a second reading needs around each suspect: the Latin anchors that Recover
+    /// requires on both sides, kept to the suspect's own visual row. Windows sometimes joins a
+    /// caption at another height into the line, and a crop across both reads neither; words
+    /// far apart on one row, such as a menu bar's, read well together.
+    /// </summary>
+    internal static IEnumerable<OcrLine> SuspectRows(OcrResult result)
     {
         foreach (OcrLine line in result.Lines.Where(IsLatinLine))
         {
-            int[] suspects = Enumerable.Range(0, line.Words.Count)
-                .Where(index => IsSuspect(line.Words[index].Text) && !IsQuoted(line, index)).ToArray();
-            if (suspects.Length == 0) continue;
-            // One retry strip per line, including Latin anchors on both sides. Keeping the
-            // strip to this row prevents a detector's padded box from joining adjacent rows.
-            int first = Math.Max(0, suspects[0] - 3), last = Math.Min(line.Words.Count - 1, suspects[^1] + 3);
-            yield return line.Words.Skip(first).Take(last - first + 1).Select(word => word.Bounds)
-                .Aggregate(default(OcrRect), OcrRect.Union);
+            (int First, int Last)? pending = null;
+            // The first word no yielded row holds: rows stay disjoint, so no word is read twice.
+            int unread = 0;
+            for (int index = 0; index < line.Words.Count; index++)
+            {
+                if (!IsSuspect(line.Words[index].Text) || IsQuoted(line, index)) continue;
+                OcrRect suspect = line.Words[index].Bounds;
+                int first = index, last = index;
+                while (first > Math.Max(0, index - 3) && SameRow(line.Words[first - 1].Bounds, suspect)) first--;
+                while (last < Math.Min(line.Words.Count - 1, index + 3) && SameRow(line.Words[last + 1].Bounds, suspect)) last++;
+                if (pending is { } open && first <= open.Last)
+                {
+                    // Boxes of different heights make SameRow intransitive: a later suspect's row can reach
+                    // further left than an earlier one's, and those words are its anchors too.
+                    pending = (Math.Max(unread, Math.Min(open.First, first)), Math.Max(open.Last, last));
+                    continue;
+                }
+                if (pending is { } done)
+                {
+                    yield return Row(line, done.First, done.Last);
+                    unread = done.Last + 1;
+                }
+                pending = (first, last);
+            }
+            if (pending is { } final) yield return Row(line, final.First, final.Last);
         }
-    }
 
-    internal static OcrResult Offset(OcrResult result, double x, double y, double scale)
-    {
-        OcrRect Move(OcrRect box) => new(box.X / scale + x, box.Y / scale + y, box.Width / scale, box.Height / scale);
-        OcrLine[] lines = result.Lines.Select(line => line with
+        static OcrLine Row(OcrLine line, int first, int last)
         {
-            Bounds = Move(line.Bounds),
-            Words = line.Words.Select(word => word with { Bounds = Move(word.Bounds) }).ToArray(),
-        }).ToArray();
-        return OcrResult.Success(result.Text, result.LanguageTag ?? string.Empty, lines, result.Elapsed, result.TextAngle);
+            OcrWord[] words = [.. line.Words.Skip(first).Take(last - first + 1)];
+            return new OcrLine(string.Join(' ', words.Select(word => word.Text)),
+                words.Select(word => word.Bounds).Aggregate(OcrRect.Union), words);
+        }
     }
 
     private static bool IsLatinLine(OcrLine line)

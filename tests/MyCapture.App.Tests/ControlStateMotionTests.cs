@@ -235,6 +235,24 @@ public sealed class ControlStateMotionTests
         Assert.Equal(DependencyProperty.UnsetValue, glyph.ReadLocalValue(UIElement.RenderTransformProperty));
     });
 
+    [Fact]
+    public void ReleasingAnUntouchedButtonStartsNoMotion() => Run(true, (theme, host) =>
+    {
+        // The pointer leaving or the command turning off releases nothing that was pressed, so no
+        // 1-to-1 scale animation draws frames (a pin's translate button turns off on every request).
+        var button = new Button { Content = "Translate", Style = (Style)theme[typeof(Button)] };
+        FluidMotion.SetPressFeedback(button, true);
+        host.Children.Add(button);
+        Drain(host);
+        var target = button.Template.FindName(FluidMotion.PressTargetName, button) as UIElement ?? button;
+
+        button.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = UIElement.MouseLeaveEvent });
+        button.IsEnabled = false;
+
+        Assert.Equal(DependencyProperty.UnsetValue, target.ReadLocalValue(UIElement.RenderTransformProperty));
+        Assert.False(target.RenderTransform is ScaleTransform { HasAnimatedProperties: true });
+    });
+
     private static ControlTemplate TemplateOf(Style style)
     {
         for (Style? current = style; current is not null; current = current.BasedOn)

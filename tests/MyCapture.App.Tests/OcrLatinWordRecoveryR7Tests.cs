@@ -117,21 +117,136 @@ public sealed class OcrLatinWordRecoveryR7Tests
     }
 
     [Fact]
-    public async Task TranslationFastRequestUsesSecondReadingOnlyForSuspectTokens()
+    public async Task TranslationFastRequestReadsOnlyTheSuspectRowWithTheRecognizer()
     {
         Assert.Equal(OcrQuality.Fast, new OcrSettings().Quality);
         OcrResult before = Result(Line("only one 하 the following seven boxes"));
-        var windows = new FixedEngine(before);
         int calls = 0;
-        var service = Service(windows, (request, _) =>
+        OcrResult? first = null;
+        var service = Service(new(before), (_, rows, _) =>
         {
             calls++;
-            Assert.False(request.UseNeuralModel);
+            Assert.Equal(OcrLatinWordRecovery.SuspectRows(before).Select(row => (row.Text, row.Bounds)),
+                rows.Select(row => (row.Text, row.Bounds)));
             return Task.FromResult(Result(Replace(before.Lines[0], "하", "of")));
         });
-        OcrResult after = await service.RecognizeAsync(OcrRequest.FromBytes([1], searchRotatedOrientations: false).WithLatinRecovery());
+        OcrResult after = await service.RecognizeAsync(OcrRequest.FromBytes([1], searchRotatedOrientations: false)
+            .WithLatinRecovery(reading =>
+            {
+                // The Windows reading arrives before its suspect row is read again.
+                Assert.Equal(0, calls);
+                first = reading;
+            }));
         Assert.Equal("only one of the following seven boxes", after.Text);
         Assert.Equal(1, calls);
+        Assert.Same(before, first);
+    }
+
+    [Fact]
+    public async Task EachSuspectRowIsReadOnceWithinItsLatinAnchors()
+    {
+        OcrLine suspect = Line("we first open the settings and then read only one 하 the following seven boxes on screen");
+        OcrLine clean = Line("nothing here needs a second reading at all", 60);
+        OcrResult before = Result(suspect, clean);
+        IReadOnlyList<OcrLine>? asked = null;
+        var service = Service(new(before), (_, rows, _) =>
+        {
+            Assert.Null(asked);
+            asked = rows;
+            return Task.FromResult(OcrResult.NoText("ko", TimeSpan.Zero));
+        });
+        OcrResult after = await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery());
+        OcrLine row = Assert.Single(asked!);
+        int index = suspect.Words.ToList().FindIndex(word => word.Text == "하");
+        Assert.Equal(suspect.Words.Skip(index - 3).Take(7), row.Words);
+        Assert.Equal((suspect.Words[index - 3].Bounds.X, suspect.Words[index + 3].Bounds.Right), (row.Bounds.X, row.Bounds.Right));
+        Assert.Equal((suspect.Bounds.Y, suspect.Bounds.Height), (row.Bounds.Y, row.Bounds.Height));
+        Assert.Equal(before.Text, after.Text);
+        Assert.True(after.Elapsed >= before.Elapsed);
+    }
+
+    [Theory]
+    [InlineData(60, 30)]
+    [InlineData(10, 21)]
+    public void SuspectRowKeepsToItsOwnVisualRow(double captionX, double captionY)
+    {
+        // Windows joined a caption that sits lower into the line.
+        OcrWord[] words =
+        [
+            new("Screenshot", new(captionX, captionY, 60, 10)), new("tools", new(captionX + 64, captionY, 40, 10)),
+            new("running", new(170, 10, 50, 16)), new("예", new(224, 12, 14, 12)), new("the", new(242, 10, 24, 16)),
+            new("device", new(270, 10, 48, 16)), new("powering", new(322, 10, 64, 16)), new("the", new(390, 10, 24, 16)),
+            new("display", new(418, 10, 56, 16)),
+        ];
+        var line = new OcrLine(string.Join(' ', words.Select(word => word.Text)),
+            words.Select(word => word.Bounds).Aggregate(OcrRect.Union), words);
+
+        OcrLine row = Assert.Single(OcrLatinWordRecovery.SuspectRows(Result(line)));
+
+        Assert.Equal(["running", "예", "the", "device", "powering"], row.Words.Select(word => word.Text));
+        Assert.Equal(new OcrRect(170, 10, 216, 16), row.Bounds);
+    }
+
+    [Fact]
+    public void MenuWordsFarApartOnOneRowStayAnchors()
+    {
+        OcrWord[] words =
+        [
+            new("Office", new(10, 10, 40, 16)), new("Products", new(110, 10, 60, 16)), new("0일.대ces", new(230, 10, 52, 16)),
+            new("Account", new(340, 10, 56, 16)), new("billing", new(450, 10, 48, 16)),
+        ];
+        var line = new OcrLine(string.Join(' ', words.Select(word => word.Text)),
+            words.Select(word => word.Bounds).Aggregate(OcrRect.Union), words);
+        Assert.Equal(words, Assert.Single(OcrLatinWordRecovery.SuspectRows(Result(line))).Words);
+    }
+
+    [Fact]
+    public void ALaterSuspectsWiderRowKeepsItsLeftAnchors()
+    {
+        // SameRow is not transitive across boxes of different heights: "(교" sits too low for "open", while
+        // "하" shares a row with both, so the merged row starts where the row of "하" starts.
+        OcrWord[] words =
+        [
+            new("please", new(10, 10, 48, 16)), new("we", new(62, 10, 18, 16)), new("open", new(84, 10, 34, 16)),
+            new("(교", new(122, 20, 20, 16)), new("하", new(146, 14, 16, 16)), new("the", new(166, 10, 24, 16)),
+        ];
+        var line = new OcrLine(string.Join(' ', words.Select(word => word.Text)),
+            words.Select(word => word.Bounds).Aggregate(OcrRect.Union), words);
+
+        OcrLine row = Assert.Single(OcrLatinWordRecovery.SuspectRows(Result(line)));
+
+        Assert.Equal("we open (교 하 the", row.Text);
+    }
+
+    [Fact]
+    public void SuspectsThatShareAnchorsAreReadInOneRow()
+    {
+        OcrResult before = Result(Line("we open 하 the settings and 예 read only one of the following seven boxes"));
+        OcrLine row = Assert.Single(OcrLatinWordRecovery.SuspectRows(before));
+        Assert.Equal("we open 하 the settings and 예 read only one", row.Text);
+    }
+
+    [Fact]
+    public async Task RotatedReadingRecoversThroughTheWholeImagePass()
+    {
+        // Row crops are horizontal source strips, so a rotated reading keeps the whole-image
+        // reading, whose source-axis boxes Recover maps through the reading orientation.
+        var orientation = new OcrReadingOrientation(90, 80, 800);
+        OcrLine line = Original(Line("only one 하 the following seven boxes"), orientation);
+        OcrResult before = OcrResult.Success(line.Text, "ko", [line], TimeSpan.Zero, orientation);
+        int rowCalls = 0, wholeCalls = 0;
+        var service = new CaptureOcrService(new FixedEngine(before), (_, _) =>
+            {
+                wholeCalls++;
+                return Task.FromResult(Result(Replace(line, "하", "of")));
+            }, () => true, () => false, NullLogger<CaptureOcrService>.Instance,
+            readNeuralRows: (_, _, _) => { rowCalls++; throw new InvalidOperationException(); });
+
+        OcrResult after = await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery());
+
+        Assert.Equal("only one of the following seven boxes", after.Text);
+        Assert.Equal(orientation, after.ReadingOrientation);
+        Assert.Equal((0, 1), (rowCalls, wholeCalls));
     }
 
     [Theory]
@@ -141,8 +256,8 @@ public sealed class OcrLatinWordRecoveryR7Tests
     {
         OcrResult before = Result(Line(suspect ? "only one 하 the following seven boxes" : "only one of the following seven boxes"));
         int calls = 0;
-        var service = Service(new(before), (_, _) => { calls++; throw new InvalidOperationException(); }, installed);
-        Assert.Same(before, await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery()));
+        var service = Service(new(before), (_, _, _) => { calls++; throw new InvalidOperationException(); }, installed);
+        Assert.Same(before, await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery(_ => calls++)));
         Assert.Equal(0, calls);
     }
 
@@ -151,7 +266,7 @@ public sealed class OcrLatinWordRecoveryR7Tests
     {
         OcrResult before = Result(Line("only one 하 the following seven boxes"));
         int calls = 0;
-        var service = Service(new(before), (_, _) => { calls++; throw new InvalidOperationException(); });
+        var service = Service(new(before), (_, _, _) => { calls++; throw new InvalidOperationException(); });
         BitmapSource image = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[4], 4);
         image.Freeze();
         Assert.Same(before, await service.RecognizeAsync(OcrRequestFactory.FromBitmap(image, new OcrSettings())));
@@ -166,6 +281,9 @@ public sealed class OcrLatinWordRecoveryR7Tests
         OcrRequest copy = original.WithLatinRecovery();
         Assert.False(original.RecoverLatinIntrusions);
         Assert.True(copy.RecoverLatinIntrusions);
+        Assert.Null(copy.BeforeLatinRecovery);
+        Action<OcrResult> first = _ => { };
+        Assert.Same(first, original.WithLatinRecovery(first).BeforeLatinRecovery);
         Assert.Same(original.EncodedImage, copy.EncodedImage);
         Assert.Equal((3.0, false, true, true, true, true), (copy.UpscaleFactor, copy.SearchRotatedOrientations,
             copy.EnhanceContrast, copy.UseNeuralModel, copy.LocalCorrection, copy.UseSuperResolution));
@@ -200,7 +318,7 @@ public sealed class OcrLatinWordRecoveryR7Tests
     public async Task RecoveryFailureKeepsTheOriginalWindowsResult(bool throws)
     {
         OcrResult before = Result(Line("only one 하 the following seven boxes"));
-        var service = Service(new(before), (_, _) => throws
+        var service = Service(new(before), (_, _, _) => throws
             ? throw new InvalidOperationException("recognizer failed")
             : Task.FromResult(OcrResult.Failed("recognizer failed")));
         OcrResult after = await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery());
@@ -214,50 +332,74 @@ public sealed class OcrLatinWordRecoveryR7Tests
     {
         using var cancel = new CancellationTokenSource();
         OcrResult before = Result(Line("only one 하 the following seven boxes"));
-        var service = Service(new(before), (_, _) => { cancel.Cancel(); return Task.FromResult(before); });
+        var service = Service(new(before), (_, _, _) => { cancel.Cancel(); return Task.FromResult(before); });
         Assert.Equal(OcrStatus.Cancelled, (await service.RecognizeAsync(OcrRequest.FromBytes([1]).WithLatinRecovery(), cancel.Token)).Status);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void UnresolvedLineGetsOnlyOneBoundedStripRetry(bool succeeds) => StaTestHost.Run(() =>
+    [Fact]
+    public void RecognizedRowGetsTheWordBoxesOfTheDetectionPipeline()
     {
-        OcrResult before = Result(Line("only one 하 the following seven boxes"));
-        BitmapSource bitmap = BitmapSource.Create(800, 80, 96, 96, PixelFormats.Bgra32, null, new byte[800 * 80 * 4], 800 * 4);
-        bitmap.Freeze();
-        OcrRequest original = OcrRequest.FromBitmap(bitmap, searchRotatedOrientations: false);
-        OcrRect region = Assert.Single(OcrLatinWordRecovery.RetryRegions(before));
-        OcrRequest crop = Assert.IsType<OcrRequest>(CaptureOcrService.CreateLatinRetryRequest(original, region, out int x, out int y));
-        Assert.NotNull(crop.Bitmap);
-        Assert.True(crop.Bitmap.IsFrozen);
-        Assert.True(crop.Bitmap.PixelWidth < bitmap.PixelWidth * 2);
-        Assert.True(crop.Bitmap.PixelHeight < bitmap.PixelHeight);
-        int calls = 0;
-        var service = Service(new(before), (request, _) =>
-        {
-            calls++;
-            if (calls == 1) return Task.FromResult(before);
-            Assert.Equal(2, calls);
-            Assert.True(request.UseNeuralModel);
-            if (!succeeds) return Task.FromResult(OcrResult.NoText("ko", TimeSpan.Zero));
-            OcrWord[] words = Replace(before.Lines[0], "하", "of").Words
-                .Where(word => word.Bounds.X >= region.X && word.Bounds.Right <= region.Right)
-                .Select(word => word with { Bounds = new((word.Bounds.X - x) * 2, (word.Bounds.Y - y) * 2,
-                    word.Bounds.Width * 2, word.Bounds.Height * 2) }).ToArray();
-            return Task.FromResult(Result(new OcrLine(string.Join(' ', words.Select(word => word.Text)),
-                words.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union), words)));
-        });
-        OcrResult after = service.RecognizeAsync(original.WithLatinRecovery()).GetAwaiter().GetResult();
-        Assert.Equal(2, calls);
-        Assert.Equal(succeeds ? "only one of the following seven boxes" : before.Text, after.Text);
-        Assert.Equal(before.Lines[0].Bounds, after.Lines[0].Bounds);
-        Assert.True(after.Elapsed >= before.Elapsed);
-    });
+        string[] chars = ["o", "n", "l", "y", " ", "o", "f", " ", "t", "h", "e"];
+        int[] cols = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32];
+        OcrLine line = Assert.IsType<OcrLine>(NeuralOcrEngine.RowLine(chars, [.. chars.Select(_ => .9f)], cols, 40,
+            new System.Windows.Int32Rect(100, 50, 400, 30), []));
+        Assert.Equal("only of the", line.Text);
+        Assert.Equal(new OcrRect(100, 50, 400, 30), line.Bounds);
+        // Ten pixels a column and three columns a character: each cell is 30 px wide around its column.
+        Assert.Equal([("only", new OcrRect(110, 50, 120, 30)), ("of", new OcrRect(260, 50, 60, 30)), ("the", new OcrRect(350, 50, 90, 30))],
+            line.Words.Select(word => (word.Text, word.Bounds)));
+    }
+
+    [Fact]
+    public void RowReadingThatLostItsSpacesSplitsAtTheWindowsWords()
+    {
+        string[] chars = [.. "ofgeneratingvector".Select(character => character.ToString())];
+        int[] cols = [.. chars.Select((_, index) => 2 + 3 * index)];
+        float[] scores = [.. chars.Select(_ => .9f)];
+        var crop = new System.Windows.Int32Rect(100, 50, 400, 30);
+        // Five pixels a column: the characters sit at 112.5, 127.5, ... 367.5.
+        OcrRect[] guides = [new(105, 52, 30, 20), new(137, 52, 148, 20), new(287, 52, 90, 20)];
+
+        OcrLine joined = Assert.IsType<OcrLine>(NeuralOcrEngine.RowLine(chars, scores, cols, 80, crop, []));
+        OcrLine split = Assert.IsType<OcrLine>(NeuralOcrEngine.RowLine(chars, scores, cols, 80, crop, guides));
+
+        Assert.Equal(["ofgeneratingvector"], joined.Words.Select(word => word.Text));
+        Assert.Equal([("of", new OcrRect(105, 50, 30, 30)), ("generating", new OcrRect(135, 50, 150, 30)),
+            ("vector", new OcrRect(285, 50, 90, 30))], split.Words.Select(word => (word.Text, word.Bounds)));
+    }
+
+    [Fact]
+    public void UnsureOrEmptyRowReadingIsDropped()
+    {
+        string[] chars = ["o", "f"];
+        var crop = new System.Windows.Int32Rect(0, 0, 100, 20);
+        Assert.Null(NeuralOcrEngine.RowLine(chars, [.4f, .5f], [3, 6], 12, crop, []));
+        Assert.Null(NeuralOcrEngine.RowLine([" "], [.9f], [3], 12, crop, []));
+        Assert.Null(NeuralOcrEngine.RowLine(null, null, null, 0, crop, []));
+    }
+
+    [Fact]
+    public void CjkInARowSplitsEveryCharacterIntoItsOwnBox()
+    {
+        OcrLine line = Assert.IsType<OcrLine>(NeuralOcrEngine.RowLine(["漢", "字", "a", "b"], [.9f, .9f, .9f, .9f],
+            [2, 6, 10, 13], 20, new System.Windows.Int32Rect(0, 0, 200, 24), []));
+        Assert.Equal(["漢", "字", "a", "b"], line.Words.Select(word => word.Text));
+        Assert.True(line.Words.Zip(line.Words.Skip(1)).All(pair => pair.First.Bounds.Right <= pair.Second.Bounds.X));
+    }
+
+    [Fact]
+    public void RowCropKeepsAMarginInsideTheImage()
+    {
+        Assert.Equal(new System.Windows.Int32Rect(95, 35, 210, 30), NeuralOcrEngine.RowCrop(new OcrRect(100, 40, 200, 20), 1000, 500));
+        Assert.Equal(new System.Windows.Int32Rect(0, 0, 53, 11), NeuralOcrEngine.RowCrop(new OcrRect(1, 1, 50, 8), 1000, 500));
+        Assert.Equal(new System.Windows.Int32Rect(990, 495, 10, 5), NeuralOcrEngine.RowCrop(new OcrRect(992, 497, 40, 8), 1000, 500));
+        Assert.True(NeuralOcrEngine.RowCrop(new OcrRect(0, 0, 0, 0), 1000, 500).IsEmpty);
+    }
 
     private static CaptureOcrService Service(FixedEngine windows,
-        Func<OcrRequest, CancellationToken, Task<OcrResult>> neural, bool installed = true) =>
-        new(windows, neural, () => installed, () => false, NullLogger<CaptureOcrService>.Instance);
+        Func<OcrRequest, IReadOnlyList<OcrLine>, CancellationToken, Task<OcrResult>> rows, bool installed = true) =>
+        new(windows, (_, _) => throw new InvalidOperationException("The whole-image recognizer must not run for Fast text."),
+            () => installed, () => false, NullLogger<CaptureOcrService>.Instance, readNeuralRows: rows);
 
     private static OcrLine Replace(OcrLine line, string before, string after) => line with
     {
@@ -265,16 +407,22 @@ public sealed class OcrLatinWordRecoveryR7Tests
         Words = line.Words.Select(word => word.Text == before ? word with { Text = after } : word).ToArray(),
     };
 
-    private static OcrLine Line(string text)
+    private static OcrLine Original(OcrLine reading, OcrReadingOrientation orientation) => reading with
+    {
+        Bounds = orientation.ToOriginal(reading.Bounds),
+        Words = reading.Words.Select(word => word with { Bounds = orientation.ToOriginal(word.Bounds) }).ToArray(),
+    };
+
+    private static OcrLine Line(string text, double y = 10)
     {
         double x = 10;
         OcrWord[] words = text.Split(' ').Select(token =>
         {
-            var word = new OcrWord(token, new(x, 10, Math.Max(15, token.Length * 8), 20));
+            var word = new OcrWord(token, new(x, y, Math.Max(15, token.Length * 8), 20));
             x = word.Bounds.Right + 6;
             return word;
         }).ToArray();
-        return new(text, new(10, 10, x - 16, 20), words);
+        return new(text, new(10, y, x - 16, 20), words);
     }
 
     private static OcrResult Result(params OcrLine[] lines) => OcrResult.Success(

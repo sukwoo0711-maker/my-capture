@@ -11,7 +11,8 @@ internal sealed partial class PinWindow
 {
     private PinContent? _translationOriginal;
     private PinContent? _translationResult;
-    private PinContent? _translationDocument;
+    // A picture translation's text view, rendered when it is first shown.
+    private Lazy<PinContent>? _translationDocument;
     private bool _showingTranslationDocument;
     private (double Width, double Height, double Zoom, double Left, double Top)? _pictureViewBeforeDocument;
     private bool _showingTranslation;
@@ -50,7 +51,7 @@ internal sealed partial class PinWindow
 
     /// <summary>The content whose diagrams the pin is showing: the translation while it is shown.</summary>
     internal PinContent DisplayedDocumentContent => _showingTranslation && _translationResult is not null
-        ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument : _translationResult
+        ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument.Value : _translationResult
         : TranslationSourceContent;
 
     private double TranslationFitScale => !_showingTranslation && !_showingMarkdownSource ? 1 : Math.Min(1,
@@ -80,13 +81,15 @@ internal sealed partial class PinWindow
 
     internal void SetTranslationDirection(bool toKorean)
     {
+        var shown = TranslationActionView;
         _translationToKorean = toKorean;
-        if (_hoverBar is not null) RefreshTranslationActions();
+        if (_hoverBar is not null && TranslationActionView != shown) RefreshTranslationActions();
     }
 
     internal void SetTranslationState(PinTranslationState state, long downloadBytes = 0)
     {
         if (_isClosed) return;
+        var shown = TranslationActionView;
         TranslationState = state;
         _translationDownloadBytes = downloadBytes;
         if (state is PinTranslationState.Translating or PinTranslationState.Downloading)
@@ -95,7 +98,8 @@ internal sealed partial class PinWindow
             ShowFeedback(UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
         else if (state is PinTranslationState.Unavailable or PinTranslationState.Available or PinTranslationState.Disabled)
             DismissFeedback();
-        RefreshTranslationActions();
+        // Checking and translating look the same; the button and the menu are rebuilt only when what they show changes.
+        if (TranslationActionView != shown) RefreshTranslationActions();
     }
 
     /// <summary>Tells the user why nothing changed (for example an image pin that is already in the target language).</summary>
@@ -105,7 +109,7 @@ internal sealed partial class PinWindow
         ShowFeedback(text, FeedbackKind.Result);
     }
 
-    internal void ApplyTranslation(PinContent translated, bool needsReview, bool toKorean = true, PinContent? document = null)
+    internal void ApplyTranslation(PinContent translated, bool needsReview, bool toKorean = true, Lazy<PinContent>? document = null)
     {
         ArgumentNullException.ThrowIfNull(translated);
         if (_isClosed) return;
@@ -134,7 +138,7 @@ internal sealed partial class PinWindow
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
         if (!translated) _showingTranslationDocument = false;
         PinContent next = translated
-            ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument : _translationResult
+            ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument.Value : _translationResult
             : _translationOriginal;
         bool isDocument = !_translationOriginal.CanRerender && next.CanRerender;
         if (isDocument && !wasDocument)
@@ -143,7 +147,7 @@ internal sealed partial class PinWindow
         _content = next.WithCurrentProvenance(_content.Provenance).RenderedAt(next.MermaidResults is not null
             ? MermaidDisplayScale : VisualTreeHelper.GetDpi(this).DpiScaleX);
         ClipboardCache.Clear();
-        _imageElement.Source = _content.Image;
+        ShowDisplayAt(_imageElement.RenderSize, VisualTreeHelper.GetDpi(this));
         // Keep position, frame, zoom and opacity stable when changing languages, except when a picture
         // becomes a text document (or back): that has its own natural size, so the frame follows it.
         if (isDocument != wasDocument)
@@ -222,21 +226,25 @@ internal sealed partial class PinWindow
     private bool TranslationActionEnabled => TranslationState is PinTranslationState.Available or PinTranslationState.Translated
         or PinTranslationState.ModelNeeded or PinTranslationState.Failed;
 
-    private void RefreshTranslationButton(PinHoverBar bar)
-    {
-        string help = TranslationState == PinTranslationState.ModelNeeded
-            ? UiText.Format("Pin_TranslationModelNeeded", Math.Ceiling(_translationDownloadBytes / 1_000_000d),
-                UiText.Get(_translationToKorean ? "Pin_LanguageKorean" : "Pin_LanguageEnglish"))
-            : TranslationActionHelp;
+    private string TranslationButtonHelp => TranslationState == PinTranslationState.ModelNeeded
+        ? UiText.Format("Pin_TranslationModelNeeded", Math.Ceiling(_translationDownloadBytes / 1_000_000d),
+            UiText.Get(_translationToKorean ? "Pin_LanguageKorean" : "Pin_LanguageEnglish"))
+        : TranslationActionHelp;
+
+    /// <summary>Everything of the translation state that the hover button and the menu entry show.</summary>
+    private (bool Visible, bool Enabled, string Label, string Help, string? MenuHelp) TranslationActionView =>
+        (TranslationState != PinTranslationState.Unavailable, TranslationActionEnabled, TranslationActionLabel,
+            TranslationButtonHelp, TranslationState == PinTranslationState.Disabled ? TranslationActionHelp : null);
+
+    private bool RefreshTranslationButton(PinHoverBar bar) =>
         bar.SetTranslationAction(TranslationState != PinTranslationState.Unavailable,
-            TranslationActionEnabled, TranslationActionLabel, help);
-    }
+            TranslationActionEnabled, TranslationActionLabel, TranslationButtonHelp);
 
     private void RefreshTranslationActions()
     {
-        if (_hoverBar is { } bar)
+        // The command dims while it runs; measuring and placing the bar again took the UI thread a moment for nothing.
+        if (_hoverBar is { } bar && RefreshTranslationButton(bar))
         {
-            RefreshTranslationButton(bar);
             _labeledHoverBarWidth = bar.MeasureLabeledWidth();
             PlaceHoverBar();
         }
@@ -278,7 +286,7 @@ internal sealed partial class PinWindow
             _markdownSourceContent = _markdownSourceContent.RenderedAt(VisualTreeHelper.GetDpi(this).DpiScaleX);
         }
         _showingMarkdownSource = source;
-        _imageElement.Source = DisplayContent.Image;
+        _imageElement.Source = DisplayContent.Display;
         _chrome.Background = _showingTranslation || source ? Brushes.White : null;
         UpdateImageRasterLayout();
         BuildContextMenu();

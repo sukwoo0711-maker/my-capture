@@ -73,6 +73,68 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         Assert.True(PinTranslationOverlay.Contrast(color, Color.FromRgb(240, 240, 240)) >= 4.5);
     }
 
+    [Fact]
+    public void TextColourMatchesTheSortedSamplesWithManyTies()
+    {
+        var random = new Random(20261102);
+        Color[] palette = [Color.FromRgb(240, 240, 240), Color.FromRgb(20, 20, 20), Color.FromRgb(90, 30, 30),
+            Color.FromRgb(30, 90, 30), Color.FromRgb(200, 60, 60), Color.FromRgb(128, 128, 128)];
+        for (int round = 0; round < 300; round++)
+        {
+            int width = random.Next(8, 400), height = random.Next(8, 120), stride = width * 4;
+            byte[] pixels = new byte[stride * height];
+            int colors = random.Next(1, palette.Length + 1);
+            for (int index = 0; index < pixels.Length; index += 4)
+            {
+                Color color = palette[random.Next(colors)];
+                (pixels[index], pixels[index + 1], pixels[index + 2], pixels[index + 3]) = (color.B, color.G, color.R, 255);
+            }
+            OcrLine[] lines = [.. Enumerable.Range(0, random.Next(1, 4)).Select(_ => Line("Text",
+                random.NextDouble() * (width + 20) - 10, random.NextDouble() * (height + 20) - 10,
+                random.NextDouble() * width + 1, random.NextDouble() * height + 1))];
+            Color background = palette[random.Next(palette.Length)];
+            Assert.Equal(SortedTextColor(pixels, width, height, stride, lines, background),
+                PinTranslationOverlay.EstimateTextColor(pixels, width, height, stride, lines, background));
+        }
+    }
+
+    /// <summary>The text colour as it was before selection replaced the sort: every sample kept and sorted.</summary>
+    private static Color SortedTextColor(byte[] bgra, int width, int height, int stride, IReadOnlyList<OcrLine> lines, Color background)
+    {
+        static double Linear(int value)
+        {
+            double n = value / 255d;
+            return n <= .04045 ? n / 12.92 : Math.Pow((n + .055) / 1.055, 2.4);
+        }
+        double backgroundLuminance = .2126 * Linear(background.R) + .7152 * Linear(background.G) + .0722 * Linear(background.B);
+        var samples = new List<(int Rgb, double Distance, int Order)>();
+        foreach (OcrLine line in lines)
+        {
+            OcrRect rect = PinTranslationOverlay.Clamp(line.Bounds, width, height);
+            int step = Math.Max(1, (int)Math.Sqrt(rect.Width * rect.Height / 4096));
+            for (int y = (int)rect.Y; y < (int)Math.Ceiling(rect.Bottom); y += step)
+                for (int x = (int)rect.X; x < (int)Math.Ceiling(rect.Right); x += step)
+                {
+                    int index = y * stride + x * 4;
+                    int r = bgra[index + 2], g = bgra[index + 1], b = bgra[index];
+                    samples.Add(((r << 16) | (g << 8) | b,
+                        Math.Abs(.2126 * Linear(r) + .7152 * Linear(g) + .0722 * Linear(b) - backgroundLuminance), samples.Count));
+                }
+        }
+        if (samples.Count == 0) return PinTranslationOverlay.EnsureContrast(background, background);
+        static Color FromRgb(int rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        if (samples.All(sample => sample.Rgb == samples[0].Rgb))
+            return PinTranslationOverlay.EnsureContrast(FromRgb(samples[0].Rgb), background);
+        int[] chosen = [.. samples.OrderByDescending(sample => sample.Distance).ThenBy(sample => sample.Order)
+            .Take(Math.Max(1, samples.Count / 5)).Select(sample => sample.Rgb)];
+        int Median(int shift)
+        {
+            int[] values = [.. chosen.Select(rgb => (rgb >> shift) & 255).Order()];
+            return (values[(values.Length - 1) / 2] + values[values.Length / 2]) / 2;
+        }
+        return PinTranslationOverlay.EnsureContrast(FromRgb((Median(16) << 16) | (Median(8) << 8) | Median(0)), background);
+    }
+
     [Theory]
     [InlineData(245, 220, true)]
     [InlineData(20, 45, false)]
@@ -343,6 +405,25 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         Assert.NotEqual(ReadPixels(source), ReadPixels(result.Image));
     });
 
+    [Theory]
+    [InlineData(96, 96)]
+    [InlineData(144, 192)]
+    public void DisplayClipsOnlyALayerThatReachesPastThePicture(double dpiX, double dpiY) => StaTestHost.Run(() =>
+    {
+        // A clipped group is drawn through a picture-sized intermediate surface, so a layer inside the
+        // picture goes without one; either way the display keeps exactly the picture's DIP size.
+        BitmapSource source = Bitmap(320, 160, dpiX, dpiY);
+        foreach ((Rect drawn, bool clipped) in new[] { (new Rect(0, 0, 320, 160), false), (new Rect(300, 150, 40, 20), true) })
+        {
+            var layer = new GeometryDrawing(Brushes.Black, null, new RectangleGeometry(drawn));
+            layer.Freeze();
+            var display = Assert.IsType<DrawingImage>(new PinOverlayComposition(source, layer, false, 1).Display);
+            Assert.Equal(clipped, ((DrawingGroup)display.Drawing).ClipGeometry is not null);
+            Assert.Equal(source.Width, display.Width, 9);
+            Assert.Equal(source.Height, display.Height, 9);
+        }
+    });
+
     [Fact]
     public void FailedBlockPixelsSurviveIncludingAdjacentErasePadding() => StaTestHost.Run(() =>
     {
@@ -429,6 +510,7 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         OcrResult merged = OcrResultMerger.Merge(OcrResult.Success(line.Text, "en-US", [line], TimeSpan.Zero, 0),
             OcrResult.Success(line.Text, "en-US", [line], TimeSpan.Zero, angle), TimeSpan.Zero);
         Assert.Equal(angle, merged.TextAngle!.Value, 10);
+        Assert.Equal(angle, merged.WithQuality(MyCapture.Core.Settings.OcrQuality.Fast).TextAngle!.Value, 10);
         Assert.False(PinTranslationOverlay.CanOverlay(merged));
         Assert.True(PinTranslationOverlay.CanOverlay(OcrResult.Success(line.Text, "en-US", [line], TimeSpan.Zero, 360)));
         double upsideDown = Assert.IsType<double>(NeuralOcrEngine.TextAngle([new SKPointI(0, 0), new(100, 0), new(100, 20), new(0, 20)], 1));

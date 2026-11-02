@@ -1,12 +1,16 @@
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Primitives;
 using MyCapture.Ocr;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -52,6 +56,98 @@ public sealed partial class PinTranslationIntegrationTests
             Assert.Equal(600, Assert.IsType<Image>(Assert.IsType<Grid>(pin.Content).Children[0]).Source.Width);
             Assert.Equal(1, recognizes);
             Assert.Equal(1, translator.Translations);
+            Assert.Equal(1, translator.WarmUps);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task ARecognizedPictureAlreadyInTheTargetLanguageNeitherChecksNorLoadsAModel() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        manager.ConfigureImageTranslation((_, _) => Task.FromResult(PinTranslationOverlayTests.Recognition(
+            PinTranslationOverlayTests.Line(Korean, 20, 20, 400, 30))));
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.False(pin.IsShowingTranslation);
+            Assert.Equal((0, 0, 0), (translator.InstallChecks, translator.WarmUps, translator.Translations));
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Theory]
+    [InlineData(English, 1)]
+    [InlineData(Korean, 0)]
+    public Task AFirstReadingThatTranslatesLoadsTheModelWhileTheRowsAreReadAgain(string firstReading, int warmUpsDuringTheReading)
+        => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        int warmUps = -1;
+        manager.ConfigureImageTranslation((_, first, _) =>
+        {
+            first?.Invoke(PinTranslationOverlayTests.Recognition(PinTranslationOverlayTests.Line(firstReading, 20, 20, 400, 30)));
+            warmUps = translator.WarmUps;
+            return Task.FromResult(PinTranslationOverlayTests.Recognition(PinTranslationOverlayTests.Line(English, 20, 20, 400, 30)));
+        });
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.True(pin.IsShowingTranslation);
+            Assert.Equal(warmUpsDuringTheReading, warmUps);
+            Assert.Equal((1, 1), (translator.WarmUps, translator.Translations));
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task PictureTranslationShowsItsLayersOnlyAtOneDevicePixelPerSourcePixel() => RunAsync(async () =>
+    {
+        PinManager manager = Manager(new FakeTranslator());
+        manager.ReadPlacementMonitorForTest = () => new MonitorInfo("fake",
+            new RectD(0, 0, 3840, 2160), new RectD(0, 0, 3840, 2100), 96, true);
+        manager.ConfigureImageTranslation((_, _) => Task.FromResult(PinTranslationOverlayTests.Recognition(
+            PinTranslationOverlayTests.Line(English, 20, 20, 400, 30))));
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            // Not yet measured: the layers, without a flattened copy.
+            Assert.IsType<DrawingImage>(pin.ImageSourceForTest);
+            Grid root = Assert.IsType<Grid>(pin.Content);
+            Image image = Assert.IsType<Image>(root.Children[0]);
+            void Layout()
+            {
+                // A window that was never shown lays out nothing, so the content is laid out at the window's size.
+                root.Measure(new Size(pin.Width, pin.Height));
+                root.Arrange(new Rect(0, 0, pin.Width, pin.Height));
+                root.UpdateLayout();
+            }
+            Layout();
+            MethodInfo dpiChanged = typeof(PinWindow).GetMethod("OnDpiChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var native = new DpiScale(600 / image.RenderSize.Width, 240 / image.RenderSize.Height);
+            var larger = new DpiScale(native.DpiScaleX * 1.5, native.DpiScaleY * 1.5);
+            dpiChanged.Invoke(pin, [larger, native]);
+            Assert.IsType<DrawingImage>(pin.ImageSourceForTest);
+
+            // A scaled source is interpolated past the erased ink, so another monitor scale or a zoom
+            // shows the flattened picture, the same bitmap a copy gets.
+            dpiChanged.Invoke(pin, [native, larger]);
+            Assert.Same(pin.DisplayedImageForTest, pin.ImageSourceForTest);
+            dpiChanged.Invoke(pin, [larger, native]);
+            Assert.IsType<DrawingImage>(pin.ImageSourceForTest);
+            typeof(PinWindow).GetMethod("ApplyZoom", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pin, [2.0, pin.Left, pin.Top, false]);
+            pin.ForceZoomSettleForTest();
+            Layout();
+            Assert.Same(pin.DisplayedImageForTest, pin.ImageSourceForTest);
         }
         finally { manager.CloseAll(); }
     });

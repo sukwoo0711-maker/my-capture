@@ -49,14 +49,15 @@ public sealed class OcrLatinRecoveryCorpusR7Tests(ITestOutputHelper output)
             OcrResult? windowsResult = null, neuralResult = null;
             int calls = 0;
             var recordingWindows = new RecordingEngine(windows, result => windowsResult = result);
-            var service = new CaptureOcrService(recordingWindows, async (request, token) =>
-            {
-                calls++;
-                OcrResult read = await neural.RecognizeAsync(request, token).ConfigureAwait(false);
-                neuralResult ??= read;
-                Save(calls == 1 ? "neural-full" : "neural-strip-" + (calls - 1).ToString(CultureInfo.InvariantCulture), read);
-                return read;
-            }, () => neural.CanRun, () => neural.IsReady, NullLogger<CaptureOcrService>.Instance);
+            var service = new CaptureOcrService(recordingWindows, neural.RecognizeAsync, () => neural.CanRun, () => neural.IsReady,
+                NullLogger<CaptureOcrService>.Instance, readNeuralRows: async (request, rows, token) =>
+                {
+                    calls++;
+                    OcrResult read = await neural.ReadRowsAsync(request, rows, token).ConfigureAwait(false);
+                    neuralResult ??= read;
+                    Save("neural-rows-" + calls.ToString(CultureInfo.InvariantCulture), read);
+                    return read;
+                });
             var watch = Stopwatch.StartNew();
             OcrResult product = service.RecognizeAsync(OcrRequestFactory.FromBitmap(image, new OcrSettings()).WithLatinRecovery())
                 .GetAwaiter().GetResult();

@@ -15,7 +15,7 @@ public sealed class PinTranslationThreadingR7Tests
         int caller = Environment.CurrentManagedThreadId, worker = caller;
         using var uiWork = new ManualResetEventSlim();
         var recognized = PinTranslationOverlayTests.Recognition(PinTranslationOverlayTests.Line("Save the document", 20, 20, 260));
-        Task<IReadOnlyList<PinOverlayBlock>> blocks = PinTranslationService.BuildOverlayBlocksAsync(recognized,
+        Task<(IReadOnlyList<PinOverlayBlock> Blocks, byte[]? Pixels)> built = PinTranslationService.BuildOverlayBlocksAsync(recognized,
             PinTranslationOverlayTests.Bitmap(1920, 1080), CancellationToken.None, () =>
             {
                 worker = Environment.CurrentManagedThreadId;
@@ -23,9 +23,12 @@ public sealed class PinTranslationThreadingR7Tests
                 Assert.True(uiWork.Wait(TimeSpan.FromSeconds(5)), "The UI dispatcher was blocked by block building.");
             });
         _ = dispatcher.BeginInvoke(new Action(uiWork.Set));
-        PumpUntil(blocks);
+        PumpUntil(built);
         Assert.NotEqual(caller, worker);
-        Assert.NotEmpty(blocks.GetAwaiter().GetResult());
+        (IReadOnlyList<PinOverlayBlock> blocks, byte[]? pixels) = built.GetAwaiter().GetResult();
+        Assert.NotEmpty(blocks);
+        // The layout step takes over the scan's copy instead of converting the picture again.
+        Assert.Equal(1920 * 1080 * 4, pixels?.Length);
     });
 
     [Fact]

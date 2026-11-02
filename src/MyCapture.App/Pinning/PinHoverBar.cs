@@ -124,14 +124,22 @@ internal sealed class PinHoverBar : Window
 
     internal Button TranslationButton { get; }
 
-    internal void SetTranslationAction(bool visible, bool enabled, string label, string help)
+    /// <returns>
+    /// Whether the bar can change size: the button was shown or hidden, or its name changed. Enabling it
+    /// or a new tooltip keeps the bar where it is.
+    /// </returns>
+    internal bool SetTranslationAction(bool visible, bool enabled, string label, string help)
     {
-        TranslationButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        Visibility visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        TextBlock name = _buttonLabels[TranslationButton];
+        bool resizes = TranslationButton.Visibility != visibility || name.Text != label;
+        TranslationButton.Visibility = visibility;
         TranslationButton.IsEnabled = enabled;
-        _buttonLabels[TranslationButton].Text = label;
+        name.Text = label;
         TranslationButton.ToolTip = help;
         AutomationProperties.SetName(TranslationButton, label);
         AutomationProperties.SetHelpText(TranslationButton, help);
+        return resizes;
     }
 
     internal double LabeledWidthBudget => UiText.Culture.TwoLetterISOLanguageName == "ko"
@@ -196,10 +204,26 @@ internal sealed class PinHoverBar : Window
     {
         bool compact = _compact;
         Compact = false;
+        // A name shown again marks only its own panel for measuring, so a shown icon-only bar
+        // reported its icon-only width as the labelled one and swapped to the names it has no room for.
+        InvalidateNameMeasures();
         _surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double width = _surface.DesiredSize.Width;
         Compact = compact;
         return width;
+    }
+
+    private void InvalidateNameMeasures()
+    {
+        foreach (TextBlock label in _labels)
+        {
+            for (DependencyObject? element = label; element is UIElement visual;
+                 element = VisualTreeHelper.GetParent(visual) ?? LogicalTreeHelper.GetParent(visual))
+            {
+                visual.InvalidateMeasure();
+                if (ReferenceEquals(visual, _surface)) break;
+            }
+        }
     }
 
     /// <summary>Reads the pin's current opacity, shown as the checked entry of the opacity menu.</summary>

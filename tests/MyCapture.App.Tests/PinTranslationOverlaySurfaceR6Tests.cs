@@ -302,7 +302,7 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
                 object surface = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
                     [pixels, width, height, stride, block, background, obstacles], CultureInfo.InvariantCulture)!;
                 var canOccupy = type.GetMethod("CanOccupy", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<OcrRect, bool>>(surface);
-                var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, bool>>(surface);
+                var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, int, bool>>(surface);
                 OcrRect[] occupied = (OcrRect[])type.GetField("occupiedLines", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(surface)!;
                 OcrRect limits = (OcrRect)type.GetMethod("HorizontalLimits", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(surface, [TextAlignment.Left])!;
                 double inset = (double)type.GetProperty("LeadingInset", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(surface)!;
@@ -328,7 +328,7 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
                 for (int y = (int)rectangle.Y; y < Math.Ceiling(rectangle.Bottom); y++)
                     for (int x = (int)rectangle.X; x < Math.Ceiling(rectangle.Right); x++)
                     {
-                        if (occupied.Any(rect => x >= rect.X && x < rect.Right && y >= rect.Y && y < rect.Bottom) || matches(y * stride + x * 4)) continue;
+                        if (occupied.Any(rect => x >= rect.X && x < rect.Right && y >= rect.Y && y < rect.Bottom) || matches(x, y)) continue;
                         int i = y * stride + x * 4;
                         OcrRect nearest = block.Lines.SelectMany(line => line.Words.Select(word => word.Bounds))
                             .MinBy(rect => Math.Max(0, Math.Max(rect.X - x, x - rect.Right)) + Math.Max(0, Math.Max(rect.Y - y, y - rect.Bottom)));
@@ -347,7 +347,7 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
                         for (int x = (int)Math.Ceiling(first.Right); x < width; x++)
                         {
                             int start = y * width + x;
-                            if (!seen.Add(start) || matches(y * stride + x * 4)) continue;
+                            if (!seen.Add(start) || matches(x, y)) continue;
                             var queue = new List<int> { start };
                             int minX = x, maxX = x, minY = y, maxY = y;
                             for (int cursor = 0; cursor < queue.Count; cursor++)
@@ -359,7 +359,7 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
                                     {
                                         int xx = cx + dx, yy = cy + dy, key = yy * width + xx;
                                         if (xx < first.Right || xx >= width || yy < first.Y || yy >= first.Bottom
-                                            || !seen.Add(key) || matches(yy * stride + xx * 4)) continue;
+                                            || !seen.Add(key) || matches(xx, yy)) continue;
                                         queue.Add(key);
                                     }
                             }
@@ -483,14 +483,14 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
         Type type = typeof(PinTranslationOverlay).GetNestedType("BackgroundSurface", BindingFlags.NonPublic)!;
         object surface = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
             [pixels, width, height, stride, block, background], CultureInfo.InvariantCulture)!;
-        var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, bool>>(surface);
+        var matches = type.GetMethod("Matches", BindingFlags.Instance | BindingFlags.NonPublic)!.CreateDelegate<Func<int, int, bool>>(surface);
         object? limits = type.GetMethod("HorizontalLimits", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(surface, [TextAlignment.Left]);
         var failures = new List<string>();
         for (int x = (int)Math.Ceiling(block.Bounds.Right); x < Math.Min(width, block.Bounds.Right + 12); x++)
             for (int y = (int)block.Bounds.Y; y < block.Bounds.Bottom; y++)
             {
                 int index = y * stride + x * 4;
-                if (!matches(index) && failures.Count < 8) failures.Add($"({x},{y})={pixels[index + 2]},{pixels[index + 1]},{pixels[index]}");
+                if (!matches(x, y) && failures.Count < 8) failures.Add($"({x},{y})={pixels[index + 2]},{pixels[index + 1]},{pixels[index]}");
             }
         return $"bounds={block.Bounds}; background={background}; limits={limits}; failed={string.Join(';', failures)}";
     }

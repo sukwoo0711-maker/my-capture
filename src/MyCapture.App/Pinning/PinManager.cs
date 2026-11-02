@@ -565,7 +565,8 @@ internal sealed partial class PinManager
         _recordClosedPins = false;
         try
         {
-            CloseAll();
+            // The process ends next; nothing needs a frame to release the closed pins' buffers.
+            CloseAll(releaseBuffers: false);
         }
         finally
         {
@@ -919,18 +920,32 @@ internal sealed partial class PinManager
     }
 
     /// <summary>Closes every open pin at once, and ends any exit a closed pin is still playing.</summary>
-    internal void CloseAll()
+    internal void CloseAll() => CloseAll(releaseBuffers: true);
+
+    private void CloseAll(bool releaseBuffers)
     {
         _restoreGeneration++;
-        foreach (PinWindow leaving in _leaving.ToArray())
+        // Copy first: closing raises CloseStarted, which mutates _pins.
+        PinWindow[] leaving = _leaving.ToArray(), open = _pins.ToArray();
+        // One frame, presented by the last visible pin after the others have gone, releases the buffers of
+        // every pin this call closes. The presenter's close still starts in its turn, so the history order holds.
+        PinWindow? presenter = !releaseBuffers ? null
+            : Array.FindLast(open, pin => pin.CanPresentReleaseFrame) ?? Array.FindLast(leaving, pin => pin.CanPresentReleaseFrame);
+        foreach (PinWindow pin in leaving)
         {
-            leaving.CompleteExit();
+            if (!ReferenceEquals(pin, presenter)) pin.CompleteExit(releaseBuffers: false);
         }
 
-        // Copy first: closing raises CloseStarted, which mutates _pins.
-        foreach (PinWindow pin in _pins.ToArray())
+        foreach (PinWindow pin in open)
         {
-            pin.Close();
+            if (ReferenceEquals(pin, presenter)) pin.BeginClose();
+            else pin.Close();
+        }
+
+        if (presenter is not null)
+        {
+            if (Array.IndexOf(leaving, presenter) >= 0) presenter.CompleteExit(releaseBuffers: true);
+            else presenter.CloseReleasingBuffers();
         }
 
         _pins.Clear();

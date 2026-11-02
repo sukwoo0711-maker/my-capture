@@ -1,8 +1,8 @@
-using System.Buffers;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Themes;
 using MyCapture.Ocr;
 
 namespace MyCapture.App.Pinning;
@@ -21,12 +21,65 @@ internal sealed record PinOverlayFit(OcrRect Bounds, double FontSize, string Tex
 {
     internal IReadOnlyList<double> LineOffsets { get; init; } = [];
 }
-internal sealed record PinOverlayComposition(BitmapSource Image, bool NeedsReview, int RenderedBlocks);
+/// <summary>
+/// The untouched source and, over it in the source's native pixels, a frozen layer with the translated
+/// surfaces and text. A pin shows the two as layers of one drawing, so no picture-sized bitmap or texture
+/// exists for the translation; <see cref="Image"/> flattens them only when a bitmap is asked for (copy,
+/// the text selection's background).
+/// </summary>
+internal sealed class PinOverlayComposition(BitmapSource source, Drawing? overlay, bool needsReview, int renderedBlocks)
+{
+    private BitmapSource? image;
+    private ImageSource? display;
 
-/// <summary>Native-pixel layout and colour sampling, followed by one window-free WPF render.</summary>
+    internal BitmapSource Source { get; } = source;
+    internal Drawing? Overlay { get; } = overlay;
+    internal bool NeedsReview { get; } = needsReview;
+    internal int RenderedBlocks { get; } = renderedBlocks;
+
+    /// <summary>The layer flattened onto the source, or the source itself when nothing was drawn.</summary>
+    internal BitmapSource Image => image ??= Overlay is null ? Source : PinTranslationOverlay.Flatten(Source, Overlay);
+
+    /// <summary>Both layers at the source's DIP size, for an Image element.</summary>
+    internal ImageSource Display => display ??= Overlay is null ? Source : PinTranslationOverlay.Layered(Source, Overlay);
+}
+
+/// <summary>
+/// Composition inputs that do not depend on the translated text. It owns a Bgra32 copy of the
+/// source pixels until it is disposed, so it can be sampled while the translator runs.
+/// </summary>
+internal sealed class PinOverlayPreparation : IDisposable
+{
+    private byte[]? pixels;
+
+    internal PinOverlayPreparation(BitmapSource source, IReadOnlyList<PinOverlayBlock> blocks, byte[] pixels,
+        int width, int height, int stride)
+    {
+        Source = source;
+        Blocks = blocks;
+        this.pixels = pixels;
+        Width = width;
+        Height = height;
+        Stride = stride;
+        Layouts = new PinTranslationOverlay.BlockLayout?[blocks.Count];
+    }
+
+    internal BitmapSource Source { get; }
+    internal IReadOnlyList<PinOverlayBlock> Blocks { get; }
+    internal int Width { get; }
+    internal int Height { get; }
+    internal int Stride { get; }
+    internal byte[] Pixels => pixels ?? throw new ObjectDisposedException(nameof(PinOverlayPreparation));
+    internal double[] FontSizes { get; set; } = [];
+    internal PinTranslationOverlay.BlockLayout?[] Layouts { get; }
+
+    public void Dispose() => pixels = null;
+}
+
+/// <summary>Native-pixel layout and colour sampling, recorded as a frozen layer over the source picture.</summary>
 internal static partial class PinTranslationOverlay
 {
-    internal const double MinimumFontSize = 9;
+    internal const double MinimumFontSize = TypeScale.Content.TranslationOverlayMinimum;
     private const double Padding = 2;
 
     internal static bool CanOverlay(OcrResult result)
@@ -327,10 +380,20 @@ internal static partial class PinTranslationOverlay
         histogram.Clear();
         int count = 0;
         long red = 0, green = 0, blue = 0, squares = 0;
+        // Only the ring between the two rectangles, in the same row order: for whole numbers, x < inside.X holds
+        // exactly below ceil(inside.X) and x >= inside.Right from ceil(inside.Right).
+        int ringLeft = (int)outside.X, ringRight = (int)Math.Ceiling(outside.Right);
+        int innerLeft = (int)Math.Ceiling(inside.X), innerRight = (int)Math.Ceiling(inside.Right);
         for (int y = (int)outside.Y; y < (int)Math.Ceiling(outside.Bottom); y++)
-            for (int x = (int)outside.X; x < (int)Math.Ceiling(outside.Right); x++)
-                if (x < inside.X || x >= inside.Right || y < inside.Y || y >= inside.Bottom)
-                    AddBackgroundSample(bgra, y * stride + x * 4, histogram, ref count, ref red, ref green, ref blue, ref squares);
+        {
+            bool beside = y >= inside.Y && y < inside.Bottom;
+            int leftEnd = beside ? Math.Min(ringRight, innerLeft) : ringRight;
+            int rightStart = beside ? Math.Max(Math.Max(ringLeft, leftEnd), innerRight) : ringRight;
+            for (int x = ringLeft; x < leftEnd; x++)
+                AddBackgroundSample(bgra, y * stride + x * 4, histogram, ref count, ref red, ref green, ref blue, ref squares);
+            for (int x = rightStart; x < ringRight; x++)
+                AddBackgroundSample(bgra, y * stride + x * 4, histogram, ref count, ref red, ref green, ref blue, ref squares);
+        }
         // Edge-to-edge text has no outer ring. Read the image-edge pixels rather than inventing white.
         bool edgeSamples = count == 0;
         if (edgeSamples)
@@ -400,62 +463,141 @@ internal static partial class PinTranslationOverlay
             Channel(histogram.Slice(512, 256), count));
     }
 
-    private readonly record struct InkSample(int Rgb, double Distance, int Order);
-
     internal static Color EstimateTextColor(byte[] bgra, int width, int height, int stride,
         IReadOnlyList<OcrLine> lines, Color background)
-        => EstimateTextColor(bgra, width, height, stride, lines, background, []);
+        => EstimateTextColor(bgra, width, height, stride, lines, background, new InkDistances());
 
+    /// <summary>
+    /// The median colour of the fifth of the line samples farthest in luminance from the background, ties going
+    /// to the sample scanned first. Selection finds the fifth's least distance, so no sample list is sorted or kept.
+    /// </summary>
     private static Color EstimateTextColor(byte[] bgra, int width, int height, int stride,
-        IReadOnlyList<OcrLine> lines, Color background, List<InkSample> samples)
+        IReadOnlyList<OcrLine> lines, Color background, InkDistances scratch)
     {
-        samples.Clear();
         double backgroundLuminance = Luminance(background);
-        int sampleCount = 0, uniformRgb = -1;
+        int sampleCount = 0;
+        foreach (OcrLine line in lines) sampleCount += new InkGrid(Clamp(line.Bounds, width, height)).Count;
+        if (sampleCount == 0) return EnsureContrast(background, background);
+        Span<double> distances = scratch.Take(sampleCount);
+        int sample = 0, firstRgb = -1;
+        bool uniform = true;
         foreach (OcrLine line in lines)
         {
-            OcrRect rect = Clamp(line.Bounds, width, height);
-            int step = Math.Max(1, (int)Math.Sqrt(rect.Width * rect.Height / 4096));
-            for (int y = (int)rect.Y; y < (int)Math.Ceiling(rect.Bottom); y += step)
-                for (int x = (int)rect.X; x < (int)Math.Ceiling(rect.Right); x += step)
+            var grid = new InkGrid(Clamp(line.Bounds, width, height));
+            for (int y = grid.Top; y < grid.Bottom; y += grid.Step)
+                for (int x = grid.Left; x < grid.Right; x += grid.Step)
                 {
                     int index = y * stride + x * 4;
                     int r = bgra[index + 2], g = bgra[index + 1], b = bgra[index];
                     int rgb = (r << 16) | (g << 8) | b;
-                    if (sampleCount == 0) uniformRgb = rgb;
-                    if (samples.Count == 0 && rgb == uniformRgb)
-                    {
-                        sampleCount++;
-                        continue;
-                    }
-                    if (samples.Count == 0)
-                    {
-                        double uniformDistance = Math.Abs(.2126 * LinearChannels[uniformRgb >> 16]
-                            + .7152 * LinearChannels[(uniformRgb >> 8) & 255] + .0722 * LinearChannels[uniformRgb & 255] - backgroundLuminance);
-                        for (int prior = 0; prior < sampleCount; prior++) samples.Add(new(uniformRgb, uniformDistance, prior));
-                    }
-                    double distance = Math.Abs(.2126 * LinearChannels[r] + .7152 * LinearChannels[g]
-                        + .0722 * LinearChannels[b] - backgroundLuminance);
-                    samples.Add(new(rgb, distance, sampleCount++));
+                    if (sample == 0) firstRgb = rgb;
+                    else uniform &= rgb == firstRgb;
+                    distances[sample++] = InkDistance(r, g, b, backgroundLuminance);
                 }
         }
-        if (sampleCount == 0) return EnsureContrast(background, background);
-        if (samples.Count == 0)
-            return EnsureContrast(Color.FromRgb((byte)(uniformRgb >> 16), (byte)(uniformRgb >> 8), (byte)uniformRgb), background);
-        samples.Sort(static (first, second) =>
-        {
-            int distance = second.Distance.CompareTo(first.Distance);
-            return distance == 0 ? first.Order.CompareTo(second.Order) : distance;
-        });
+        if (uniform)
+            return EnsureContrast(Color.FromRgb((byte)(firstRgb >> 16), (byte)(firstRgb >> 8), (byte)firstRgb), background);
+        int count = Math.Max(1, sampleCount / 5);
+        double least = KthLargest(distances, count);
+        int ties = count;
+        foreach (double distance in distances)
+            if (distance > least) ties--;
         Span<int> histogram = stackalloc int[768];
         histogram.Clear();
-        int count = Math.Max(1, samples.Count / 5);
-        for (int i = 0; i < count; i++)
+        foreach (OcrLine line in lines)
         {
-            int rgb = samples[i].Rgb;
-            histogram[rgb >> 16]++; histogram[256 + ((rgb >> 8) & 255)]++; histogram[512 + (rgb & 255)]++;
+            var grid = new InkGrid(Clamp(line.Bounds, width, height));
+            for (int y = grid.Top; y < grid.Bottom; y += grid.Step)
+                for (int x = grid.Left; x < grid.Right; x += grid.Step)
+                {
+                    int index = y * stride + x * 4;
+                    int r = bgra[index + 2], g = bgra[index + 1], b = bgra[index];
+                    double distance = InkDistance(r, g, b, backgroundLuminance);
+                    if (distance < least) continue;
+                    if (distance == least)
+                    {
+                        if (ties == 0) continue;
+                        ties--;
+                    }
+                    histogram[r]++; histogram[256 + g]++; histogram[512 + b]++;
+                }
         }
         return EnsureContrast(HistogramColor(histogram, count), background);
+    }
+
+    private static double InkDistance(int r, int g, int b, double backgroundLuminance) =>
+        Math.Abs(.2126 * LinearChannels[r] + .7152 * LinearChannels[g] + .0722 * LinearChannels[b] - backgroundLuminance);
+
+    /// <summary>The pixels a line contributes to its text colour: every pixel of a short line, about 4096 of a long one.</summary>
+    private readonly struct InkGrid
+    {
+        internal InkGrid(OcrRect rect)
+        {
+            Step = Math.Max(1, (int)Math.Sqrt(rect.Width * rect.Height / 4096));
+            Left = (int)rect.X;
+            Top = (int)rect.Y;
+            Right = (int)Math.Ceiling(rect.Right);
+            Bottom = (int)Math.Ceiling(rect.Bottom);
+        }
+
+        internal int Step { get; }
+        internal int Left { get; }
+        internal int Top { get; }
+        internal int Right { get; }
+        internal int Bottom { get; }
+
+        internal int Count => Right > Left && Bottom > Top
+            ? (Right - Left + Step - 1) / Step * ((Bottom - Top + Step - 1) / Step) : 0;
+    }
+
+    /// <summary>One distance buffer for the text colours of every block of a preparation.</summary>
+    private sealed class InkDistances
+    {
+        private double[] _values = [];
+
+        internal Span<double> Take(int count)
+        {
+            if (_values.Length < count) _values = GC.AllocateUninitializedArray<double>(count);
+            return _values.AsSpan(0, count);
+        }
+    }
+
+    /// <summary>The <paramref name="k"/>-th largest of <paramref name="values"/>, counting from one; reorders them.</summary>
+    private static double KthLargest(Span<double> values, int k)
+    {
+        int low = 0, high = values.Length - 1, target = k - 1, rounds = 0;
+        while (low < high)
+        {
+            if (++rounds > 64)
+            {
+                // Pathological orders only; sorting what is left is exact as well.
+                values[low..(high + 1)].Sort();
+                return values[high - (target - low)];
+            }
+            double first = values[low], middle = values[low + (high - low) / 2], last = values[high];
+            double pivot = Math.Max(Math.Min(first, middle), Math.Min(Math.Max(first, middle), last));
+            // Larger values move to the front and smaller ones to the back; the pivot's equals stay between.
+            int larger = low, cursor = low, smaller = high;
+            while (cursor <= smaller)
+            {
+                double value = values[cursor];
+                if (value > pivot)
+                {
+                    values[cursor++] = values[larger];
+                    values[larger++] = value;
+                }
+                else if (value < pivot)
+                {
+                    values[cursor] = values[smaller];
+                    values[smaller--] = value;
+                }
+                else cursor++;
+            }
+            if (target < larger) high = larger - 1;
+            else if (target > smaller) low = smaller + 1;
+            else return pivot;
+        }
+        return values[low];
     }
 
     internal static Color EnsureContrast(Color foreground, Color background)
@@ -498,29 +640,131 @@ internal static partial class PinTranslationOverlay
         Action<PinOverlayBlock, string>? observeDecision = null)
     {
         ArgumentNullException.ThrowIfNull(source);
-        int width = source.PixelWidth, height = source.PixelHeight, stride = checked(width * 4);
-        var converted = source.Format == PixelFormats.Bgra32 ? source
-            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-        byte[] pixels = ArrayPool<byte>.Shared.Rent(checked(stride * height));
-        try
-        {
-            converted.CopyPixels(pixels, stride, 0);
-            return ComposePixels(source, translations, drawText, observeFit, observeDecision, pixels, width, height, stride);
-        }
-        finally { ArrayPool<byte>.Shared.Return(pixels); }
+        ArgumentNullException.ThrowIfNull(translations);
+        using PinOverlayPreparation preparation = Prepare(source, translations.Select(item => item.Block).ToArray(),
+            index => EarlyDecision(translations[index]) is null);
+        return Compose(preparation, translations, drawText, observeFit, observeDecision);
     }
 
-    private static PinOverlayComposition ComposePixels(BitmapSource source, IReadOnlyList<PinOverlayTranslation> translations,
-        bool drawText, Action<PinOverlayBlock, PinOverlayFit, bool>? observeFit, Action<PinOverlayBlock, string>? observeDecision,
-        byte[] pixels, int width, int height, int stride)
+    /// <summary>Translation-independent placement inputs of one block.</summary>
+    internal sealed record BlockLayout(PinOverlayBackground[] Backgrounds, Color Background, double SourcePitch,
+        TextAlignment Alignment, Color Foreground)
     {
+        internal BackgroundSurface Surface { get; init; } = null!;
+        internal OcrRect[] Obstacles { get; init; } = [];
+        internal OcrRect HorizontalLimits { get; init; }
+    }
+
+    /// <summary>
+    /// Samples font sizes, ring colours, surfaces, columns and text colours before the translation
+    /// exists. Only blocks that <paramref name="needsLayout"/> selects get a layout. The preparation
+    /// takes over <paramref name="sourcePixels"/>, the copy the block scan returned, when it is given.
+    /// </summary>
+    internal static PinOverlayPreparation Prepare(BitmapSource source, IReadOnlyList<PinOverlayBlock> blocks,
+        Func<int, bool>? needsLayout = null, CancellationToken cancellationToken = default, byte[]? sourcePixels = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(blocks);
+        int width = source.PixelWidth, height = source.PixelHeight, stride = checked(width * 4);
+        if (sourcePixels is not null && sourcePixels.Length != checked(stride * height))
+            throw new ArgumentException("The pixels are not a Bgra32 copy of the source.", nameof(sourcePixels));
+        var preparation = new PinOverlayPreparation(source, blocks, sourcePixels ?? Bgra32Pixels(source), width, height, stride);
+        try
+        {
+            byte[] pixels = preparation.Pixels;
+            double[] fontSizes = preparation.FontSizes = EstimateFontSizes(blocks);
+            for (int index = 0; index < blocks.Count; index++)
+            {
+                double inkHeight = SourceInkHeight(blocks[index], pixels, width, height, stride);
+                if (inkHeight > 0) fontSizes[index] = Math.Min(fontSizes[index], inkHeight * 1.1);
+            }
+            OcrRect[] protectedRegions = blocks.SelectMany(block => block.ProtectedRegions).ToArray();
+            var inkDistances = new InkDistances();
+            for (int index = 0; index < blocks.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                PinOverlayBlock block = blocks[index];
+                if (block.PreservePixels || needsLayout?.Invoke(index) == false) continue;
+                // Other blocks and protected regions only; composition checks the earlier placements.
+                OcrRect[] obstacles = blocks.Where((_, otherIndex) => otherIndex != index)
+                    .SelectMany(other => other.Lines.Select(line => line.Bounds))
+                    .Where(region => !block.ProtectedRegions.Contains(region))
+                    .Concat(protectedRegions.Where(region => !block.ProtectedRegions.Contains(region))).ToArray();
+                preparation.Layouts[index] = PrepareLayout(preparation, index, obstacles, inkDistances);
+            }
+            return preparation;
+        }
+        catch
+        {
+            preparation.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// A new Bgra32 copy with rows of width × 4 bytes. It is not pooled: returned on a pool thread,
+    /// a picture-sized buffer would stay cached after the pin closes.
+    /// </summary>
+    internal static byte[] Bgra32Pixels(BitmapSource source)
+    {
+        int stride = checked(source.PixelWidth * 4);
+        BitmapSource converted = source.Format == PixelFormats.Bgra32 ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        byte[] pixels = GC.AllocateUninitializedArray<byte>(checked(stride * source.PixelHeight));
+        converted.CopyPixels(pixels, stride, 0);
+        return pixels;
+    }
+
+    private static BlockLayout PrepareLayout(PinOverlayPreparation preparation, int index, OcrRect[] obstacles, InkDistances inkDistances)
+    {
+        byte[] pixels = preparation.Pixels;
+        int width = preparation.Width, height = preparation.Height, stride = preparation.Stride;
+        PinOverlayBlock block = preparation.Blocks[index];
+        PinOverlayBackground[] backgrounds = block.Lines.Select(line =>
+            EstimateBackground(pixels, width, height, stride, line.Bounds)).ToArray();
+        Color background = MedianColor(backgrounds.Select(value => value.Color).ToArray());
+        var layout = new BlockLayout(backgrounds, background, SourceLinePitch(block.Lines), InferAlignment(block.Lines),
+            EstimateTextColor(pixels, width, height, stride, block.Lines, background, inkDistances));
+        return WithSurface(layout, preparation, index, obstacles);
+    }
+
+    private static BlockLayout WithSurface(BlockLayout layout, PinOverlayPreparation preparation, int index, OcrRect[] obstacles)
+    {
+        var surface = new BackgroundSurface(preparation.Pixels, preparation.Width, preparation.Height, preparation.Stride,
+            preparation.Blocks[index], layout.Background, obstacles);
+        return layout with
+        {
+            Surface = surface,
+            Obstacles = obstacles,
+            HorizontalLimits = EstablishedColumnLimits(surface.HorizontalLimits(layout.Alignment), preparation.Blocks,
+                preparation.FontSizes, index, layout.Alignment),
+        };
+    }
+
+    private static string? EarlyDecision(PinOverlayTranslation item) => item.Block.PreservePixels ? "protected"
+        : item.Text is null ? "all-rejected"
+        : string.Equals(NormalizeWhitespace(item.Text), NormalizeWhitespace(item.Block.Text), StringComparison.Ordinal) ? "identity"
+        : null;
+
+    /// <summary>Places the translations, which must follow the prepared blocks in order.</summary>
+    internal static PinOverlayComposition Compose(PinOverlayPreparation preparation, IReadOnlyList<PinOverlayTranslation> translations,
+        bool drawText = true, Action<PinOverlayBlock, PinOverlayFit, bool>? observeFit = null,
+        Action<PinOverlayBlock, string>? observeDecision = null)
+    {
+        ArgumentNullException.ThrowIfNull(preparation);
+        ArgumentNullException.ThrowIfNull(translations);
+        if (translations.Count != preparation.Blocks.Count
+            || Enumerable.Range(0, translations.Count).Any(index => !ReferenceEquals(translations[index].Block, preparation.Blocks[index])))
+            throw new ArgumentException("The translations must follow the prepared blocks.", nameof(translations));
+        BitmapSource source = preparation.Source;
+        int width = preparation.Width, height = preparation.Height;
         var draws = new List<(PinOverlayFit Fit, PinOverlayBackground[] Backgrounds, Color Color, PinOverlayBlock Block,
             double InkTop, double PitchScale, TextAlignment Alignment, Geometry? Clip, BackgroundSurface Surface)>();
         var metrics = new CompositionMetrics();
         var inkBounds = new Dictionary<(string Text, double Size, double Pitch), Rect>();
         var paragraphMetrics = new Dictionary<(string Text, double Size, double Pitch), Size>();
         var renderedText = new Dictionary<(string Text, double Size, Color Color, double Pitch, TextAlignment Alignment, double Width, bool Underline), FormattedText>();
-        var samples = new List<InkSample>();
+        var inkDistances = new InkDistances();
         Rect PlacementBounds(string text, double size, double pitch)
         {
             var key = (text, size, pitch);
@@ -544,22 +788,14 @@ internal static partial class PinTranslationOverlay
             return measured;
         }
         bool needsReview = false;
-        double[] fontSizes = EstimateFontSizes(translations.Select(item => item.Block).ToArray());
-        for (int index = 0; index < translations.Count; index++)
-        {
-            double inkHeight = SourceInkHeight(translations[index].Block, pixels, width, height, stride);
-            if (inkHeight > 0) fontSizes[index] = Math.Min(fontSizes[index], inkHeight * 1.1);
-        }
+        double[] fontSizes = preparation.FontSizes;
         OcrRect[] protectedRegions = translations.SelectMany(item => item.Block.ProtectedRegions).ToArray();
         for (int index = 0; index < translations.Count; index++)
         {
             PinOverlayTranslation item = translations[index];
-            if (item.Block.PreservePixels)
-            { observeDecision?.Invoke(item.Block, "protected"); continue; }
-            if (item.Text is null)
-            { observeDecision?.Invoke(item.Block, "all-rejected"); continue; }
-            if (string.Equals(NormalizeWhitespace(item.Text), NormalizeWhitespace(item.Block.Text), StringComparison.Ordinal))
-            { observeDecision?.Invoke(item.Block, "identity"); continue; }
+            if (EarlyDecision(item) is { } skipped)
+            { observeDecision?.Invoke(item.Block, skipped); continue; }
+            string translated = item.Text!; // Only a block with a translation gets past the early decision.
             // Small source screenshots already have ink below the ordinary minimum.
             // Preserve their capped scale instead of either enlarging or rejecting them.
             double minimumEm = Math.Min(MinimumFontSize, fontSizes[index]);
@@ -568,18 +804,20 @@ internal static partial class PinTranslationOverlay
                 .Where(region => !item.Block.ProtectedRegions.Contains(region))
                 .Concat(protectedRegions.Where(region => !item.Block.ProtectedRegions.Contains(region)))
                 .Concat(draws.Select(draw => draw.Fit.Bounds)).ToArray();
-            PinOverlayBackground[] backgrounds = item.Block.Lines.Select(line =>
-                EstimateBackground(pixels, width, height, stride, line.Bounds)).ToArray();
-            Color background = MedianColor(backgrounds.Select(value => value.Color).ToArray());
-            var surface = new BackgroundSurface(pixels, width, height, stride, item.Block, background, obstacles);
-            double sourcePitch = SourceLinePitch(item.Block.Lines);
+            // A surface sampled before the translation stays exact unless an earlier placement touches it.
+            BlockLayout layout = preparation.Layouts[index] is not { } prepared ? PrepareLayout(preparation, index, obstacles, inkDistances)
+                : prepared.Surface.Admits(prepared.Obstacles, obstacles) ? prepared : WithSurface(prepared, preparation, index, obstacles);
+            PinOverlayBackground[] backgrounds = layout.Backgrounds;
+            Color background = layout.Background;
+            BackgroundSurface surface = layout.Surface;
+            double sourcePitch = layout.SourcePitch;
             double pitchScale = sourcePitch > 0 ? sourcePitch / fontSizes[index] : 0;
-            TextAlignment alignment = InferAlignment(item.Block.Lines);
-            OcrRect horizontalLimits = EstablishedColumnLimits(surface.HorizontalLimits(alignment), translations, fontSizes, index, alignment);
+            TextAlignment alignment = layout.Alignment;
+            OcrRect horizontalLimits = layout.HorizontalLimits;
             Size FinalMeasure(string text, double size) => MeasureParagraph(text, size, pitchScale);
             Size MeasurePlacement(string text, double size) =>
                 new(FinalMeasure(text, size).Width, PlacementBounds(text, size, pitchScale).Height);
-            PinOverlayFit? fit = Fit(item.Text, item.Block.Bounds, fontSizes[index],
+            PinOverlayFit? fit = Fit(translated, item.Block.Bounds, fontSizes[index],
                 width, height, Measure, obstacles, item.Block.Lines.Count,
                 sourcePitch > 0 ? sourcePitch : metrics.LineHeight(fontSizes[index]),
                 FinalMeasure, metrics.MeasureWidth, MeasurePlacement, alignment, horizontalLimits, surface.CanOccupy,
@@ -588,7 +826,7 @@ internal static partial class PinTranslationOverlay
             // right. Its unused left padding is legal only after the usual fit has failed.
             if (fit is null && item.Block.Lines.Count == 1 && alignment == TextAlignment.Left
                 && surface.TextExclusions.Count == 0)
-                fit = Fit(item.Text, item.Block.Bounds, fontSizes[index], width, height,
+                fit = Fit(translated, item.Block.Bounds, fontSizes[index], width, height,
                     Measure, obstacles, 1, metrics.LineHeight(fontSizes[index]),
                     FinalMeasure, metrics.MeasureWidth, MeasurePlacement, TextAlignment.Right,
                     surface.HorizontalLimits(TextAlignment.Right), surface.CanOccupy, minimumFontSize: minimumEm);
@@ -604,19 +842,17 @@ internal static partial class PinTranslationOverlay
             if (obstacles.Any(obstacle => Intersects(EraseBounds(fit.Bounds, width, height), obstacle))
                 || !surface.CanOccupy(fit.Bounds))
             { needsReview = true; observeDecision?.Invoke(item.Block, "fit"); continue; }
-            Color foreground = EstimateTextColor(pixels, width, height, stride, item.Block.Lines, background, samples);
+            Color foreground = layout.Foreground;
             OcrRect clipBounds = surface.ExtraInk.Aggregate(EraseBounds(fit.Bounds, width, height), OcrRect.Union);
             draws.Add((fit, backgrounds, foreground, item.Block, ink.Y, pitchScale, alignment,
                 surface.DrawingClip(clipBounds), surface));
             observeDecision?.Invoke(item.Block, "rendered");
         }
-        if (draws.Count == 0) return new(source, needsReview, 0);
-        var visual = new DrawingVisual();
-        using (DrawingContext drawing = visual.RenderOpen())
+        if (draws.Count == 0) return new(source, null, needsReview, 0);
+        var layer = new DrawingGroup();
+        using (DrawingContext drawing = layer.Open())
         {
-            // Work in native pixels even when the source has non-square or non-96 DPI.
-            drawing.PushTransform(new ScaleTransform(96 / source.DpiX, 96 / source.DpiY));
-            drawing.DrawImage(source, new Rect(0, 0, width, height));
+            // Native pixels even when the source has non-square or non-96 DPI; Layered and Flatten scale the layer.
             foreach (var draw in draws)
             {
                 if (draw.Clip is not null) drawing.PushClip(draw.Clip);
@@ -699,12 +935,55 @@ internal static partial class PinTranslationOverlay
                 }
                 if (draw.Clip is not null) drawing.Pop();
             }
+        }
+        // Frozen, the layer leaves the thread that measured it for the pin's UI thread.
+        layer.Freeze();
+        return new(source, layer, needsReview, draws.Count);
+    }
+
+    /// <summary>
+    /// The source and the layer as one drawing at the source's DIP size. The source keeps its own bitmap
+    /// (the texture the untranslated pin already uses); the layer is drawn as vectors over it.
+    /// </summary>
+    internal static ImageSource Layered(BitmapSource source, Drawing layer)
+    {
+        var bounds = new Rect(0, 0, source.Width, source.Height);
+        var layers = new DrawingGroup();
+        // Text can reach past the picture's edge, where a bitmap cut it off. Only then does a clip do the same
+        // and keep the drawing's bounds, and with them the Image element's size, at exactly the picture's size:
+        // WPF draws a clipped group through a picture-sized intermediate surface whose video memory the driver
+        // keeps after the pin closes.
+        Rect drawn = layer.Bounds;
+        if (!drawn.IsEmpty && (drawn.Left < 0 || drawn.Top < 0 || drawn.Right > source.PixelWidth || drawn.Bottom > source.PixelHeight))
+            layers.ClipGeometry = new RectangleGeometry(bounds);
+        layers.Children.Add(new ImageDrawing(source, bounds));
+        layers.Children.Add(new DrawingGroup
+        {
+            Transform = new ScaleTransform(96 / source.DpiX, 96 / source.DpiY),
+            Children = { layer },
+        });
+        var image = new DrawingImage(layers);
+        image.Freeze();
+        return image;
+    }
+
+    /// <summary>One window-free WPF render of the source with the layer, in native pixels.</summary>
+    internal static BitmapSource Flatten(BitmapSource source, Drawing layer)
+    {
+        int width = source.PixelWidth, height = source.PixelHeight;
+        var visual = new DrawingVisual();
+        using (DrawingContext drawing = visual.RenderOpen())
+        {
+            // Work in native pixels even when the source has non-square or non-96 DPI.
+            drawing.PushTransform(new ScaleTransform(96 / source.DpiX, 96 / source.DpiY));
+            drawing.DrawImage(source, new Rect(0, 0, width, height));
+            drawing.DrawDrawing(layer);
             drawing.Pop();
         }
         var bitmap = new RenderTargetBitmap(width, height, source.DpiX, source.DpiY, PixelFormats.Pbgra32);
         bitmap.Render(visual);
         bitmap.Freeze();
-        return new(bitmap, needsReview, draws.Count);
+        return bitmap;
     }
 
     private static double SourceInkHeight(PinOverlayBlock block, byte[] pixels, int width, int height, int stride)

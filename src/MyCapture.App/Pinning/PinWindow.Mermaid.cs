@@ -41,7 +41,7 @@ internal sealed partial class PinWindow
         }
         _mermaidPreviousHeight = updated.LayoutHeightDip;
         ClipboardCache.Clear();
-        _imageElement.Source = DisplayContent.Image;
+        _imageElement.Source = DisplayContent.Display;
         UpdateImageRasterLayout();
         ContentChanged?.Invoke();
     }
