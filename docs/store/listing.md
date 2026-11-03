@@ -103,18 +103,20 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (5.0.0)
+### 이 버전의 새로운 기능 (5.0.1)
 
-입력 한도는 1,500자입니다.
+입력 한도는 1,500자입니다. 5.0.1 줄을 앞에 더했고, 그 아래는 Store에 있던 4.12.2에서 5.0.0까지 바뀐 점입니다. Store에는 4.13.0과 4.13.1을 내지 않았습니다.
 
+- 인식 품질을 ‘정확’으로 두면 문자 인식 뒤 메모리를 1 GB 넘게 계속 차지하던 문제를 고쳤습니다. 이제 마지막으로 읽고 20초가 지나면 메모리를 돌려줍니다.
 - 캡처하면 카드가 뜨기 전에 클립보드 복사를 마칩니다. 카드가 보일 때 바로 붙여 넣으면 방금 캡처한 그림이 들어갑니다.
-- 핀을 번역하는 동안 끝난 문장 수와 남은 시간, 진행 막대를 보입니다.
+- 그림 핀의 ‘번역’이 번역문을 원래 그림 위 같은 자리에 덧씌웁니다. 원래 글자의 색과 크기에 맞춰 그리고, ‘번역’을 다시 누르면 원본으로 돌아갑니다.
+- 핀 메뉴의 ‘번역문 문서로 보기’와 ‘번역 그림으로 보기’로 두 보기를 오갑니다. 덧씌운 상태에서 Ctrl+C를 누르면 그림과 번역문을 함께 복사합니다.
+- 핀을 번역하는 동안 끝난 문장 수와 남은 시간, 진행 막대를 보입니다. 번역이 빨라지고 메모리를 덜 씁니다.
 - 형광펜과 펜에서 Shift를 누른 채 그리면 직선으로 그립니다. 밑줄은 수평으로 맞춰집니다.
 - 형광펜 커서가 편집 아이콘의 연필 모양으로 바뀌고, 획이 연필 끝에서 시작합니다.
+- 한국어 화면 문구가 낱말 중간에서 줄을 바꾸지 않습니다.
+- 문자 인식 결과의 텍스트를 고친 뒤 표 탭을 고르면 빈 표로 굳던 문제를 고쳤습니다.
 - 오래 켜 두고 반복해 써도 메모리가 늘거나 느려지지 않는지 점검했고, 캡처 직후 카드가 뜨는 과정의 병목을 줄였습니다.
-- 그림 핀의 ‘번역’이 번역문을 원래 그림 위 같은 자리에 덧씌웁니다. ‘번역’을 다시 누르면 원본으로 돌아갑니다.
-- 핀 메뉴의 ‘번역문 문서로 보기’와 ‘번역 그림으로 보기’로 두 보기를 오갑니다. 덧씌운 상태에서 Ctrl+C를 누르면 그림과 번역문을 함께 복사합니다.
-- 핀 메뉴에 ‘숨기기’와 ‘이 핀만 보기’가 있습니다. 트레이의 ‘열린 핀’은 미리 보기와 함께 숨긴 핀을 표시합니다.
 
 ### 검색어
 
@@ -198,18 +200,20 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (5.0.0)
+### What's new in this version (5.0.1)
 
-Limit: 1,500 characters.
+Limit: 1,500 characters. The 5.0.1 line comes first. The rest lists the changes from 4.12.2, the version the Store had, through 5.0.0; versions 4.13.0 and 4.13.1 did not go to the Store.
 
+- Fixed MyCapture keeping more than 1 GB of memory after text recognition when Recognition quality was set to Accurate. Memory is now returned 20 seconds after the last read.
 - A capture is copied to the clipboard before its card appears, so pasting right away pastes the new capture.
-- While a pin is translated, it shows the sentences done, the time left and a progress bar.
+- Translate on an image pin now draws the translation over the original text, in the same place and in a matching color and size. Click Translate again to see the original.
+- Switch views with Show translation as text and Show translation on picture in the pin menu. Ctrl+C on a translated picture copies the picture together with the translated text.
+- While a pin is translated, it shows the sentences done, the time left and a progress bar. Translation is faster and uses less memory.
 - Hold Shift while drawing with the highlighter or pen to draw a straight line. Underlines snap to horizontal.
 - The highlighter cursor is now the pencil of the edit icon, and strokes start at its tip.
+- Korean interface text no longer breaks lines in the middle of a word.
+- Fixed an empty table that stayed after you edited recognized text and then chose the Table tab.
 - Checked that long, repeated use neither grows memory nor slows down, and removed a bottleneck before the capture card appears.
-- Translate on an image pin draws the translation over the original text, in the same place and in a matching color and size. Click Translate again to see the original.
-- Switch views with Show translation as text and Show translation on picture in the pin menu. Ctrl+C on a translated picture copies the picture together with the translated text.
-- Pin menu items Hide and Show only this pin. Open pins in the tray shows thumbnails, hidden pins included.
 
 ### Search terms
 

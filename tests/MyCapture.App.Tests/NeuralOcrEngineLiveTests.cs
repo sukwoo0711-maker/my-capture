@@ -97,13 +97,80 @@ public sealed class NeuralOcrEngineLiveTests
         });
     }
 
+    [Fact]
+    public void RealKoreanModel_LeavesAfterTheIdleSpellAndReadsAgain()
+    {
+        using var released = new ManualResetEventSlim();
+        using LiveModels? fixture = CreateIfModelsPresent(engineIdleRelease: TimeSpan.FromMilliseconds(300));
+        if (fixture is null)
+        {
+            return;
+        }
+        NeuralOcrEngine engine = fixture.Engine;
+        engine.EngineReleased += released.Set;
+
+        StaTestHost.Run(() =>
+        {
+            BitmapSource receipt = ReceiptBitmap();
+            OcrResult first = Recognize(engine, receipt);
+            Assert.True(released.Wait(TimeSpan.FromSeconds(10)), "The whole-image sessions should leave once idle.");
+            Assert.False(engine.IsReady);
+
+            OcrResult again = Recognize(engine, receipt);
+            Assert.Equal(OcrStatus.Success, again.Status);
+            Assert.Equal(first.Text, again.Text);
+        });
+    }
+
+    [Fact]
+    public void RealKoreanModel_ReadsACaptureWhoseFourthByteIsZero()
+    {
+        using LiveModels? fixture = CreateIfModelsPresent();
+        if (fixture is null)
+        {
+            return;
+        }
+        NeuralOcrEngine engine = fixture.Engine;
+
+        StaTestHost.Run(() =>
+        {
+            // A desktop capture is Bgr32, and nothing defines its fourth byte.
+            BitmapSource capture = WithFourthByteZero(ReceiptBitmap());
+            OcrResult whole = Recognize(engine, capture);
+            Assert.Contains("12345", whole.Text, StringComparison.Ordinal);
+
+            OcrResult rows = engine.ReadRowsAsync(Request(capture), whole.Lines, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            Assert.Contains("12345", rows.Text, StringComparison.Ordinal);
+        });
+    }
+
+    private static OcrRequest Request(BitmapSource image) =>
+        OcrRequest.FromBitmap(image, 1.0, ["ko-KR"], false, true, true);
+
+    private static OcrResult Recognize(NeuralOcrEngine engine, BitmapSource image) =>
+        engine.RecognizeAsync(Request(image), CancellationToken.None).GetAwaiter().GetResult();
+
+    private static BitmapSource WithFourthByteZero(BitmapSource image)
+    {
+        var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        byte[] pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 0;
+        BitmapSource capture = BitmapSource.Create(bgra.PixelWidth, bgra.PixelHeight, 96, 96, PixelFormats.Bgr32, null, pixels, stride);
+        capture.Freeze();
+        return capture;
+    }
+
     /// <summary>
     /// Opt-in: set MYCAPTURE_OCR_LIVE_MODELS to a local folder that holds the catalog's model
     /// files. The files are copied into an owned test profile; the store and engine, including their
     /// background verification and retired-file cleanup, never see the source folder or the
     /// real MyCapture profile, and every download request is rejected.
     /// </summary>
-    private static LiveModels? CreateIfModelsPresent()
+    private static LiveModels? CreateIfModelsPresent(TimeSpan? engineIdleRelease = null)
     {
         string? setting = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_LIVE_MODELS");
         if (string.IsNullOrWhiteSpace(setting)) return null;
@@ -117,7 +184,8 @@ public sealed class NeuralOcrEngineLiveTests
             http = new HttpClient(new RejectingHandler());
             var store = new OcrModelStore(paths, http, NullLogger.Instance);
             Assert.True(store.HasRequiredModels, "The opt-in folder must contain every required, verified OCR model.");
-            return new LiveModels(root, http, new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance));
+            return new LiveModels(root, http,
+                new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance, engineIdleRelease: engineIdleRelease));
         }
         catch
         {
