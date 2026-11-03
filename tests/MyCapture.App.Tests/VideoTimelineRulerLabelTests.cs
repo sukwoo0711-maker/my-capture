@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using Xunit;
 
@@ -110,7 +111,7 @@ public sealed class VideoTimelineRulerLabelTests
     private static Dictionary<string, Rect> Labels(TimelineRenderSurface surface) =>
         Enumerable.Range(0, VisualTreeHelper.GetChildrenCount(surface))
             .SelectMany(index => Drawings(VisualTreeHelper.GetDrawing((Visual)VisualTreeHelper.GetChild(surface, index))))
-            .OfType<GlyphRunDrawing>().Where(drawing => drawing.GlyphRun.FontRenderingEmSize == 10)
+            .OfType<GlyphRunDrawing>().Where(drawing => drawing.GlyphRun.FontRenderingEmSize == TypeScale.Micro)
             // The renderer excludes the full label width, including glyph side bearings.
             // Read that advance width from the actual run instead of its smaller ink bounds.
             .ToDictionary(drawing => new string(drawing.GlyphRun.Characters!.ToArray()), drawing =>

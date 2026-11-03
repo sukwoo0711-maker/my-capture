@@ -102,9 +102,9 @@ public sealed class SettingsUxTextTests
                 Assert.Equal(new[] { fast, balanced, accurate }, items.Select(item => (string)item.Content));
                 Assert.Equal("accurate", selector.SelectedValue);
                 Assert.Equal(SettingsWindow.OcrQualityDescription,
-                    Assert.IsType<TextBlock>(window.FindName("OcrQualityHintText")).Text);
+                    KoreanWordWrap.Strip(Assert.IsType<TextBlock>(window.FindName("OcrQualityHintText")).Text));
                 Assert.Equal(UiText.Format("About_PrivacyModel", SettingsWindow.OcrModelMegabytes),
-                    Assert.IsType<TextBlock>(window.FindName("PrivacyModelText")).Text);
+                    KoreanWordWrap.Strip(Assert.IsType<TextBlock>(window.FindName("PrivacyModelText")).Text));
             }
             finally { window.CloseForExit(); }
         }

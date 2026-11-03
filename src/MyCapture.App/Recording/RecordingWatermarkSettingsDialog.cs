@@ -94,7 +94,7 @@ internal sealed class RecordingWatermarkSettingsDialog : Window
         save.Click += (_, _) =>
         {
             if (_isLocked()) return;
-            if (!TryRead(out RecordingWatermarkSettings candidate)) { _error.Text = UiText.Get("RecordingWatermark_InvalidValues"); return; }
+            if (!TryRead(out RecordingWatermarkSettings candidate)) { KoreanWordWrap.Show(_error, UiText.Get("RecordingWatermark_InvalidValues")); return; }
             if (candidate.Enabled && !ValidateAsset(candidate)) return;
             Result = candidate; DialogResult = true;
         };
@@ -152,13 +152,13 @@ internal sealed class RecordingWatermarkSettingsDialog : Window
         {
             _ = RecordingWatermarkSnapshot.Create(settings, settings.Source == RecordingWatermarkSource.Image
                 ? RecordingWatermarkAssets.Load(_imageFolder) : null);
-            _error.Text = string.Empty;
+            KoreanWordWrap.Show(_error, string.Empty);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException
             or ArgumentException or FormatException or System.Runtime.InteropServices.ExternalException or OverflowException)
         {
-            _error.Text = UiText.Get(settings.Source == RecordingWatermarkSource.Image ? "RecordingWatermark_ImageError" : "RecordingWatermark_TextError");
+            KoreanWordWrap.Show(_error, UiText.Get(settings.Source == RecordingWatermarkSource.Image ? "RecordingWatermark_ImageError" : "RecordingWatermark_TextError"));
             return false;
         }
     }
@@ -169,7 +169,7 @@ internal sealed class RecordingWatermarkSettingsDialog : Window
         RefreshSourceAvailability();
         if (!TryRead(out RecordingWatermarkSettings candidate)) return;
         if (candidate.Enabled && !ValidateAsset(candidate)) return;
-        _error.Text = string.Empty;
+        KoreanWordWrap.Show(_error, string.Empty);
         _preview?.Invoke(candidate);
     }
 
@@ -196,6 +196,6 @@ internal sealed class RecordingWatermarkSettingsDialog : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException
             or ArgumentException or FormatException or System.Runtime.InteropServices.ExternalException or OverflowException)
-        { _error.Text = UiText.Get("RecordingWatermark_ImageError"); }
+        { KoreanWordWrap.Show(_error, UiText.Get("RecordingWatermark_ImageError")); }
     }
 }

@@ -116,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
 
                             // Retain the original OCR layout checks as well as checking the entire block.
                             TextBlock label = Descendants(welcome.AccurateOcrCheck).OfType<TextBlock>()
-                                .Single(text => text.Text == UiText.Get("Welcome_AccurateOcr"));
+                                .Single(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Welcome_AccurateOcr"));
                             Check(label.ActualHeight <= label.FontSize * 1.8, "OCR checkbox label wraps");
                             Check(label.ActualWidth >= label.DesiredSize.Width, "OCR checkbox label is clipped");
                             Rect help = welcome.AccurateOcrHelp.TransformToAncestor(welcome)

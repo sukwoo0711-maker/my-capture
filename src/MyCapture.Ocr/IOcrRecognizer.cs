@@ -12,7 +12,10 @@ namespace MyCapture.Ocr;
 /// normalising and joining text, deciding the outcome — is pure and covered by tests through a
 /// fake recognizer.
 /// </remarks>
-public sealed record RecognizedText(string LanguageTag, IReadOnlyList<RecognizedLine> Lines);
+public sealed record RecognizedText(string LanguageTag, IReadOnlyList<RecognizedLine> Lines)
+{
+    public double? TextAngle { get; init; }
+}
 
 /// <summary>A recognizer line in prepared-bitmap pixel coordinates.</summary>
 public sealed record RecognizedLine(string Text, IReadOnlyList<RecognizedWord> Words);

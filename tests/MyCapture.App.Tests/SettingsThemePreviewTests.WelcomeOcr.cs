@@ -40,7 +40,7 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(WelcomeWindow.DefaultWidth, welcome.Width);
                         Assert.True(welcome.UseAccurateOcr);
                         TextBlock label = Descendants(welcome.AccurateOcrCheck).OfType<TextBlock>()
-                            .Single(text => text.Text == UiText.Get("Welcome_AccurateOcr"));
+                            .Single(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Welcome_AccurateOcr"));
                         Assert.True(label.ActualHeight <= label.FontSize * 1.8, "The checkbox label stays on one line.");
                         Assert.True(label.ActualWidth >= label.DesiredSize.Width, "The label is not clipped.");
                         Rect help = welcome.AccurateOcrHelp.TransformToAncestor(welcome)

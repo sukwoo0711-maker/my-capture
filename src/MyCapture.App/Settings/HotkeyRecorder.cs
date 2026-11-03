@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.ComponentModel;
 using System.Windows.Automation;
@@ -142,7 +143,7 @@ public sealed class HotkeyRecorder : StackPanel
 
     private void ShowConflict(string message)
     {
-        _conflict.Text = message;
+        KoreanWordWrap.Show(_conflict, message);
         _conflict.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 

@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
@@ -36,7 +37,7 @@ internal sealed record PinContent
         double? layoutHeightDip = null,
         CaptureProvenance? provenance = null)
     {
-        Image = image ?? throw new ArgumentNullException(nameof(image));
+        _image = image ?? throw new ArgumentNullException(nameof(image));
         RasterDpiX = image.DpiX;
         RasterDpiY = image.DpiY;
         Kind = kind;
@@ -50,7 +51,29 @@ internal sealed record PinContent
         LayoutHeightDip = layoutHeightDip ?? image.Height;
     }
 
-    internal BitmapSource Image { get; }
+    private readonly BitmapSource _image;
+
+    /// <summary>
+    /// The picture as a bitmap. A picture translation flattens its layer onto the source only here, when
+    /// something needs the pixels (copy, the text selection's background).
+    /// </summary>
+    internal BitmapSource Image => Overlay?.Image ?? _image;
+
+    /// <summary>What a pin window shows: the bitmap, or a picture translation's layers without a flattened copy.</summary>
+    internal ImageSource Display => Overlay?.Display ?? _image;
+
+    /// <summary>
+    /// What a pin window shows at <paramref name="device"/> pixels. A picture translation's layers are exact only
+    /// while each source pixel lands on one device pixel; scaled, the source under them is interpolated past the
+    /// erased ink, so a zoomed pin, or one on a monitor of another scale, shows the flattened picture. An element
+    /// not yet measured shows the layers.
+    /// </summary>
+    internal ImageSource DisplayAt(System.Windows.Size device) => Overlay is null || device.Width <= 0 || device.Height <= 0
+        || Math.Abs(device.Width - _image.PixelWidth) <= .5 && Math.Abs(device.Height - _image.PixelHeight) <= .5
+            ? Display : Overlay.Image;
+
+    /// <summary>A picture translation drawn over <c>_image</c>, its untouched source.</summary>
+    private PinOverlayComposition? Overlay { get; init; }
 
     /// <summary>The exact PNG used to decode this image, when already available.</summary>
     internal byte[]? EncodedPng { get; init; }
@@ -83,7 +106,7 @@ internal sealed record PinContent
 
     /// <summary>The same content once its source lookup has resolved: no lookup is pending any more.</summary>
     internal PinContent WithProvenance(CaptureProvenance provenance) =>
-        new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
+        new(_image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
             TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance)
         {
             BorderlessText = BorderlessText,
@@ -91,6 +114,7 @@ internal sealed record PinContent
             EncodedPng = EncodedPng,
             RasterDpiX = RasterDpiX,
             RasterDpiY = RasterDpiY,
+            Overlay = Overlay,
         };
 
     /// <summary>
@@ -130,7 +154,7 @@ internal sealed record PinContent
     /// The closed-pin restore history budgets against this value.
     /// </summary>
     internal long EstimatedRetainedBytes =>
-        ClosedPinMemory.EstimatePixelBytes(Image.PixelWidth, Image.PixelHeight, Image.Format.BitsPerPixel)
+        ClosedPinMemory.EstimatePixelBytes(_image.PixelWidth, _image.PixelHeight, _image.Format.BitsPerPixel)
         + ClosedPinMemory.EstimateTextBytes(OriginalText)
         + ClosedPinMemory.EstimateTextBytes(SourcePageUrl)
         + ClosedPinMemory.EstimateTextBytes(Provenance.Url)
@@ -157,6 +181,12 @@ internal sealed record PinContent
     internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null, CaptureProvenance? provenance = null) =>
         new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty,
             usesDeviceIndependentPixels: false, provenance: provenance);
+
+    /// <summary>An unsaved picture translation with the complete translated text for copying.</summary>
+    internal static PinContent FromTranslationOverlay(PinOverlayComposition composed, string text, PinContent source) =>
+        new(composed.Source, PinContentKind.Image, text, source.SourcePageUrl, usesDeviceIndependentPixels: false,
+            layoutWidthDip: source.LayoutWidthDip, layoutHeightDip: source.LayoutHeightDip, provenance: source.Provenance)
+        { PendingProvenance = source.PendingProvenance, Overlay = composed.Overlay is null ? null : composed };
 
     /// <summary>Rebuilds the immutable content retained in an opt-in saved pin session.</summary>
     internal static PinContent FromSession(

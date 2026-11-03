@@ -173,7 +173,7 @@ public sealed class PinMermaidIntegrationTests
         Assert.True(PinTranslationService.CanTranslate(content));
         var service = new PinTranslationService(new LabelTranslator());
         PinTranslationResult result = Assert.IsType<PinTranslationResult>(await service.TranslateAsync(content, CancellationToken.None));
-        Assert.Equal("flowchart LR\nA[문서를 저장합니다.] --> B[문서를 저장합니다.]", result.Content.OriginalText);
+        Assert.Equal("flowchart LR\nA[창을 닫기 전에 문서를 저장합니다.] --> B[창을 닫기 전에 문서를 저장합니다.]", result.Content.OriginalText);
         Assert.True(result.Content.IsMarkdown);
         Assert.False(result.NeedsReview);
     });
@@ -186,7 +186,7 @@ public sealed class PinMermaidIntegrationTests
         public Task<IReadOnlyList<MyCapture.Ocr.Translation.TranslatedText>> TranslateAsync(IReadOnlyList<string> sources,
             IProgress<MyCapture.Ocr.Translation.TranslationProgress>? progress, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MyCapture.Ocr.Translation.TranslatedText>>(
-                [.. sources.Select(static source => new MyCapture.Ocr.Translation.TranslatedText(source, "문서를 저장합니다.", [], []))]);
+                [.. sources.Select(static source => new MyCapture.Ocr.Translation.TranslatedText(source, "창을 닫기 전에 문서를 저장합니다.", [], []))]);
     }
 
     private static PinManager Manager(IMermaidRenderer renderer)

@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
@@ -216,7 +217,7 @@ internal sealed partial class SettingsWindow
                 {
                     _savedNotice = null;
                     // A later import or storage failure owns the status line now.
-                    if (SettingsStatus.Text == UiText.Get("Settings_Saved")) SetStatusMessage(string.Empty);
+                    if (KoreanWordWrap.Strip(SettingsStatus.Text) == UiText.Get("Settings_Saved")) SetStatusMessage(string.Empty);
                 });
             RefreshErrorSummary();
             return !_draft.HasErrors;

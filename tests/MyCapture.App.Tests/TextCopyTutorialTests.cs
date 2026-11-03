@@ -40,7 +40,7 @@ public sealed class TextCopyTutorialTests
             Show(window);
             Assert.Equal(Path.Combine(window.AssetDirectory, "text-copy.en.mp4"), Assert.Single(media.OpenedPaths));
             Assert.True(window.HasFirstFrame);
-            Assert.DoesNotContain(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
+            Assert.DoesNotContain(Texts(window), text => KoreanWordWrap.Strip(text.Text) == UiText.Get("TextCapture_TutorialLoading") && text.IsVisible);
         }
         finally { window.Close(); }
         Assert.False(window.HasMedia);
@@ -63,7 +63,7 @@ public sealed class TextCopyTutorialTests
             Assert.False(window.IsPlaying);
             Assert.Equal(0, media.PlayCount);
             Assert.All(new[] { "TextCapture_TutorialStep1", "TextCapture_TutorialStep2", "TextCapture_TutorialStep3" },
-                key => Assert.Contains(Texts(window), text => text.Text == UiText.Get(key)));
+                key => Assert.Contains(Texts(window), text => KoreanWordWrap.Strip(text.Text) == UiText.Get(key)));
             Click(window, UiText.Get("GifPreview_Play"));
             Assert.True(window.IsPlaying && media.IsPlaying);
             Click(window, UiText.Get("GifPreview_Pause"));
@@ -149,13 +149,13 @@ public sealed class TextCopyTutorialTests
             if (kind == "failed") media.RaiseFailed(new FileFormatException("fixture malformed"));
             Assert.True(window.IsShowingFallback);
             Assert.False(window.HasMedia || window.IsPlaying);
-            Assert.Contains(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialUnavailable") && text.IsVisible);
+            Assert.Contains(Texts(window), text => KoreanWordWrap.Strip(text.Text) == UiText.Get("TextCapture_TutorialUnavailable") && text.IsVisible);
             Button play = FirstRunWelcomeTests.Descendants(window).OfType<Button>().Single(button =>
                 Equals(button.Content, UiText.Get("GifPreview_Play")));
             Assert.False(play.IsEnabled);
             window.TogglePlayback();
             Assert.False(window.IsPlaying);
-            Assert.Contains(Texts(window), text => text.Text == UiText.Get("TextCapture_TutorialStep3") && text.IsVisible);
+            Assert.Contains(Texts(window), text => KoreanWordWrap.Strip(text.Text) == UiText.Get("TextCapture_TutorialStep3") && text.IsVisible);
         }
         finally { window.Close(); }
     });
@@ -218,10 +218,10 @@ public sealed class TextCopyTutorialTests
         var unassigned = Offscreen(new HotkeySettings { Capture = Hotkey.None }, new FakeTutorialMedia());
         try
         {
-            Assert.Contains(Texts(configured), text => text.Text == UiText.Format("TextCapture_TutorialCaptureKey", "Ctrl+Shift+J"));
-            Assert.Contains(Texts(configured), text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
-            Assert.Contains(Texts(unassigned), text => text.Text == UiText.Get("TextCapture_TutorialCaptureMenu"));
-            Assert.DoesNotContain(Texts(unassigned), text => text.Text.Contains(UiText.Get("Hotkey.Unassigned"), StringComparison.Ordinal));
+            Assert.Contains(Texts(configured), text => KoreanWordWrap.Strip(text.Text) == UiText.Format("TextCapture_TutorialCaptureKey", "Ctrl+Shift+J"));
+            Assert.Contains(Texts(configured), text => KoreanWordWrap.Strip(text.Text) == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
+            Assert.Contains(Texts(unassigned), text => KoreanWordWrap.Strip(text.Text) == UiText.Get("TextCapture_TutorialCaptureMenu"));
+            Assert.DoesNotContain(Texts(unassigned), text => KoreanWordWrap.Strip(text.Text).Contains(UiText.Get("Hotkey.Unassigned"), StringComparison.Ordinal));
             Assert.Equal(language.StartsWith("ko", StringComparison.Ordinal) ? "text-copy.ko.mp4" : "text-copy.en.mp4",
                 Path.GetFileName(configured.AssetPath));
         }
@@ -246,21 +246,21 @@ public sealed class TextCopyTutorialTests
             view.Search.Text = UiText.Get("TextCapture_Title");
             Border[] rows = view.VisibleResults();
             Assert.Equal(4, rows.Length);
-            Border directCapture = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("TextCapture_Title")
-                && Texts(row)[1].Text == UiText.Get("Help.Capture"));
+            Border directCapture = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("TextCapture_Title")
+                && KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.Capture"));
             Assert.Contains(FirstRunWelcomeTests.Descendants(directCapture).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == UiText.Get("Hotkey.Unassigned"));
-            Border selectionCapture = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("TextCapture_HelpToggle")
-                && Texts(row)[1].Text == UiText.Get("Help.Capture"));
+            Border selectionCapture = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("TextCapture_HelpToggle")
+                && KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.Capture"));
             Assert.Contains(FirstRunWelcomeTests.Descendants(selectionCapture).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == "T / Shift+T");
-            Border originalText = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("Text_976A6C92B870"));
-            Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(originalText)[1].Text);
+            Border originalText = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("Text_976A6C92B870"));
+            Assert.Equal(UiText.Get("Text_33EFD44366A7"), KoreanWordWrap.Strip(Texts(originalText)[1].Text));
             Assert.Contains(FirstRunWelcomeTests.Descendants(originalText).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
             Assert.Empty(FirstRunWelcomeTests.Descendants(originalText).OfType<Button>());
-            Border quickAccess = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("QuickAccess.CopyText")
-                && Texts(row)[1].Text == UiText.Get("Help.QuickAccess"));
+            Border quickAccess = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("QuickAccess.CopyText")
+                && KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.QuickAccess"));
             Assert.Contains(FirstRunWelcomeTests.Descendants(quickAccess).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == "T");
             Assert.Empty(FirstRunWelcomeTests.Descendants(quickAccess).OfType<Button>());

@@ -65,7 +65,7 @@ internal sealed class EditorCloseDialog : Window
         // Korean text wraps between words, not inside one (KoreanWordWrap).
         Heading = KoreanWordWrap.Show(new TextBlock
         {
-            FontSize = 20,
+            FontSize = TypeScale.Subtitle,
             FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
         }, title);

@@ -29,10 +29,16 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Card first: the quick access card shows on the turn after the selector closes, before the capture
-/// is saved and copied. Its actions wait for the saved capture, its status for the copy, and a failed
-/// save or copy is reported on the card instead of a second notification.
+/// Card first: the quick access card shows on the turn after the automatic copy reports, or once the
+/// copy has outlasted its wait, before the capture is saved. Its actions wait for the saved capture,
+/// its status for a copy still running, and a failed save or copy is reported on the card instead of
+/// a second notification.
 /// </summary>
+/// <remarks>
+/// The shell lets the copy outlast the wait at once (zero) unless a test asks for one, so the card
+/// still shows while a held copy runs; <see cref="TheCardWaitsForTheCopySoAPasteRightAfterItPastesThisCapture"/>
+/// holds the copy within the wait.
+/// </remarks>
 public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 {
     // ---- The card on its own -------------------------------------------------------------------
@@ -289,6 +295,40 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         shell.RunIdleTurns();
         Assert.Same(card, shell.Card);
     });
+
+    [Fact]
+    public void TheCardWaitsForTheCopySoAPasteRightAfterItPastesThisCapture() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell(copyWait: TimeSpan.FromMinutes(1));
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+
+        // While the clipboard still holds what was there before, no card says the capture is copied,
+        // even once the capture is saved.
+        Assert.Null(shell.Card);
+        shell.PumpUntil(() => shell.CurrentRecord is not null);
+        shell.RunIdleTurns();
+        Assert.Null(shell.Card);
+        Assert.Equal(1, shell.CopyCalls);
+
+        copy.SetResult(true);
+        shell.Wait(handler);
+        shell.RunIdleTurns();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.True(card.IsOpen);
+        Assert.False(card.IsPending);
+        Assert.Equal((UiText.Get("QuickAccess.Copied"), FeedbackKind.Confirmation, true, false), card.StatusForTest);
+        Assert.Equal(shell.CurrentRecord!.Id, shell.LatestReceipt);
+        Assert.Empty(shell.Notices);
+        shell.RunIdleTurns();
+        Assert.Same(card, shell.Card);
+    });
+
+    [Fact]
+    public void TheCardsWaitForTheCopyEndsBeforeTheLiftedCaptureFadesAway() =>
+        Assert.True(App.QuickAccessFirstCopyWait < CaptureFlight.LandingTimeout);
 
     [Fact]
     public void ACopyFinishedBeforeTheCardShowsStartsItAtCopied() => StaTestHost.Run(() =>
@@ -699,7 +739,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     private static Button CopyButton(QuickAccessWindow card) => card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf("Copy")];
 
     private static TextBlock TipText(QuickAccessWindow card, string tip) =>
-        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => text.Text == tip);
+        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => KoreanWordWrap.Strip(text.Text) == tip);
 
     private static QuickAccessWindow Pending(ReceiptKeyboardRouter router, bool? copied) =>
         QuickAccessWindow.ForPendingCapture(Image(), copied, targetMonitor: Offscreen(), keyboardRouter: router);
@@ -782,10 +822,12 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         private readonly Func<Window, bool> _previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
         private CaptureOverlayCoordinator? _coordinator;
 
-        internal Shell(QueueSettings? queue = null, AfterCaptureAction mode = AfterCaptureAction.QuickAccess, bool motion = false)
+        internal Shell(QueueSettings? queue = null, AfterCaptureAction mode = AfterCaptureAction.QuickAccess, bool motion = false,
+            TimeSpan? copyWait = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             typeof(System.Windows.Threading.DispatcherObject).GetField("_dispatcher", Flags)!.SetValue(_app, Dispatcher.CurrentDispatcher);
+            _app.QuickAccessFirstCopyWaitForTest = copyWait ?? TimeSpan.Zero;
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
             MonitorInfo monitor = Offscreen();
             CaptureFlight.ReadRemoteSession = () => false;

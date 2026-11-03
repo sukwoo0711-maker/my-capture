@@ -277,7 +277,7 @@ public sealed class WindowsOcrService : IOcrService
             passes.Add(new LanguageResult(
                 recognized.LanguageTag,
                 lines,
-                OcrPlanner.ScoreLines(lines)));
+                OcrPlanner.ScoreLines(lines), recognized.TextAngle));
         }
 
         if (passes.Count == 0)
@@ -306,7 +306,8 @@ public sealed class WindowsOcrService : IOcrService
             dominant.LanguageTag,
             merged,
             OcrPlanner.ScoreLines(merged),
-            recognizerWasAvailable);
+            recognizerWasAvailable,
+            OcrResult.MostTilted(passes.Select(pass => pass.TextAngle)));
     }
 
     private static IReadOnlyList<OcrLine> BuildLines(
@@ -378,7 +379,9 @@ public sealed class WindowsOcrService : IOcrService
                 Bounds = words.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union),
             };
         }).ToArray();
-        return OcrResult.Success(blockText, recognized.LanguageTag, lines, elapsed, orientation);
+        double? angle = recognized.TextAngle is { } detected ? detected - recognized.Rotation
+            : recognized.Rotation == 0 ? null : -recognized.Rotation;
+        return OcrResult.Success(blockText, recognized.LanguageTag, lines, elapsed, orientation, angle);
     }
 
     private static BitmapSource Rotate(BitmapSource source, int clockwiseDegrees)
@@ -435,12 +438,14 @@ public sealed class WindowsOcrService : IOcrService
     private sealed record LanguageResult(
         string LanguageTag,
         IReadOnlyList<OcrLine> Lines,
-        int Score);
+        int Score,
+        double? TextAngle);
 
     private sealed record OrientationResult(
         int Rotation,
         string LanguageTag,
         IReadOnlyList<OcrLine> Lines,
         int Score,
-        bool RecognizerWasAvailable);
+        bool RecognizerWasAvailable,
+        double? TextAngle = null);
 }

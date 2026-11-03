@@ -80,7 +80,7 @@ internal sealed partial class OcrResultWindow : Window
             Text = UiText.Get("Text_A7C9AFB5B1AF"),
             Foreground = ResourceBrush("Text.Primary", Brushes.White),
             FontFamily = Application.Current?.TryFindResource("Font.Display") as FontFamily ?? new FontFamily("Segoe UI"),
-            FontSize = 24,
+            FontSize = TypeScale.Subtitle,
             FontWeight = FontWeights.SemiBold,
         };
         title.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
@@ -91,7 +91,7 @@ internal sealed partial class OcrResultWindow : Window
             Margin = new Thickness(0, 6, 0, 0),
             TextWrapping = TextWrapping.Wrap,
             Foreground = ResourceBrush("Text.Secondary", Brushes.LightGray),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
         };
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetName(_status, UiText.Get("Text_9E53B74AE062"));
@@ -119,7 +119,7 @@ internal sealed partial class OcrResultWindow : Window
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             FontFamily = Application.Current?.TryFindResource("Font.Mono") as FontFamily
                 ?? new FontFamily("Consolas, Malgun Gothic"),
-            FontSize = 14,
+            FontSize = TypeScale.Body,
             Padding = new Thickness(16),
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
@@ -229,7 +229,8 @@ internal sealed partial class OcrResultWindow : Window
 
     /// <summary>Populates the window from a result and shows/activates it.</summary>
     internal void ShowResult(OcrResult result, string contextLabel,
-        BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null)
+        BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null,
+        bool keepEdits = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         SetRecognitionOperation(active: false);
@@ -239,7 +240,7 @@ internal sealed partial class OcrResultWindow : Window
             _geometryRequested = false;
         }
         SetSourceImage(sourceImage);
-        ApplyResult(result, contextLabel);
+        ApplyResult(result, contextLabel, keepEdits);
         SetResultQuality(quality ?? result.Quality);
 
         if (SuppressPresentation) return;
@@ -302,9 +303,12 @@ internal sealed partial class OcrResultWindow : Window
         Close();
     }
 
-    private void ApplyResult(OcrResult result, string contextLabel)
+    private void ApplyResult(OcrResult result, string contextLabel, bool keepEdits = false)
     {
+        // Positions fetched for the table or code view only add layout, so text edits stay.
+        KeyValuePair<OcrExtractionMode, string>[] keptEdits = keepEdits ? [.. _textEdits] : [];
         ResetEdits();
+        foreach ((OcrExtractionMode mode, string text) in keptEdits) _textEdits[mode] = text;
         _settingEditorText = true;
         _rerunButton.IsEnabled = true;
 
@@ -493,15 +497,15 @@ internal sealed partial class OcrResultWindow : Window
     {
         public new string Text
         {
-            get => base.Text;
+            get => KoreanWordWrap.Strip(base.Text);
             set
             {
-                if (string.Equals(base.Text, value, StringComparison.Ordinal))
+                if (string.Equals(Text, value, StringComparison.Ordinal))
                 {
                     return;
                 }
 
-                base.Text = value;
+                KoreanWordWrap.Show(this, value);
                 if (!IsLoaded)
                 {
                     return;

@@ -202,7 +202,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         content.Children.Add(action);
         if (tip is not null && pin is not null)
         {
-            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = 12 };
+            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = TypeScale.Caption };
             tipButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
             AutomationProperties.SetName(tipButton, tip);
             AutomationProperties.SetAutomationId(tipButton, "MyCapture.Receipt.Pin");
@@ -216,8 +216,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             locationHint.Margin = new Thickness(12, 0, 12, 4);
             content.Children.Add(locationHint);
         }
-        var hint = new TextBlock { Text = UiText.Get("Onboard_ReceiptKeyboard"), FontSize = 12,
-            Margin = new Thickness(12, 4, 12, 4), TextWrapping = TextWrapping.Wrap };
+        var hint = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption,
+            Margin = new Thickness(12, 4, 12, 4), TextWrapping = TextWrapping.Wrap }, UiText.Get("Onboard_ReceiptKeyboard"));
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         content.Children.Add(hint);
         Window window = CreateNotificationWindow(content, UiText.Get("QuickAccess.Title"), new Thickness(8), width: tip is null ? 320 : 360);
@@ -270,7 +270,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             if (keyboardRouter?.IsRegisteredFor(window) == true) return;
             // A conflicting global chord must still leave a keyboard-only route through Alt+Tab.
             fallback = true;
-            hint.Text = UiText.Get("Onboard_ReceiptKeyboardFallback");
+            KoreanWordWrap.Show(hint, UiText.Get("Onboard_ReceiptKeyboardFallback"));
             WindowStyleFacade.SetNoActivate(Handle(), false);
             window.ShowInTaskbar = true;
         };
@@ -572,7 +572,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     }
 
     private static TextBlock Heading(string title) =>
-        KoreanWordWrap.Show(new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title);
+        KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.BodyLarge, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, title);
 
     private static TextBlock Body(string message)
     {

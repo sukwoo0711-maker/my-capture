@@ -7,13 +7,15 @@ namespace MyCapture.Ocr;
 
 /// <summary>
 /// Runs Accurate requests through PP-OCR and Windows OCR in parallel when the
-/// downloaded Korean model is present, and merges their lines; Windows OCR alone serves
-/// Fast/Balanced requests and remains the fallback when the model is missing.
+/// downloaded Korean model is present, and merges their lines; Windows OCR serves
+/// Fast/Balanced requests, with a targeted second reading for short Hangul intrusions
+/// in otherwise Latin lines, and remains the fallback when the model is missing.
 /// </summary>
 public sealed class CaptureOcrService : IOcrService
 {
     private readonly IOcrService _windows;
     private readonly Func<OcrRequest, CancellationToken, Task<OcrResult>> _recognizeNeural;
+    private readonly Func<OcrRequest, IReadOnlyList<OcrLine>, CancellationToken, Task<OcrResult>>? _readNeuralRows;
     private readonly Func<bool> _neuralCanRun;
     private readonly Func<bool> _neuralIsReady;
     private readonly ILogger _log;
@@ -28,7 +30,8 @@ public sealed class CaptureOcrService : IOcrService
             (neural ?? throw new ArgumentNullException(nameof(neural))).RecognizeAsync,
             () => neural.CanRun,
             () => neural.IsReady,
-            log)
+            log,
+            readNeuralRows: neural.ReadRowsAsync)
     {
     }
 
@@ -36,17 +39,20 @@ public sealed class CaptureOcrService : IOcrService
     // and held-out validation3 corpora: every category CER within 0.5 pp of the better single
     // engine, overall CER below both, and median wall time within 30 ms of PP-OCR alone
     // (OcrModelBenchmarkTests, A-dual). The switch belongs to the instance, so tests cannot
-    // alter another request's routing through process-wide state.
+    // alter another request's routing through process-wide state. Without a row reader the
+    // Latin recovery of upright Fast requests is off.
     internal CaptureOcrService(
         IOcrService windows,
         Func<OcrRequest, CancellationToken, Task<OcrResult>> recognizeNeural,
         Func<bool> neuralCanRun,
         Func<bool> neuralIsReady,
         ILogger<CaptureOcrService> log,
-        bool enableDualEngine = true)
+        bool enableDualEngine = true,
+        Func<OcrRequest, IReadOnlyList<OcrLine>, CancellationToken, Task<OcrResult>>? readNeuralRows = null)
     {
         _windows = windows ?? throw new ArgumentNullException(nameof(windows));
         _recognizeNeural = recognizeNeural ?? throw new ArgumentNullException(nameof(recognizeNeural));
+        _readNeuralRows = readNeuralRows;
         _neuralCanRun = neuralCanRun ?? throw new ArgumentNullException(nameof(neuralCanRun));
         _neuralIsReady = neuralIsReady ?? throw new ArgumentNullException(nameof(neuralIsReady));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -120,7 +126,34 @@ public sealed class CaptureOcrService : IOcrService
             }
         }
 
-        return await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        OcrResult windows = await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        // Fast is the default, so these requests never reach the dual-engine merge above.
+        // The Korean Windows pack can read English function words as Hangul. When the caller
+        // asks for it (image translation), consult the installed Latin-capable model only for
+        // that pattern, retaining every other word and all Windows geometry; a missing model
+        // keeps the ordinary Fast result. Plain recognition never pays for the second reading.
+        // Windows OCR has already found the rows, so the recognizer alone reads only those that
+        // hold a suspect, each bounded to its own visual row with up to three Latin anchors either side.
+        // Row crops are horizontal source strips, so a rotated reading keeps the whole-image pass,
+        // whose source-axis boxes Recover maps through the reading orientation.
+        bool rotated = windows.ReadingOrientation.IsRotated;
+        if (!request.RecoverLatinIntrusions || !_enableDualEngine || !rotated && _readNeuralRows is null
+            || !OcrLatinWordRecovery.HasSuspects(windows) || !NeuralCanRunSafely())
+            return windows;
+        request.BeforeLatinRecovery?.Invoke(windows);
+        var recoveryWatch = Stopwatch.StartNew();
+        OcrLine[] rows = rotated ? [] : [.. OcrLatinWordRecovery.SuspectRows(windows)];
+        OcrResult second = await RecognizeSafelyAsync((input, token) => rotated
+                ? _recognizeNeural(PrepareDualRequest(input), token) : _readNeuralRows!(input, rows, token),
+            "PP-OCR Latin recovery", request, cancellationToken).ConfigureAwait(false);
+        if (cancellationToken.IsCancellationRequested || second.Status == OcrStatus.Cancelled)
+            return OcrResult.Cancelled();
+        TimeSpan elapsed = windows.Elapsed + recoveryWatch.Elapsed;
+        OcrResult recovered = OcrLatinWordRecovery.Recover(windows, second, elapsed);
+        // A failed or inconclusive second reading still took time. Preserve the source
+        // text/geometry, but include all attempted work in the result's elapsed metadata.
+        return OcrResult.Success(recovered.Text, recovered.LanguageTag ?? string.Empty, recovered.Lines,
+            elapsed, recovered.ReadingOrientation, recovered.TextAngle);
     }
 
     private async Task<OcrResult> RecognizeDualAsync(OcrRequest request, CancellationToken cancellationToken)

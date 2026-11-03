@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -55,7 +56,7 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
         var bannerText = new TextBlock
         {
             Text = countdown,
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
         };
         if (TryFindResource("Font.Mono") is FontFamily mono)
         {

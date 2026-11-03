@@ -8,6 +8,7 @@ using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Settings;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using Xunit;
@@ -61,7 +62,7 @@ public sealed partial class SettingsThemePreviewTests
                     window.ChooseDiagnosticsBundlePath = () => bundle;
                     button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     Drain(window);
-                    Assert.Equal(UiText.Get("About_DiagnosticsBundleSaved"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+                    Assert.Equal(UiText.Get("About_DiagnosticsBundleSaved"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
                     using ZipArchive zip = ZipFile.OpenRead(bundle);
                     Assert.Equal(["support.txt", "logs/mycapture.log"], zip.Entries.Select(entry => entry.FullName));

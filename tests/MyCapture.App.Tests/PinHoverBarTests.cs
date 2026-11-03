@@ -245,6 +245,47 @@ public sealed class PinHoverBarTests
         }
     });
 
+    [Fact]
+    public void AShownIconOnlyBarStillMeasuresTheWidthOfItsNames() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        var bar = new PinHoverBar { Left = -10000, Top = -10000 };
+        try
+        {
+            // The app's buttons have a fixed height, so a button measured again for its names
+            // keeps the icon-only measure of its face unless the names mark the whole way up.
+            Ocr410Fixture.LoadTheme(bar);
+            bar.SetTranslationAction(true, true, UiText.Get("Pin_Translate"), UiText.Get("Pin_TranslateHelp"));
+            bar.Compact = true;
+            bar.Show();
+            PumpUntil(() => bar.IsLoaded && bar.CopyButton.Content is Grid { Name: "CommandButtonFace" });
+            bar.UpdateLayout();
+            var surface = Assert.IsType<Border>(bar.Content);
+            double icons = surface.ActualWidth;
+            // The icon-only layout was reported as the labelled width, so a translation step
+            // swapped the bar to names that do not fit and resized it under the pointer.
+            double measured = bar.MeasureLabeledWidth();
+            bar.UpdateLayout();
+            Assert.True(bar.Compact);
+            Assert.InRange(surface.ActualWidth, icons - 1, icons + 1);
+            bar.Compact = false;
+            bar.UpdateLayout();
+            double names = surface.ActualWidth;
+            Assert.True(icons < names - 20, $"icons {icons} vs names {names}");
+            Assert.InRange(measured, names - 1, names + 1);
+        }
+        finally
+        {
+            bar.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
     [Theory]
     [InlineData("ko-KR", false, 336)]
     [InlineData("ko-KR", true, 382)]
@@ -306,6 +347,19 @@ public sealed class PinHoverBarTests
             // Keep the bar beside the off-screen pin instead of on the desktop.
             ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000),
         };
+    }
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        while (!condition())
+        {
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) > TimeSpan.FromSeconds(15)) throw new TimeoutException();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                new Action(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
     }
 
     private static void Enter(PinWindow pin) =>

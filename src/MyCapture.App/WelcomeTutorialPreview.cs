@@ -87,7 +87,7 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
             int index = 0;
             foreach (string scene in TutorialCatalog.Get(feature).Steps)
             {
-                var line = new TextBlock { Text = $"{++index}. {scene}", TextWrapping = TextWrapping.Wrap, FontSize = 12 * _textScale, Margin = new Thickness(0, 3, 0, 0) };
+                var line = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Caption * _textScale, Margin = new Thickness(0, 3, 0, 0) }, $"{++index}. {scene}");
                 line.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
                 scenes.Children.Add(line);
             }

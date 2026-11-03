@@ -98,7 +98,7 @@ public sealed partial class SettingsThemePreviewTests
 
         Assert.Equal("321", DraftOf(window).MaxItems);
         TextBlock status = Assert.IsType<TextBlock>(window.FindName("SettingsStatus"));
-        Assert.Equal(UiText.Get("Settings_Saved"), status.Text);
+        Assert.Equal(UiText.Get("Settings_Saved"), KoreanWordWrap.Strip(status.Text));
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
         AssertStatusFits(window, status);
         var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
@@ -115,7 +115,7 @@ public sealed partial class SettingsThemePreviewTests
         Drain(window);
         Assert.Same(pending, window.DataContext);
         Assert.Equal("321", pending.MaxItems);
-        Assert.Equal(UiText.Get("Settings_ImportFailed"), status.Text);
+        Assert.Equal(UiText.Get("Settings_ImportFailed"), KoreanWordWrap.Strip(status.Text));
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
@@ -127,8 +127,8 @@ public sealed partial class SettingsThemePreviewTests
         Drain(window);
         Assert.Same(pending, window.DataContext);
         Assert.Equal("321", pending.MaxItems);
-        Assert.StartsWith(UiText.Get("Settings_ImportFailed"), status.Text, StringComparison.Ordinal);
-        Assert.Contains("missing-settings.json", status.Text, StringComparison.Ordinal);
+        Assert.StartsWith(UiText.Get("Settings_ImportFailed"), KoreanWordWrap.Strip(status.Text), StringComparison.Ordinal);
+        Assert.Contains("missing-settings.json", KoreanWordWrap.Strip(status.Text), StringComparison.Ordinal);
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
 
