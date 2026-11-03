@@ -1,9 +1,11 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Extensions.Logging;
@@ -17,6 +19,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
@@ -365,6 +368,84 @@ public sealed class CaptureWindowExclusionTests
             Assert.Equal(Color.FromRgb(220, 230, 240), brush.Color);
             Assert.Equal(1, brush.Opacity);
         }, typeof(CaptureWindowExclusionTests));
+
+    // Issue #220: Binding.Source holds a brush only weakly, so a collection under a live backing
+    // used to drop its theme source and the next UpdateTarget turned the backing transparent.
+    [Fact]
+    public void OpaqueBackingKeepsItsThemeSourceThroughCollection() => StaTestHost.Run(() =>
+    {
+        (SolidColorBrush brush, WeakReference source) = NewOpaqueBacking();
+        CollectFully();
+        BindingExpression expression = OpaqueBinding(brush);
+        expression.UpdateTarget();
+        Assert.Equal(255, brush.Color.A);
+        Assert.Equal(1, brush.Opacity);
+        Assert.Equal(BindingStatus.Active, expression.Status);
+        Assert.True(source.IsAlive, "The theme source must live as long as the backing that binds to it.");
+        GC.KeepAlive(brush);
+    });
+
+    [Fact]
+    public Task OpaqueBackingFollowsApplicationThemeAfterCollectionAndReleasesItsFollower() => SettingsThemePreviewTests.RunIsolated(
+        nameof(OpaqueBackingFollowsApplicationThemeAfterCollectionAndReleasesItsFollower), () =>
+        {
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            ThemeService.ApplyResources(AppTheme.Glass, application.Resources, systemHighContrast: false);
+            (SolidColorBrush brush, _) = NewOpaqueBacking();
+            (WeakReference released, WeakReference releasedSource) = NewReleasedOpaqueBacking();
+            var seen = new HashSet<Color>();
+            foreach (AppTheme theme in new[] { AppTheme.GlassLight, AppTheme.Glass })
+            {
+                CollectFully();
+                ThemeService.ApplyResources(theme, application.Resources, systemHighContrast: false);
+                Color token = Assert.IsType<SolidColorBrush>(application.Resources["Surface.Floating"]).Color;
+                Assert.True(token.A < 255, $"{theme} must keep a translucent floating token for this test.");
+                Color expected = Color.FromRgb(token.R, token.G, token.B);
+                Assert.Equal(expected, brush.Color);
+                CollectFully();
+                BindingExpression expression = OpaqueBinding(brush);
+                expression.UpdateTarget();
+                Assert.Equal(expected, brush.Color);
+                Assert.Equal(1, brush.Opacity);
+                Assert.Equal(BindingStatus.Active, expression.Status);
+                seen.Add(expected);
+            }
+
+            Assert.Equal(2, seen.Count);
+            Assert.False(released.IsAlive, "A released backing must not be kept alive.");
+            Assert.False(releasedSource.IsAlive, "The follower of a released backing must be collectable.");
+            GC.KeepAlive(brush);
+        }, typeof(CaptureWindowExclusionTests));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (SolidColorBrush Brush, WeakReference Source) NewOpaqueBacking()
+    {
+        SolidColorBrush brush = Assert.IsType<SolidColorBrush>(CaptureWindowExclusion.OpaqueBackground());
+        object source = Assert.IsAssignableFrom<SolidColorBrush>(
+            BindingOperations.GetBinding(brush, SolidColorBrush.ColorProperty)?.Source);
+        return (brush, new WeakReference(source));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference Brush, WeakReference Source) NewReleasedOpaqueBacking()
+    {
+        (SolidColorBrush brush, WeakReference source) = NewOpaqueBacking();
+        return (new WeakReference(brush), source);
+    }
+
+    private static BindingExpression OpaqueBinding(SolidColorBrush brush) =>
+        Assert.IsType<BindingExpression>(BindingOperations.GetBindingExpression(brush, SolidColorBrush.ColorProperty));
+
+    // Collection is a test probe only; production never forces it.
+    private static void CollectFully()
+    {
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+    }
 
     private static QuickAccessWindow QuickAccess(bool exclude = true)
     {

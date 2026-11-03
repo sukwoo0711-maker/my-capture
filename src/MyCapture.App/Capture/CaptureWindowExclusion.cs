@@ -137,6 +137,12 @@ internal static class CaptureWindowExclusion
     internal static bool TryApply(IntPtr handle) =>
         handle != IntPtr.Zero && SetWindowDisplayAffinity(handle, 0x11);
 
+    // Binding.Source holds a DependencyObject only weakly and ThemeBrushes keeps only a weak
+    // reference to its follower, so each backing owns its follower here for exactly its own
+    // lifetime. Otherwise a collection drops the follower: theme changes stop reaching the
+    // backing and the next UpdateTarget makes it transparent (#220).
+    private static readonly ConditionalWeakTable<SolidColorBrush, SolidColorBrush> OpaqueBackingSources = new();
+
     // Opaque backing also covers antialiasing, translucent theme brushes and content animations.
     internal static Brush OpaqueBackground()
     {
@@ -145,6 +151,7 @@ internal static class CaptureWindowExclusion
         var brush = new SolidColorBrush(fallback);
         if (token is SolidColorBrush solid)
         {
+            OpaqueBackingSources.Add(brush, solid);
             // Keep live theme changes, but never copy the floating token's alpha/opacity.
             BindingOperations.SetBinding(brush, SolidColorBrush.ColorProperty,
                 new Binding(nameof(SolidColorBrush.Color)) { Source = solid, Converter = OpaqueColorConverter.Instance });
