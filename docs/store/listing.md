@@ -105,16 +105,17 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 
 ### 이 버전의 새로운 기능 (5.0.0)
 
-입력 한도는 1,500자입니다.
+입력 한도는 1,500자입니다. Store에는 4.13.0과 4.13.1을 내지 않았으므로 Store에 있던 4.12.2에서 바뀐 점을 적습니다.
 
 - 캡처하면 카드가 뜨기 전에 클립보드 복사를 마칩니다. 카드가 보일 때 바로 붙여 넣으면 방금 캡처한 그림이 들어갑니다.
-- 핀을 번역하는 동안 끝난 문장 수와 남은 시간, 진행 막대를 보입니다.
+- 그림 핀의 ‘번역’이 번역문을 원래 그림 위 같은 자리에 덧씌웁니다. 원래 글자의 색과 크기에 맞춰 그리고, ‘번역’을 다시 누르면 원본으로 돌아갑니다.
+- 핀 메뉴의 ‘번역문 문서로 보기’와 ‘번역 그림으로 보기’로 두 보기를 오갑니다. 덧씌운 상태에서 Ctrl+C를 누르면 그림과 번역문을 함께 복사합니다.
+- 핀을 번역하는 동안 끝난 문장 수와 남은 시간, 진행 막대를 보입니다. 번역이 빨라지고 메모리를 덜 씁니다.
 - 형광펜과 펜에서 Shift를 누른 채 그리면 직선으로 그립니다. 밑줄은 수평으로 맞춰집니다.
 - 형광펜 커서가 편집 아이콘의 연필 모양으로 바뀌고, 획이 연필 끝에서 시작합니다.
+- 한국어 화면 문구가 낱말 중간에서 줄을 바꾸지 않습니다.
+- 문자 인식 결과의 텍스트를 고친 뒤 표 탭을 고르면 빈 표로 굳던 문제를 고쳤습니다.
 - 오래 켜 두고 반복해 써도 메모리가 늘거나 느려지지 않는지 점검했고, 캡처 직후 카드가 뜨는 과정의 병목을 줄였습니다.
-- 그림 핀의 ‘번역’이 번역문을 원래 그림 위 같은 자리에 덧씌웁니다. ‘번역’을 다시 누르면 원본으로 돌아갑니다.
-- 핀 메뉴의 ‘번역문 문서로 보기’와 ‘번역 그림으로 보기’로 두 보기를 오갑니다. 덧씌운 상태에서 Ctrl+C를 누르면 그림과 번역문을 함께 복사합니다.
-- 핀 메뉴에 ‘숨기기’와 ‘이 핀만 보기’가 있습니다. 트레이의 ‘열린 핀’은 미리 보기와 함께 숨긴 핀을 표시합니다.
 
 ### 검색어
 
@@ -200,16 +201,17 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 
 ### What's new in this version (5.0.0)
 
-Limit: 1,500 characters.
+Limit: 1,500 characters. Versions 4.13.0 and 4.13.1 did not go to the Store, so this lists the changes since 4.12.2, the version the Store had.
 
 - A capture is copied to the clipboard before its card appears, so pasting right away pastes the new capture.
-- While a pin is translated, it shows the sentences done, the time left and a progress bar.
+- Translate on an image pin now draws the translation over the original text, in the same place and in a matching color and size. Click Translate again to see the original.
+- Switch views with Show translation as text and Show translation on picture in the pin menu. Ctrl+C on a translated picture copies the picture together with the translated text.
+- While a pin is translated, it shows the sentences done, the time left and a progress bar. Translation is faster and uses less memory.
 - Hold Shift while drawing with the highlighter or pen to draw a straight line. Underlines snap to horizontal.
 - The highlighter cursor is now the pencil of the edit icon, and strokes start at its tip.
+- Korean interface text no longer breaks lines in the middle of a word.
+- Fixed an empty table that stayed after you edited recognized text and then chose the Table tab.
 - Checked that long, repeated use neither grows memory nor slows down, and removed a bottleneck before the capture card appears.
-- Translate on an image pin draws the translation over the original text, in the same place and in a matching color and size. Click Translate again to see the original.
-- Switch views with Show translation as text and Show translation on picture in the pin menu. Ctrl+C on a translated picture copies the picture together with the translated text.
-- Pin menu items Hide and Show only this pin. Open pins in the tray shows thumbnails, hidden pins included.
 
 ### Search terms
 
