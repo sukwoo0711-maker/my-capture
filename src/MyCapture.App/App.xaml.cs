@@ -289,6 +289,7 @@ public partial class App : Application
             void ModelLeft() => Dispatcher.InvokeAsync(ScheduleIdleMemoryReclamation);
             _services.GetRequiredService<PinTranslationEngines>().ModelReleased += ModelLeft;
             _services.GetRequiredService<NeuralOcrEngine>().RowReaderReleased += ModelLeft;
+            _services.GetRequiredService<NeuralOcrEngine>().EngineReleased += ModelLeft;
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
