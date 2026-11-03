@@ -13,7 +13,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **제품 이름**: 두 언어 모두 `MyCapture`. 패키지 DisplayName과 같습니다.
 - **예약해 둔 이름**: `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20 예약). Store 정책 10.1.1은 제품 이름에 설명 문구나 키워드를 넣지 못하게 하므로 목록에는 쓰지 않습니다. 설명어는 짧은 소개 첫 문장과 검색어에 넣었습니다. 예약한 이름은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 - **Store ID**: `9PB33MC095VR`, https://apps.microsoft.com/detail/9PB33MC095VR
-- **게시자 표시 이름**: `MyCapture`. 계정 설정 > Legal info > Contact info의 Publisher name에서 바꿉니다. 바꾸면 계정이 추가 검토를 받고, 이후 패키지는 `package-store.ps1 -PublisherDisplayName 'MyCapture'`로 다시 만들어야 합니다. 2026-10-20에는 4.3.1(제출 12, `sukwoo0711`로 빌드)이 인증 중이라 게시 뒤에 바꿉니다.
+- **게시자 표시 이름**: `Mimiloaf`(2026-10-21 Partner Center 승인, 4.5.2 제출부터). 계정 설정 > Legal info > Contact info의 Publisher name에서 바꿉니다. 바꾸면 계정이 추가 검토를 받고, 이후 패키지는 승인된 이름으로 `package-store.ps1 -PublisherDisplayName 'Mimiloaf'`처럼 다시 만들어야 합니다. 패키징 값은 [README](README.md)의 패키지 ID 표에 있습니다.
 - **개발자(Developed by)**: `MyCapture`
 - **저작권**: `Copyright (c) 2026 MyCapture`
 - **범주**: 생산성 또는 사진 및 비디오
