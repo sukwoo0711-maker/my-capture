@@ -23,7 +23,8 @@ internal static class CaptureWindowExclusion
     internal static void RecordResult(Window window, bool succeeded) =>
         Applied.GetValue(window, static _ => new AppliedResult()).Succeeded = succeeded;
 
-    private static Func<bool> s_layeredWindowProbe = ProbeLayeredWindow;
+    private static readonly Func<bool> s_probeWindow = ProbeLayeredWindow;
+    private static Func<bool> s_layeredWindowProbe = s_probeWindow;
     private static Lazy<bool> s_supportsLayeredWindows = CreateCapabilityCache();
 
     internal static ILogger Logger { get; set; } = NullLogger.Instance;
@@ -54,9 +55,40 @@ internal static class CaptureWindowExclusion
         }
     }
 
-    private static Lazy<bool> CreateCapabilityCache() => new(() =>
+    /// <summary>
+    /// Whether a layered surface may be made: <see cref="SupportsLayeredWindows"/>, or true while
+    /// nothing has asked it. The surface then answers it with its own window
+    /// (<see cref="TryApplyLayered"/>), which shows only once exclusion has succeeded, so the
+    /// first capture makes no probe window of its own (about 35 ms).
+    /// </summary>
+    internal static bool MayTryLayeredWindow =>
+        (CanAnswerWithFirstWindow && !s_supportsLayeredWindows.IsValueCreated) || SupportsLayeredWindows;
+
+    // A probe a test put in place stays the only answer.
+    private static bool CanAnswerWithFirstWindow => ReferenceEquals(s_layeredWindowProbe, s_probeWindow);
+
+    internal static int ProbeWindowsForTest { get; private set; }
+
+    /// <summary>
+    /// <see cref="TryApply(Window)"/> for a layered window; the first one, made before anything
+    /// asked <see cref="SupportsLayeredWindows"/>, answers it.
+    /// </summary>
+    internal static bool TryApplyLayered(Window window)
     {
-        bool supported = s_layeredWindowProbe();
+        bool succeeded = TryApply(window);
+        if (CanAnswerWithFirstWindow && !s_supportsLayeredWindows.IsValueCreated)
+        {
+            s_supportsLayeredWindows = CreateCapabilityCache(() => succeeded);
+            _ = s_supportsLayeredWindows.Value;
+        }
+        return succeeded;
+    }
+
+    private static Lazy<bool> CreateCapabilityCache() => CreateCapabilityCache(() => s_layeredWindowProbe());
+
+    private static Lazy<bool> CreateCapabilityCache(Func<bool> answer) => new(() =>
+    {
+        bool supported = answer();
         Logger.LogInformation("Capture exclusion mode: {Mode}",
             supported ? "layered windows" : "opaque windows with recording control region");
         return supported;
@@ -64,6 +96,7 @@ internal static class CaptureWindowExclusion
 
     private static bool ProbeLayeredWindow()
     {
+        ProbeWindowsForTest++;
         var window = new Window
         {
             Style = null,

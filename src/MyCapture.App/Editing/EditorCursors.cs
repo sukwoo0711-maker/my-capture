@@ -61,8 +61,9 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 
 /// <summary>
 /// Turns <see cref="EditorCursorKind"/> into a WPF cursor. System shapes come from Windows;
-/// tool shapes are drawn at run time. Brush locators mark the exact stroke centre while
-/// the surface independently draws the effective brush width.
+/// tool shapes are drawn at run time. The pen's brush locator marks the exact stroke centre and
+/// the highlighter writes from the nib of the shared edit icon, while the surface independently
+/// draws the effective brush width around that point.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -70,7 +71,8 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 /// is rendered from vector geometry at the exact pixel size the pointer uses on the editor's
 /// monitor (the user's pointer size times the monitor scale), packed as an in-memory 32-bit
 /// .cur and loaded at that size. The hot spot is placed on a pixel centre at every size: the
-/// brush centre, the inner crop corner, or the crosshair centre.
+/// pen's brush centre, the highlighter's pencil nib, the inner crop corner, or the crosshair
+/// centre.
 /// </para>
 /// <para>
 /// Tool cursors take the fill and outline of the user's pointer style (white with a black
@@ -187,8 +189,11 @@ internal static class EditorCursors
             switch (kind)
             {
                 case EditorCursorKind.Pen:
-                case EditorCursorKind.Highlighter:
                     DrawBrushLocator(dc, anchor, style);
+                    break;
+                case EditorCursorKind.Highlighter:
+                    // The shared edit icon, placed by its pencil nib so the stroke starts there.
+                    DrawOutline(dc, IconGeometry("Icon.Edit", EditFallback), new Point(3.75, 16.25), anchor, 1.25, style);
                     break;
                 case EditorCursorKind.Crop:
                     DrawOutline(dc, IconGeometry("Icon.Crop", CropFallback), new Point(5, 5), anchor, 1.3, style);
@@ -276,13 +281,21 @@ internal static class EditorCursors
 
     private const string CropFallback = "M5,2 V14 A1,1 0 0 0 6,15 H18 M2,5 H14 A1,1 0 0 1 15,6 V18";
 
+    // The edit icon on its 20x20 grid, its pencil nib at 3.75,16.25; the shared Icon.Edit
+    // resource wins when loaded.
+    private const string EditFallback =
+        "M3.75,16.25 L4.45,12.65 L12.25,4.85 A1.65,1.65 0 0 1 14.6,7.2 L6.8,15 Z M11.1,6 L13.45,8.35 M3.75,17 L16.25,17";
+
     // The highlighter rail icon's marker body, and the inked band at its chisel tip.
     private const string HighlighterBody = "M4,14 L13,3 L17,7 L8,18 Z";
     private const string HighlighterTip = "M4,14 L5.4,12.3 L9.4,16.3 L8,18 Z";
 
     private static Point Anchor(EditorCursorKind kind) => kind switch
     {
-        EditorCursorKind.Pen or EditorCursorKind.Highlighter => new Point(15.5, 15.5),
+        EditorCursorKind.Pen => new Point(15.5, 15.5),
+        // Low on the left: the pencil rises to the upper right of its nib and the base line
+        // runs to the right, all inside the box at 1.25 times the icon size.
+        EditorCursorKind.Highlighter => new Point(3.5, 27.5),
         EditorCursorKind.Crop => new Point(8.5, 8.5),
         _ => new Point(10.5, 10.5),
     };

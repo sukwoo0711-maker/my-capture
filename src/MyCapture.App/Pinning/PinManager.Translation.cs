@@ -104,16 +104,18 @@ internal sealed partial class PinManager
         CancelPinTranslation(pin);
         var operation = new CancellationTokenSource();
         _translationOperations[pin] = operation;
+        // The sentences done reach the pin from the translator's threads until this operation ends or is replaced.
+        var progress = new PinTranslationProgress(pin, operation.Token);
         // A frozen picture starts its reading before the pin redraws its command, which takes the UI thread a moment.
         Task<PictureReading>? reading = picture && source.Image.IsFrozen
-            ? StartPictureReading(source, source.Image, translator, direction, korean, operation.Token) : null;
+            ? StartPictureReading(source, source.Image, translator, direction, korean, progress, operation.Token) : null;
         pin.SetTranslationDirection(korean);
         // A picture is read first, which already takes a moment: it shows "translating" from the command on.
         pin.SetTranslationState(picture ? PinTranslationState.Translating : PinTranslationState.Checking);
         // Dispatcher scheduling makes every UI continuation stay on the owning thread,
         // including test hosts without an ambient synchronization context.
         pin.TranslationWork = pin.Dispatcher.InvokeAsync(() => RunPinTranslationAsync(
-            pin, source, translator, direction, korean, operation, reading)).Task.Unwrap();
+            pin, source, translator, direction, korean, operation, progress, reading)).Task.Unwrap();
     }
 
     /// <summary>
@@ -129,7 +131,7 @@ internal sealed partial class PinManager
     /// so the UI thread shows only the states and the result. An installed model loads once the text needs it.
     /// </summary>
     private Task<PictureReading> StartPictureReading(PinContent source, BitmapSource picture, ITextTranslator translator,
-        PinTranslationDirection direction, bool korean, CancellationToken token)
+        PinTranslationDirection direction, bool korean, IProgress<TranslationProgress> progress, CancellationToken token)
     {
         return Task.Run(async () =>
         {
@@ -162,7 +164,7 @@ internal sealed partial class PinManager
             if (!warming) _ = translator.WarmUpAsync(token);
             bool installed = await translator.IsModelInstalledAsync(token).ConfigureAwait(false);
             if (!installed || recognition is null) return new PictureReading(recognition, text, decision, installed, false, null);
-            PinTranslationResult? result = await new PinTranslationService(translator, direction)
+            PinTranslationResult? result = await new PinTranslationService(translator, direction) { Progress = progress }
                 .TranslateRecognizedAsync(recognition, source, token, sourcePixels: pixels).ConfigureAwait(false);
             return new PictureReading(recognition, text, decision, installed, true, result);
         }, token);
@@ -181,7 +183,8 @@ internal sealed partial class PinManager
     }
 
     private async Task RunPinTranslationAsync(PinWindow pin, PinContent source, ITextTranslator translator,
-        PinTranslationDirection direction, bool korean, CancellationTokenSource operation, Task<PictureReading>? reading)
+        PinTranslationDirection direction, bool korean, CancellationTokenSource operation,
+        IProgress<TranslationProgress> progress, Task<PictureReading>? reading)
     {
         CancellationToken token = operation.Token;
         bool Current() => !pin.IsClosed && !token.IsCancellationRequested
@@ -199,7 +202,7 @@ internal sealed partial class PinManager
                 // installation right after the reading, on the same worker, so an installed model
                 // leaves the pin "translating" from the command to the result.
                 reading ??= StartPictureReading(source, await PinTranslationService.FreezeOverlaySourceAsync(source.Image, token),
-                    translator, direction, korean, token);
+                    translator, direction, korean, progress, token);
                 read = await reading;
                 if (!Current()) return;
                 (recognition, recognized) = (read.Recognition, read.Text);
@@ -240,7 +243,7 @@ internal sealed partial class PinManager
                     if (!Current()) return;
                 }
                 if (pin.TranslationState != PinTranslationState.Translating) pin.SetTranslationState(PinTranslationState.Translating);
-                var service = new PinTranslationService(translator, direction);
+                var service = new PinTranslationService(translator, direction) { Progress = progress };
                 // The overlay steps run on worker threads; starting them from the pool keeps their set-up there too.
                 result = recognition is not null
                     ? await Task.Run(() => service.TranslateRecognizedAsync(recognition, source, token), token)

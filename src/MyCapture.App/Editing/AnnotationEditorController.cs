@@ -47,10 +47,14 @@ internal sealed class AnnotationEditorController
     private List<PointD>? _draftPoints;
 
     // The draft pen's own point list, kept equal to _draftPoints by appending each move's point
-    // instead of copying the whole stroke. Null when something else changed the pen's points,
-    // so the next move gives it a fresh copy of the drawn points, as every move used to.
+    // instead of copying the whole stroke. Null when something else changed the pen's points or
+    // the pen shows the Shift straight segment, so the next freehand move gives it a fresh copy
+    // of the drawn points, as every move used to.
     private PenPointCollection? _draftPenPoints;
     private bool _updatingDraftPen;
+
+    // True while the draft pen shows the Shift straight segment instead of the drawn path.
+    private bool _draftPenStraight;
 
     // The text being typed into a live box. Its draft is visible but has no undo entry
     // until its content is committed, so style changes apply directly (see PushProperty).
@@ -620,25 +624,7 @@ internal sealed class AnnotationEditorController
                 break;
             case Gesture.PenDraw:
                 _draftPoints?.Add(point);
-                if (_draftItem is PenAnnotation pen)
-                {
-                    // Appending now raises the points/bounds notifications itself. Guard
-                    // the append too, so it is not mistaken for an external draft edit.
-                    _updatingDraftPen = true;
-                    try
-                    {
-                        if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
-                            own.Add(point);
-                        else
-                            pen.Points = [.. _draftPoints!];
-                        _draftPenPoints = pen.Points;
-                    }
-                    finally
-                    {
-                        _updatingDraftPen = false;
-                    }
-                }
-
+                ShowDraftPen(shift);
                 RaiseVisual();
                 break;
         }
@@ -654,6 +640,8 @@ internal sealed class AnnotationEditorController
                 break;
             case Gesture.PenDraw:
                 if (_draftPoints is not { Count: > 0 } points || points[^1] != point) PointerMove(point, shift);
+                // Shift pressed or released since the last move still decides the stroke.
+                else if (shift != _draftPenStraight) ShowDraftPen(shift);
                 CommitPen();
                 break;
             case Gesture.Resize when _selected is TextAnnotation text:
@@ -744,6 +732,7 @@ internal sealed class AnnotationEditorController
         _draftItem = null;
         _draftPoints = null;
         _draftPenPoints = null;
+        _draftPenStraight = false;
     }
 
     /// <summary>
@@ -1332,6 +1321,44 @@ internal sealed class AnnotationEditorController
         // is still selected for immediate inspector edits; the next press starts fresh.
         SetSelected(draft);
         if (draft is PolylineAnnotation) UserArrowAdded?.Invoke();
+    }
+
+    /// <summary>
+    /// Shows the drawn path on the draft pen or, with <paramref name="straight"/> (Shift), the
+    /// straight segment from the press point to the latest pointer position, snapped to 45 degrees
+    /// like the arrow tool. The drawn path keeps recording underneath, so releasing Shift
+    /// mid-stroke shows it again.
+    /// </summary>
+    private void ShowDraftPen(bool straight)
+    {
+        if (_draftItem is not PenAnnotation pen || _draftPoints is not { Count: > 0 } drawn) return;
+
+        // Assigning or appending raises the points/bounds notifications itself. Guard both,
+        // so neither is mistaken for an external draft edit.
+        _updatingDraftPen = true;
+        try
+        {
+            _draftPenStraight = straight && drawn.Count > 1;
+            if (_draftPenStraight)
+            {
+                pen.Points = [drawn[0], AnnotationGestureConstraints.Line(drawn[0], drawn[^1])];
+                // The pen no longer holds the drawn path; the next freehand move copies it back.
+                _draftPenPoints = null;
+            }
+            else if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
+            {
+                for (int i = own.Count; i < drawn.Count; i++) own.Add(drawn[i]);
+            }
+            else
+            {
+                pen.Points = [.. drawn];
+                _draftPenPoints = pen.Points;
+            }
+        }
+        finally
+        {
+            _updatingDraftPen = false;
+        }
     }
 
     private void CommitPen()

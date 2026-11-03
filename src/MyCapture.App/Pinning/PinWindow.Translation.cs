@@ -93,11 +93,20 @@ internal sealed partial class PinWindow
         TranslationState = state;
         _translationDownloadBytes = downloadBytes;
         if (state is PinTranslationState.Translating or PinTranslationState.Downloading)
-            ShowFeedback(UiText.Get(state == PinTranslationState.Downloading ? "Pin_TranslationDownloading" : "Pin_Translating"), FeedbackKind.Progress);
-        else if (state == PinTranslationState.Failed)
-            ShowFeedback(UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
-        else if (state is PinTranslationState.Unavailable or PinTranslationState.Available or PinTranslationState.Disabled)
-            DismissFeedback();
+        {
+            string text = UiText.Get(state == PinTranslationState.Downloading ? "Pin_TranslationDownloading" : "Pin_Translating");
+            BeginTranslationProgress(text);
+            ShowFeedback(text, FeedbackKind.Progress);
+        }
+        else
+        {
+            // Every other state ends the progress, including one that shows nothing of its own (an install question).
+            EndTranslationProgress();
+            if (state == PinTranslationState.Failed)
+                ShowFeedback(UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
+            else if (state is PinTranslationState.Unavailable or PinTranslationState.Available or PinTranslationState.Disabled)
+                DismissFeedback();
+        }
         // Checking and translating look the same; the button and the menu are rebuilt only when what they show changes.
         if (TranslationActionView != shown) RefreshTranslationActions();
     }
@@ -121,6 +130,7 @@ internal sealed partial class PinWindow
         _showingTranslationDocument = false;
         _translationNeedsReview = needsReview;
         TranslationState = PinTranslationState.Translated;
+        EndTranslationProgress();
         // Don't replace text under an active selection. The command remains available.
         if (!IsTextSelectionMode && !_showingMarkdownSource) SetTranslationDisplay(true);
         else RefreshTranslationActions();

@@ -5277,6 +5277,12 @@ Install the model?</value></data>
   <data name="Pin_Translating" xml:space="preserve">
     <value>Translating</value>
   </data>
+  <data name="Pin_TranslationSecondsLeft" xml:space="preserve">
+    <value>{0} · about {1} s left</value>
+  </data>
+  <data name="Pin_TranslationMinutesLeft" xml:space="preserve">
+    <value>{0} · about {1} min left</value>
+  </data>
   <data name="Pin_TranslationDownloading" xml:space="preserve">
     <value>Installing translation model</value>
   </data>

@@ -124,7 +124,7 @@ public sealed class RollingFileLogTests
     {
         string line = SafeLogLine.Session(FixedTime);
         Assert.True(SafeLogLine.IsWellFormed(line), line);
-        Assert.StartsWith("2026-10-23T04:30:15.123Z INF session version=4.", line, StringComparison.Ordinal);
+        Assert.StartsWith("2026-10-23T04:30:15.123Z INF session version=5.", line, StringComparison.Ordinal);
         Assert.Contains(" windows=10.0.", line, StringComparison.Ordinal);
         Assert.Equal("2026-10-23T04:30:15.123Z INF session version=- windows=- packaged=true",
             SafeLogLine.Session(FixedTime, CapturePath, WindowTitle, packaged: true));
