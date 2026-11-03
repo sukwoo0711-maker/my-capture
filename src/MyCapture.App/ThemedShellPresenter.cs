@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -28,6 +29,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>The gap between a notification card and the edges of the work area.</summary>
     internal const double EdgeGap = 16;
 
+    /// <summary>The gap between a notification card and the capture card it stacks above.</summary>
+    internal const double StackGap = 8;
+
     /// <summary>Width of a notification card, without its shadow band.</summary>
     internal const double CardWidth = 360;
 
@@ -37,6 +41,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     private Window? _toast;
     private CardKind _toastCard;
+    // Where each notification goes, so a capture card taking the corner can move the open one aside.
+    private readonly ConditionalWeakTable<Window, Action> _placements = new();
     // Cards that are already dismissed but still playing their exit.
     private readonly List<Window> _leaving = [];
     private ReceiptKeyboardSession? _receiptKeyboardSession;
@@ -55,6 +61,15 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     /// <summary>The monitor notifications appear on: the one with the pointer. Tests replace it.</summary>
     internal Func<MonitorInfo> NotificationMonitor { get; init; } = MonitorEnumerator.GetFromCursor;
+
+    /// <summary>The monitor a notification is on now, read again when a capture card refits it. Tests replace it.</summary>
+    internal Func<IntPtr, MonitorInfo> MonitorOfWindow { get; init; } = MonitorEnumerator.GetFromWindow;
+
+    /// <summary>
+    /// The visible bounds, in physical pixels, of the capture card waiting in the same corner, or
+    /// null when none is open (<see cref="QuickAccessWindow.OpenSurfaceBounds"/>).
+    /// </summary>
+    internal Func<RectD?> CornerOccupant { get; init; } = () => null;
 
     /// <summary>
     /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
@@ -543,14 +558,33 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>
     /// Where a notification window of <paramref name="width"/> × <paramref name="height"/> DIPs
     /// goes on a monitor: its visible card <see cref="EdgeGap"/> inside the bottom-right corner of
-    /// the work area, with the transparent shadow band around it.
+    /// the work area, with the transparent shadow band around it. When the capture card already
+    /// waits there (<paramref name="occupant"/>, physical pixels), the notification stacks
+    /// <see cref="StackGap"/> above it instead of covering it, or waits that far to its left on a
+    /// work area too short to stack them.
     /// </summary>
-    internal static Rect NotificationBounds(RectD workArea, double scale, double width, double height, double shadowMargin = ShadowMargin)
+    internal static Rect NotificationBounds(RectD workArea, double scale, double width, double height,
+        double shadowMargin = ShadowMargin, RectD? occupant = null)
     {
         double left = workArea.Left / scale, top = workArea.Top / scale;
         double right = workArea.Right / scale, bottom = workArea.Bottom / scale;
         double x = right - EdgeGap - width + shadowMargin;
         double y = bottom - EdgeGap - height + shadowMargin;
+        if (occupant is { } card)
+        {
+            double cardLeft = card.Left / scale, cardTop = card.Top / scale;
+            double cardRight = card.Right / scale, cardBottom = card.Bottom / scale;
+            bool covers = x + shadowMargin < cardRight && x + width - shadowMargin > cardLeft
+                && y + shadowMargin < cardBottom && y + height - shadowMargin > cardTop;
+            if (covers)
+            {
+                double above = cardTop - StackGap - height + shadowMargin;
+                double beside = cardLeft - StackGap - width + shadowMargin;
+                // A work area too small for either keeps the notification inside it, over the card's top.
+                if (above >= top - shadowMargin || beside < left - shadowMargin) y = above;
+                else x = beside;
+            }
+        }
         return new Rect(Math.Max(left - shadowMargin, x), Math.Max(top - shadowMargin, y), width, height);
     }
 
@@ -558,17 +592,38 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     private void PlaceOnPointerMonitor(Window window)
     {
         MonitorInfo? monitor = null;
-        void Place()
+        void Place(bool refresh)
         {
-            monitor ??= NotificationMonitor();
+            // A refit reads the monitor the notification is on now: its work area, scale or
+            // place on the desktop may have changed since it was shown.
+            monitor = refresh && monitor is not null ? MonitorOfWindow(new WindowInteropHelper(window).Handle)
+                : monitor ?? NotificationMonitor();
             Rect bounds = NotificationBounds(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight,
-                window.AllowsTransparency ? ShadowMargin : 0);
+                window.AllowsTransparency ? ShadowMargin : 0, CornerOccupant());
             double scale = monitor.ScaleFactor;
             PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
                 new RectD(bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));
         }
-        window.Loaded += (_, _) => Place();
-        window.SizeChanged += (_, _) => { if (window.IsLoaded && window.IsVisible) Place(); };
+        window.Loaded += (_, _) => Place(refresh: false);
+        window.SizeChanged += (_, _) => { if (window.IsLoaded && window.IsVisible) Place(refresh: false); };
+        _placements.AddOrUpdate(window, () => Place(refresh: true));
+    }
+
+    /// <summary>
+    /// Places the open notification again, so a capture card that has just taken or resized the
+    /// corner (<see cref="CornerOccupant"/>) never covers a notification shown before it.
+    /// </summary>
+    internal void RefitNotification()
+    {
+        if (_toast is not { IsLoaded: true, IsVisible: true } toast || !_placements.TryGetValue(toast, out Action? place)) return;
+        try
+        {
+            place();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // A notification that cannot be placed again stays where it is; the card goes on.
+        }
     }
 
     private static TextBlock Heading(string title) =>

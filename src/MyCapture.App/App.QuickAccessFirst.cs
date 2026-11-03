@@ -3,7 +3,6 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
-using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
@@ -72,9 +71,7 @@ public partial class App
         // The conditions of the card after the save (ShowQuickAccess); a scrolling capture shows it without a flight.
         if (ShowsCardAfterSaveForTest || _services is null || _queue is null || _commit is null || e.TextCapture
             || (!preserveEditor && _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess)) return null;
-        var region = new RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-            e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
-        var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
+        var first = new QuickAccessFirst(e.SelectedBitmap, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
             { PreserveEditor = preserveEditor };
         _quickAccessFirst = first;
         ScheduleQuickAccessFirstCard(first, copy);
@@ -126,10 +123,12 @@ public partial class App
             // Made waiting for the copy even when it has finished; its result reaches the card as it
             // shows, before the first frame. A card made at 복사됨 kept about 5 MB more per capture
             // through captures in a row (resident probe capture-30: 583 against 421 MB after 30).
-            card = QuickAccessWindow.ForPendingCapture(first.Image, copiedToClipboard: null, first.Region, first.Monitor,
+            card = QuickAccessWindow.ForPendingCapture(first.Image, copiedToClipboard: null, first.Monitor,
                 _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"), _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             QuickAccessWindow shown = card;
+            // A notification already in the corner moves above the card instead of under it.
+            shown.Placed += () => _shellPresenter?.RefitNotification();
             shown.Closed += (_, _) =>
             {
                 _overlay?.NoteForegroundDismissal(shown.IsCaptureExcluded);
@@ -307,12 +306,9 @@ public partial class App
     }
 
     /// <summary>One still capture whose card shows first, until its save and copy have reported.</summary>
-    private sealed class QuickAccessFirst(BitmapSource image, RectD region, MonitorInfo monitor)
+    private sealed class QuickAccessFirst(BitmapSource image, MonitorInfo monitor)
     {
         internal BitmapSource Image { get; } = image;
-
-        /// <summary>Where the capture was taken, in virtual-desktop physical pixels.</summary>
-        internal RectD Region { get; } = region;
 
         internal MonitorInfo Monitor { get; } = monitor;
 

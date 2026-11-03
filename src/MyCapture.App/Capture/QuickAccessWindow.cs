@@ -61,10 +61,11 @@ internal sealed class QuickAccessWindow : Window
     private DpiScale _previewDpi = new(1, 1);
     private readonly TextBlock _firstUseTip = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 6, 2, 6) };
     private readonly TextBlock _dimensions = new() { VerticalAlignment = VerticalAlignment.Center };
-    private readonly RectD? _capturedRegion;
     private readonly MonitorInfo? _targetMonitor;
     private readonly ReceiptKeyboardRouter? _keyboardRouter;
     private MonitorInfo? _placementMonitor;
+    // While the card moves itself: the positioner already settles a DPI change that move causes.
+    private bool _placing;
     private NativeHotkeyRegistrar? _activationKey;
     private bool _activationRegistered;
     private const int ActivationKeyId = 0x7102;
@@ -81,6 +82,9 @@ internal sealed class QuickAccessWindow : Window
     private bool _copyPending;
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _actions;
     internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(6);
+
+    /// <summary>The transparent band around the visible card that holds its shadow, on a layered card.</summary>
+    internal const double ShadowMargin = 8;
 
     /// <summary>The failure the card shows when its capture could not be saved; nothing on the card retries it.</summary>
     internal const string CaptureFailureAction = "Capture";
@@ -119,6 +123,15 @@ internal sealed class QuickAccessWindow : Window
 
     internal bool IsCaptureExcluded => CaptureWindowExclusion.WasApplied(this);
 
+    /// <summary>
+    /// Raised whenever the card takes its corner, on showing and again when it resizes or the work
+    /// area moves, so a notification already in that corner can move aside.
+    /// </summary>
+    internal event Action? Placed;
+
+    /// <summary>The monitor a window is on, read again when the work area or the display changes. Tests replace it.</summary>
+    internal Func<IntPtr, MonitorInfo> MonitorOfWindow { get; init; } = MonitorEnumerator.GetFromWindow;
+
     /// <summary>A library, edit or pin choice makes the saved-location reminder unnecessary.</summary>
     internal bool ChoseLibraryEditOrPin { get; private set; }
 
@@ -144,10 +157,10 @@ internal sealed class QuickAccessWindow : Window
     /// </param>
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
         Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true,
-        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null,
+        MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null,
         bool copiedToClipboard = true, string? firstCaptureTip = null, ReceiptKeyboardRouter? keyboardRouter = null)
         : this(bitmap, new QuickAccessCardActions(copy, edit, pin, save, library, export, copyText), excludeFromCapture,
-            capturedRegion, targetMonitor, copiedToClipboard, firstCaptureTip, keyboardRouter)
+            targetMonitor, copiedToClipboard, firstCaptureTip, keyboardRouter)
     {
     }
 
@@ -162,19 +175,19 @@ internal sealed class QuickAccessWindow : Window
     /// says 복사 중… until <see cref="ReportInitialCopy"/>, and only the result is announced.
     /// </param>
     internal static QuickAccessWindow ForPendingCapture(BitmapSource bitmap, bool? copiedToClipboard,
-        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, string? firstCaptureTip = null,
+        MonitorInfo? targetMonitor = null, string? firstCaptureTip = null,
         ReceiptKeyboardRouter? keyboardRouter = null, bool excludeFromCapture = true) =>
-        new(bitmap, captureActions: null, excludeFromCapture, capturedRegion, targetMonitor, copiedToClipboard, firstCaptureTip, keyboardRouter);
+        new(bitmap, captureActions: null, excludeFromCapture, targetMonitor, copiedToClipboard, firstCaptureTip, keyboardRouter);
 
     private QuickAccessWindow(BitmapSource bitmap, QuickAccessCardActions? captureActions, bool excludeFromCapture,
-        RectD? capturedRegion, MonitorInfo? targetMonitor, bool? copiedToClipboard, string? firstCaptureTip,
+        MonitorInfo? targetMonitor, bool? copiedToClipboard, string? firstCaptureTip,
         ReceiptKeyboardRouter? keyboardRouter)
     {
         _captureActions = captureActions;
         Title = UiText.Get("QuickAccess.Title");
         // Fits a 1366 x 768 work area at 150% scaling.
         Width = QuickAccessActionPanel.MinimumDefaultTextWidth + 34;
-        _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
+        _targetMonitor = targetMonitor;
         _keyboardRouter = keyboardRouter;
         _previewDpi = targetMonitor is null ? VisualTreeHelper.GetDpi(this)
             : new DpiScale(targetMonitor.ScaleFactor, targetMonitor.ScaleFactor);
@@ -365,7 +378,7 @@ internal sealed class QuickAccessWindow : Window
         _progressReveal.Tick += (_, _) => RevealProgress();
         _remaining.Margin = new Thickness(0, 6, 0, 0);
         panel.Children.Add(_remaining);
-        var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
+        var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? ShadowMargin : 0),
             CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
         surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
@@ -570,7 +583,21 @@ internal sealed class QuickAccessWindow : Window
             handled = true;
             return new IntPtr(3); // MA_NOACTIVATE: action clicks and drag keep the destination active.
         }
+        // WM_SETTINGCHANGE for SPI_SETWORKAREA, or WM_DISPLAYCHANGE: the corner may have moved.
+        if ((message == 0x001A && wParam == new IntPtr(0x002F)) || message == 0x007E)
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(ReturnToCorner));
         return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// The card waits in its corner again after the work area or the display around it changed: a
+    /// taskbar shown, hidden or moved, a display added or removed, or a new scale. A card being
+    /// dragged stays under the pointer.
+    /// </summary>
+    private void ReturnToCorner()
+    {
+        if (_closed || !IsLoaded || !IsVisible || IsMouseCaptured || FluidMotion.IsExiting(this)) return;
+        PlaceOnMonitor(MonitorOfWindow(new WindowInteropHelper(this).Handle));
     }
 
     internal bool ActivateForKeyboard()
@@ -624,9 +651,12 @@ internal sealed class QuickAccessWindow : Window
         // Resizing after a monitor move must use that monitor rather than snap back
         // through the SizeChanged placement handler to the previous monitor.
         if (IsLoaded && IsVisible)
-            _placementMonitor = MonitorEnumerator.GetFromWindow(new WindowInteropHelper(this).Handle);
+            _placementMonitor = MonitorOfWindow(new WindowInteropHelper(this).Handle);
         ConstrainToWorkArea(_placementMonitor ?? _targetMonitor);
         base.OnDpiChanged(oldDpi, newDpi);
+        // Windows scales the card from its top-left corner; once resized it goes back to its own.
+        // Placing it again after a move of its own would only raise it over a capture flying in.
+        if (IsLoaded && IsVisible && !_placing) _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(ReturnToCorner));
     }
 
     internal void DismissForCapture(Action foregroundDismissed)
@@ -745,15 +775,52 @@ internal sealed class QuickAccessWindow : Window
         }
     }
 
+    /// <summary>
+    /// The visible card, without its shadow band, in virtual-desktop physical pixels while it is
+    /// open; null otherwise. A notification shown meanwhile stacks above it in the shared corner.
+    /// </summary>
+    internal RectD? OpenSurfaceBounds
+    {
+        get
+        {
+            if (!IsOpen || _surface.ActualWidth <= 0 || _surface.ActualHeight <= 0
+                || PresentationSource.FromVisual(_surface) is null || VisualTreeHelper.GetParent(_surface) is not Visual parent) return null;
+            try
+            {
+                // From the surface's layout box: the entrance settles it with a render transform, and
+                // a notification placed meanwhile goes where the card comes to rest.
+                Point origin = (Point)VisualTreeHelper.GetOffset(_surface);
+                Point topLeft = parent.PointToScreen(origin);
+                Point bottomRight = parent.PointToScreen(new Point(origin.X + _surface.ActualWidth, origin.Y + _surface.ActualHeight));
+                return new RectD(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+    }
+
     internal void PlaceOnMonitor(MonitorInfo monitor)
     {
         _placementMonitor = monitor;
         _previewDpi = new DpiScale(monitor.ScaleFactor, monitor.ScaleFactor);
         ConstrainToWorkArea(monitor);
-        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion);
-        PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
-            new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
-                position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
+        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight,
+            AllowsTransparency ? ShadowMargin : 0);
+        _placing = true;
+        try
+        {
+            PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
+                new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
+                    position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
+        }
+        finally
+        {
+            _placing = false;
+        }
+
+        Placed?.Invoke();
     }
 
     /// <summary>The action row owns the minimum width; a smaller work area takes precedence.</summary>
@@ -768,20 +835,19 @@ internal sealed class QuickAccessWindow : Window
         ReflowPreview();
     }
 
-    internal static Rect Position(RectD work, double scale, double width, double height, RectD? capturedRegion = null)
+    /// <summary>
+    /// Where the card waits on a monitor: in the bottom-right corner of the work area, above the
+    /// taskbar's notification area, its visible card where the shell's notifications put theirs
+    /// (<see cref="ThemedShellPresenter.NotificationBounds"/>), wherever the capture was taken.
+    /// A card as large as the work area keeps its top-left edges inside it.
+    /// </summary>
+    internal static Rect Position(RectD work, double scale, double width, double height, double shadowMargin = 0)
     {
         double left = work.Left / scale, top = work.Top / scale, right = work.Right / scale, bottom = work.Bottom / scale;
         width = Math.Min(width, right - left);
         height = Math.Min(height, bottom - top);
-        double x = right - width - 12, y = bottom - height - 12;
-        if (capturedRegion is { } region && (region.Width < work.Width || region.Height < work.Height))
-        {
-            x = region.Right / scale + 8;
-            y = region.Bottom / scale + 8;
-            if (x + width > right - 4) x = region.Right / scale - width;
-            if (y + height > bottom - 4) y = region.Bottom / scale - height - 8;
-        }
-        return new Rect(Math.Clamp(x, left, Math.Max(left, right - width)), Math.Clamp(y, top, Math.Max(top, bottom - height)), width, height);
+        Rect corner = ThemedShellPresenter.NotificationBounds(work, scale, width, height, shadowMargin);
+        return new Rect(Math.Max(left, corner.X), Math.Max(top, corner.Y), width, height);
     }
 
     internal void Advance(TimeSpan time, bool interacting)

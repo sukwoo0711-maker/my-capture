@@ -30,13 +30,18 @@ namespace MyCapture.App.Capture;
 /// box of the source and the card's preview, known only once the card is laid out: when that box
 /// fits the lift window (a full-screen capture), the image flies there; otherwise a second window
 /// the size of that box takes over once it has drawn its first frame, so no frame lacks the image.
+/// A card farther from the source than <see cref="ApproachDip"/>, such as one waiting in its corner
+/// above the notification area, receives the image over that last stretch of the way only: the
+/// image fades in there while the lifted one fades away on the source, so no window spans the
+/// screen between them.
 /// </para>
 /// <para>
 /// Nothing waits for the flight: the card shows, takes input and counts down as before, and a
 /// new capture or the card closing ends the flight at once (<see cref="Finish"/>). There is no
 /// flight when Windows animation effects are off, in a remote session, without layered windows
-/// or capture exclusion, when the path crosses displays of different scale, or when the
-/// window would exceed <see cref="MaxSurfacePixels"/>.
+/// or capture exclusion, when the path crosses displays of different scale or the card waits on
+/// a display of a scale other than the source's, or when the window would exceed
+/// <see cref="MaxSurfacePixels"/>.
 /// </para>
 /// </remarks>
 internal sealed class CaptureFlight
@@ -66,8 +71,18 @@ internal sealed class CaptureFlight
     /// </summary>
     internal const double MaxSurfacePixels = 3840d * 2160d;
 
+    /// <summary>
+    /// How far a flight reaches, in DIPs at the display's scale, between the centres of the image
+    /// and the card's preview. A card farther away receives the image over this last stretch only,
+    /// so the window it flies in stays near the card.
+    /// </summary>
+    internal const double ApproachDip = 240;
+
     // The shadow leaves over the last 40% of the flight, while the image settles into the card.
     private const double ShadowLeaveFrom = 0.6;
+
+    // An approach fades in over the first 30% of its flight, while the lifted image fades away.
+    private const double ApproachFadeTo = 0.3;
 
     internal static Func<bool> ReadRemoteSession { get; set; } = () => SystemParameters.IsRemoteSession;
     internal static Func<bool> ReadLayeredSupport { get; set; } = () => CaptureWindowExclusion.MayTryLayeredWindow;
@@ -83,10 +98,14 @@ internal sealed class CaptureFlight
     private readonly DispatcherTimer _deadline;
     private CaptureFlightDecoration? _window;
     private CaptureFlightDecoration? _successor;
+    // The lift window, fading away on the source while an approach comes in near the card.
+    private CaptureFlightDecoration? _departing;
     private QuickAccessWindow? _card;
     private Phase _phase = Phase.Lifted;
     private double _phaseStart;
     private bool _rendering;
+    private Rect _flightStart;
+    private bool _approaching;
 
     /// <summary>Actual capture exclusion of each decoration that has left the screen.</summary>
     internal event Action<bool>? SurfaceDismissed;
@@ -98,6 +117,7 @@ internal sealed class CaptureFlight
     {
         Image = image;
         Source = source;
+        _flightStart = ToRect(source);
         _window = window;
         window.Closed += OnDecorationClosed;
         _scale = scale;
@@ -211,6 +231,8 @@ internal sealed class CaptureFlight
         }
         _successor?.Close();
         _successor = null;
+        if (_departing is { IsClosed: false } departing) departing.Close();
+        _departing = null;
         if (_window is { IsClosed: false } window) window.Close();
         // The app keeps its latest flight until the next capture. A finished flight lets go of the
         // image, its closed windows and the card, so none of them outlives what is on screen.
@@ -244,7 +266,8 @@ internal sealed class CaptureFlight
                 }
 
                 double flight = (now - _phaseStart) / FluidMotion.DeliberateDuration.TimeSpan.TotalMilliseconds;
-                Draw(FlightFrame(ToRect(Source), target, Math.Clamp(flight, 0, 1), _scale, LiftLevel(now - _liftedAt)));
+                Draw(FlightFrameAt(target, flight, now));
+                Depart(now);
                 if (flight >= 1)
                 {
                     // The card shows the same pixels where the image lands. The image leaves on the
@@ -282,16 +305,18 @@ internal sealed class CaptureFlight
         }
 
         if (_window is not { } lifted || Image is not { } image) return;
+        CaptureFlightDecoration? successor = null;
         try
         {
-            if (_card.PreviewScreenBounds is not { } target
-                || PlanBounds(Rect.Union(ToRect(Source), target), ReadMonitors()) is not { } plan)
+            Rect source = ToRect(Source);
+            if (_card.PreviewScreenBounds is not { } target)
             {
                 SkipFlight();
                 return;
             }
 
-            if (Contains(lifted.Bounds, plan.Bounds))
+            IReadOnlyList<MonitorInfo> monitors = ReadMonitors();
+            if (PlanBounds(Rect.Union(source, target), monitors) is { } whole && Contains(lifted.Bounds, whole.Bounds))
             {
                 // The card was shown after the lift window: put the image back on top before it moves.
                 lifted.Raise();
@@ -299,10 +324,20 @@ internal sealed class CaptureFlight
                 return;
             }
 
+            if (HandOver(source, target, _scale, monitors) is not { } plan)
+            {
+                SkipFlight();
+                return;
+            }
+
+            _flightStart = plan.Start;
+            _approaching = plan.Start != source;
             // Made while the lift window keeps WPF's layered-window resources, a new window is quick here.
-            var successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
+            successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
             successor.Closed += OnDecorationClosed;
-            successor.Draw(lifted.Frame);
+            // Over the whole way the new window first shows what the lift window shows; an approach
+            // starts clear, so the image is never drawn twice.
+            successor.Draw(_approaching ? FlightFrameAt(target, 0, _clock()) : lifted.Frame);
             if (!successor.ShowDecoration())
             {
                 successor.Close();
@@ -311,12 +346,15 @@ internal sealed class CaptureFlight
             }
 
             _successor = successor;
+            successor = null;
             _phase = Phase.HandingOver;
             ReceiptTimeline.Mark?.Invoke("flight-handover");
-            successor.ContentRendered += OnSuccessorRendered;
+            _successor.ContentRendered += OnSuccessorRendered;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            // A window shown but not placed never takes over: it closes with its image.
+            if (successor is { IsClosed: false }) successor.Close();
             SkipFlight();
         }
     }
@@ -325,8 +363,10 @@ internal sealed class CaptureFlight
     {
         if (sender is CaptureFlightDecoration successor) successor.ContentRendered -= OnSuccessorRendered;
         if (_phase != Phase.HandingOver || _successor is not { } next) return;
-        // The new window shows the image where the lift window does; the lift window can go.
-        _window?.Close();
+        // The new window shows the image where the lift window does, and the lift window can go;
+        // during an approach the lifted image fades away on the source instead.
+        if (_approaching) _departing = _window;
+        else _window?.Close();
         _window = next;
         _successor = null;
         StartFlying();
@@ -396,6 +436,26 @@ internal sealed class CaptureFlight
 
     private void Draw(CaptureFlightFrame frame) => _window?.Draw(frame);
 
+    private CaptureFlightFrame FlightFrameAt(Rect target, double progress, double now)
+    {
+        CaptureFlightFrame frame = FlightFrame(_flightStart, target, Math.Clamp(progress, 0, 1), _scale, LiftLevel(now - _liftedAt));
+        return _approaching ? frame with { Opacity = ApproachOpacity(progress) } : frame;
+    }
+
+    /// <summary>The lifted image left on the source fades away while an approach comes in.</summary>
+    private void Depart(double now)
+    {
+        if (_departing is not { } departing) return;
+        double leave = (now - _phaseStart) / FluidMotion.FastDuration.TimeSpan.TotalMilliseconds;
+        if (leave >= 1)
+        {
+            departing.Close();
+            _departing = null;
+            return;
+        }
+        departing.Draw(LiftFrame(now - _liftedAt, 1 - FluidMotion.StandardEasing.Ease(leave)));
+    }
+
     private void StartRendering()
     {
         if (_rendering) return;
@@ -447,6 +507,41 @@ internal sealed class CaptureFlight
             Lerp(LiftOffsetDip, PeakOffsetDip, rise) * scale,
             Lerp(LiftShadowOpacity * liftLevel, PeakShadowOpacity, rise) * (1 - leave),
             1);
+    }
+
+    /// <summary>
+    /// Where the image flying from <paramref name="source"/> to <paramref name="target"/> (physical
+    /// pixels at <paramref name="scale"/>) starts: the source itself when their centres are at most
+    /// <see cref="ApproachDip"/> apart, otherwise the point of that same path that far short of the
+    /// target, at the size the image has there.
+    /// </summary>
+    internal static Rect FlightStart(Rect source, Rect target, double scale)
+    {
+        double dx = (target.Left + (target.Width / 2)) - (source.Left + (source.Width / 2));
+        double dy = (target.Top + (target.Height / 2)) - (source.Top + (source.Height / 2));
+        double distance = Math.Sqrt((dx * dx) + (dy * dy));
+        double reach = ApproachDip * scale;
+        if (!(distance > reach)) return source;
+        double t = 1 - (reach / distance);
+        return new Rect(Lerp(source.Left, target.Left, t), Lerp(source.Top, target.Top, t),
+            Lerp(source.Width, target.Width, t), Lerp(source.Height, target.Height, t));
+    }
+
+    /// <summary>How visible an approach is <paramref name="progress"/> of the way (by time, 0 to 1) into its flight.</summary>
+    internal static double ApproachOpacity(double progress) => SmoothStep(0, ApproachFadeTo, progress);
+
+    /// <summary>
+    /// The window that takes over a flight the lift window cannot hold, and where the image starts
+    /// in it (<see cref="FlightStart"/>). Null when it would lie on a display of a scale other than
+    /// the lift's <paramref name="scale"/>, since every frame draws at that scale.
+    /// </summary>
+    internal static (Rect Start, RectD Bounds, double Scale)? HandOver(Rect source, Rect target, double scale,
+        IReadOnlyList<MonitorInfo> monitors)
+    {
+        Rect start = FlightStart(source, target, scale);
+        return PlanBounds(Rect.Union(start, target), monitors) is { } plan && plan.Scale == scale
+            ? (start, plan.Bounds, plan.Scale)
+            : null;
     }
 
     /// <summary>
