@@ -283,8 +283,12 @@ public partial class App : Application
         {
             _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
             // A picture pin reads its text with the app's recognizer when the user asks to translate it.
-            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
-                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
+            _pins.ConfigureImageTranslation((image, windowsReading, token) => PinTranslationEngines.RecognizeResultAsync(
+                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token, windowsReading));
+            // A model that leaves on its idle timer frees memory the next idle collection hands back.
+            void ModelLeft() => Dispatcher.InvokeAsync(ScheduleIdleMemoryReclamation);
+            _services.GetRequiredService<PinTranslationEngines>().ModelReleased += ModelLeft;
+            _services.GetRequiredService<NeuralOcrEngine>().RowReaderReleased += ModelLeft;
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
@@ -1266,6 +1270,7 @@ public partial class App : Application
         // finished scroll) arrives here as soon as its image exists, before anything is saved or
         // copied: the shutter answers the gesture itself, the capture lifts off the screen, and its
         // quick access card shows on the next turn and receives it (card first, ShowQuickAccessFirst).
+        ReceiptTimeline.Mark?.Invoke("selection-handler");
         if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
         if (!e.PinRequested) LiftCaptureForQuickAccess(e);
         _log?.LogInformation(
@@ -1291,6 +1296,7 @@ public partial class App : Application
             // Protect the editor's record across that boundary even when all older items
             // are pinned or this image alone exceeds the configured capacity.
             _currentEditSession = _commit.BeginEditSession(_pendingRecord);
+            ReceiptTimeline.Mark?.Invoke("save-start");
             _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
             ReceiptTimeline.Mark?.Invoke("save-resumed");
         }
@@ -1391,10 +1397,15 @@ public partial class App : Application
         // The same conditions as the card itself (_services, the after-capture mode). The card shown
         // first takes the image even when the save then fails; without a card, the image fades away.
         if (_services is null || e.TextCapture || _scrollCancellation is not null
-            || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
+            || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess)
+        {
+            QueueCaptureFlightSpare();
+            return;
+        }
         System.Windows.Media.Imaging.BitmapSource image = e.SelectedBitmap;
         var source = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
             e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
+        _lastLiftSource = source;
         _pendingLift = image;
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
         {
@@ -1404,9 +1415,13 @@ public partial class App : Application
             ReceiptTimeline.Mark?.Invoke("lift-start");
             try
             {
-                _captureFlight = CaptureFlight.TryLift(image, source);
+                _captureFlight = CaptureFlight.TryLift(image, source, spare: _flightSpare);
                 if (_captureFlight is { } flight)
+                {
                     flight.SurfaceDismissed += excluded => _overlay?.NoteForegroundDismissal(excluded);
+                    // The next capture's lift window is made once this one is off the screen.
+                    flight.Ended += QueueCaptureFlightSpare;
+                }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -1414,6 +1429,7 @@ public partial class App : Application
                 _log?.LogWarning(ex, "Could not lift the capture toward its receipt card");
             }
             ReceiptTimeline.Mark?.Invoke(_captureFlight is null ? "lift-none" : "lift-shown");
+            if (_captureFlight is null) QueueCaptureFlightSpare();
         }));
     }
 
@@ -2660,6 +2676,8 @@ public partial class App : Application
         // Stop a model download in progress; completed, verified model files stay.
         _ocrModelPreparation.Close();
         _quickAccess?.Close();
+        _flightSpareRelease?.Stop();
+        _flightSpare?.Release();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         if (_services?.GetService<SettingsStore>() is { } store
             && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))

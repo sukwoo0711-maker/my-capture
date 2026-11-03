@@ -80,6 +80,55 @@ public sealed class CaptureWindowExclusionTests
     [Fact]
     public void TryApplyStillRejectsZeroHandle() => Assert.False(CaptureWindowExclusion.TryApply(IntPtr.Zero));
 
+    [Fact]
+    public void TheFirstLayeredWindowAnswersInsteadOfAProbeWindow() => StaTestHost.Run(() =>
+    {
+        bool real = NativeExclusion.SupportsLayeredWindows;
+        Func<bool> original = CaptureWindowExclusion.LayeredWindowProbe;
+        Window window = NativeExclusion.HiddenLayeredWindow();
+        try
+        {
+            NativeExclusion.ResetAppProbe();
+            int probes = CaptureWindowExclusion.ProbeWindowsForTest;
+            // Nothing has asked yet: a layered surface may be made, and its own window answers.
+            Assert.True(CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(real, CaptureWindowExclusion.TryApplyLayered(window));
+            Assert.Equal(real, CaptureWindowExclusion.SupportsLayeredWindows);
+            Assert.Equal(real, CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(probes, CaptureWindowExclusion.ProbeWindowsForTest);
+        }
+        finally
+        {
+            window.Close();
+            CaptureWindowExclusion.LayeredWindowProbe = original;
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AProbePutInPlaceStaysTheAnswerAfterALayeredWindow(bool supported) => StaTestHost.Run(() =>
+    {
+        bool real = NativeExclusion.SupportsLayeredWindows;
+        Func<bool> original = CaptureWindowExclusion.LayeredWindowProbe;
+        Window window = NativeExclusion.HiddenLayeredWindow();
+        int calls = 0;
+        try
+        {
+            CaptureWindowExclusion.LayeredWindowProbe = () => { calls++; return supported; };
+            Assert.Equal(real, CaptureWindowExclusion.TryApplyLayered(window));
+            Assert.Equal(0, calls);
+            Assert.Equal(supported, CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(supported, CaptureWindowExclusion.SupportsLayeredWindows);
+            Assert.Equal(1, calls);
+        }
+        finally
+        {
+            window.Close();
+            CaptureWindowExclusion.LayeredWindowProbe = original;
+        }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -367,6 +416,16 @@ internal static class NativeExclusion
     });
 
     internal static bool SupportsLayeredWindows => RealLayeredSupport.Value;
+
+    // The app's own probe, set back: a new answer nothing has asked for yet.
+    internal static void ResetAppProbe() => CaptureWindowExclusion.LayeredWindowProbe = (Func<bool>)typeof(CaptureWindowExclusion)
+        .GetField("s_probeWindow", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+
+    internal static Window HiddenLayeredWindow() => new()
+    {
+        AllowsTransparency = true, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false,
+        Width = 1, Height = 1, Left = -32000, Top = -32000,
+    };
     internal static bool ExpectsSuccess(bool layered) => !layered || SupportsLayeredWindows;
 
     internal static void AssertAffinity(IntPtr hwnd, bool layered)

@@ -40,8 +40,10 @@ internal sealed class ResidentProbeOptions
     /// Diagnostic variants (<c>--resident-variant a,b</c>), each removing one suspected owner of retained
     /// memory or time so a differential run shows what it costs: <c>no-overlay-prewarm</c>,
     /// <c>no-editor-prewarm</c>, <c>no-engine-prewarm</c>, <c>no-flight</c> (no lifted capture flying into
-    /// the card), <c>frame-cached</c> (synthetic frames built like the real grab, BitmapSource.Create Bgr32,
-    /// instead of a frozen WriteableBitmap), <c>no-reader-prewarm</c> (skip production reader prewarm).
+    /// the card), <c>no-flight-spare</c> (each lift makes its own window), <c>no-copy-wait</c> (the card
+    /// shows on the turn after the lift, before the copy reports), <c>frame-cached</c> (synthetic
+    /// frames built like the real grab, BitmapSource.Create Bgr32, instead of a frozen WriteableBitmap),
+    /// <c>no-reader-prewarm</c> (skip production reader prewarm).
     /// The old <c>prewarm-readers</c> flag is accepted as a no-op since warming is now the default;
     /// <c>no-reader-prewarm</c> wins when both are supplied. <c>legacy-capture-settle</c>,
     /// <c>no-idle-gc</c>, <c>legacy-flight-bounds</c> and <c>no-private-working-set</c> isolate the
@@ -50,9 +52,9 @@ internal sealed class ResidentProbeOptions
     /// These diagnostic variants change workload or timing and are never used for the release table.
     /// </summary>
     internal static readonly string[] KnownVariants =
-        ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "frame-cached",
-         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers", "no-reader-prewarm",
-         "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
+        ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "no-flight-spare", "no-copy-wait",
+         "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
+         "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel"];
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];

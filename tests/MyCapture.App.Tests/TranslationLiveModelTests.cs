@@ -45,6 +45,24 @@ public sealed class TranslationLiveModelTests
     }
 
     [Fact]
+    public void SharedWeightsTranslateExactlyLikeSeparateSessions()
+    {
+        using LiveModel? live = LiveModel.CreateIfPresent();
+        if (live is null) return;
+        string[] screen = [.. ProbeTranslations().Take(40).Select(item => item.Text)];
+        IReadOnlyList<string> Translate(bool shareWeights)
+        {
+            using MarianTranslator translator = MarianTranslator.Load(live.Store.ModelDirectory,
+                TranslationModelCatalog.ModelFiles, 4, shareWeights);
+            return [.. TextTranslationService.PlanBatches(screen, translator.CountTokens)
+                .SelectMany(batch => translator.Translate(batch, CancellationToken.None))
+                .Concat(screen.Take(8).SelectMany(line => translator.Translate([line], CancellationToken.None)))];
+        }
+
+        Assert.Equal(Translate(shareWeights: false), Translate(shareWeights: true));
+    }
+
+    [Fact]
     public void FortyLineScreenTranslatesWithinTheBudget()
     {
         using LiveModel? live = LiveModel.CreateIfPresent();
@@ -58,7 +76,7 @@ public sealed class TranslationLiveModelTests
         for (int round = 0; round < 3; round++)
         {
             var watch = Stopwatch.StartNew();
-            translated = [.. screen.Chunk(TextTranslationService.BatchSize)
+            translated = [.. TextTranslationService.PlanBatches(screen, translator.CountTokens)
                 .SelectMany(batch => translator.Translate(batch, CancellationToken.None))];
             timings.Add(watch.Elapsed);
         }

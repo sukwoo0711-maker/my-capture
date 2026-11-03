@@ -1,7 +1,11 @@
 using MyCapture.Core.Platform;
+using System.Diagnostics;
 using System.IO;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
+using Microsoft.ML.OnnxRuntime;
 using MyCapture.Platform.Imaging;
 using RapidOcrNet;
 using SkiaSharp;
@@ -14,12 +18,22 @@ namespace MyCapture.Ocr;
 /// </summary>
 internal sealed class NeuralOcrEngine : IDisposable
 {
+    /// <summary>
+    /// The row recognizer leaves after this quiet spell. Pictures translated one after another
+    /// share it, and it is gone well before a closed translation pin's memory settles.
+    /// </summary>
+    internal static readonly TimeSpan RowReaderIdleRelease = TimeSpan.FromSeconds(20);
+
     private readonly OcrModelStore _store;
     private readonly ILogger _log;
     private readonly OnnxRuntimeInitialization _runtime;
     private readonly object _sync = new();
+    private readonly object _rowSync = new();
+    private readonly Timer _rowIdle;
     private RapidOcr? _engine;
+    private TextRecognizer? _rowReader;
     private bool _initFailed;
+    private bool _disposed;
 
     internal NeuralOcrEngine(
         OcrModelStore store,
@@ -29,6 +43,7 @@ internal sealed class NeuralOcrEngine : IDisposable
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
+        _rowIdle = new Timer(_ => ReleaseRowReaderIfIdle(), null, Timeout.Infinite, Timeout.Infinite);
         ModelVerificationTask = _store.PreVerifyInstalledModelsAsync();
     }
 
@@ -36,6 +51,9 @@ internal sealed class NeuralOcrEngine : IDisposable
     /// Installed-model verification runs independently of construction and never downloads weights.
     /// </summary>
     internal Task ModelVerificationTask { get; }
+
+    /// <summary>Raised on the releasing thread after the row recognizer has left.</summary>
+    internal event Action? RowReaderReleased;
 
     internal bool CanRun => AppArchitecture.SupportsNeuralOcr && _store.HasRequiredModels;
 
@@ -171,12 +189,267 @@ internal sealed class NeuralOcrEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads rows that Windows OCR has already located with the recognizer alone. Image
+    /// translation re-reads only a few short rows, so it needs neither the detector nor the
+    /// angle classifier, nor the memory a whole-image pass leaves in ONNX Runtime. Each row's
+    /// Windows words also mark where its reading splits into words.
+    /// </summary>
+    internal async Task<OcrResult> ReadRowsAsync(OcrRequest request, IReadOnlyList<OcrLine> rows,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(rows);
+        if (!CanRun) return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
+        return await Task.Run(() => ReadRowsOnWorker(request, rows, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private OcrResult ReadRowsOnWorker(OcrRequest request, IReadOnlyList<OcrLine> rows, CancellationToken cancellationToken)
+    {
+        var watch = Stopwatch.StartNew();
+        BitmapSource? source = Decode(request);
+        if (source is null) return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), TimeSpan.Zero);
+        if (request.EnhanceContrast) source = ImageCodec.StretchContrastForRecognition(source);
+        SKAlphaType alpha = source.Format == PixelFormats.Pbgra32 ? SKAlphaType.Premul
+            : source.Format == PixelFormats.Bgra32 ? SKAlphaType.Unpremul
+            : source.Format == PixelFormats.Bgr32 ? SKAlphaType.Opaque : SKAlphaType.Unknown;
+        if (alpha == SKAlphaType.Unknown)
+        {
+            // Left unfrozen: freezing a conversion can walk a decoder that belongs to another thread.
+            source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            alpha = SKAlphaType.Unpremul;
+        }
+
+        var lines = new List<OcrLine>(rows.Count);
+        lock (_rowSync)
+        {
+            if (_disposed) return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
+            SetRowIdle(Timeout.InfiniteTimeSpan);
+            try
+            {
+                TextRecognizer? reader = _rowReader ??= LoadRowReader();
+                if (reader is null) return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
+                foreach (OcrLine row in rows)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Int32Rect crop = RowCrop(row.Bounds, source.PixelWidth, source.PixelHeight);
+                    if (crop.IsEmpty) continue;
+                    using var strip = new SKBitmap(new SKImageInfo(crop.Width, crop.Height, SKColorType.Bgra8888, alpha));
+                    source.CopyPixels(crop, strip.GetPixels(), strip.ByteCount, strip.RowBytes);
+                    TextLine read = reader.GetTextLine(strip, cancellationToken);
+                    if (RowLine(read.Chars, read.CharScores, read.CharCols, read.ColCount, crop,
+                            [.. row.Words.Select(word => word.Bounds)]) is { } line)
+                        lines.Add(line);
+                }
+            }
+            finally
+            {
+                if (!SetRowIdle(RowReaderIdleRelease)) ReleaseRowReader();
+            }
+        }
+
+        return lines.Count == 0
+            ? OcrResult.NoText("ko-KR", watch.Elapsed)
+            : OcrResult.Success(OcrPlanner.BuildBlockText(lines.Select(line => line.Text)), "ko-KR", lines, watch.Elapsed);
+    }
+
+    private TextRecognizer? LoadRowReader()
+    {
+        string rec = _store.PathFor(OcrModelCatalog.Recognition);
+        if (!_store.HasRequiredModels) return null;
+        var reader = new TextRecognizer();
+        try
+        {
+            _runtime.EnsureInitialized();
+            using var options = new SessionOptions
+            {
+                GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+                IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4),
+                InterOpNumThreads = 1,
+                // A row needs a few megabytes; an arena would keep the largest row's for the session.
+                EnableCpuMemArena = false,
+                EnableMemoryPattern = false,
+            };
+            reader.InitModel(rec, _store.PathFor(OcrModelCatalog.Dictionary), options);
+            _log.LogInformation("PP-OCR row recognizer ready rec={Rec}", rec);
+            return reader;
+        }
+        catch (Exception ex)
+        {
+            reader.Dispose();
+            _log.LogWarning(ex, "PP-OCR row recognizer could not be created rec={Rec}", rec);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Windows word boxes hug the ink, while the recognizer learned from detector boxes that
+    /// keep a margin around the text: pad by a quarter of the row height inside the image.
+    /// </summary>
+    internal static Int32Rect RowCrop(OcrRect row, int width, int height)
+    {
+        if (!OcrGeometry.IsValid(row)) return Int32Rect.Empty;
+        double pad = Math.Max(2, row.Height * 0.25);
+        int left = Math.Max(0, (int)Math.Floor(row.X - pad)), top = Math.Max(0, (int)Math.Floor(row.Y - pad));
+        int right = Math.Min(width, (int)Math.Ceiling(row.Right + pad)), bottom = Math.Min(height, (int)Math.Ceiling(row.Bottom + pad));
+        return right > left && bottom > top ? new Int32Rect(left, top, right - left, bottom - top) : Int32Rect.Empty;
+    }
+
+    /// <summary>
+    /// One recognized row crop as a line in source coordinates, with the words and boxes that
+    /// RapidOcrNet's CalRecBoxes (Apache-2.0) gives detected lines: a word ends at a space, at a
+    /// switch between CJK and other characters, or after a gap of more than five CTC columns;
+    /// each character is a cell of the average character width centred on its column, and
+    /// neighbouring cells split any overlap. Small text often loses its spaces, so a word also
+    /// ends where its characters pass from one Windows word box (<paramref name="guides"/>) to the
+    /// next. Rows below the pipeline's text score are dropped.
+    /// </summary>
+    internal static OcrLine? RowLine(string[]? chars, float[]? scores, int[]? cols, int colCount, Int32Rect crop,
+        IReadOnlyList<OcrRect> guides)
+    {
+        if (chars is not { Length: > 0 } || cols is null || scores is null || cols.Length != chars.Length
+            || scores.Length != chars.Length || colCount <= 0 || scores.Average() < RapidOcrOptions.Default.TextScore)
+            return null;
+
+        float width = crop.Width, columnWidth = width / colCount;
+        // The Windows word whose box holds the character's column, or one within a column of it.
+        int Guide(int index)
+        {
+            double centre = crop.X + (cols[index] + 0.5) * columnWidth;
+            int best = -1;
+            double nearest = columnWidth;
+            for (int guide = 0; guide < guides.Count; guide++)
+            {
+                double distance = Math.Max(0, Math.Max(guides[guide].X - centre, centre - guides[guide].Right));
+                if (distance > nearest || distance == nearest && best >= 0) continue;
+                (best, nearest) = (guide, distance);
+            }
+            return best;
+        }
+
+        var words = new List<(int First, int Count, bool Cjk)>();
+        int first = 0, count = 0, owner = -1;
+        bool? cjkState = null;
+        for (int index = 0; index < chars.Length; index++)
+        {
+            string character = chars[index];
+            if (character.Length == 0 || character.Length == 1 && char.IsWhiteSpace(character[0]))
+            {
+                if (count > 0) words.Add((first, count, cjkState ?? false));
+                count = 0;
+                continue;
+            }
+            bool cjk = character.Any(IsCjk);
+            cjkState ??= cjk;
+            int gap = index == 0 ? Math.Min(cjk ? 3 : 2, cols[0]) : cols[index] - cols[index - 1];
+            int guide = Guide(index);
+            if (cjkState != cjk || gap > 5 || count > 0 && guide != owner)
+            {
+                if (count > 0) words.Add((first, count, cjkState.Value));
+                count = 0;
+                cjkState = cjk;
+            }
+            owner = guide;
+            if (count++ == 0) first = index;
+        }
+        if (count > 0) words.Add((first, count, cjkState ?? false));
+        if (words.Count == 0) return null;
+
+        float[] spans = [.. words.Where(word => word.Count > 1)
+            .Select(word => (cols[word.First + word.Count - 1] - cols[word.First]) * columnWidth / (word.Count - 1))];
+        float charWidth = spans.Length > 0 ? spans.Average() : width / string.Concat(chars).Length;
+        (float Left, float Right) Cell(int index)
+        {
+            float centre = (cols[index] + 0.5f) * columnWidth;
+            float left = MathF.Max(centre - charWidth / 2, 0), right = MathF.Min(centre + charWidth / 2, width);
+            return (left, right > left ? right : MathF.Min(left + 1, width));
+        }
+
+        var cells = new List<(string Text, float Left, float Right)>();
+        bool perWord = words.All(word => !word.Cjk);
+        foreach ((int start, int length, _) in words)
+        {
+            if (perWord)
+            {
+                (float Left, float Right)[] range = [.. Enumerable.Range(start, length).Select(Cell)];
+                cells.Add((string.Concat(chars[start..(start + length)]), range.Min(cell => cell.Left), range.Max(cell => cell.Right)));
+            }
+            else
+            {
+                cells.AddRange(Enumerable.Range(start, length).Select(index => (chars[index], Cell(index).Left, Cell(index).Right)));
+            }
+        }
+        cells.Sort((a, b) => a.Left.CompareTo(b.Left));
+        for (int index = 0; index + 1 < cells.Count; index++)
+        {
+            float overlap = cells[index].Right - cells[index + 1].Left;
+            if (overlap <= 0) continue;
+            cells[index] = cells[index] with { Right = cells[index].Right - overlap / 2 };
+            cells[index + 1] = cells[index + 1] with { Left = cells[index + 1].Left + (overlap - overlap / 2) };
+        }
+
+        int top = crop.Y, height = crop.Height;
+        OcrWord[] boxes = [.. cells.Where(cell => !string.IsNullOrWhiteSpace(cell.Text)).Select(cell =>
+        {
+            int left = (int)MathF.Round(crop.X + cell.Left), right = (int)MathF.Round(crop.X + cell.Right);
+            return new OcrWord(cell.Text.Trim(), new OcrRect(left, top, Math.Max(1, right - left), height));
+        })];
+        string text = string.Concat(chars).Trim();
+        return boxes.Length == 0 || text.Length == 0
+            ? null
+            : new OcrLine(text, new OcrRect(crop.X, crop.Y, crop.Width, crop.Height), boxes);
+    }
+
+    private static bool IsCjk(char value) => value is >= '一' and <= '鿿' or >= '　' and <= '〿'
+        or >= '＀' and <= '￯';
+
+    private bool SetRowIdle(TimeSpan dueTime)
+    {
+        try
+        {
+            return _rowIdle.Change(dueTime, Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    private void ReleaseRowReaderIfIdle()
+    {
+        if (!Monitor.TryEnter(_rowSync)) return;
+        try
+        {
+            ReleaseRowReader();
+        }
+        finally
+        {
+            Monitor.Exit(_rowSync);
+        }
+    }
+
+    private void ReleaseRowReader()
+    {
+        if (_rowReader is null) return;
+        _rowReader.Dispose();
+        _rowReader = null;
+        RowReaderReleased?.Invoke();
+    }
+
     public void Dispose()
     {
         lock (_sync)
         {
             _engine?.Dispose();
             _engine = null;
+        }
+
+        lock (_rowSync)
+        {
+            _disposed = true;
+            _rowIdle.Dispose();
+            ReleaseRowReader();
         }
     }
 
@@ -256,6 +529,7 @@ internal sealed class NeuralOcrEngine : IDisposable
         }
 
         var lines = new List<OcrLine>(raw.TextBlocks.Length);
+        var angles = new List<double?>();
         foreach (TextBlock block in raw.TextBlocks)
         {
             if (string.IsNullOrWhiteSpace(block.Text))
@@ -283,6 +557,7 @@ internal sealed class NeuralOcrEngine : IDisposable
             }
 
             lines.Add(new OcrLine(block.Text.Trim(), lineBox, words));
+            angles.Add(TextAngle(block.BoxPoints, block.AngleIndex));
         }
 
         if (lines.Count == 0)
@@ -291,7 +566,15 @@ internal sealed class NeuralOcrEngine : IDisposable
         }
 
         string text = OcrPlanner.BuildBlockText(lines.Select(line => line.Text));
-        return OcrResult.Success(text, "ko-KR", lines, TimeSpan.FromMilliseconds(raw.DetectTime));
+        return OcrResult.Success(text, "ko-KR", lines, TimeSpan.FromMilliseconds(raw.DetectTime), OcrResult.MostTilted(angles));
+    }
+
+    /// <summary>PP-OCR quadrilaterals run top-left to top-right in the source image.</summary>
+    internal static double? TextAngle(SKPointI[]? points, int angleIndex = 0)
+    {
+        if (points is null || points.Length < 2) return null;
+        double x = points[1].X - points[0].X, y = points[1].Y - points[0].Y;
+        return x * x + y * y < 4 ? null : Math.Atan2(y, x) * 180 / Math.PI + (angleIndex == 1 ? 180 : 0);
     }
 
     private static OcrRect ToRect(SKPointI[]? points, double scale = 1.0)

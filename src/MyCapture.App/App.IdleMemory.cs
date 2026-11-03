@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -56,9 +57,22 @@ public partial class App
             // starting on the UI thread. Input and capture work outrank ContextIdle.
             long started = Stopwatch.GetTimestamp();
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            TrimProcessHeap();
             _log?.LogInformation("Idle memory collection completed in {PauseMs:F2} ms",
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         });
+    }
+
+    /// <summary>
+    /// Native code that frees into the process heap (ONNX Runtime without its arena, Skia, WIC) leaves
+    /// the freed pages committed for later allocations; hands them back like the collection does.
+    /// </summary>
+    private static void TrimProcessHeap()
+    {
+        IntPtr heap = GetProcessHeap();
+        _ = HeapCompact(heap, 0);
+        var information = new HeapOptimizeResourcesInformation { Version = HeapOptimizeResourcesCurrentVersion };
+        _ = HeapSetInformation(heap, HeapOptimizeResources, ref information, (nuint)Marshal.SizeOf<HeapOptimizeResourcesInformation>());
     }
 
     private void ObserveIdleMemoryWindow(Window window)
@@ -105,4 +119,20 @@ public partial class App
         try { await work; }
         finally { ScheduleIdleMemoryReclamation(); }
     }
+
+    private const int HeapOptimizeResources = 3;
+    private const uint HeapOptimizeResourcesCurrentVersion = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HeapOptimizeResourcesInformation
+    {
+        public uint Version;
+        public uint Flags;
+    }
+
+    [DllImport("kernel32.dll")] private static extern IntPtr GetProcessHeap();
+    [DllImport("kernel32.dll")] private static extern nuint HeapCompact(IntPtr heap, uint flags);
+    [DllImport("kernel32.dll")]
+    private static extern bool HeapSetInformation(IntPtr heap, int informationClass,
+        ref HeapOptimizeResourcesInformation information, nuint length);
 }

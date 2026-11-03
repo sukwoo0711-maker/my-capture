@@ -396,6 +396,8 @@ public sealed class PreservedCaptureDeliveryTests : KoreanCaptionTest
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             typeof(DispatcherObject).GetField("_dispatcher", Flags)!.SetValue(App, Dispatcher.CurrentDispatcher);
+            // A held copy outlasts the card's wait at once, so the card shows while it runs.
+            App.QuickAccessFirstCopyWaitForTest = TimeSpan.Zero;
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             ReceiptTimeline.Mark = mark => { if (mark == "card-shown") CardsShown++; };
             Settings.General.AfterCapture = AfterCaptureAction.Editor;

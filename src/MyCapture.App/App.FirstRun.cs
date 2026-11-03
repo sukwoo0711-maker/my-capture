@@ -403,9 +403,17 @@ public partial class App
         _log?.LogInformation("Shortcut settings requested for {Row}", draftProperty);
         EnsureSettingsWindow()?.ShowShortcut(draftProperty);
     }
+
+    // Tips show while the user acts (a first pin, a capture, a save), so the write stays off the
+    // dispatcher: a flushed file replace plus the serializer's first-use cost held the first pin ~30 ms.
     private void SaveFirstUseTips()
     {
-        try { if (_settings is not null) _services?.GetRequiredService<SettingsStore>().Save(_settings); }
+        try
+        {
+            if (_settings is not null)
+                _services?.GetRequiredService<SettingsStore>().SaveInBackground(
+                    _settings.DeepClone(), "Could not save first-use tip state");
+        }
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save first-use tip state"); }
     }
 
