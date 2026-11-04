@@ -363,6 +363,16 @@ internal sealed class AnnotationRenderer
         return geometry;
     }
 
+    /// <summary>The most opaque a highlighter stroke is painted, whatever colour is picked.</summary>
+    internal const byte HighlighterMaxAlpha = 110;
+
+    /// <summary>
+    /// The colour a pen or highlighter stroke is painted with. The brush preview calls this too,
+    /// so what the pointer shows is what the stroke will look like.
+    /// </summary>
+    internal static ColorRgba PenInk(ColorRgba stroke, bool isHighlighter) =>
+        isHighlighter ? stroke.WithAlpha((byte)Math.Min((int)stroke.A, HighlighterMaxAlpha)) : stroke;
+
     private void DrawPen(DrawingContext dc, PenAnnotation pen)
     {
         PenPointCollection points = pen.Points;
@@ -371,7 +381,7 @@ internal sealed class AnnotationRenderer
             return;
         }
 
-        ColorRgba color = pen.IsHighlighter ? pen.Stroke.WithAlpha((byte)Math.Min((int)pen.Stroke.A, 110)) : pen.Stroke;
+        ColorRgba color = PenInk(pen.Stroke, pen.IsHighlighter);
 
         if (points.Count == 1)
         {

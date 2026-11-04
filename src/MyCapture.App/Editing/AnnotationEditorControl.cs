@@ -246,6 +246,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The settings contract is the editor's range: a width saved in settings is the width drawn.
         _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness)
             ? Math.Clamp(defaults.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max) : 3;
+        // The controller keeps the highlighter's own width within 12 to 64 and reads anything else as 12.
+        _controller.HighlighterThickness = defaults.HighlighterThickness;
         _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
         _controller.ApplyArrowHeads(defaults.ArrowHeads);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
@@ -277,6 +279,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         _surface.FrameLayoutChanged += (_, _) =>
         {
             if (_activeTextBox is { } box) LayoutLiveTextBox(box);
+            // A new zoom changes how many screen pixels the brush covers.
+            RefreshBrushCursor();
         };
 
         SetResourceReference(BackgroundProperty, "Surface.Base");
@@ -634,7 +638,33 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (Keyboard.FocusedElement is TextBox box
             && !(_crop is not null && (ReferenceEquals(box, _cropWidth) || ReferenceEquals(box, _cropHeight))
                 && ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers) is "Done" or "Save" or "SaveAs")) return false;
+        // [ and ] belong to the pen and the highlighter only; with any other tool they pass through.
+        if (!BrushWidthKeysApply
+            && ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers) is "StrokeThinner" or "StrokeThicker") return false;
         return ShortcutCatalog.Execute(ShortcutScope.Annotation, key, modifiers, _shortcutActions);
+    }
+
+    private bool BrushWidthKeysApply => _controller.Tool is EditorTool.Pen or EditorTool.Highlighter;
+
+    /// <summary>
+    /// Makes the pen or highlighter one step thinner or thicker (the keys [ and ]), keeping the
+    /// pointer, the brush preview and the width controls in step with it.
+    /// </summary>
+    private void StepBrushWidth(bool thicker)
+    {
+        if (!BrushWidthKeysApply) return;
+        double minimum = _controller.Tool == EditorTool.Highlighter
+            ? AnnotationEditorController.MinimumHighlighterThickness : SettingsRanges.StrokeThickness.Min;
+        double next = AnnotationEditorController.NextBrushWidth(_controller.BrushThickness, thicker, minimum);
+        if (Math.Abs(next - _controller.BrushThickness) > 1e-9)
+        {
+            _controller.ApplyStrokeThickness(next);
+            RememberPreferences();
+            UpdateInspector();
+            RefreshBrushCursor();
+        }
+
+        SetStatus(UiText.Format("Text_DBAF1D995258", _controller.BrushThickness));
     }
 
     private void BuildShortcutActions()
@@ -663,6 +693,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         _shortcutActions["Duplicate"] = _controller.DuplicateSelected;
         _shortcutActions["BringForward"] = () => _controller.ReorderSelected(forward: true);
         _shortcutActions["SendBackward"] = () => _controller.ReorderSelected(forward: false);
+        _shortcutActions["StrokeThinner"] = () => StepBrushWidth(thicker: false);
+        _shortcutActions["StrokeThicker"] = () => StepBrushWidth(thicker: true);
         _shortcutActions["EditText"] = () =>
         {
             CancelFrozenPointerGesture();
@@ -1040,6 +1072,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         ConfigurePointerScale();
         if (_activeTextBox is not null)
         {
+            // Outside the box the canvas only ends the entry, so it shows the plain arrow, not
+            // the move cursor of the caption the box was opened on.
+            ApplyCursorKind(EditorCursorKind.Arrow);
             HidePointerPreview();
             return;
         }
@@ -1187,15 +1222,44 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void ApplyCursorKind(EditorCursorKind kind)
     {
+        // While a caption is typed, the box keeps its own I-beam and everything else on the
+        // canvas is the plain arrow, whatever tool or caption the pointer was last over.
+        if (_activeTextBox is not null) kind = EditorCursorKind.Arrow;
         _canvasCursorKind = kind;
+        double dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        int pixelSize = EditorCursors.PixelSize(_cursorBaseSize, dpiScale);
         Cursor cursor = EditorCursors.Get(
             kind,
-            EditorCursors.PixelSize(_cursorBaseSize, VisualTreeHelper.GetDpi(this).DpiScaleX),
+            pixelSize,
             kind == EditorCursorKind.StepNumber ? _controller.NextStepNumber : 0,
             _controller.StrokeColor,
             SystemParameters.HighContrast || ThemeService.Current == MyCapture.Core.Themes.AppTheme.HighContrast,
-            _cursorStyle);
+            _cursorStyle,
+            EditorCursors.IsBrush(kind) ? BrushCursorOffset(pixelSize, dpiScale) : 0);
         if (!ReferenceEquals(_viewport.Cursor, cursor)) _viewport.Cursor = cursor;
+    }
+
+    /// <summary>
+    /// The pencil offset of the pen or highlighter pointer for the footprint as it is now, at a
+    /// pointer size and monitor scale; the tutorial renderer draws the pointer with it too.
+    /// </summary>
+    internal int BrushCursorOffset(int pixelSize, double dpiScale) =>
+        EditorCursors.BrushOffset(pixelSize, BrushFootprintRadiusPixels(dpiScale));
+
+    /// <summary>
+    /// The radius, in screen pixels, of the circle the pen or highlighter paints at the pointer:
+    /// the effective width in image pixels, scaled by the canvas zoom and the monitor.
+    /// </summary>
+    private double BrushFootprintRadiusPixels(double dpiScale) =>
+        _controller.BrushThickness * _surface.DipPerPixel * dpiScale / 2;
+
+    /// <summary>
+    /// Draws the pen or highlighter pointer again for the footprint as it is now, after the width,
+    /// the zoom or the monitor scale changed under a pointer that did not move.
+    /// </summary>
+    private void RefreshBrushCursor()
+    {
+        if (EditorCursors.IsBrush(_canvasCursorKind)) ApplyCursorKind(_canvasCursorKind);
     }
 
     /// <summary>The cursor kind the canvas shows now, for tests.</summary>
@@ -1356,6 +1420,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             textBox.BorderThickness.Top + textBox.Padding.Top);
         _overlayCanvas.Children.Add(textBox);
         _activeTextBox = textBox;
+        // The tool just became Select and the pointer is over the new caption, so the canvas would
+        // keep the move cursor until the pointer next moves.
+        ApplyCursorKind(EditorCursorKind.Arrow);
         SizeChangedEventHandler resize = (_, _) => LayoutLiveTextBox(textBox);
         ScrollChangedEventHandler scroll = (_, e) =>
         {
@@ -1653,6 +1720,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             : UiText.Get("EditorText_Updated"));
         DraftChanged?.Invoke(this, EventArgs.Empty);
         UpdateInspector();
+        // The canvas showed the plain arrow while typing; show what is under the pointer now.
+        RefreshPointerFeedback();
         if (hadKeyboardFocus)
         {
             Focus();
@@ -3273,8 +3342,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         AnnotationEditorPreferences.Write(new AnnotationDefaults
         {
             LastTool = _preferredTool.ToString(), StrokeColor = _controller.StrokeColor,
-            StrokeThickness = _controller.StrokeThickness, StrokeStyle = _controller.StrokeStyle,
-            ArrowHeads = _controller.ArrowHeads,
+            StrokeThickness = _controller.StrokeThickness, HighlighterThickness = _controller.HighlighterThickness,
+            StrokeStyle = _controller.StrokeStyle, ArrowHeads = _controller.ArrowHeads,
             FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
             TextBold = _defaultTextBold, TextBackground = _defaultTextBackground, TextOutline = _defaultTextOutline,
@@ -3631,7 +3700,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             ShapeAnnotation shape => shape.StrokeThickness,
             PolylineAnnotation line => line.StrokeThickness,
             PenAnnotation pen => pen.StrokeThickness,
-            _ when _controller.Tool == EditorTool.Highlighter => Math.Max(12, _controller.StrokeThickness),
+            _ when _controller.Tool == EditorTool.Highlighter => _controller.HighlighterThickness,
             _ => _controller.StrokeThickness,
         };
 

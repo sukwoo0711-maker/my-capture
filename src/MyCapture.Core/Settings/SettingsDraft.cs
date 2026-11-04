@@ -819,6 +819,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         // Preserve members not surfaced in the UI so mapping back is lossless.
         _preservedSchemaVersion = s.SchemaVersion;
         _preservedStrokeColor = s.Annotation.StrokeColor;
+        _preservedHighlighterThickness = s.Annotation.HighlighterThickness;
         _preservedTextColor = s.Annotation.TextColor;
         _preservedTextBold = s.Annotation.TextBold;
         _preservedTextBackground = s.Annotation.TextBackground;
@@ -889,7 +890,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
-        _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
+        _preservedStrokeColor.ToString(), Dbl(_preservedHighlighterThickness), _preservedTextColor.ToString(),
         B(_preservedTextBold), B(_preservedTextBackground), B(_preservedTextOutline),
         string.Join(";", _preservedRecentFontFamilies),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
@@ -1044,6 +1045,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 FillTransparency = _annotationFillTransparency,
                 StrokeColor = _preservedStrokeColor,
                 StrokeThickness = ParseDouble(_strokeThickness),
+                HighlighterThickness = _preservedHighlighterThickness,
                 TextColor = _preservedTextColor,
                 FontSize = ParseDouble(_fontSize),
                 FontFamily = _fontFamily.Trim(),
@@ -1540,6 +1542,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private int _preservedSchemaVersion = 1;
     private Primitives.ColorRgba _preservedStrokeColor;
+    private double _preservedHighlighterThickness = 12;
     private Primitives.ColorRgba _preservedTextColor;
     private bool _preservedTextBold;
     private bool _preservedTextBackground;

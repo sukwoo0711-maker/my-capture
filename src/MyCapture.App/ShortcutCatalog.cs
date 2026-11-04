@@ -40,6 +40,9 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Annotation, "Duplicate", Key.D, "Ctrl+D", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "BringForward", Key.OemCloseBrackets, "Ctrl+]", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "SendBackward", Key.OemOpenBrackets, "Ctrl+[", ModifierKeys.Control);
+        // The brush width of the pen and highlighter; with any other tool the keys are not taken.
+        Add(ShortcutScope.Annotation, "StrokeThinner", Key.OemOpenBrackets, "[");
+        Add(ShortcutScope.Annotation, "StrokeThicker", Key.OemCloseBrackets, "]");
         Add(ShortcutScope.Annotation, "Delete", Key.Delete, "Del");
         Add(ShortcutScope.Annotation, "Delete", Key.Back, "Backspace");
         Add(ShortcutScope.Annotation, "RotateLeft", Key.Q, "Q");
@@ -162,6 +165,7 @@ internal static class ShortcutCatalog
                 Row("Shortcuts.Undo", "Undo"), Row("Shortcuts.Redo", "Redo"),
                 Row("Shortcuts.SelectAll", "SelectAll"), Row("Shortcuts.Duplicate", "Duplicate"),
                 Row("Shortcuts.BringForward", "BringForward"), Row("Shortcuts.SendBackward", "SendBackward"),
+                Row("Shortcuts.StrokeThinner", "StrokeThinner"), Row("Shortcuts.StrokeThicker", "StrokeThicker"),
                 Row("Shortcuts.DeleteSelection", "Delete"), Row("Shortcuts.Move1", "Left", "Right", "Up", "Down"),
                 Row("Shortcuts.Move10", "LeftFast", "RightFast", "UpFast", "DownFast")],
             ShortcutScope.Crop => [Row("EditorFlow_CropApplyHint", "Apply"), Row("EditorFlow_CropCancelHint", "Cancel"),

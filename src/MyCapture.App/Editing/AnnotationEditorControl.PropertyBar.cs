@@ -297,6 +297,7 @@ internal sealed partial class AnnotationEditorControl
             if (_syncingInspector) return;
             _controller.ApplyStrokeThickness(args.NewValue);
             RememberPreferences();
+            RefreshBrushCursor();
             if (_controller.Selected is not null) SetStatus(UiText.Format("Text_DBAF1D995258", args.NewValue));
         };
         return panel;

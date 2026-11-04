@@ -108,11 +108,12 @@ internal sealed class EditorScene : TutorialScene
         (planned.X - _plannedImageOrigin.X) / (_plannedImageUnit.X - _plannedImageOrigin.X),
         (planned.Y - _plannedImageOrigin.Y) / (_plannedImageUnit.Y - _plannedImageOrigin.Y));
 
-    private bool OverCanvas(PointD stage)
+    private bool OverCanvas(PointD stage) => Over((FrameworkElement)_editor.PointerInputElement, stage);
+
+    private bool Over(FrameworkElement element, PointD stage)
     {
-        var viewport = (FrameworkElement)_editor.PointerInputElement;
-        Point local = Viewport(stage);
-        return local.X >= 0 && local.Y >= 0 && local.X <= viewport.ActualWidth && local.Y <= viewport.ActualHeight;
+        Point local = _host.ClientRoot.TranslatePoint(new Point(stage.X - ClientOrigin.X, stage.Y - ClientOrigin.Y), element);
+        return local.X >= 0 && local.Y >= 0 && local.X <= element.ActualWidth && local.Y <= element.ActualHeight;
     }
 
     private FrameworkElement ByAutomationId(string id) =>
@@ -341,11 +342,19 @@ internal sealed class EditorScene : TutorialScene
     {
         if (!_closed && OverCanvas(cursor))
         {
+            // The open text box keeps its own I-beam; the canvas cursor shows only outside it.
+            if (ActiveTextBox() is { } box && Over(box, cursor))
+            {
+                Stage.DrawPointer(dc, cursor, Stage.PointerKind.Beam);
+                return;
+            }
+
             EditorCursorKind kind = _editor.CanvasCursorKind;
             if (EditorCursorPolicy.IsCustom(kind))
             {
                 int size = (int)Math.Round(32 * Stage.Scale);
-                EditorCursorImage image = EditorCursors.Render(kind, size, _steps + 1, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White);
+                EditorCursorImage image = EditorCursors.Render(kind, size, _steps + 1, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White,
+                    EditorCursors.IsBrush(kind) ? _editor.BrushCursorOffset(size, Stage.Scale) : 0);
                 Stage.DrawCursorBitmap(dc, image.Bitmap, new PointD(image.HotSpotX / Stage.Scale, image.HotSpotY / Stage.Scale), cursor);
                 return;
             }

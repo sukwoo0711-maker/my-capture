@@ -444,9 +444,9 @@ public sealed class EditorUxTests
     [Theory]
     [InlineData("Select", "Arrow")]
     [InlineData("Text", "TextBeam")]
-    [InlineData("Rectangle", "Cross")]
-    [InlineData("Ellipse", "Cross")]
-    [InlineData("Arrow", "Cross")]
+    [InlineData("Rectangle", "Crosshair")]
+    [InlineData("Ellipse", "Crosshair")]
+    [InlineData("Arrow", "Crosshair")]
     [InlineData("Pen", "Pen")]
     [InlineData("Highlighter", "Highlighter")]
     [InlineData("StepNumber", "StepNumber")]
@@ -611,7 +611,7 @@ public sealed class EditorUxTests
         foreach ((Key key, EditorCursorKind kind) in new[]
         {
             (Key.P, EditorCursorKind.Pen), (Key.H, EditorCursorKind.Highlighter), (Key.T, EditorCursorKind.TextBeam),
-            (Key.R, EditorCursorKind.Cross), (Key.N, EditorCursorKind.StepNumber), (Key.M, EditorCursorKind.Mosaic),
+            (Key.R, EditorCursorKind.Crosshair), (Key.N, EditorCursorKind.StepNumber), (Key.M, EditorCursorKind.Mosaic),
             (Key.B, EditorCursorKind.Blur), (Key.X, EditorCursorKind.Crop), (Key.V, EditorCursorKind.Arrow),
         })
         {
