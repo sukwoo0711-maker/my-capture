@@ -86,7 +86,7 @@ internal sealed class PinScene : TutorialScene
     private readonly List<LivePin> _pins = [];
     private readonly string[] _noteLines;
     private readonly double _workBottom;
-    private BitmapSource? _checklist;
+    private BitmapSource? _sheet;
     private MenuView? _pinMenu, _trayMenu, _menu;
     private MenuItem? _menuTarget;
     private LivePin? _focus, _dragged, _copyPending, _savePending;
@@ -166,8 +166,8 @@ internal sealed class PinScene : TutorialScene
 
     private TutorialStoryboard HideAllStory()
     {
-        _checklist = ChecklistCapture();
-        AddPin(PinContent.FromImage(_checklist), new Point(330, 150));
+        _sheet = SheetCapture();
+        AddPin(PinContent.FromImage(_sheet), new Point(330, 150));
         AddPin(TablePin(), new Point(612, 36));
         var story = new TutorialStoryboard(new PointD(190, 404));
         story.Hold("pins", 2.0).Hold("hide", 0.8).Hold("hidden", 1.3);
@@ -179,8 +179,8 @@ internal sealed class PinScene : TutorialScene
 
     private TutorialStoryboard ClickThroughStory()
     {
-        _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(330, 160));
+        _sheet = SheetCapture();
+        LivePin pin = AddPin(PinContent.FromImage(_sheet), new Point(330, 160));
         var rightClick = new PointD(560, 236);
         // Opening the menu refreshes the reopen command, exactly as its Opened handler does.
         pin.Window.CanRestoreClosedPin = () => false;
@@ -231,8 +231,8 @@ internal sealed class PinScene : TutorialScene
 
     private TutorialStoryboard SaveStory()
     {
-        _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(596, 80));
+        _sheet = SheetCapture();
+        LivePin pin = AddPin(PinContent.FromImage(_sheet), new Point(596, 80));
         // Measure where the hover bar's Save button lands for this pin, then leave the bar hidden.
         pin.Window.ShowHoverBar();
         Stage.Pump(40);
@@ -503,10 +503,10 @@ internal sealed class PinScene : TutorialScene
         return PinContent.FromText(ClipboardTextRenderer.Render(table, isTabularContent: true), table, isTable: true);
     }
 
-    /// <summary>The checklist the editor clips edit, captured as far as its owner line.</summary>
-    private BitmapSource ChecklistCapture()
+    /// <summary>The sheet the editor clips edit, captured as far as its total.</summary>
+    private BitmapSource SheetCapture()
     {
-        var capture = new CroppedBitmap(Fixtures.Checklist(Korean), new Int32Rect(0, 0, 340, 246));
+        var capture = new CroppedBitmap(Fixtures.PurchaseSheet(Korean), Fixtures.PurchaseSheetParts.PinCapture);
         capture.Freeze();
         return capture;
     }
@@ -811,10 +811,10 @@ internal sealed class PinScene : TutorialScene
         dc.DrawRectangle(Solid(0x33, 0x38, 0x44), null, new Rect(client.X + 12, client.Y + 74, client.Width - 24, 1));
         var row = new Rect(client.X + 12, client.Y + 82, client.Width - 24, 76);
         dc.DrawRoundedRectangle(Solid(0x2F, 0x3D, 0x5C), null, row, 4, 4);
-        if (_checklist is not null)
+        if (_sheet is not null)
         {
-            double height = 60, width = height * _checklist.PixelWidth / _checklist.PixelHeight;
-            dc.DrawImage(_checklist, new Rect(row.X + 10, row.Y + 8, width, height));
+            double height = 60, width = height * _sheet.PixelWidth / _sheet.PixelHeight;
+            dc.DrawImage(_sheet, new Rect(row.X + 10, row.Y + 8, width, height));
         }
 
         Stage.Text(dc, QuickSaveNaming.BuildStem(new ExportSettings().FileNamePattern, SavedAt) + ".png", row.X + 110, row.Y + 28, 14, Brushes.White);
