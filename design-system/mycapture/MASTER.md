@@ -11,9 +11,13 @@ source and a near-white forward pane for the floating, editable object. The curr
 mark is an open capture frame with a pin; its geometry and colours are in `docs/design/brand/README.md`.
 The mark keeps its supplied colours: changing the UI accent never recolours the artwork.
 
-The default UI accent is pin red: fill `#E0453C`, hover `#F35B4D`, pressed `#DA433A`, ink `#0A0818`.
-Violet is the alternative accent. Focus and selection use neutral outlines.
-`ThemeService` computes accessible accent foregrounds per theme. The six themes are Midnight, Glass,
+The product has one UI accent, red. At runtime `AccentPalette.RedOverrides` (`AppAccent.cs`) gives every
+theme except high contrast a deep red primary fill with white ink: fill `#C9352C`, hover `#BD3129`,
+pressed `#B32E26`, ink `#FFFFFF` (5.2:1, and hover and pressed only darken). The brighter brand red
+`#E0453C` stays on what marks the brand or a live recording over other apps: the pin outline and the
+recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines.
+The accent rows in the token table below are the `Tokens.xaml` startup defaults that this runtime palette
+replaces, not the colours users see. The six themes are Midnight, Glass,
 Workspace, Daylight, GlassLight and HighContrast; System follows Windows. Windows high contrast takes
 precedence and uses the user's system colours.
 
