@@ -128,6 +128,66 @@ internal sealed class AnnotationEditorController
 
     /// <summary>Current stroke thickness applied to new shape/line/pen items.</summary>
     internal double StrokeThickness { get; set; } = 3;
+
+    /// <summary>Narrowest highlighter stroke, in image pixels.</summary>
+    internal const double MinimumHighlighterThickness = 12;
+
+    /// <summary>
+    /// Width of new highlighter strokes, kept apart from <see cref="StrokeThickness"/> so the pen
+    /// and the highlighter each remember their own. Held within 12 to 64; a value that is not a
+    /// number becomes 12.
+    /// </summary>
+    internal double HighlighterThickness
+    {
+        get;
+        set => field = double.IsFinite(value)
+            ? Math.Clamp(value, MinimumHighlighterThickness, SettingsRanges.StrokeThickness.Max) : MinimumHighlighterThickness;
+    } = MinimumHighlighterThickness;
+
+    /// <summary>
+    /// The width the active drawing tool paints with: the highlighter's own width, otherwise the
+    /// shared stroke width. The brush preview and the pointer follow this value.
+    /// </summary>
+    internal double BrushThickness => _tool == EditorTool.Highlighter ? HighlighterThickness : StrokeThickness;
+
+    /// <summary>
+    /// True while a pen or highlighter stroke is being drawn, between the press and the release.
+    /// </summary>
+    internal bool IsDrawingStroke => _gesture == Gesture.PenDraw;
+
+    /// <summary>The widths [ and ] step through, thinnest to thickest.</summary>
+    internal static readonly IReadOnlyList<double> BrushWidthSteps = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64];
+
+    /// <summary>
+    /// The next width from <paramref name="current"/>: the nearest step above it when
+    /// <paramref name="thicker"/>, otherwise the nearest step below it. A width between steps moves
+    /// to the step in that direction; at either end the width stays.
+    /// </summary>
+    /// <param name="minimum">The narrowest width allowed, which a thinner step never goes below.</param>
+    internal static double NextBrushWidth(double current, bool thicker, double minimum = 1)
+    {
+        const double Tolerance = 1e-9;
+        double floor = Math.Max(minimum, BrushWidthSteps[0]);
+        if (!double.IsFinite(current)) return Math.Max(floor, BrushWidthSteps[0]);
+        if (thicker)
+        {
+            foreach (double step in BrushWidthSteps)
+            {
+                if (step > current + Tolerance) return step;
+            }
+
+            return Math.Max(floor, current);
+        }
+
+        for (int index = BrushWidthSteps.Count - 1; index >= 0; index--)
+        {
+            double step = BrushWidthSteps[index];
+            if (step < current - Tolerance) return Math.Max(floor, step);
+        }
+
+        return Math.Max(floor, current);
+    }
+
     internal AnnotationStrokeStyle StrokeStyle { get; private set; }
     internal ArrowHeadStyle ArrowHeads { get; private set; }
 
@@ -976,18 +1036,29 @@ internal sealed class AnnotationEditorController
         }
     }
 
+    /// <summary>
+    /// True when a width edit belongs to the highlighter's own width: the highlighter tool with
+    /// nothing selected, or a selection of only highlighter strokes. Anything else edits the
+    /// width the pen and shapes share.
+    /// </summary>
+    private bool ThicknessEditsHighlighter => _selection.Count == 0
+        ? _tool == EditorTool.Highlighter
+        : _selection.All(item => item is PenAnnotation { IsHighlighter: true });
+
     internal void ApplyStrokeThickness(double thickness)
     {
+        bool highlighter = ThicknessEditsHighlighter;
         // The settings range is the one contract for a stroke width, wherever it is typed.
         thickness = double.IsFinite(thickness)
             ? Math.Clamp(thickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max)
-            : StrokeThickness;
+            : highlighter ? HighlighterThickness : StrokeThickness;
         if ((_selection.Count == 1 && _selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
             || (_selected is null && Tool == EditorTool.Rectangle && StrokeStyle == AnnotationStrokeStyle.ThickDashed))
         {
             thickness = Math.Max(6, thickness);
         }
-        StrokeThickness = thickness;
+        if (highlighter) HighlighterThickness = thickness;
+        else StrokeThickness = thickness;
         ApplySelectionStyle(UiText.Get("Text_6953A4195620"), item => ApplyStrokeThickness(item, thickness));
     }
 
@@ -1136,7 +1207,10 @@ internal sealed class AnnotationEditorController
                 return new(toggle ? PointerAction.ToggleSelection : PointerAction.Move, hit, Cursor: EditorCursorKind.Move);
             if (!step) return new(PointerAction.Marquee);
         }
-        EditorCursorKind cursor = EditorCursorPolicy.Resolve(_tool, default);
+        // A number that cannot be added is not offered: Windows' unavailable pointer says so
+        // before the click, and the status line explains why after it.
+        EditorCursorKind cursor = step && !CanAddStepNumber
+            ? EditorCursorKind.Unavailable : EditorCursorPolicy.Resolve(_tool, default);
         return new(_tool switch
         {
             EditorTool.StepNumber => CanAddStepNumber ? PointerAction.AddStepNumber : PointerAction.None,
@@ -1222,7 +1296,7 @@ internal sealed class AnnotationEditorController
                 IsHighlighter = _tool == EditorTool.Highlighter,
                 Points = _draftPenPoints,
                 Stroke = StrokeColor,
-                StrokeThickness = _tool == EditorTool.Highlighter ? Math.Max(12, StrokeThickness) : StrokeThickness,
+                StrokeThickness = BrushThickness,
             };
             pen.PropertyChanged += OnDraftPenChanged;
             _draftItem = pen;

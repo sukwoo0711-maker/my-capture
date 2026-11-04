@@ -5456,6 +5456,12 @@ Install the model?</value></data>
   <data name="Shortcuts.SendBackward" xml:space="preserve">
     <value>Send backward</value>
   </data>
+  <data name="Shortcuts.StrokeThinner" xml:space="preserve">
+    <value>Thinner stroke</value>
+  </data>
+  <data name="Shortcuts.StrokeThicker" xml:space="preserve">
+    <value>Thicker stroke</value>
+  </data>
   <data name="Shortcuts.DeleteSelection" xml:space="preserve">
     <value>Delete selection</value>
   </data>

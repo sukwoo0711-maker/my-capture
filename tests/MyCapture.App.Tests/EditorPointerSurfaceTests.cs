@@ -99,11 +99,14 @@ public sealed class EditorPointerSurfaceTests
     [InlineData(48)]
     [InlineData(64)]
     [InlineData(256)]
-    public void BrushLocatorHasCenteredHotspotAtEveryPointerSize(int size) => StaTestHost.Run(() =>
+    public void PenCursorWritesFromItsNibLowOnTheLeftAtEveryPointerSize(int size) => StaTestHost.Run(() =>
     {
+        // Without a brush offset the pen is drawn like the highlighter: the pen icon, nib on the hot spot.
         EditorCursorImage cursor = EditorCursors.Render(EditorCursorKind.Pen, size, 1, ColorRgba.White, EditorCursorStyle.White);
-        Assert.Equal(cursor.HotSpotX, cursor.HotSpotY);
-        Assert.InRange(cursor.HotSpotX, size * .45, size * .51);
+        EditorCursorImage highlighter = EditorCursors.Render(EditorCursorKind.Highlighter, size, 1, ColorRgba.White, EditorCursorStyle.White);
+        Assert.Equal((highlighter.HotSpotX, highlighter.HotSpotY), (cursor.HotSpotX, cursor.HotSpotY));
+        Assert.InRange(cursor.HotSpotX, 0, size * .2);
+        Assert.InRange(cursor.HotSpotY, size * .8, size - 1);
         byte[] pixels = new byte[size * size * 4];
         cursor.Bitmap.CopyPixels(pixels, size * 4, 0);
         Assert.True(pixels[(cursor.HotSpotY * size + cursor.HotSpotX) * 4 + 3] >= 160);
@@ -145,7 +148,7 @@ public sealed class EditorPointerSurfaceTests
         Assert.True(left > 0 && top > 0 && right < size - 1 && bottom < size - 1, $"{size}px: drawn {left},{top} to {right},{bottom}.");
         // The nib is the icon's left end with only its outline beside it, and the base line sits
         // just below it. The pencil rises to the upper right and the base line runs right, each
-        // about 15 design pixels, so this is the edit icon and not the small brush locator.
+        // about 15 design pixels, so this is the whole edit icon.
         Assert.InRange(cursor.HotSpotX - left, 1.5 * k, 2.5 * k + 1);
         Assert.InRange(bottom - cursor.HotSpotY, 2 * k, 3.5 * k + 1);
         Assert.True(right - cursor.HotSpotX >= 16 * k, $"{size}px: the base line ends {right - cursor.HotSpotX}px right of the nib.");

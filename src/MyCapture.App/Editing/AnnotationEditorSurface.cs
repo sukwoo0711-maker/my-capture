@@ -35,6 +35,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     private static readonly DependencyProperty CropFrameShadowProperty = DependencyProperty.Register(
         "CropFrameShadow", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    // The brush preview's edge: two 1 DIP rings at 70% opacity, the dark one inside the light one.
+    private static readonly Pen BrushEdgeDark = EdgePen(Color.FromArgb(0xB3, EditorCursorStyle.Ink.R, EditorCursorStyle.Ink.G, EditorCursorStyle.Ink.B));
+    private static readonly Pen BrushEdgeLight = EdgePen(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
+
     private FrozenFrame _frame;
     private RectD _cropRegion;
     private readonly AnnotationEditorController _controller;
@@ -123,10 +127,15 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         {
             if (_pointerPreviewPoint is not { } point || PendingCrop is not null
                 || _controller.Tool is not (EditorTool.Pen or EditorTool.Highlighter)) return null;
-            double width = _controller.Tool == EditorTool.Highlighter
-                ? Math.Max(12, _controller.StrokeThickness) : _controller.StrokeThickness;
-            return BrushPreviewBounds(ToSurfacePoint(point), width, DipPerPixel);
+            return BrushPreviewBounds(ToSurfacePoint(point), _controller.BrushThickness, DipPerPixel);
         }
+    }
+
+    private static Pen EdgePen(Color color)
+    {
+        var pen = new Pen(new SolidColorBrush(color), 1);
+        pen.Freeze();
+        return pen;
     }
 
     internal static Rect BrushPreviewBounds(Point centre, double strokeWidth, double dipPerPixel)
@@ -370,10 +379,21 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         {
             dc.PushClip(new RectangleGeometry(CropRectDip));
             var center = new Point(brush.X + brush.Width / 2, brush.Y + brush.Height / 2);
-            // The path follows the true footprint, even for a subpixel brush. Only the
-            // contrast edge has a fixed DIP width; the locator follows Windows pointer size.
-            dc.DrawEllipse(null, new Pen(Brushes.Black, 3), center, brush.Width / 2, brush.Height / 2);
-            dc.DrawEllipse(null, new Pen(Brushes.White, 1), center, brush.Width / 2, brush.Height / 2);
+            double radius = brush.Width / 2;
+            // The footprint follows the true size, even for a subpixel brush, and shows the colour
+            // the stroke will have. While a stroke is drawn its own head is already there, so only
+            // the edge stays (a highlighter's translucent head would otherwise be doubled).
+            if (!_controller.IsDrawingStroke)
+            {
+                ColorRgba ink = AnnotationRenderer.PenInk(_controller.StrokeColor, _controller.Tool == EditorTool.Highlighter);
+                dc.DrawEllipse(ink.ToBrush(), null, center, radius, radius);
+            }
+
+            // Only the contrast edge has a fixed DIP width. A dark and a light ring sit just
+            // outside the footprint, so the edge reads on light and dark captures alike and never
+            // covers the colour inside it.
+            dc.DrawEllipse(null, BrushEdgeDark, center, radius + 0.5, radius + 0.5);
+            dc.DrawEllipse(null, BrushEdgeLight, center, radius + 1.5, radius + 1.5);
             dc.Pop();
         }
         else if (_pointerPreviewPoint is { } point && PendingCrop is null

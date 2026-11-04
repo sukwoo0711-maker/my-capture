@@ -138,6 +138,7 @@ public static class AppSettingsClone
         FillTransparency = s.FillTransparency,
         StrokeColor = s.StrokeColor,
         StrokeThickness = s.StrokeThickness,
+        HighlighterThickness = s.HighlighterThickness,
         TextColor = s.TextColor,
         FontSize = s.FontSize,
         FontFamily = s.FontFamily,

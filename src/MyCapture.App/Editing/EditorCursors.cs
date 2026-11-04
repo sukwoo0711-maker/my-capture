@@ -61,9 +61,9 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 
 /// <summary>
 /// Turns <see cref="EditorCursorKind"/> into a WPF cursor. System shapes come from Windows;
-/// tool shapes are drawn at run time. The pen's brush locator marks the exact stroke centre and
-/// the highlighter writes from the nib of the shared edit icon, while the surface independently
-/// draws the effective brush width around that point.
+/// tool shapes are drawn at run time. The pen and the highlighter click at the centre of the
+/// brush footprint, which the surface draws at the effective brush width; their pencil icon sits
+/// beside the footprint with its nib touching the footprint's upper-right edge.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -71,8 +71,15 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 /// is rendered from vector geometry at the exact pixel size the pointer uses on the editor's
 /// monitor (the user's pointer size times the monitor scale), packed as an in-memory 32-bit
 /// .cur and loaded at that size. The hot spot is placed on a pixel centre at every size: the
-/// pen's brush centre, the highlighter's pencil nib, the inner crop corner, or the crosshair
-/// centre.
+/// brush footprint's centre for the pen and highlighter, the inner crop corner, or the
+/// crosshair centre.
+/// </para>
+/// <para>
+/// A brush cursor is larger than the pointer size by the offset the pencil sits from the
+/// footprint (see <see cref="BrushOffset"/>): the icon is drawn as it is at offset 0, moved right
+/// by the offset, and the hot spot moves down by the same amount, so the nib lands up and to the
+/// right of the click point. Which offsets are in use depends on the brush width and the zoom,
+/// so only the last few brush cursors are kept.
 /// </para>
 /// <para>
 /// Tool cursors take the fill and outline of the user's pointer style (white with a black
@@ -88,7 +95,21 @@ internal static class EditorCursors
     // Glyphs are authored in a 32x32 space and scaled to the requested size.
     private const double Design = 32;
     private static readonly object Gate = new();
-    private static readonly Dictionary<(EditorCursorKind Kind, int Size, int Number, ColorRgba Color, EditorCursorStyle Style), Cursor> Cache = [];
+    private static readonly Dictionary<CursorKey, Cursor> Cache = [];
+
+    // Brush cursors in the order they were last used, oldest first; at most BrushCursorLimit stay.
+    private static readonly List<CursorKey> BrushOrder = [];
+
+    private readonly record struct CursorKey(EditorCursorKind Kind, int Size, int Number, ColorRgba Color, EditorCursorStyle Style, int BrushOffset);
+
+    /// <summary>How many pen and highlighter cursors are kept; the least recently used one is dropped beyond that.</summary>
+    internal const int BrushCursorLimit = 8;
+
+    /// <summary>How many pen and highlighter cursors are kept now, for tests.</summary>
+    internal static int BrushCursorCount
+    {
+        get { lock (Gate) return BrushOrder.Count; }
+    }
 
     private static readonly Color Ink = EditorCursorStyle.Ink;
     private static readonly Color Marker = Color.FromRgb(0xFF, 0xD6, 0x0A);
@@ -98,6 +119,24 @@ internal static class EditorCursors
     {
         double scale = double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1;
         return Math.Clamp((int)Math.Round(Math.Clamp(baseSize, DefaultBaseSize, 256) * scale), 16, 256);
+    }
+
+    /// <summary>True for the cursors whose pencil sits beside the brush footprint.</summary>
+    internal static bool IsBrush(EditorCursorKind kind) => kind is EditorCursorKind.Pen or EditorCursorKind.Highlighter;
+
+    /// <summary>
+    /// How many pixels the pencil of a brush cursor is moved right (and the click point down) so
+    /// the nib sits outside the footprint, one pixel clear of its edge at 45 degrees.
+    /// </summary>
+    /// <param name="pixelSize">Edge length from <see cref="PixelSize"/>.</param>
+    /// <param name="footprintRadius">The footprint's radius in screen pixels. A value that is not a
+    /// number, or is negative, means no footprint and gives 0.</param>
+    /// <returns>The offset, at most as large as keeps the cursor within 256 pixels.</returns>
+    internal static int BrushOffset(int pixelSize, double footprintRadius)
+    {
+        if (!double.IsFinite(footprintRadius) || footprintRadius < 0) return 0;
+        double room = 256 - Math.Clamp(pixelSize, 16, 256);
+        return (int)Math.Clamp(Math.Ceiling((footprintRadius + 1) / Math.Sqrt(2)), 0, room);
     }
 
     /// <summary>Reads the Windows pointer size (Accessibility, Mouse pointer, Size).</summary>
@@ -121,21 +160,29 @@ internal static class EditorCursors
     /// <param name="stepColor">The badge colour the step tool uses.</param>
     /// <param name="highContrast">True to keep system cursors only.</param>
     /// <param name="style">The user's pointer colours.</param>
-    internal static Cursor Get(EditorCursorKind kind, int pixelSize, int stepNumber, ColorRgba stepColor, bool highContrast, EditorCursorStyle style)
+    /// <param name="brushOffset">For the pen and highlighter, the offset from <see cref="BrushOffset"/>; it is part of
+    /// what makes a cursor distinct for those two kinds only.</param>
+    internal static Cursor Get(EditorCursorKind kind, int pixelSize, int stepNumber, ColorRgba stepColor, bool highContrast, EditorCursorStyle style, int brushOffset = 0)
     {
         if (SystemCursor(kind, highContrast) is { } system) return system;
 
         bool numbered = kind == EditorCursorKind.StepNumber;
-        var key = (kind, pixelSize, numbered ? stepNumber : 0, numbered ? stepColor : default, style);
+        bool brush = IsBrush(kind);
+        int offset = brush ? ClampBrushOffset(pixelSize, brushOffset) : 0;
+        var key = new CursorKey(kind, pixelSize, numbered ? stepNumber : 0, numbered ? stepColor : default, style, offset);
         lock (Gate)
         {
-            if (Cache.TryGetValue(key, out Cursor? cached)) return cached;
+            if (Cache.TryGetValue(key, out Cursor? cached))
+            {
+                if (brush) UseBrushCursor(key);
+                return cached;
+            }
         }
 
         Cursor cursor;
         try
         {
-            EditorCursorImage image = Render(kind, pixelSize, stepNumber, stepColor, style);
+            EditorCursorImage image = Render(kind, pixelSize, stepNumber, stepColor, style, offset);
             using var stream = new MemoryStream(BuildCursorFile(image));
             cursor = new Cursor(stream, scaleWithDpi: false);
         }
@@ -148,12 +195,37 @@ internal static class EditorCursors
 
         lock (Gate)
         {
-            if (Cache.TryGetValue(key, out Cursor? raced)) return raced;
+            if (Cache.TryGetValue(key, out Cursor? raced))
+            {
+                if (brush) UseBrushCursor(key);
+                return raced;
+            }
+
             Cache[key] = cursor;
+            if (brush)
+            {
+                BrushOrder.Add(key);
+                // Dropped from the cache only: the evicted cursor may still be on the viewport, and
+                // its handle is released with the object once nothing shows it.
+                while (BrushOrder.Count > BrushCursorLimit)
+                {
+                    Cache.Remove(BrushOrder[0]);
+                    BrushOrder.RemoveAt(0);
+                }
+            }
         }
 
         return cursor;
     }
+
+    // Callers hold Gate.
+    private static void UseBrushCursor(CursorKey key)
+    {
+        BrushOrder.Remove(key);
+        BrushOrder.Add(key);
+    }
+
+    private static int ClampBrushOffset(int pixelSize, int offset) => Math.Clamp(offset, 0, 256 - Math.Clamp(pixelSize, 16, 256));
 
     /// <summary>The Windows cursor for system kinds, or for every kind under high contrast.</summary>
     internal static Cursor? SystemCursor(EditorCursorKind kind, bool highContrast) => kind switch
@@ -166,16 +238,21 @@ internal static class EditorCursors
         EditorCursorKind.ResizeWestEast => Cursors.SizeWE,
         EditorCursorKind.TextBeam => Cursors.IBeam,
         EditorCursorKind.Cross => Cursors.Cross,
+        EditorCursorKind.Unavailable => Cursors.No,
         EditorCursorKind.Pen or EditorCursorKind.Highlighter when highContrast => Cursors.Pen,
         _ when highContrast => Cursors.Cross,
         _ => null,
     };
 
     /// <summary>Draws one tool cursor at <paramref name="size"/> pixels.</summary>
-    internal static EditorCursorImage Render(EditorCursorKind kind, int size, int stepNumber, ColorRgba stepColor, EditorCursorStyle style)
+    /// <param name="brushOffset">For the pen and highlighter, see <see cref="BrushOffset"/>. The image is then that
+    /// many pixels larger each way: the icon moves right and the hot spot down by the offset, so the nib lands at the
+    /// hot spot plus (offset, -offset). 0 draws the icon with its nib on the hot spot. Ignored for other kinds.</param>
+    internal static EditorCursorImage Render(EditorCursorKind kind, int size, int stepNumber, ColorRgba stepColor, EditorCursorStyle style, int brushOffset = 0)
     {
         if (!EditorCursorPolicy.IsCustom(kind)) throw new ArgumentOutOfRangeException(nameof(kind), kind, "System cursors are not drawn.");
         size = Math.Clamp(size, 16, 256);
+        int offset = IsBrush(kind) ? ClampBrushOffset(size, brushOffset) : 0;
         double k = size / Design;
         Point anchor = Anchor(kind);
         int hotX = Math.Clamp((int)Math.Floor(anchor.X * k), 0, size - 1);
@@ -184,12 +261,14 @@ internal static class EditorCursors
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
         {
-            // Lands the anchor exactly on the hot spot pixel's centre at every size.
-            dc.PushTransform(new MatrixTransform(k, 0, 0, k, hotX + 0.5 - (anchor.X * k), hotY + 0.5 - (anchor.Y * k)));
+            // Lands the anchor exactly on the hot spot pixel's centre at every size, then moves the
+            // whole icon right by the brush offset.
+            dc.PushTransform(new MatrixTransform(k, 0, 0, k, offset + hotX + 0.5 - (anchor.X * k), hotY + 0.5 - (anchor.Y * k)));
             switch (kind)
             {
                 case EditorCursorKind.Pen:
-                    DrawBrushLocator(dc, anchor, style);
+                    // The shared pen icon, placed by its nib like the edit icon below.
+                    DrawOutline(dc, IconGeometry("Icon.Pen", PenFallback), new Point(4.1, 15.9), anchor, 1.25, style);
                     break;
                 case EditorCursorKind.Highlighter:
                     // The shared edit icon, placed by its pencil nib so the stroke starts there.
@@ -201,18 +280,18 @@ internal static class EditorCursors
                 default:
                     DrawCrosshair(dc, anchor, style);
                     if (kind == EditorCursorKind.StepNumber) DrawStepBadge(dc, stepNumber, stepColor);
-                    else DrawToolBadge(dc, kind, style);
+                    else if (kind != EditorCursorKind.Crosshair) DrawToolBadge(dc, kind, style);
                     break;
             }
 
             dc.Pop();
         }
 
-        var target = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        var target = new RenderTargetBitmap(size + offset, size + offset, 96, 96, PixelFormats.Pbgra32);
         target.Render(visual);
         var straight = new FormatConvertedBitmap(target, PixelFormats.Bgra32, null, 0);
         straight.Freeze();
-        return new EditorCursorImage(straight, hotX, hotY);
+        return new EditorCursorImage(straight, hotX, hotY + offset);
     }
 
     /// <summary>Packs one 32-bit image as a Windows .cur file.</summary>
@@ -292,10 +371,9 @@ internal static class EditorCursors
 
     private static Point Anchor(EditorCursorKind kind) => kind switch
     {
-        EditorCursorKind.Pen => new Point(15.5, 15.5),
         // Low on the left: the pencil rises to the upper right of its nib and the base line
         // runs to the right, all inside the box at 1.25 times the icon size.
-        EditorCursorKind.Highlighter => new Point(3.5, 27.5),
+        EditorCursorKind.Pen or EditorCursorKind.Highlighter => new Point(3.5, 27.5),
         EditorCursorKind.Crop => new Point(8.5, 8.5),
         _ => new Point(10.5, 10.5),
     };
@@ -345,15 +423,6 @@ internal static class EditorCursors
         dc.DrawGeometry(new SolidColorBrush(style.Outline), null, new EllipseGeometry(c, 1.8, 1.8));
         dc.DrawGeometry(null, RoundPen(style.Body, 1.3), lines);
         dc.DrawGeometry(new SolidColorBrush(style.Body), null, new EllipseGeometry(c, 0.9, 0.9));
-    }
-
-    private static void DrawBrushLocator(DrawingContext dc, Point center, EditorCursorStyle style)
-    {
-        var lines = new GeometryGroup();
-        lines.Children.Add(new LineGeometry(new Point(center.X - 4, center.Y), new Point(center.X + 4, center.Y)));
-        lines.Children.Add(new LineGeometry(new Point(center.X, center.Y - 4), new Point(center.X, center.Y + 4)));
-        dc.DrawGeometry(null, RoundPen(style.Outline, 3.2), lines);
-        dc.DrawGeometry(null, RoundPen(style.Body, 1.2), lines);
     }
 
     private static readonly Rect BadgePlate = new(15.5, 15.5, 15, 15);

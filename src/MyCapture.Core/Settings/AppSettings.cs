@@ -326,6 +326,12 @@ public sealed class AnnotationDefaults
 
     public double StrokeThickness { get; set; } = 3;
 
+    /// <summary>
+    /// Width of the highlighter, in image pixels. Pen and shapes share <see cref="StrokeThickness"/>;
+    /// the highlighter keeps its own so setting one never moves the other.
+    /// </summary>
+    public double HighlighterThickness { get; set; } = 12;
+
     public ColorRgba TextColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
 
     public double FontSize { get; set; } = 18;
