@@ -299,11 +299,15 @@ public sealed class TextTranslationServiceTests
     public async Task AWarmedModelThatIsNotUsedLeavesAfterTheQuietTime()
     {
         using var fixture = new ServiceFixture(idleRelease: TimeSpan.FromMilliseconds(50), installed: true);
+        int released = 0;
+        fixture.Service.EngineReleased += () => Interlocked.Increment(ref released);
 
         await fixture.Service.WarmUpAsync(CancellationToken.None);
         FakeEngine warmed = fixture.Engine;
 
-        Assert.True(SpinWait.SpinUntil(() => !fixture.Service.IsEngineLoaded, TimeSpan.FromSeconds(5)));
+        // The timer thread empties the slot before it disposes the model; the event follows the disposal.
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref released) == 1, TimeSpan.FromSeconds(5)));
+        Assert.False(fixture.Service.IsEngineLoaded);
         Assert.True(warmed.Disposed);
     }
 
@@ -354,9 +358,12 @@ public sealed class TextTranslationServiceTests
 
     internal sealed class FakeEngine(Func<string, string> map) : ISentenceTranslator
     {
+        private bool _disposed;
+
         internal List<IReadOnlyList<string>> Batches { get; } = [];
 
-        internal bool Disposed { get; private set; }
+        /// <summary>Set by the idle timer's thread when the model leaves after the quiet time.</summary>
+        internal bool Disposed => Volatile.Read(ref _disposed);
 
         /// <summary>The rows a call ends before it returns, in the order the model ends them; none by default.</summary>
         internal Func<IReadOnlyList<string>, IEnumerable<int>>? EndOrder { get; init; }
@@ -382,7 +389,7 @@ public sealed class TextTranslationServiceTests
             return translated;
         }
 
-        public void Dispose() => Disposed = true;
+        public void Dispose() => Volatile.Write(ref _disposed, true);
     }
 
     /// <summary>Reports synchronously so assertions see every update in order.</summary>
