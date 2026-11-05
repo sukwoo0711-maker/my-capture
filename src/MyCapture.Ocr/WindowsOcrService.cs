@@ -35,6 +35,7 @@ public sealed class WindowsOcrService : IOcrService
     private readonly Func<byte[], BitmapSource?> _decodeBytes;
     private readonly Func<string, BitmapSource?> _decodeFile;
     private readonly ILogger _log;
+    private readonly bool _useAdaptiveScale;
 
     /// <summary>Production constructor: wraps the real Windows OCR engine.</summary>
     public WindowsOcrService(ILogger<WindowsOcrService> log)
@@ -47,12 +48,14 @@ public sealed class WindowsOcrService : IOcrService
         IOcrRecognizer recognizer,
         Func<byte[], BitmapSource?> decodeBytes,
         Func<string, BitmapSource?> decodeFile,
-        ILogger log)
+        ILogger log,
+        bool useAdaptiveScale = true)
     {
         _recognizer = recognizer ?? throw new ArgumentNullException(nameof(recognizer));
         _decodeBytes = decodeBytes ?? throw new ArgumentNullException(nameof(decodeBytes));
         _decodeFile = decodeFile ?? throw new ArgumentNullException(nameof(decodeFile));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _useAdaptiveScale = useAdaptiveScale;
     }
 
     public bool IsAvailable => _recognizer.IsAvailable;
@@ -115,11 +118,11 @@ public sealed class WindowsOcrService : IOcrService
             ? [null]
             : selectedLanguages.Select(language => (string?)language).ToArray();
 
-        double scale = OcrPlanner.ResolveAdaptiveScale(
-            source.PixelWidth,
-            source.PixelHeight,
-            request.UpscaleFactor,
-            _recognizer.MaxImageDimension);
+        double scale = _useAdaptiveScale
+            ? OcrPlanner.ResolveAdaptiveScale(source.PixelWidth, source.PixelHeight,
+                request.UpscaleFactor, _recognizer.MaxImageDimension)
+            : OcrPlanner.ResolveScale(source.PixelWidth, source.PixelHeight,
+                request.UpscaleFactor, _recognizer.MaxImageDimension);
 
         try
         {
@@ -305,7 +308,7 @@ public sealed class WindowsOcrService : IOcrService
             rotation,
             dominant.LanguageTag,
             merged,
-            OcrPlanner.ScoreLines(merged),
+            passes.Count == 1 ? dominant.Score : OcrPlanner.ScoreLines(merged),
             recognizerWasAvailable,
             OcrResult.MostTilted(passes.Select(pass => pass.TextAngle)));
     }

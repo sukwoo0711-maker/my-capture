@@ -238,7 +238,8 @@ public sealed class GalleryCaptionPreviewTests
             Drain(window);
             var item = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(0));
             Border card = Descendants(item).OfType<Border>().Single(part => part.Name == "TileCard");
-            Assert.Equal(track - GalleryRowBuilder.CardInset, card.ActualWidth, 1);
+            double scale = VisualTreeHelper.GetDpi(card).DpiScaleX;
+            Assert.Equal(Math.Round((track - GalleryRowBuilder.CardInset) * scale), card.ActualWidth * scale, 6);
             if (textScale == 1) Assert.Equal(276, card.ActualWidth, 1);
             TextBlock caption = Descendants(item).OfType<TextBlock>().Single(part => part.Name == "TileMetadataText");
             Assert.True(caption.IsVisible);

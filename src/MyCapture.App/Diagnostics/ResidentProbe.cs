@@ -23,8 +23,9 @@ namespace MyCapture.App.Diagnostics;
 /// <remarks>
 /// The probe never registers global shortcuts, never writes the Run key, never checks for updates,
 /// never imports the legacy library and never writes the clipboard (the clipboard writer is replaced
-/// before any product code runs). Desktop frames are synthetic, at the virtual desktop's size, so no
-/// screen content is read or stored.
+/// before any product code runs). Selection frames are synthetic, at the virtual desktop's size.
+/// Ordinary modes retain native one-pixel/metadata prewarm. The explicit long-run preflight also
+/// substitutes those input boundaries before shell startup; it does not measure native acquisition.
 /// </remarks>
 internal sealed class ResidentProbeOptions
 {
@@ -97,6 +98,15 @@ internal sealed class ResidentProbeOptions
     /// <summary>Short settle windows for development; the release table always uses the full ones.</summary>
     internal bool Quick { get; }
 
+    internal int? LibraryFirstPageCount { get; private init; }
+
+    internal bool LibraryFirstPage => LibraryFirstPageCount is not null;
+
+    internal bool LongRun => ResidentLongRunContract.IsRequested(Scenarios);
+
+    internal bool LongRunPreflight => Scenarios.Count == 1 &&
+        string.Equals(Scenarios[0], ResidentLongRunContract.PreflightScenario, StringComparison.OrdinalIgnoreCase);
+
     internal int[] SettleSeconds => Quick ? [0, 2, 4] : [0, 10, 30];
 
     internal int[] StartSeconds => Quick ? [0, 2, 4] : [0, 10, 30, 60];
@@ -115,8 +125,15 @@ internal sealed class ResidentProbeOptions
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
         IReadOnlySet<string> variants = ReadVariants(args);
+        ResidentLongRunContract.ValidateOptions(scenarios, quick, audit, variants,
+            Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)));
+        int? libraryCount = GalleryFirstPageProbe.ValidateOptions(scenarios, quick, audit, variants,
+            Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)), args);
         return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
         {
+            LibraryFirstPageCount = libraryCount,
             Variants = variants,
             SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
             SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),

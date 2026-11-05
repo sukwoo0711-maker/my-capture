@@ -82,7 +82,7 @@ public sealed class EditorEscapeCloseTests
         switch (layer)
         {
             case "text": Assert.Null(Field<TextBox?>(editor, "_activeTextBox")); break;
-            case "color": Assert.False(editor.CustomColorPopupForTest.IsOpen); break;
+            case "color": Assert.False(editor.IsCustomColorFlyoutOpenForTest); break;
             case "crop": Assert.Null(editor.PendingCrop); break;
             case "selection": Assert.Null(Controller(editor).Selected); break;
             case "tool": Assert.Equal(EditorTool.Select, Controller(editor).Tool); break;

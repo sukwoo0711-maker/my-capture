@@ -1,28 +1,58 @@
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Serialization;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.EditorKeysTests;
 
 namespace MyCapture.App.Tests;
 
-public sealed class EditorCropInteractionFixTests
+public sealed class EditorCropInteractionFixTests(ITestOutputHelper output)
 {
     [Fact]
     public void DragInsideUntouchedFullCropCreatesANewRange() => StaTestHost.Run(() =>
     {
-        using EditorWindowHost host = EditorWindowHost.Create();
+        byte[] sourcePixels = new byte[640 * 360 * 4];
+        for (int y = 0; y < 360; y++)
+        for (int x = 0; x < 640; x++)
+        {
+            int offset = (y * 640 + x) * 4;
+            sourcePixels[offset] = (byte)(x & 255);
+            sourcePixels[offset + 1] = (byte)(y & 255);
+            sourcePixels[offset + 2] = (byte)((x * 17 + y * 31) & 255);
+            sourcePixels[offset + 3] = 255;
+        }
+        BitmapSource source = BitmapSource.Create(640, 360, 96, 96, PixelFormats.Bgra32, null, sourcePixels, 640 * 4);
+        source.Freeze();
+        using EditorWindowHost host = EditorWindowHost.Create(source);
         var editor = host.Editor;
         editor.HandleShortcut(Key.X, ModifierKeys.None);
         host.Window.UpdateLayout();
         editor.SimulatePointerDown(editor.ViewportPointOf(new PointD(100, 80)));
         editor.SimulatePointerMove(editor.ViewportPointOf(new PointD(350, 240)), leftPressed: true);
         editor.SimulatePointerUp(editor.ViewportPointOf(new PointD(350, 240)));
+        RectD actual = editor.PendingCrop!.Region;
+        RectD pixels = actual.ToPixelBounds();
+        var surface = Field<AnnotationEditorSurface>(editor, "_surface");
+        output.WriteLine($"Crop scale={surface.DipPerPixel:R}; " +
+            $"actual X={actual.X:R} Y={actual.Y:R} W={actual.Width:R} H={actual.Height:R}; " +
+            $"pixel bounds X={pixels.X:R} Y={pixels.Y:R} W={pixels.Width:R} H={pixels.Height:R}.");
         Assert.Equal(new RectD(100, 80, 250, 160), editor.PendingCrop!.Region);
+        var original = new FormatConvertedBitmap(editor.DisplayedBitmap, PixelFormats.Bgra32, null, 0);
+        byte[] expected = new byte[250 * 160 * 4];
+        original.CopyPixels(new Int32Rect(100, 80, 250, 160), expected, 250 * 4, 0);
+        editor.ApplyPendingCrop();
+        Assert.Equal((250, 160), (editor.DisplayedBitmap.PixelWidth, editor.DisplayedBitmap.PixelHeight));
+        byte[] cropped = new byte[expected.Length];
+        new FormatConvertedBitmap(editor.DisplayedBitmap, PixelFormats.Bgra32, null, 0).CopyPixels(cropped, 250 * 4, 0);
+        Assert.Equal(expected, cropped);
     });
 
     [Fact]

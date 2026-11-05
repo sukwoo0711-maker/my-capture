@@ -45,6 +45,9 @@ public sealed class RegionFrameGrabber : IDisposable
     private readonly bool _includeCursor;
     private readonly bool _cursorHighlight;
     private readonly ILogger? _log;
+    private readonly Action<byte[], int, int, int>? _syntheticFrame;
+    private bool _syntheticOpened;
+    private bool _syntheticDisposed;
     private RectD _region;
     private byte[] _buffer = [];
     private ScreenCaptureEngine.CaptureSession? _session;
@@ -58,7 +61,20 @@ public sealed class RegionFrameGrabber : IDisposable
         bool cursorHighlight = false,
         RecordingCaptureBackend? backend = null,
         ILogger? log = null)
+        : this(engine, includeCursor, cursorHighlight, backend, log, null)
     {
+    }
+
+    /// <summary>
+    /// An explicit synthetic input boundary for isolated diagnostics. The callback synchronously
+    /// borrows the reusable BGRA buffer and must fill every byte; it must not retain/dispose it.
+    /// A null callback preserves native acquisition. No desktop/cursor acquisition occurs otherwise.
+    /// The five-argument constructor remains available with its original binary signature.
+    /// </summary>
+    public RegionFrameGrabber(ScreenCaptureEngine engine, bool includeCursor, bool cursorHighlight,
+        RecordingCaptureBackend? backend, ILogger? log, Action<byte[], int, int, int>? syntheticFrame)
+    {
+        _syntheticFrame = syntheticFrame;
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _includeCursor = includeCursor;
         _cursorHighlight = cursorHighlight;
@@ -80,6 +96,9 @@ public sealed class RegionFrameGrabber : IDisposable
 
     /// <summary>Backend that produced the latest frame; <see langword="null"/> before the first frame.</summary>
     public RecordingCaptureBackend? ActiveBackend { get; private set; }
+
+    /// <summary>True for the explicit synthetic source; ActiveBackend remains null.</summary>
+    public bool UsesSyntheticFrames => _syntheticFrame is not null;
 
     /// <summary>Why a requested WGC capture fell back to GDI, if it did.</summary>
     public string? FallbackReason { get; private set; }
@@ -108,6 +127,13 @@ public sealed class RegionFrameGrabber : IDisposable
     /// </summary>
     public void Open(RectD screenRegion)
     {
+        if (_syntheticFrame is not null)
+        {
+            ObjectDisposedException.ThrowIf(_syntheticDisposed, this);
+            if (_syntheticOpened) throw new InvalidOperationException("Synthetic capture is already open.");
+            if (CaptureFrameForTest is not null)
+                throw new InvalidOperationException("Only one synthetic frame supplier may be installed.");
+        }
         if (_session is not null || _wgc is not null || _wgcOpening is not null)
         {
             throw new InvalidOperationException("The previous capture session is still open.");
@@ -125,7 +151,8 @@ public sealed class RegionFrameGrabber : IDisposable
         Height = height;
         _region = new RectD(pixels.Left, pixels.Top, width, height);
         _buffer = new byte[Stride * Height];
-        if (CaptureFrameForTest is null && RequestedBackend == RecordingCaptureBackend.WindowsGraphicsCapture)
+        if (_syntheticFrame is not null) _syntheticOpened = true;
+        if (_syntheticFrame is null && CaptureFrameForTest is null && RequestedBackend == RecordingCaptureBackend.WindowsGraphicsCapture)
         {
             RectD region = _region;
             bool includeCursor = _includeCursor;
@@ -143,6 +170,14 @@ public sealed class RegionFrameGrabber : IDisposable
     public byte[] GrabInto()
     {
         long started = Stopwatch.GetTimestamp();
+        if (_syntheticFrame is { } syntheticFrame)
+        {
+            ObjectDisposedException.ThrowIf(_syntheticDisposed, this);
+            if (!_syntheticOpened) throw new InvalidOperationException("Synthetic capture has not been opened.");
+            syntheticFrame(_buffer, Width, Height, Stride);
+            FrameCaptureTimed?.Invoke(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return _buffer;
+        }
         if (CaptureFrameForTest is { } captureFrame)
         {
             captureFrame(_buffer);
@@ -328,6 +363,13 @@ public sealed class RegionFrameGrabber : IDisposable
     /// <summary>Releases native resources on the recording thread that captured frames.</summary>
     public void Dispose()
     {
+        if (_syntheticFrame is not null)
+        {
+            _syntheticDisposed = true;
+            _syntheticOpened = false;
+            _buffer = [];
+            return;
+        }
         if (_wgcOpening is { } opening)
         {
             // Opened but never captured: release the session whenever it finishes opening.

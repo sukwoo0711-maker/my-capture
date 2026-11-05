@@ -105,6 +105,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        InitializeGridResizeFocusRestoration();
         CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
@@ -119,6 +120,7 @@ internal sealed partial class GalleryWindow : Window
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
+        InitializeDeferredDetails();
         InitializeFolderActions();
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
@@ -139,9 +141,9 @@ internal sealed partial class GalleryWindow : Window
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible);
             if (IsVisible) UpdateMetadataMinimumWidths();
-            if (IsVisible && _refreshWhenShown)
+            if (IsVisible && (_refreshWhenShown || _viewModel.NeedsInitialRefresh))
             {
-                // Shown without ShowGallery (which refreshes itself): apply what arrived while hidden.
+                // Direct Show initializes an explicitly deferred model and applies hidden changes.
                 _refreshWhenShown = false;
                 _viewModel.Refresh();
                 RefreshOcrCoverageBanner();
@@ -185,22 +187,35 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     internal void ShowGallery()
     {
+        Action<GalleryOpenTiming>? observer = OpenTimingObserverForTest;
+        long stageStarted = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateCommandShortcuts();
         _refreshWhenShown = false;
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
+        if (observer is not null)
+            observer(new GalleryOpenTiming("commands-refresh-banner",
+                System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
 
         if (!IsVisible)
         {
+            if (observer is not null) stageStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             Show();
+            if (observer is not null)
+                observer(new GalleryOpenTiming("show",
+                    System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
         }
 
+        if (observer is not null) stageStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         if (WindowState == WindowState.Minimized)
         {
             WindowState = WindowState.Normal;
         }
 
         WindowForeground.BringForward(this);
+        if (observer is not null)
+            observer(new GalleryOpenTiming("foreground",
+                System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
         ShowPendingRetentionNotice();
     }
 
@@ -383,9 +398,11 @@ internal sealed partial class GalleryWindow : Window
 
         UpdateMetadataMinimumWidths();
 
-        // The view model only rebuilds rows when the resulting column count actually changes,
-        // so this fires cheaply on every resize.
-        _ = _viewModel.SetColumnCountForWidth(RowsContentWidth(e.NewSize.Width));
+        // The row containers change only at a column breakpoint.
+        bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
+        IInputElement? focusedBeforeResize = Keyboard.FocusedElement;
+        if (_viewModel.SetColumnCountForWidth(RowsContentWidth(e.NewSize.Width)) && hadGridFocus)
+            QueueGridResizeFocusRestoration(focusedBeforeResize);
     }
 
     // ---- Tile selection / keyboard -------------------------------------------------

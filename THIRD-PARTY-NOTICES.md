@@ -15,8 +15,9 @@ under their own licenses.
 | Microsoft.Web.WebView2 1.0.4022.49 | On-demand, isolated local Mermaid rendering | Microsoft WebView2 SDK license | <https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4022.49> |
 | Mermaid 11.12.0 | Local diagram rendering in Markdown pins | MIT; bundled dependency notices below | <https://github.com/mermaid-js/mermaid/releases/tag/mermaid%4011.12.0> |
 | RapidOcrNet 4.2.0 | PP-OCR ONNX pipeline used for Accurate OCR | Apache-2.0 | <https://github.com/BobLd/RapidOcrNet> |
-| Microsoft.ML.OnnxRuntime | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
-| SkiaSharp | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
+| Microsoft.ML.OnnxRuntime / Microsoft.ML.OnnxRuntime.Managed 1.30.0 | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
+| SkiaSharp / SkiaSharp.NativeAssets.Win32 3.119.1 | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
+| Clipper2 2.0.0 | Polygon geometry used by RapidOcrNet | Boost Software License 1.0 | <https://www.nuget.org/packages/Clipper2/2.0.0> |
 | PaddleOCR / RapidAI PP-OCRv5 models | Downloaded Korean text detector and recognizer | Apache-2.0 | <https://github.com/PaddlePaddle/PaddleOCR>, <https://github.com/RapidAI/RapidOCR> |
 | OPUS-MT tc-big English–Korean model | Downloaded English-to-Korean translation model (see below) | CC BY 4.0 | <https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-ko> |
 | OPUS-MT tc-big Korean–English model | Downloaded Korean-to-English translation model (see below) | CC BY 4.0 | <https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-ko-en> |
@@ -24,6 +25,30 @@ under their own licenses.
 The portable and installer packages include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as
 `DOTNET-THIRD-PARTY-NOTICES.txt`.
+
+## OCR runtime license files
+
+The following complete upstream license and notice texts are included in both
+build and published output under `Assets/ThirdParty/`:
+
+| Component | Included files |
+| --- | --- |
+| RapidOcrNet 4.2.0 | `RapidOcrNet-4.2.0/LICENSE.txt`, `RapidOcrNet-4.2.0/NOTICE.txt` |
+| Microsoft.ML.OnnxRuntime and Microsoft.ML.OnnxRuntime.Managed 1.30.0 | `OnnxRuntime-1.30.0/LICENSE.txt`, `OnnxRuntime-1.30.0/ThirdPartyNotices.txt` |
+| SkiaSharp and SkiaSharp.NativeAssets.Win32 3.119.1 | `SkiaSharp-3.119.1/LICENSE.txt`, `SkiaSharp-3.119.1/THIRD-PARTY-NOTICES.txt` |
+| Clipper2 2.0.0, Angus Johnson | `Clipper2-2.0.0/License.txt` |
+
+RapidOcrNet's unchanged NOTICE retains the RapidOCR, PdfPig, PContour,
+PContourNet and PaddleOCR attributions. Its license and NOTICE come from the
+[4.2.0 release](https://github.com/BobLd/RapidOcrNet/releases/tag/4.2.0), commit
+`7b5c432e4262470b6d81bf1710c3bd52fc438566`; both texts are byte-identical to
+those at the NuGet package's source commit
+`708cae2fcb88720e1d891a81b5ee3e8b2bcc139e`.
+
+ONNX Runtime, SkiaSharp and Clipper2 texts come unchanged from the exact NuGet
+versions above. The ONNX managed/native license and notice pairs are identical,
+and the SkiaSharp managed/Windows native licenses are identical. The complete
+native notices are retained. Clipper2's full Boost license is included.
 
 ## Bundled Mermaid renderer
 

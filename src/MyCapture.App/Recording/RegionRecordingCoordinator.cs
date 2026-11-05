@@ -101,6 +101,10 @@ internal sealed class RegionRecordingCoordinator
     internal VideoFrameCaptureService? FrameCaptureService { get; set; }
     internal Action<Guid>? ShowFrameInLibrary { get; set; }
     internal Action<RecordingWatermarkSettings>? PersistWatermarkSettings { get; set; }
+    // Installed only by the explicit isolated resident long-run diagnostic before Toggle.
+    // The grabber snapshots the delegate for the lifetime of that recording.
+    internal Action<byte[], int, int, int>? SyntheticRecordingFrame { get; set; }
+
     internal bool IsWatermarkLocked => _controls is { CanEditWatermark: false };
 
     internal void RefreshWatermarkSettings(RecordingWatermarkSettings settings) =>
@@ -407,8 +411,11 @@ internal sealed class RegionRecordingCoordinator
                     RecordingCaptureModeNames.ToSetting(settings.CaptureMode),
                     RecordingCaptureBackendSelection.EnvironmentVariable,
                     RecordingCaptureBackendSelection.ParseOverride(backendOverride)?.ToString() ?? "unset");
+                Action<byte[], int, int, int>? synthetic = SyntheticRecordingFrame;
                 var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor, settings.CursorHighlight,
-                    backend, _loggerFactory.CreateLogger<RegionFrameGrabber>());
+                    backend, _loggerFactory.CreateLogger<RegionFrameGrabber>(), synthetic);
+                if (synthetic is not null)
+                    _log.LogInformation("Recording input source: synthetic BGRA; native capture backend: none");
                 return new RegionRecorder(
                     grabber,
                     options => new MediaFoundationVideoEncoder(

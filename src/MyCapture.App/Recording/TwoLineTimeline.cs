@@ -1672,13 +1672,14 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double width = size.Width;
         double left = OverviewMsToPx(_viewport.ViewStartMs, width);
         double right = OverviewMsToPx(_viewport.ViewEndMs, width);
-        DrawLine(dc, _connectorPen, left, 0, 1, ConnectorHeight);
-        DrawLine(dc, _connectorPen, right, 0, width - 1, ConnectorHeight);
+        DrawLine(dc, _connectorPen, left, 0, 1, size.Height);
+        DrawLine(dc, _connectorPen, right, 0, width - 1, size.Height);
 
         if (width >= 360)
         {
             DrawText(dc, UiText.Get("Text_41F81C272691"), width / 2.0, 0,
-                _textSecondary, TypeScale.Caption, semiBold: true, _surfaceBase, centered: true);
+                _textSecondary, TypeScale.Caption, semiBold: true, _surfaceBase, centered: true,
+                availableHeight: size.Height);
         }
     }
 
@@ -1969,11 +1970,17 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double fontSize,
         bool semiBold,
         Brush? background,
-        bool centered)
+        bool centered,
+        double availableHeight = double.PositiveInfinity)
     {
         FormattedText formatted = Format(text, fontSize, semiBold, foreground);
+        if (formatted.Height > availableHeight) return;
         double paddingX = background is null ? 0 : 5;
         double paddingY = background is null ? 0 : 1;
+        // Layout rounding can give an 18 DIP connector only 17.6 DIP at 125% DPI.
+        // Keep the caption's font size and fit its padding to the actual render height.
+        double backgroundHeight = Math.Min(formatted.Height + (paddingY * 2), availableHeight);
+        paddingY = (backgroundHeight - formatted.Height) / 2;
         double left = centered
             ? Math.Max(2, x - ((formatted.Width + (paddingX * 2)) / 2.0))
             : x;
@@ -1982,7 +1989,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             dc.DrawRectangle(
                 background,
                 null,
-                new Rect(left, y, formatted.Width + (paddingX * 2), formatted.Height + (paddingY * 2)));
+                new Rect(left, y, formatted.Width + (paddingX * 2), backgroundHeight));
         }
 
         dc.DrawText(formatted, new Point(left + paddingX, y + paddingY));

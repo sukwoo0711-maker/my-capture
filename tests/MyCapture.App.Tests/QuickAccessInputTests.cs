@@ -61,17 +61,34 @@ public sealed class QuickAccessInputTests
         try
         {
             Show(card);
-            Point start = new(10, 10);
-            card.BeginPreviewGesture(start);
-            Point end = new(start.X + (horizontal ? SystemParameters.MinimumHorizontalDragDistance : 0),
-                start.Y + (horizontal ? 0 : SystemParameters.MinimumVerticalDragDistance));
-            Assert.True(card.TryBeginPreviewDrag(end));
-            Assert.False(card.TryBeginPreviewDrag(end));
-            // Returning to the starting point after a drag must not turn mouse-up into a click.
-            card.EndPreviewGesture(start);
-            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.Focusable));
-            Assert.False(EditorKeysTests.Press(card, Key.P, ime: false));
-            Assert.Equal(0, pinned);
+            Image preview = Preview(card);
+            DpiScale dpi = VisualTreeHelper.GetDpi(preview);
+            double distance = Math.Ceiling(horizontal
+                ? SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX
+                : SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY);
+            for (int placement = 0; placement < 2; placement++)
+            {
+                if (placement != 0)
+                {
+                    Point before = preview.PointToScreen(default);
+                    card.Left += 1 / dpi.DpiScaleX;
+                    card.UpdateLayout();
+                    Assert.Equal(1, preview.PointToScreen(default).X - before.X, 6);
+                }
+                Point screenStart = preview.PointToScreen(new Point(10, 10));
+                screenStart = new(Math.Round(screenStart.X), Math.Round(screenStart.Y));
+                Point start = preview.PointFromScreen(screenStart);
+                Point end = preview.PointFromScreen(new(screenStart.X + (horizontal ? distance : 0),
+                    screenStart.Y + (horizontal ? 0 : distance)));
+                card.BeginPreviewGesture(start);
+                Assert.True(card.TryBeginPreviewDrag(end));
+                Assert.False(card.TryBeginPreviewDrag(end));
+                // Returning to the starting point after a drag must not turn mouse-up into a click.
+                card.EndPreviewGesture(start);
+                Assert.All(card.ActionButtonsForTest, button => Assert.False(button.Focusable));
+                Assert.False(EditorKeysTests.Press(card, Key.P, ime: false));
+                Assert.Equal(0, pinned);
+            }
         }
         finally { card.Close(); }
     });
@@ -88,6 +105,75 @@ public sealed class QuickAccessInputTests
             card.BeginPreviewGesture(default);
             Assert.False(card.TryBeginPreviewDrag(end));
             card.EndPreviewGesture(end);
+            Assert.False(card.IsKeyboardFocusWithin);
+        }
+        finally { card.Close(); }
+    });
+
+    [Theory]
+    [InlineData(true, 1, 10)]
+    [InlineData(true, -1, 10)]
+    [InlineData(false, 1, 10)]
+    [InlineData(false, -1, 10)]
+    [InlineData(true, 1, -10000)]
+    [InlineData(true, -1, -10000)]
+    [InlineData(false, 1, -10000)]
+    [InlineData(false, -1, -10000)]
+    public void PreviewDragBoundaryIsInclusiveWithoutAdmittingTheAdjacentInsidePixel(
+        bool horizontal, int direction, double origin) => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = Card();
+        try
+        {
+            Show(card);
+            Image preview = Preview(card);
+            DpiScale dpi = VisualTreeHelper.GetDpi(preview);
+            Point start = new(origin, origin);
+            double distance = Math.Ceiling(horizontal
+                ? SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX
+                : SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY);
+            double boundary = origin + direction * distance;
+            double inside = boundary - direction;
+            card.BeginPreviewGesture(preview.PointFromScreen(start));
+            Assert.False(card.TryBeginPreviewDrag(preview.PointFromScreen(horizontal ? new Point(inside, origin) : new Point(origin, inside))));
+            Assert.True(card.TryBeginPreviewDrag(preview.PointFromScreen(horizontal ? new Point(boundary, origin) : new Point(origin, boundary))));
+            Assert.False(card.TryBeginPreviewDrag(preview.PointFromScreen(horizontal ? new Point(boundary, origin) : new Point(origin, boundary))));
+            card.EndPreviewGesture(preview.PointFromScreen(start));
+            Assert.False(card.IsKeyboardFocusWithin);
+        }
+        finally { card.Close(); }
+    });
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(true, -1)]
+    [InlineData(false, 1)]
+    [InlineData(false, -1)]
+    public void PreviewDragHonorsNativePixelBoundaryAcrossScreenPositions(bool horizontal, int direction) => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = Card();
+        try
+        {
+            Show(card);
+            Image preview = Preview(card);
+            DpiScale dpi = VisualTreeHelper.GetDpi(preview);
+            double pixels = horizontal
+                ? SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX
+                : SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY;
+            int distance = checked((int)Math.Ceiling(pixels));
+            Assert.True(distance > 0);
+            // Exercise WPF's actual screen/client transforms, including the preview's offset.
+            for (int pixel = -10000; pixel <= 10000; pixel++)
+            {
+                Point start = new(pixel, pixel);
+                Point inside = horizontal ? new(pixel + direction * (distance - 1), pixel) : new(pixel, pixel + direction * (distance - 1));
+                Point boundary = horizontal ? new(pixel + direction * distance, pixel) : new(pixel, pixel + direction * distance);
+                card.BeginPreviewGesture(preview.PointFromScreen(start));
+                Assert.False(card.TryBeginPreviewDrag(preview.PointFromScreen(inside)), $"Inside at pixel {pixel}, distance {distance}, dpi {dpi}.");
+                Assert.True(card.TryBeginPreviewDrag(preview.PointFromScreen(boundary)), $"Boundary at pixel {pixel}, distance {distance}, dpi {dpi}.");
+                Assert.False(card.TryBeginPreviewDrag(preview.PointFromScreen(boundary)));
+                card.EndPreviewGesture(preview.PointFromScreen(start));
+            }
             Assert.False(card.IsKeyboardFocusWithin);
         }
         finally { card.Close(); }

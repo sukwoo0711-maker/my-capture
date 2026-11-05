@@ -61,6 +61,10 @@ public sealed class PinCoreFlowTests
             Assert.Equal(PasteResult.Pinned, manager.PasteFromClipboardAsync(
                 () => Task.FromResult(ClipboardImageReader.PinReadAttempt.Success(content))).GetAwaiter().GetResult());
             PinWindow pin = Assert.IsType<PinWindow>(shown);
+            // Text previews are rasterized for the pin's monitor before copying.
+            // Images and table pictures retain the bitmap supplied by the clipboard.
+            BitmapSource renderedImage = pin.PinnedContent.Image;
+            if (kind != "text") Assert.Same(image, renderedImage);
             switch (gesture)
             {
                 case "keyboard":
@@ -81,11 +85,11 @@ public sealed class PinCoreFlowTests
             }
             Assert.Equal(1, copies);
             Assert.True(forwarded.HasValue);
-            Assert.Same(image, forwarded.Value.Image);
+            Assert.Same(renderedImage, forwarded.Value.Image);
             Assert.Equal(content.SourcePageUrl, forwarded.Value.Url);
             Assert.Equal(text, forwarded.Value.Text);
             Assert.True(request.HasValue);
-            Assert.Same(image, request.Value.Image);
+            Assert.Same(renderedImage, request.Value.Image);
             Assert.Equal(text, request.Value.OriginalText);
             Assert.Equal(content.SourcePageUrl, request.Value.SourcePageUrl);
         }

@@ -277,7 +277,37 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         scale = Math.Max(double.Epsilon, scale);
         double framePixelX = (dip.X - origin.X) / scale;
         double framePixelY = (dip.Y - origin.Y) / scale;
-        return new PointD(framePixelX - _cropRegion.Left, framePixelY - _cropRegion.Top);
+        return new PointD(
+            RestorePixelBoundary(framePixelX - _cropRegion.Left, dip.X, origin.X, scale, _cropRegion.Left),
+            RestorePixelBoundary(framePixelY - _cropRegion.Top, dip.Y, origin.Y, scale, _cropRegion.Top));
+    }
+
+    private static double RestorePixelBoundary(double image, double dip, double origin, double scale, double cropOffset)
+    {
+        double integer = Math.Round(image);
+        if (!double.IsFinite(integer) || image == integer) return image;
+        double framePixel = integer + cropOffset;
+        double scaled = framePixel * scale;
+        double projected = origin + scaled;
+        if (!double.IsFinite(projected)) return image;
+
+        // Qualify the integer in DIP space using the same forward map as ToSurfacePoint.
+        // One ULP for each rounded input/intermediate covers the local affine round trip:
+        // the DIP input, frame origin, scaled displacement, and pixel+crop addition
+        // (the last error is converted to DIP). This is a representation-error budget,
+        // not a fixed image-pixel snap radius. Positions outside this local roundoff
+        // envelope retain their continuous coordinates.
+        double budget = Ulp(dip) + Ulp(origin) + Ulp(scaled) + Ulp(framePixel) * scale;
+        // If adjacent pixel boundaries cannot be distinguished at this magnitude/zoom,
+        // keep the continuous coordinate instead of choosing an ambiguous integer.
+        return double.IsFinite(budget) && budget < scale / 2 && Math.Abs(projected - dip) <= budget
+            ? integer : image;
+
+        static double Ulp(double value)
+        {
+            double magnitude = Math.Abs(value);
+            return Math.BitIncrement(magnitude) - magnitude;
+        }
     }
 
     /// <summary>Maps a selected-image pixel point to a point on the surface (DIP).</summary>

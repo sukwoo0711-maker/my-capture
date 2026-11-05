@@ -10,11 +10,12 @@ using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.EditorKeysTests;
 
 namespace MyCapture.App.Tests;
 
-public sealed class EditorCompactInspectorControlTests
+public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("ko-KR")]
@@ -71,8 +72,15 @@ public sealed class EditorCompactInspectorControlTests
     public void TrashIconIsLastAfterADividerAndDeletesTheSelectionWithOneUndo(
         string language, string name, string tooltip) => StaTestHost.Run(() =>
     {
+        using var dpiContext = TestDpiContext.At96Dpi();
         using var culture = UiText.UseLanguage(language);
-        using var host = new InspectorContractHost(width: 2000);
+        using var host = new InspectorContractHost(width: 2000, beforeShow: window =>
+        {
+            TestDpiContext.Initialize96DpiWindow(window);
+            _ = new WindowTrackSizeScope(window, new Size(4096, 2160));
+        });
+        TestDpiContext.Assert96Dpi(host.Window);
+        Assert.Equal(2000, host.Window.ActualWidth);
         AnnotationEditorController controller = Controller(host.Editor);
         SelectText(host);
         controller.Document.Add(new RectangleAnnotation { Rect = new RectD(250, 80, 100, 70) });
@@ -96,8 +104,40 @@ public sealed class EditorCompactInspectorControlTests
         Rect previous = groups[^2].TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(groups[^2].RenderSize));
         Rect current = delete.TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(delete.RenderSize));
         Rect divider = host.PropertyGroups.DividerBounds[^1];
+        output.WriteLine($"Inspector geometry {language}: window requested={host.Window.Width:R}, actual={host.Window.ActualWidth:R}; " +
+            $"panel={host.PropertyGroups.ActualWidth:R}x{host.PropertyGroups.ActualHeight:R}; " +
+            $"previous X={previous.X:R} Y={previous.Y:R} W={previous.Width:R} H={previous.Height:R}; " +
+            $"delete X={current.X:R} Y={current.Y:R} W={current.Width:R} H={current.Height:R}; " +
+            $"last divider X={divider.X:R} Y={divider.Y:R} W={divider.Width:R} H={divider.Height:R}; " +
+            $"divider count={host.PropertyGroups.DividerBounds.Count}.");
+        Assert.Equal(LayoutInformation.GetLayoutSlot(groups[^2]).Top, LayoutInformation.GetLayoutSlot(delete).Top);
         Assert.InRange(divider.Left, previous.Right, current.Left);
         Assert.Equal(20, divider.Height);
+        // Constrain the panel itself: narrowing the window can also introduce its automatic
+        // vertical scrollbar, invalidating a Window.Width - panel.ActualWidth estimate.
+        // DesiredSize includes group margins. A width between the prefix and whole-row sums
+        // fits every preceding group but leaves less than one delete slot on the first row.
+        Size[] unwrappedSizes = groups.Select(group => group.DesiredSize).ToArray();
+        double prefixWidth = unwrappedSizes.Take(groups.Length - 1).Sum(size => size.Width);
+        double wrappedWidth = Math.Ceiling(prefixWidth + unwrappedSizes[^1].Width / 2);
+        Assert.True(wrappedWidth >= prefixWidth);
+        Assert.True(wrappedWidth < prefixWidth + unwrappedSizes[^1].Width);
+        host.PropertyGroups.Width = wrappedWidth;
+        host.Settle();
+        TestDpiContext.Assert96Dpi(host.Window);
+        Assert.Equal(2000, host.Window.ActualWidth);
+        Assert.Equal(wrappedWidth, host.PropertyGroups.ActualWidth);
+        Assert.Equal(unwrappedSizes, groups.Select(group => group.DesiredSize).ToArray());
+        Rect[] wrappedSlots = groups.Select(LayoutInformation.GetLayoutSlot).ToArray();
+        output.WriteLine($"Wrapped inspector {language}: prefix={prefixWidth:R}; panel={host.PropertyGroups.ActualWidth:R}; " +
+            $"slots={string.Join("; ", wrappedSlots.Select(slot => $"X={slot.X:R},Y={slot.Y:R},W={slot.Width:R},H={slot.Height:R}"))}.");
+        Assert.All(wrappedSlots[..^1], slot => Assert.Equal(wrappedSlots[0].Top, slot.Top));
+        Rect wrapped = delete.TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(delete.RenderSize));
+        Assert.Equal(0, LayoutInformation.GetLayoutSlot(delete).Left);
+        Assert.True(LayoutInformation.GetLayoutSlot(delete).Top > LayoutInformation.GetLayoutSlot(groups[^2]).Top);
+        Assert.DoesNotContain(host.PropertyGroups.DividerBounds,
+            rule => rule.Top < wrapped.Bottom && rule.Bottom > wrapped.Top);
+        Assert.Equal(groups.Length - 2, host.PropertyGroups.DividerBounds.Count);
         string before = controller.Document.ToJson();
         Assert.Equal(2, controller.SelectedItems.Count);
 

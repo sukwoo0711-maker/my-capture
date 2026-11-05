@@ -28,7 +28,7 @@ namespace MyCapture.Platform.Recording;
 /// top-down in Media Foundation, so NV12 rows are copied in order.
 /// </para>
 /// </remarks>
-public sealed class MediaFoundationVideoEncoder : IVideoEncoder
+public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 {
     private const uint MF_VERSION = 0x0002_0070; // MF_SDK_VERSION << 16 | MF_API_VERSION
     private const uint MFSTARTUP_LITE = 1;
@@ -71,9 +71,19 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     internal static bool ForceSoftwareForTest { get; set; }
 
     public MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log)
+        : this(options, log, diagnosticQualityVsSpeed: null)
+    {
+    }
+
+    internal MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log, uint? diagnosticQualityVsSpeed)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        if (diagnosticQualityVsSpeed is > 100)
+            throw new ArgumentOutOfRangeException(nameof(diagnosticQualityVsSpeed));
+        if (diagnosticQualityVsSpeed.HasValue && (options.ConstantQuality.HasValue || options.QualityVsSpeed.HasValue))
+            throw new ArgumentException("The diagnostic effort must be the only encoder quality override.", nameof(options));
+        _diagnosticQualityVsSpeed = diagnosticQualityVsSpeed;
         if (options.InputFormat == VideoEncoderInputFormat.Nv12
             && ((options.Width & 1) != 0 || (options.Height & 1) != 0))
         {
@@ -99,6 +109,189 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     public int Width => _options.Width;
 
     public int Height => _options.Height;
+
+    /// <summary>
+    /// Opt-in diagnostics, called only by tests on the encoder's owning thread. Queries never
+    /// configure or drive an MFT. Unsupported queries retain their HRESULT instead of replacing
+    /// a WriteSample/Finalize failure. The normal encoding path does not call this method.
+    /// </summary>
+    internal IReadOnlyDictionary<string, object?> CaptureDiagnostics()
+    {
+        var result = new Dictionary<string, object?> { ["finalized"] = _finalized, ["disposed"] = _disposed };
+        if (_writer is null) { result["writerAvailable"] = false; return result; }
+        result["writerAvailable"] = true;
+        try
+        {
+            int size = Marshal.SizeOf<DiagnosticSinkStatistics>();
+            if (size != 112) throw new InvalidOperationException("Unexpected MF_SINK_WRITER_STATISTICS layout.");
+            IntPtr memory = Marshal.AllocCoTaskMem(size);
+            try
+            {
+                Marshal.StructureToPtr(new DiagnosticSinkStatistics { Cb = (uint)size }, memory, false);
+                int hr = _writer.GetStatistics(_streamIndex, memory);
+                result["statisticsHresult"] = DiagnosticHr(hr);
+                if (hr >= 0)
+                {
+                    DiagnosticSinkStatistics s = Marshal.PtrToStructure<DiagnosticSinkStatistics>(memory);
+                    result["statistics"] = new
+                    {
+                        s.Cb, s.LastTimestampReceived, s.LastTimestampEncoded, s.LastTimestampProcessed,
+                        s.LastStreamTickReceived, s.LastSinkSampleRequest, s.NumSamplesReceived,
+                        s.NumSamplesEncoded, s.NumSamplesProcessed, s.NumStreamTicksReceived,
+                        s.ByteCountQueued, s.ByteCountProcessed, s.NumOutstandingSinkSampleRequests,
+                        s.AverageSampleRateReceived, s.AverageSampleRateEncoded, s.AverageSampleRateProcessed,
+                    };
+                }
+            }
+            finally { Marshal.FreeCoTaskMem(memory); }
+        }
+        catch (Exception ex) { result["statisticsQueryFailure"] = DiagnosticHr(ex.HResult); }
+        try
+        {
+            // This is another interface on the owned writer RCW, not a newly returned object.
+            // Do not ReleaseComObject on this alias: the encoder still owns the writer.
+            var extended = (IDiagnosticSinkWriterEx)_writer;
+            var transforms = new List<object>();
+            result["transforms"] = transforms;
+            for (int index = 0; index < 8; index++)
+            {
+                IDiagnosticTransform? transform = null;
+                try
+                {
+                    int hr = extended.GetTransformForStream(_streamIndex, index, out Guid category, out transform);
+                    if (hr < 0 || transform is null)
+                    {
+                        result["transformEnumerationEnd"] = new { index, hresult = DiagnosticHr(hr) };
+                        return result;
+                    }
+                    var entry = new Dictionary<string, object?> { ["index"] = index, ["category"] = category };
+                    transforms.Add(entry);
+                    try { ReadDiagnosticTransform(transform, entry); }
+                    catch (Exception ex) { entry["queryFailure"] = DiagnosticHr(ex.HResult); }
+                }
+                finally { if (transform is not null) Marshal.ReleaseComObject(transform); }
+            }
+            result["transformEnumerationTruncated"] = true;
+        }
+        catch (Exception ex) { result["transformQueryFailure"] = DiagnosticHr(ex.HResult); }
+        return result;
+    }
+
+    private static string DiagnosticHr(int hr) => $"0x{hr:X8}";
+
+    private static void ReadDiagnosticTransform(IDiagnosticTransform transform, Dictionary<string, object?> entry)
+    {
+        IMFAttributes? attributes = null;
+        try
+        {
+            int hr = transform.GetAttributes(out attributes);
+            entry["attributesHresult"] = DiagnosticHr(hr);
+            if (hr >= 0 && attributes is not null)
+            {
+                Guid clsidKey = new("6821c42b-65a4-4e82-99bc-9a88205ecd0c");
+                hr = attributes.GetGUID(ref clsidKey, out Guid clsid);
+                entry["classIdHresult"] = DiagnosticHr(hr);
+                if (hr >= 0) entry["classId"] = clsid;
+                entry["friendlyName"] = DiagnosticString(attributes, new Guid("314ffbae-5b41-4c95-9c19-4e7d586face3"), out int nameHr);
+                entry["friendlyNameHresult"] = DiagnosticHr(nameHr);
+                // Device URLs are unnecessary local identifiers; record only presence and hash.
+                string? url = DiagnosticString(attributes, new Guid("2fb866ac-b078-4942-ab6c-003d05cda674"), out int urlHr);
+                entry["hardwareUrlHresult"] = DiagnosticHr(urlHr);
+                entry["hardwareUrlPresent"] = url is not null;
+                if (url is not null) entry["hardwareUrlSha256"] = Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
+            }
+        }
+        finally { if (attributes is not null) Marshal.ReleaseComObject(attributes); }
+        try
+        {
+            int hr = ((IDiagnosticPersist)transform).GetClassID(out Guid clsid);
+            entry["persistClassIdHresult"] = DiagnosticHr(hr);
+            if (hr >= 0) entry["persistClassId"] = clsid;
+        }
+        catch (Exception ex) { entry["persistClassIdHresult"] = DiagnosticHr(ex.HResult); }
+
+        int countHr = transform.GetStreamCount(out uint inputs, out uint outputs);
+        entry["streamCountHresult"] = DiagnosticHr(countHr);
+        if (countHr < 0) return;
+        entry["inputCount"] = inputs; entry["outputCount"] = outputs;
+        if (inputs > 16 || outputs > 16) { entry["streamEnumerationTruncated"] = true; return; }
+        uint[] inputIds = new uint[inputs], outputIds = new uint[outputs];
+        int idsHr = transform.GetStreamIDs(inputs, inputIds, outputs, outputIds);
+        entry["streamIdsHresult"] = DiagnosticHr(idsHr);
+        if (idsHr == unchecked((int)0x80004001)) // E_NOTIMPL specifies consecutive stream IDs.
+        {
+            for (uint i = 0; i < inputs; i++) inputIds[i] = i;
+            for (uint i = 0; i < outputs; i++) outputIds[i] = i;
+        }
+        else if (idsHr < 0) return;
+        var types = new List<object>(); entry["mediaTypes"] = types;
+        foreach ((bool input, uint[] ids) in new[] { (true, inputIds), (false, outputIds) })
+            foreach (uint id in ids)
+            {
+                IMFMediaType? type = null;
+                try
+                {
+                    int hr = input ? transform.GetInputCurrentType(id, out type) : transform.GetOutputCurrentType(id, out type);
+                    types.Add(new { direction = input ? "input" : "output", streamId = id,
+                        hresult = DiagnosticHr(hr), attributes = hr >= 0 && type is not null ? ReadDiagnosticMediaType(type) : null });
+                }
+                finally { if (type is not null) Marshal.ReleaseComObject(type); }
+            }
+    }
+
+    private static string? DiagnosticString(IMFAttributes attributes, Guid key, out int hr)
+    {
+        IntPtr text = IntPtr.Zero;
+        try
+        {
+            hr = attributes.GetAllocatedString(ref key, out text, out uint length);
+            return hr >= 0 && text != IntPtr.Zero && length <= 4096 ? Marshal.PtrToStringUni(text, (int)length) : null;
+        }
+        finally { if (text != IntPtr.Zero) Marshal.FreeCoTaskMem(text); }
+    }
+
+    private static Dictionary<string, object?> ReadDiagnosticMediaType(IMFMediaType type)
+    {
+        var values = new Dictionary<string, object?>();
+        foreach ((string name, Guid key) in new[] { ("majorType", MF_MT_MAJOR_TYPE), ("subtype", MF_MT_SUBTYPE) })
+        {
+            Guid k = key; int hr = type.GetGUID(ref k, out Guid value);
+            values[name] = new { hresult = DiagnosticHr(hr), value = hr >= 0 ? (Guid?)value : null };
+        }
+        foreach ((string name, Guid key) in new[] { ("frameSize", MF_MT_FRAME_SIZE), ("frameRate", MF_MT_FRAME_RATE),
+                     ("pixelAspectRatio", MF_MT_PIXEL_ASPECT_RATIO) })
+        {
+            Guid k = key; int hr = type.GetUINT64(ref k, out ulong value);
+            values[name] = new { hresult = DiagnosticHr(hr), high = hr >= 0 ? (uint?)(value >> 32) : null,
+                low = hr >= 0 ? (uint?)value : null };
+        }
+        foreach ((string name, Guid key) in new[] { ("bitrate", MF_MT_AVG_BITRATE), ("profile", MF_MT_MPEG2_PROFILE),
+                     ("nominalRange", MF_MT_VIDEO_NOMINAL_RANGE), ("interlace", MF_MT_INTERLACE_MODE),
+                     ("yuvMatrix", new Guid("3e23d450-2c75-4d25-a00e-b91670d12327")),
+                     ("primaries", new Guid("dbfbe4d7-0740-4ee0-8192-850ab0e21935")),
+                     ("transferFunction", new Guid("5fb0fce9-be5c-4935-a811-ec838f8eed93")),
+                     ("stride", new Guid("644b4e48-1e02-4516-b0eb-c01ca9d49ac6")) })
+        {
+            Guid k = key; int hr = type.GetUINT32(ref k, out uint value);
+            values[name] = new { hresult = DiagnosticHr(hr), value = hr >= 0 ? (uint?)value : null };
+        }
+        return values;
+    }
+
+    // Layout and COM slots verified against Windows SDK 10.0.26100.0 mfreadwrite.h/mftransform.h.
+#pragma warning disable CS0649 // The native GetStatistics call fills these sequential fields.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DiagnosticSinkStatistics
+    {
+        public uint Cb;
+        public long LastTimestampReceived, LastTimestampEncoded, LastTimestampProcessed, LastStreamTickReceived, LastSinkSampleRequest;
+        public ulong NumSamplesReceived, NumSamplesEncoded, NumSamplesProcessed, NumStreamTicksReceived;
+        public uint ByteCountQueued;
+        public ulong ByteCountProcessed;
+        public uint NumOutstandingSinkSampleRequests, AverageSampleRateReceived, AverageSampleRateEncoded, AverageSampleRateProcessed;
+    }
+#pragma warning restore CS0649
 
     private void Initialize()
     {
@@ -189,6 +382,11 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     /// </summary>
     private void SetInputMediaType(IMFMediaType inType)
     {
+        if (_diagnosticQualityVsSpeed is { } effortOverride)
+        {
+            SetDiagnosticQualityVsSpeed(inType, effortOverride);
+            return;
+        }
         if (_options.ConstantQuality is not { } quality)
         {
             Check(_writer!.SetInputMediaType(_streamIndex, inType, IntPtr.Zero), nameof(IMFSinkWriter.SetInputMediaType));
@@ -599,4 +797,50 @@ internal interface IMFSinkWriter
     [PreserveSig] int FinalizeWriting();
     [PreserveSig] int GetServiceForStream(int streamIndex, ref Guid service, ref Guid riid, out IntPtr service2);
     [PreserveSig] int GetStatistics(int streamIndex, IntPtr stats);
+}
+
+// Diagnostic interfaces retain the native vtable order. Only getters are invoked.
+[ComImport, Guid("588d72ab-5bc1-496a-8714-b70617141b25"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IDiagnosticSinkWriterEx
+{
+    [PreserveSig] int AddStream(IMFMediaType type, out int index);
+    [PreserveSig] int SetInputMediaType(int index, IMFMediaType type, IntPtr parameters);
+    [PreserveSig] int BeginWriting();
+    [PreserveSig] int WriteSample(int index, IMFSample sample);
+    [PreserveSig] int SendStreamTick(int index, long timestamp);
+    [PreserveSig] int PlaceMarker(int index, IntPtr context);
+    [PreserveSig] int NotifyEndOfSegment(int index);
+    [PreserveSig] int Flush(int index);
+    [PreserveSig] int FinalizeWriting();
+    [PreserveSig] int GetServiceForStream(int index, ref Guid service, ref Guid iid, out IntPtr value);
+    [PreserveSig] int GetStatistics(int index, IntPtr statistics);
+    [PreserveSig] int GetTransformForStream(int streamIndex, int transformIndex, out Guid category, out IDiagnosticTransform? transform);
+}
+
+[ComImport, Guid("bf94c121-5b05-4e6f-8000-ba598961414d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IDiagnosticTransform
+{
+    [PreserveSig] int GetStreamLimits(out uint minInput, out uint maxInput, out uint minOutput, out uint maxOutput);
+    [PreserveSig] int GetStreamCount(out uint inputs, out uint outputs);
+    [PreserveSig] int GetStreamIDs(uint inputCount, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] uint[] inputs,
+        uint outputCount, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] uint[] outputs);
+    [PreserveSig] int GetInputStreamInfo(uint id, IntPtr info);
+    [PreserveSig] int GetOutputStreamInfo(uint id, IntPtr info);
+    [PreserveSig] int GetAttributes(out IMFAttributes? attributes);
+    [PreserveSig] int GetInputStreamAttributes(uint id, out IMFAttributes attributes);
+    [PreserveSig] int GetOutputStreamAttributes(uint id, out IMFAttributes attributes);
+    [PreserveSig] int DeleteInputStream(uint id);
+    [PreserveSig] int AddInputStreams(uint count, IntPtr ids);
+    [PreserveSig] int GetInputAvailableType(uint id, uint index, out IMFMediaType type);
+    [PreserveSig] int GetOutputAvailableType(uint id, uint index, out IMFMediaType type);
+    [PreserveSig] int SetInputType(uint id, IMFMediaType type, uint flags);
+    [PreserveSig] int SetOutputType(uint id, IMFMediaType type, uint flags);
+    [PreserveSig] int GetInputCurrentType(uint id, out IMFMediaType? type);
+    [PreserveSig] int GetOutputCurrentType(uint id, out IMFMediaType? type);
+}
+
+[ComImport, Guid("0000010c-0000-0000-c000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IDiagnosticPersist
+{
+    [PreserveSig] int GetClassID(out Guid clsid);
 }

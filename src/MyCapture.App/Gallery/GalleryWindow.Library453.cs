@@ -14,6 +14,16 @@ internal sealed partial class GalleryWindow
 {
     private (double Font, string Family, string Culture, double Dpi, TextFormattingMode Mode)? _metadataTextMetrics;
 
+    // Optional internal diagnostics. The null path reads no clock and allocates no timing data.
+    internal Action<GalleryOpenTiming>? OpenTimingObserverForTest { get; set; }
+
+    internal readonly record struct GalleryOpenTiming(
+        string Stage, double TotalMilliseconds, int CallNumber = 0, bool? CacheHit = null,
+        int MeasureCount = 0, double MeasureTotalMilliseconds = 0, double MeasureMaximumMilliseconds = 0,
+        bool Completed = true, double FontSize = default, string? FontFamily = null,
+        string? Culture = null, double Dpi = 0, TextFormattingMode? FormattingMode = null);
+
+
     /// <summary>How many times the card text widths were checked; scrolling and layout passes must not add to it.</summary>
     internal int MetadataWidthChecks { get; private set; }
 
@@ -24,29 +34,73 @@ internal sealed partial class GalleryWindow
     /// </summary>
     private void UpdateMetadataMinimumWidths()
     {
+        Action<GalleryOpenTiming>? observer = OpenTimingObserverForTest;
+        long started = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         MetadataWidthChecks++;
-        double font = TryFindResource("FontSize.Caption") is double size ? size : TypeScale.Caption;
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));
-        if (_metadataTextMetrics == metrics) return;
-        _metadataTextMetrics = metrics;
-        Resources["Gallery.SearchFolderBadgeWidth"] = GalleryRowBuilder.SearchFolderBadgeWidthFor(font);
-        var probe = new TextBlock { FontSize = font, FontFamily = FontFamily };
-        TextOptions.SetTextFormattingMode(probe, metrics.Item5);
-        VisualTreeHelper.SetRootDpi(probe, dpi);
-        double timeWidth = 0;
-        // Every hour covers single/double digits and both day periods in the UI culture.
-        for (int hour = 0; hour < 24; hour++)
+        int callNumber = MetadataWidthChecks;
+        bool cacheHit = false, completed = false;
+        int measureCount = 0;
+        long measureTicks = 0, maximumMeasureTicks = 0;
+        (double Font, string Family, string Culture, double Dpi, TextFormattingMode Mode)? observedMetrics = null;
+        try
         {
-            probe.Text = new DateTime(2000, 1, 1, hour, 58, 0).ToString("t", UiText.Culture);
-            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
+            double font = TryFindResource("FontSize.Caption") is double size ? size : TypeScale.Caption;
+            DpiScale dpi = VisualTreeHelper.GetDpi(this);
+            var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));
+            if (observer is not null) observedMetrics = metrics;
+            if (_metadataTextMetrics == metrics)
+            {
+                cacheHit = true;
+                completed = true;
+                return;
+            }
+            _metadataTextMetrics = metrics;
+            Resources["Gallery.SearchFolderBadgeWidth"] = GalleryRowBuilder.SearchFolderBadgeWidthFor(font);
+            var probe = new TextBlock { FontSize = font, FontFamily = FontFamily };
+            TextOptions.SetTextFormattingMode(probe, metrics.Item5);
+            VisualTreeHelper.SetRootDpi(probe, dpi);
+            double timeWidth = 0;
+            // Keep every hour and the original culture/font/DPI/layout contract.
+            for (int hour = 0; hour < 24; hour++)
+            {
+                probe.Text = new DateTime(2000, 1, 1, hour, 58, 0).ToString("t", UiText.Culture);
+                if (observer is null)
+                {
+                    probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                }
+                else
+                {
+                    long measureStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                    measureCount++;
+                    try { probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); }
+                    finally
+                    {
+                        long ticks = System.Diagnostics.Stopwatch.GetTimestamp() - measureStarted;
+                        measureTicks += ticks;
+                        maximumMeasureTicks = Math.Max(maximumMeasureTicks, ticks);
+                    }
+                }
+                timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
+            }
+            _viewModel.SetMetadataMinimumTrackWidths(
+                GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font),
+                GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font),
+                GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font, withFolderReason: true),
+                GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font, withFolderReason: true));
+            completed = true;
         }
-        _viewModel.SetMetadataMinimumTrackWidths(
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font),
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font),
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font, withFolderReason: true),
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font, withFolderReason: true));
+        finally
+        {
+            if (observer is not null)
+            {
+                double tickMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                observer(new GalleryOpenTiming("metadata-minimum-widths",
+                    (System.Diagnostics.Stopwatch.GetTimestamp() - started) * tickMs, callNumber, cacheHit,
+                    measureCount, measureTicks * tickMs, maximumMeasureTicks * tickMs, completed,
+                    observedMetrics?.Font ?? 0, observedMetrics?.Family, observedMetrics?.Culture,
+                    observedMetrics?.Dpi ?? 0, observedMetrics?.Mode));
+            }
+        }
     }
 
     private GalleryItemViewModel? _renamingTile;
