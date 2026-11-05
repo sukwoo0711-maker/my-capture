@@ -73,9 +73,7 @@ internal static class ClipboardMarkdownRenderer
                     };
                     foreach (string language in languages)
                     {
-                        if (language.Equals("markdown", StringComparison.OrdinalIgnoreCase)
-                            || language.Equals("md", StringComparison.OrdinalIgnoreCase)
-                            || language.Equals("mermaid", StringComparison.OrdinalIgnoreCase)) markdown = true;
+                        if (IsMarkdownLanguage(language)) markdown = true;
                         // A fragment containing mixed/other language containers is ambiguous.
                         else return false;
                     }
@@ -88,6 +86,16 @@ internal static class ClipboardMarkdownRenderer
             return false;
         }
     }
+
+    /// <summary>
+    /// A language name that selects the document renderer: an HTML container's language or the
+    /// editor language a copy carries, such as VS Code's <c>markdown</c> or a Mermaid file's <c>mermaid</c>.
+    /// </summary>
+    internal static bool IsMarkdownLanguage(string? language) =>
+        language is not null
+        && (language.Equals("markdown", StringComparison.OrdinalIgnoreCase)
+            || language.Equals("md", StringComparison.OrdinalIgnoreCase)
+            || language.Equals("mermaid", StringComparison.OrdinalIgnoreCase));
 
     private static string? ClassLanguage(string value)
     {
