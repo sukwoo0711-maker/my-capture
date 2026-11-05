@@ -160,8 +160,11 @@ internal sealed class PracticeGuideScene : TutorialScene
             _editor!.Editor.PracticeTarget = target;
             Require(_guide.Notify(new(PracticeEventKind.EditorReady, target.SessionId,
                 RecordId: target.RecordId, EditorId: target.EditorId)), "The guide rejected the loaded editor.");
-            Require(_guide.Session.Step == PracticeStep.A4 && _guide.TryNowButton.Visibility == Visibility.Collapsed
-                && _guide.ReplayButton.Visibility == Visibility.Visible, "The guide did not hide its external-action button while retaining replay.");
+            // Since 4.12.1 the primary button stays in place as a disabled "in the editor" label
+            // while the step waits in the editor, instead of disappearing.
+            Require(_guide.Session.Step == PracticeStep.A4 && _guide.TryNowButton.Visibility == Visibility.Visible
+                && !_guide.TryNowButton.IsEnabled && !_guide.TryNowButton.IsDefault
+                && _guide.ReplayButton.Visibility == Visibility.Visible, "The guide did not turn its external-action button into a waiting label while retaining replay.");
         };
         _guideHost = Host(_guide, 624, 720);
         Stage.Pump(50);

@@ -143,10 +143,11 @@ internal sealed class PracticePinScene : TutorialScene
     private void RequireGuideActionState()
     {
         if (_guide is null) return;
-        bool externalAction = _guide.Session.Step == PracticeStep.B2 && _guide.Session.WindowPinId is not null;
-        Visibility expected = externalAction ? Visibility.Collapsed : Visibility.Visible;
-        if (_guide.TryNowButton.Visibility != expected || _guide.TryNowButton.IsDefault == externalAction
-            || _guide.TryNowButton.IsTabStop == externalAction)
+        // Since 4.12.1 the primary button stays visible; while a pin step waits in the pin it is a
+        // disabled "in the pin" label that Enter and Tab skip.
+        bool externalAction = _guide.Session.Step is >= PracticeStep.B2 and <= PracticeStep.B5 && _guide.Session.WindowPinId is not null;
+        if (_guide.TryNowButton.Visibility != Visibility.Visible || _guide.TryNowButton.IsDefault == externalAction
+            || _guide.TryNowButton.IsTabStop == externalAction || externalAction && _guide.TryNowButton.IsEnabled)
             throw new InvalidOperationException("The practice guide's primary action does not match the current pin step.");
         if (!_guide.PreviewShown || _guide.ReplayButton.Visibility != Visibility.Visible)
             throw new InvalidOperationException("The practice guide lost its replay control while the pin is open.");
