@@ -56,6 +56,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>The monitor notifications appear on: the one with the pointer. Tests replace it.</summary>
     internal Func<MonitorInfo> NotificationMonitor { get; init; } = MonitorEnumerator.GetFromCursor;
 
+    /// <summary>How long a dismissed card takes to leave; null is the shared fast exit. Tests lengthen it.</summary>
+    internal Duration? ExitDuration { get; init; }
+
     /// <summary>
     /// A command or a submenu branch in the tray tree. A null Action marks a branch. A command
     /// with <c>IsEnabled</c> false stays visible but cannot be invoked; its <c>ToolTip</c> says why.
@@ -639,7 +642,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
         _leaving.Add(card);
         card.Closed += (_, _) => _leaving.Remove(card);
-        FluidMotion.BeginExit(card, ExitMotion.FadeRight, card.Close);
+        FluidMotion.BeginExit(card, ExitMotion.FadeRight, card.Close, ExitDuration);
     }
 
     /// <summary>Test hook: dismissed cards whose exit is still on the screen.</summary>
