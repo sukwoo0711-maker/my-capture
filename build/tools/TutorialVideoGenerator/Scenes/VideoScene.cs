@@ -390,10 +390,15 @@ internal sealed class VideoScene : TutorialScene
             throw new InvalidOperationException($"The preview did not show the frame at {_timeline.PlayheadMs:0} ms after {shortcut.Hint}.");
     }
 
-    /// <summary>The accessible status line; independent of the editor grid's row numbers.</summary>
+    /// <summary>
+    /// The accessible status line; independent of the editor grid's row numbers. The status bar's
+    /// border holds the line directly or, since the frame save, a dock panel with the line beside
+    /// the "show in library" button.
+    /// </summary>
     private string StatusText() =>
-        _host.Find<TextBlock>().Single(text => text.Parent is Border { Parent: Grid } bar
-            && ReferenceEquals(bar.Child, text) && text.TextTrimming == TextTrimming.CharacterEllipsis
+        _host.Find<TextBlock>().Single(text => (text.Parent is DockPanel row ? row.Parent : text.Parent) is Border { Parent: Grid } bar
+            && (ReferenceEquals(bar.Child, text) || ReferenceEquals(bar.Child, text.Parent))
+            && text.TextTrimming == TextTrimming.CharacterEllipsis
             && System.Windows.Automation.AutomationProperties.GetLiveSetting(text)
                 == System.Windows.Automation.AutomationLiveSetting.Polite).Text;
 
