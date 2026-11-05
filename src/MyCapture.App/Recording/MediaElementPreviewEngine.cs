@@ -236,6 +236,18 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     }
 
     /// <summary>
+    /// How long the composition wait gives its two render ticks before it takes the compositor for
+    /// stopped. Under load the UI thread stalls: with the test host and twelve busy loops on four
+    /// cores and software rendering, the first seek after the player showed took up to 0.5 s to
+    /// handle ticks that had arrived in 30 ms, and a 0.6 s stall made a 500 ms limit fail a seek
+    /// whose ticks had both arrived, which left frame capture disabled on the requested frame.
+    /// </summary>
+    internal static readonly TimeSpan CompositionTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Test hook: runs on the UI thread once the composition wait and its limit have started.</summary>
+    internal Action? CompositionWaitStartedForTest { get; set; }
+
+    /// <summary>
     /// Waits for composition after the paused clock has settled. A landed Position can still
     /// precede the MediaElement surface by a render frame, especially with software rendering.
     /// Keep this separate from SeekAsync: the editor publishes scrub intent before its end-of-
@@ -280,8 +292,18 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         try
         {
             // A hidden/stopped compositor must fail closed, rather than enable capture after
-            // an arbitrary sleep. The subscription exists only for this short request.
-            await composed.Task.WaitAsync(TimeSpan.FromMilliseconds(500), cancellationToken);
+            // an arbitrary sleep; capture stays disabled while this waits. The subscription
+            // exists only for this request.
+            Task wait = composed.Task.WaitAsync(CompositionTimeout, cancellationToken);
+            CompositionWaitStartedForTest?.Invoke();
+            try
+            {
+                await wait;
+            }
+            catch (TimeoutException) when (composed.Task.IsCompleted)
+            {
+                // Both ticks arrived; only the limit's timer was serviced first.
+            }
             cancellationToken.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_media.IsLoaded || !_media.HasVideo)
