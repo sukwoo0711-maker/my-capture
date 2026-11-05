@@ -154,6 +154,11 @@ public sealed class PlayerFrameRound2Tests
         Assert.True(fixture.Player.MediaForDiagnostic.HasVideo);
         foreach ((double target, Color expected) in new[] { (100d, Colors.Lime), (500d, Colors.Blue), (900d, Colors.Red) })
             CheckNativeFrame(fixture, target, expected);
+        // Open plays the clip until the player is ready (ADR 0007 keeps that order). On a loaded
+        // runner that playback can reach the end before MediaOpened or the source probe is
+        // handled; its MediaEnded must not release the wait for the playback requested here,
+        // or the seek below runs while that playback is still going.
+        ended = false;
         fixture.Player.RequestPlay();
         WaitUntil(() => ended, 5);
         CheckNativeFrame(fixture, 500, Colors.Blue);
