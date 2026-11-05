@@ -53,8 +53,8 @@ public sealed class LibraryFirstPageProbeTests
     [LibraryFirstPageFixtureFact]
     public void PrepareImmutablePreindexedSyntheticLibraries()
     {
-        string requested = Environment.GetEnvironmentVariable(LibraryFirstPageFixtureFactAttribute.Variable)
-            ?? throw new InvalidOperationException("An explicit fresh output is required.");
+        string requested = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable(LibraryFirstPageFixtureFactAttribute.Variable)
+            ?? throw new InvalidOperationException("An explicit fresh output is required."));
         Assert.False(Directory.Exists(requested));
         string output = DiagnosticOutputPaths.Create(requested);
         foreach (int count in new[] { 0, 1000 })

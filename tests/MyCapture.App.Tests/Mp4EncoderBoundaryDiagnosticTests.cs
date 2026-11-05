@@ -31,7 +31,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests(ITestOutputHelper 
         try
         {
             Assert.False(MediaFoundationVideoEncoder.ForceSoftwareForTest);
-            string source = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_BOUNDARY_SOURCE")
+            string source = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_BOUNDARY_SOURCE")
                 ?? throw new InvalidOperationException("MYCAPTURE_ENCODER_BOUNDARY_SOURCE must identify the retained failing source."));
             Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(source));
             string timelineReference = Path.Combine(Path.GetDirectoryName(source)!, "nv12.mp4");

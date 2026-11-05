@@ -43,7 +43,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
             Assert.False(MediaFoundationVideoEncoder.ForceSoftwareForTest);
             string input = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_TUNING_INPUT")
                 ?? throw new InvalidOperationException("Set MYCAPTURE_ENCODER_TUNING_INPUT to the retained encoder26 fixed-720p directory."));
-            string referencePath = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_UV_REFERENCE")
+            string referencePath = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_UV_REFERENCE")
                 ?? throw new InvalidOperationException("Set MYCAPTURE_ENCODER_UV_REFERENCE to the pinned build34 tuning report.json."));
             string reportPath = DiagnosticOutputPaths.Child(input, "report.json");
             string source = DiagnosticOutputPaths.Child(input, "source.mp4");

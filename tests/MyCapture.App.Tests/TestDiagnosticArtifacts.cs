@@ -42,6 +42,14 @@ internal static class TestDiagnosticArtifacts
         encoder.Save(stream);
     }
 
+    /// <summary>Resolves an explicitly supplied file or directory through the confined diagnostic path check.</summary>
+    internal static string Confined(string path)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        string parent = Path.GetDirectoryName(full) ?? throw new IOException("Diagnostic paths require a parent directory.");
+        return DiagnosticOutputPaths.Child(parent, Path.GetFileName(full));
+    }
+
     internal static string HashFile(string path)
     {
         using FileStream stream = File.OpenRead(path);

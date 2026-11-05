@@ -621,7 +621,7 @@ public sealed class EditorColorFlyoutEvidenceTests(ITestOutputHelper output)
         string repo = AppContext.BaseDirectory;
         while (!File.Exists(Path.Combine(repo, "MyCapture.slnx")))
             repo = Directory.GetParent(repo)?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
-        string root = Path.GetFullPath(requested);
+        string root = TestDiagnosticArtifacts.Confined(requested);
         string prefix = Path.Combine(repo, "artifacts") + Path.DirectorySeparatorChar;
         Assert.StartsWith(prefix, root, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(root) || File.Exists(root), "Evidence path already exists; preserve it and choose a new one.");
