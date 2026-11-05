@@ -47,6 +47,7 @@ internal sealed class QuickAccessWindow : Window
     private long _lastTick;
     private bool IsBusy => _running.Count > 0;
     private Point _dragStart;
+    private Vector _dragDistance;
     private bool _dragArmed;
     private bool _keyboardInteracting;
     private readonly List<Control> _keyboardTargets = [];
@@ -522,13 +523,26 @@ internal sealed class QuickAccessWindow : Window
 
     internal void BeginPreviewGesture(Point position)
     {
-        _dragStart = position;
+        _dragStart = PreviewScreenPixel(position);
+        DpiScale dpi = VisualTreeHelper.GetDpi(_preview);
+        _dragDistance = new(SystemParameters.MinimumHorizontalDragDistance * dpi.DpiScaleX,
+            SystemParameters.MinimumVerticalDragDistance * dpi.DpiScaleY);
         _dragArmed = true;
     }
 
-    private bool ExceedsPreviewDragThreshold(Point position) =>
-        Math.Abs(position.X - _dragStart.X) >= SystemParameters.MinimumHorizontalDragDistance
-        || Math.Abs(position.Y - _dragStart.Y) >= SystemParameters.MinimumVerticalDragDistance;
+    private Point PreviewScreenPixel(Point position)
+    {
+        // Mouse positions originate in device pixels. Undo the preview's full transform
+        // before comparing them, so fractional DPI and layout offsets cannot lose a pixel.
+        Point screen = _preview.PointToScreen(position);
+        return new(Math.Round(screen.X), Math.Round(screen.Y));
+    }
+
+    private bool ExceedsPreviewDragThreshold(Point position)
+    {
+        Vector delta = PreviewScreenPixel(position) - _dragStart;
+        return Math.Abs(delta.X) >= _dragDistance.X || Math.Abs(delta.Y) >= _dragDistance.Y;
+    }
 
     internal bool TryBeginPreviewDrag(Point position)
     {

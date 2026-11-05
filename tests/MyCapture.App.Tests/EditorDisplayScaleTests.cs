@@ -38,12 +38,18 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(WindowStyle.None, ResizeMode.CanResize)]
     public void PredictedNativeFrameMatchesHwndWithoutSourceResize(WindowStyle style, ResizeMode resize) => StaTestHost.Run(() =>
     {
+        using var dpiContext = TestDpiContext.AtPerMonitorDpi();
         MonitorInfo monitor = MonitorEnumerator.GetPrimary();
         Size frameBefore = default, sizeBefore = default;
         WithWindow(SyntheticCapture(900, 520), monitor, true, (window, _) =>
         {
             Assert.Equal(frameBefore, NativeFrame(window));
-            Assert.Equal(sizeBefore, new Size(window.Width, window.Height));
+            DpiScale dpi = VisualTreeHelper.GetDpi(window);
+            Assert.True(GetWindowRect(new WindowInteropHelper(window).Handle, out NativeRect outer));
+            // Native dimensions are whole physical pixels. Fractional-DPI conversion
+            // may change the last binary digit of a DIP without resizing the HWND.
+            Assert.Equal((int)Math.Round(sizeBefore.Width * dpi.DpiScaleX), outer.Right - outer.Left);
+            Assert.Equal((int)Math.Round(sizeBefore.Height * dpi.DpiScaleY), outer.Bottom - outer.Top);
             Assert.True(window.SourceSizingMeasurement.Skipped);
             Assert.Equal(0, window.SourceSizingMeasurement.Passes);
         }, beforeShow: window =>
@@ -56,11 +62,11 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             window.Top = -20000;
             frameBefore = NativeFrame(window);
             sizeBefore = new Size(window.Width, window.Height);
-        });
+        }, expect96Dpi: false);
     });
 
     [Fact]
-    public void ReportTenThousandImagePointConversions() => StaTestHost.Run(() =>
+    public void ReportTenThousandImagePointConversions() => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(1920, 1080), Monitor(3440, 1440, 1392), false, (_, surface) =>
         {
@@ -90,7 +96,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
         for (int run = -1; run < 5; run++)
         {
             bool record = run >= 0;
-            StaTestHost.Run(() =>
+            RunAt96Dpi(() =>
             {
                 BitmapSource bitmap = SyntheticCapture(width, height);
                 ResourceDictionary resources = ThemedResources();
@@ -132,7 +138,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [Theory]
     [InlineData(900, 520)]
     [InlineData(1920, 1080)]
-    public void SecondOpenOfTheSameCaptureSizeTakesNoSizingPass(int width, int height) => StaTestHost.Run(() =>
+    public void SecondOpenOfTheSameCaptureSizeTakesNoSizingPass(int width, int height) => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         ResourceDictionary resources = ThemedResources();
@@ -167,7 +173,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void SourceInitializationKeepsTheClientSizeWhenOnlyTheNativeFrameDiffers() => StaTestHost.Run(() =>
+    public void SourceInitializationKeepsTheClientSizeWhenOnlyTheNativeFrameDiffers() => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         Size estimatedFrame = default, client = default;
@@ -195,7 +201,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void SourceInitializationMeasuresAgainAfterADpiChange() => StaTestHost.Run(() =>
+    public void SourceInitializationMeasuresAgainAfterADpiChange() => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         ResourceDictionary resources = ThemedResources();
@@ -216,7 +222,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void ThemeAndCultureChangesMeasureTheChromeAgain() => StaTestHost.Run(() =>
+    public void ThemeAndCultureChangesMeasureTheChromeAgain() => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         ResourceDictionary resources = ThemedResources();
@@ -237,7 +243,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void RepeatedSizingReusesUnchangedMeasurement() => StaTestHost.Run(() =>
+    public void RepeatedSizingReusesUnchangedMeasurement() => RunAt96Dpi(() =>
     {
         BitmapSource bitmap = SyntheticCapture(900, 520);
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
@@ -245,6 +251,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, monitor, 0), region, bitmap, pointerMonitor: monitor);
         try
         {
+            TestDpiContext.Initialize96DpiWindow(window);
             // Explicit placement still resolves the cold budget before moving the window.
             window.PlaceOnMonitor(monitor);
             Size original = new(window.Width, window.Height);
@@ -258,7 +265,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void SourceInitializationReusesUnchangedNativeChrome() => StaTestHost.Run(() =>
+    public void SourceInitializationReusesUnchangedNativeChrome() => RunAt96Dpi(() =>
     {
         // Borderless chrome is zero both before and after HWND creation. PlaceOnMonitor
         // measures the loaded theme/content first, leaving no new sizing inputs at Show.
@@ -272,7 +279,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void CachedFrameLayoutRefreshesForMoveResizeFrameAndDpiChanges() => StaTestHost.Run(() =>
+    public void CachedFrameLayoutRefreshesForMoveResizeFrameAndDpiChanges() => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(1920, 1080), Monitor(3440, 1440, 1392), false, (window, surface) =>
         {
@@ -346,7 +353,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [Theory]
     [InlineData(900, 520)]
     [InlineData(1920, 1080)]
-    public void StandaloneFirstFrameStaysCenteredAfterSizeCorrection(int width, int height) => StaTestHost.Run(() =>
+    public void StandaloneFirstFrameStaysCenteredAfterSizeCorrection(int width, int height) => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         WithWindow(SyntheticCapture(width, height), monitor, false, (window, _) =>
@@ -413,7 +420,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(1920, 1080, 1032, 1920, 1080, false)]
     [InlineData(1920, 1080, 1032, 2560, 1440, false)]
     public void RealWindowFitsCaptureAtOneHundredPercentWhenPossible(
-        int monitorWidth, int monitorHeight, int workHeight, int width, int height, bool fits) => StaTestHost.Run(() =>
+        int monitorWidth, int monitorHeight, int workHeight, int width, int height, bool fits) => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(monitorWidth, monitorHeight, workHeight);
         WithWindow(SyntheticCapture(width, height), monitor, placeOnMonitor: false, (window, surface) =>
@@ -444,7 +451,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(1920, 1080, 1032, 600, 400, false)]
     [InlineData(2560, 1600, 1552, 1200, 800, false)]
     public void TargetMonitorDpiBudgetsImageAndMeasuredChrome(
-        int monitorWidth, int monitorHeight, int workHeight, int width, int height, bool placeOnMonitor) => StaTestHost.Run(() =>
+        int monitorWidth, int monitorHeight, int workHeight, int width, int height, bool placeOnMonitor) => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(monitorWidth, monitorHeight, workHeight, 144);
         WithWindow(SyntheticCapture(width, height), monitor, placeOnMonitor, (window, surface) =>
@@ -462,10 +469,10 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(1920, 1080, 1032, 600, 400)]
     [InlineData(2560, 1600, 1552, 1200, 800)]
     public void PlacementBudgetsTargetDpiBeforeMovingTheNativeWindow(
-        int monitorWidth, int monitorHeight, int workHeight, int width, int height) => StaTestHost.Run(() =>
+        int monitorWidth, int monitorHeight, int workHeight, int width, int height) => RunAt96Dpi(() =>
     {
         // A synthetic monitor cannot change the HWND DPI. Inspect the target-DIP layout
-        // before CenterOn applies physical bounds on this machine's real 96-DPI monitor.
+        // before CenterOn applies physical bounds to this fixture's 96-DPI HWND.
         WithWindow(SyntheticCapture(width, height), Monitor(monitorWidth, monitorHeight, workHeight, 144), true,
             (window, surface) =>
             {
@@ -479,7 +486,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void GalleryBannerIsIncludedInTheMeasuredChrome(bool placeOnMonitor) => StaTestHost.Run(() =>
+    public void GalleryBannerIsIncludedInTheMeasuredChrome(bool placeOnMonitor) => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(900, 520), Monitor(3440, 1440, 1392), placeOnMonitor, (window, surface) =>
         {
@@ -497,7 +504,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void ExplicitCallerWindowSizeSurvivesSourceInitialization() => StaTestHost.Run(() =>
+    public void ExplicitCallerWindowSizeSurvivesSourceInitialization() => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(240, 90), Monitor(3440, 1440, 1392), false,
             (window, _) => Assert.Equal(new Size(1100, 700), new Size(window.Width, window.Height)),
@@ -505,7 +512,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void NativeTrackingLimitStillClampsAnExplicitCallerSize() => StaTestHost.Run(() =>
+    public void NativeTrackingLimitStillClampsAnExplicitCallerSize() => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(240, 90), Monitor(3440, 1440, 1392), false,
             (window, _) => Assert.Equal(new Size(1044, 700), new Size(window.Width, window.Height)),
@@ -517,7 +524,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(1920, 1080, 1032, 1280, 720)]
     [InlineData(3440, 1440, 1392, 1920, 1080)]
     public void NativeTrackingLimitFitsTheImageToTheActualClient(
-        int monitorWidth, int monitorHeight, int workHeight, int width, int height) => StaTestHost.Run(() =>
+        int monitorWidth, int monitorHeight, int workHeight, int width, int height) => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(width, height), Monitor(monitorWidth, monitorHeight, workHeight), false,
             (window, surface) =>
@@ -545,7 +552,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void GalleryAndNormalEditorsKeepTheirChromeWhenOpenedInEitherOrder(bool galleryFirst, bool prewarm) => StaTestHost.Run(() =>
+    public void GalleryAndNormalEditorsKeepTheirChromeWhenOpenedInEitherOrder(bool galleryFirst, bool prewarm) => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         BitmapSource bitmap = SyntheticCapture(900, 520);
@@ -557,6 +564,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
                 region, bitmap, [monitor], provenance: null);
             try
             {
+                TestDpiContext.Initialize96DpiWindow(host);
                 // Seed this same themed environment without an HWND, as startup prewarm does.
                 host.Resources = resources;
                 host.PlaceOnMonitor(monitor);
@@ -579,7 +587,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void SameWrapperTypeWithDifferentBannerHeightsDoesNotReuseOtherWindowsChrome() => StaTestHost.Run(() =>
+    public void SameWrapperTypeWithDifferentBannerHeightsDoesNotReuseOtherWindowsChrome() => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         BitmapSource bitmap = SyntheticCapture(900, 520);
@@ -598,7 +606,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     });
 
     [Fact]
-    public void BannerChangedAfterPlacementIsMeasuredBeforeFirstRender() => StaTestHost.Run(() =>
+    public void BannerChangedAfterPlacementIsMeasuredBeforeFirstRender() => RunAt96Dpi(() =>
     {
         MonitorInfo monitor = Monitor(3440, 1440, 1392);
         Border? banner = null;
@@ -629,7 +637,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ChangedBannerInvalidatesChromeCachedAtOtherClientSizes(bool layoutBeforeSizing) => StaTestHost.Run(() =>
+    public void ChangedBannerInvalidatesChromeCachedAtOtherClientSizes(bool layoutBeforeSizing) => RunAt96Dpi(() =>
     {
         MonitorInfo wide = Monitor(3440, 1440, 1392);
         MonitorInfo narrow = Monitor(1000, 1440, 1392);
@@ -689,7 +697,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             $"constructor={window.ConstructorSizingMeasurement}; source={window.SourceSizingMeasurement}");
 
     [Fact]
-    public void OneHundredPercentPreservesEveryPixelIncludingOuterBorderAndCropScale() => StaTestHost.Run(() =>
+    public void OneHundredPercentPreservesEveryPixelIncludingOuterBorderAndCropScale() => RunAt96Dpi(() =>
     {
         BitmapSource source = SyntheticCapture(900, 520);
         WithWindow(source, Monitor(3440, 1440, 1392), placeOnMonitor: false, (window, surface) =>
@@ -728,7 +736,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [Theory]
     [InlineData(900, 520)]
     [InlineData(3440, 1440)]
-    public void CropHandlesAndOuterGrabBandsRemainInsideSurface(int width, int height) => StaTestHost.Run(() =>
+    public void CropHandlesAndOuterGrabBandsRemainInsideSurface(int width, int height) => RunAt96Dpi(() =>
     {
         WithWindow(SyntheticCapture(width, height), Monitor(3440, 1440, 1392), false, (window, surface) =>
         {
@@ -762,10 +770,19 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
         });
     });
 
+    private static void RunAt96Dpi(Action verify) => StaTestHost.Run(() =>
+    {
+        // The synthetic monitors, native-frame sizes and pixel-exact render targets in
+        // these fixtures use 96 DPI. Establish that context before constructing WPF objects.
+        using var dpiContext = TestDpiContext.At96Dpi();
+        verify();
+    });
+
     private static void WithWindow(BitmapSource bitmap, MonitorInfo monitor, bool placeOnMonitor,
         Action<AnnotationEditorWindow, AnnotationEditorSurface> assert, bool gallery = false, Size? explicitSize = null,
         bool show = true, bool centerOnTarget = false, bool borderless = false, ResourceDictionary? resources = null,
-        Action<AnnotationEditorWindow>? beforeShow = null, Action<TimeSpan>? opened = null, Size? nativeMaximum = null)
+        Action<AnnotationEditorWindow>? beforeShow = null, Action<TimeSpan>? opened = null, Size? nativeMaximum = null,
+        bool expect96Dpi = true)
     {
         bool? animations = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -785,6 +802,8 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
         window.ContentRendered -= rendered;
         try
         {
+            if (expect96Dpi) TestDpiContext.Initialize96DpiWindow(window);
+            else TestDpiContext.InitializeMonitorDpiWindow(window, monitor.Dpi);
             // Like the application's shared resources, a caller can reuse one themed dictionary.
             window.Resources = resources ?? ThemedResources();
             if (borderless)
@@ -805,6 +824,8 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             if (show)
             {
                 window.Show();
+                if (expect96Dpi) TestDpiContext.Assert96Dpi(window);
+                else TestDpiContext.AssertMonitorDpi(window, monitor.Dpi);
                 // Construction, sizing and the first layout at the final size, before rendering.
                 if (opened is not null)
                 {
@@ -815,6 +836,8 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
                 // SourceInitialized correction and before the first rendered frame.
                 Rect firstVisibleBounds = new(window.Left, window.Top, window.Width, window.Height);
                 Settle(window);
+                if (expect96Dpi) TestDpiContext.Assert96Dpi(window);
+                else TestDpiContext.AssertMonitorDpi(window, monitor.Dpi);
                 Assert.Equal(firstVisibleBounds, new Rect(window.Left, window.Top, window.Width, window.Height));
             }
             var surface = (AnnotationEditorSurface)typeof(AnnotationEditorControl).GetField("_surface", PrivateInstance)!
@@ -834,6 +857,10 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(nint hwnd, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint hwnd, out NativeRect rect);
 
     private static void Settle(Window window)
     {

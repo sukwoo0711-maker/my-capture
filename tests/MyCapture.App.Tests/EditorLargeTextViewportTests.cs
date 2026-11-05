@@ -110,15 +110,14 @@ public sealed class EditorLargeTextViewportTests
     [InlineData(6)]
     public void FullWidthCaptionOverlaysItsBarInsideTheCanvasAndKeepsEditing(int paragraphLines) => StaTestHost.Run(() =>
     {
-        // A wide image stays width-limited in the default 1000x640 host, even on a
-        // small work area that would clamp a taller window and letterbox a 4:3 image.
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(900, 300, 240));
+        using EditorWindowHost host = CreateWidthLimitedHost();
         // The 16-DIP image margin is narrower than the bar and text chrome on either side,
         // so a full-width caption still overlays the bar at its right edge.
         Invoke(host.Editor, "PlaceTextBox", new PointD(0, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         // Paragraphs wider than the image, so the caption wraps at the image's right edge.
-        string paragraph = string.Concat(Enumerable.Repeat("한글 조합과 줄바꿈을 유지합니다 abcXYZ😀 ", 6));
+        int paragraphRepeats = (int)Math.Ceiling(6.0 * Controller(host.Editor).Document.CanvasWidth / 900);
+        string paragraph = string.Concat(Enumerable.Repeat("한글 조합과 줄바꿈을 유지합니다 abcXYZ😀 ", paragraphRepeats));
         string text = string.Join("\n", Enumerable.Repeat(paragraph, 120 / paragraphLines));
         box.Text = text;
         box.CaretIndex = text.Length;
@@ -229,8 +228,9 @@ public sealed class EditorLargeTextViewportTests
     public void OverflowScrollbarKeepsTheCommittedWrappingWidth(bool paragraphs) => StaTestHost.Run(() =>
     {
         // Keep the image width-limited, with only the 16-DIP inset outside its right edge.
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(900, 300, 240));
-        Invoke(host.Editor, "PlaceTextBox", new PointD(600, 40));
+        using EditorWindowHost host = CreateWidthLimitedHost();
+        double textLeft = Controller(host.Editor).Document.CanvasWidth - 300;
+        Invoke(host.Editor, "PlaceTextBox", new PointD(textLeft, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         string line = "고정 폭에서 같은 줄바꿈을 유지합니다 abcXYZ😀 ";
         box.Text = string.Join(paragraphs ? "\n" : "", Enumerable.Repeat(line, 100));
@@ -269,7 +269,7 @@ public sealed class EditorLargeTextViewportTests
         host.Window.Hide();
         host.Window.Show();
         Assert.Equal(caption.Text, Controller(host.Editor).Document.Items.OfType<TextAnnotation>().Single().Text);
-        Invoke(host.Editor, "PlaceTextBox", new PointD(600, 40));
+        Invoke(host.Editor, "PlaceTextBox", new PointD(textLeft, 40));
         box = Field<TextBox>(host.Editor, "_activeTextBox");
         box.Text = caption.Text;
         host.Window.Height = 520;
@@ -278,4 +278,19 @@ public sealed class EditorLargeTextViewportTests
         Assert.True(box.ActualHeight <= canvas.ActualHeight - Canvas.GetTop(box) + 1);
         Assert.Equal(caption.Text, box.Text);
     });
+
+    private static EditorWindowHost CreateWidthLimitedHost()
+    {
+        int imageWidth;
+        using (EditorWindowHost probe = EditorWindowHost.Create(Solid(900, 300, 240)))
+        {
+            AnnotationEditorSurface surface = Field<AnnotationEditorSurface>(probe.Editor, "_surface");
+            // The editor caps the image at one physical pixel per image pixel. Size the
+            // fixture from the actual viewport and monitor DPI so that cap cannot leave
+            // horizontal letterboxing; retain the short height so width limits the fit.
+            double dpi = VisualTreeHelper.GetDpi(surface).DpiScaleX;
+            imageWidth = Math.Max(900, (int)Math.Ceiling(surface.ActualWidth * dpi));
+        }
+        return EditorWindowHost.Create(Solid(imageWidth, 300, 240));
+    }
 }

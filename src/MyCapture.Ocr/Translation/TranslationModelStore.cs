@@ -77,6 +77,7 @@ internal sealed class TranslationModelStore
     private readonly ILogger _log;
     private readonly TimeSpan _stallTimeout;
     private readonly Func<string, long> _availableFreeSpace;
+    private readonly string _modelsRoot;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
@@ -109,10 +110,35 @@ internal sealed class TranslationModelStore
         _availableFreeSpace = availableFreeSpace ?? QueryFreeSpace;
         Files = ValidateFiles(files ?? TranslationModelCatalog.Files);
         TotalBytes = Files.Sum(file => file.Bytes);
-        ModelDirectory = Path.Combine(paths.TranslationModelsRoot, folderName ?? TranslationModelCatalog.FolderName);
+        _modelsRoot = paths.TranslationModelsRoot;
+        ModelDirectory = Path.Combine(_modelsRoot, folderName ?? TranslationModelCatalog.FolderName);
     }
 
     internal string ModelDirectory { get; }
+
+    /// <summary>Validates the actual native load names and every catalog leaf before opening a model.</summary>
+    internal string GetValidatedModelDirectoryForLoad(MarianModelFiles files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        string directory = ValidateModelDirectory();
+        string[] required = [files.Encoder, files.Decoder, files.DecoderWithPast,
+            files.SourceVocabulary, files.TargetVocabulary];
+        foreach (string name in required)
+        {
+            ValidateFileName(name);
+            TranslationModelFile? file = Files.FirstOrDefault(candidate =>
+                string.Equals(candidate.FileName, name, StringComparison.Ordinal));
+            if (file is null)
+                throw new ArgumentException($"Translation model file {name} is not in the store catalog.", nameof(files));
+            _ = PathFor(file);
+        }
+        // The graphs also open their catalog-pinned external weights. Keep checking these
+        // leaves even though MarianModelFiles lists only the five direct entry points.
+        foreach (TranslationModelFile file in Files)
+            if (!required.Contains(file.FileName, StringComparer.Ordinal))
+                _ = PathFor(file);
+        return directory;
+    }
 
     internal IReadOnlyList<TranslationModelFile> Files { get; }
 
@@ -122,7 +148,7 @@ internal sealed class TranslationModelStore
     {
         ArgumentNullException.ThrowIfNull(file);
         ValidateFileName(file.FileName);
-        return Path.Combine(ModelDirectory, file.FileName);
+        return ValidateModelPath(Path.Combine(ModelDirectory, file.FileName));
     }
 
     /// <summary>
@@ -222,6 +248,10 @@ internal sealed class TranslationModelStore
             _log.LogWarning(ex, "Could not prepare the translation model ({Error})", ex.Error);
             throw;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw DiskError("Could not access the translation model folder.", ex);
+        }
         finally
         {
             _gate.Release();
@@ -232,7 +262,7 @@ internal sealed class TranslationModelStore
         CancellationToken cancellationToken)
     {
         string destination = PathFor(file);
-        string temp = destination + TempSuffix;
+        string temp = ValidateModelPath(destination + TempSuffix);
         // Waiting longer than the stall timeout for headers or for the next bytes cancels the transfer.
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         stall.CancelAfter(_stallTimeout);
@@ -243,7 +273,7 @@ internal sealed class TranslationModelStore
             using (response)
             using (body)
             {
-                stall.CancelAfter(_stallTimeout);
+                stall.CancelAfter(Timeout.InfiniteTimeSpan);
                 await WriteVerifiedAsync(file, body, temp, completedBefore, reporter, stall, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -305,6 +335,7 @@ internal sealed class TranslationModelStore
     private async Task WriteVerifiedAsync(TranslationModelFile file, Stream body, string temp, long completedBefore,
         ProgressReporter reporter, CancellationTokenSource stall, CancellationToken cancellationToken)
     {
+        temp = ValidateModelPath(temp);
         var options = new FileStreamOptions
         {
             Mode = FileMode.Create,
@@ -320,13 +351,17 @@ internal sealed class TranslationModelStore
         using (var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
             byte[] buffer = new byte[BufferSize];
-            int read;
-            while ((read = await ReadAsync(file, body, buffer, stall.Token, cancellationToken)
-                .ConfigureAwait(false)) != 0)
+            while (true)
             {
+                // Keep local hashing, disk writes and progress callbacks outside the
+                // network wait deadline; their cancellation still uses the caller token.
+                stall.CancelAfter(_stallTimeout);
+                int read = await ReadAsync(file, body, buffer, stall.Token, cancellationToken)
+                    .ConfigureAwait(false);
+                stall.CancelAfter(Timeout.InfiniteTimeSpan);
+                if (read == 0) break;
                 if (read > file.Bytes - received)
                     throw Corrupt(file, "is longer than expected");
-                stall.CancelAfter(_stallTimeout);
                 sha256.AppendData(buffer, 0, read);
                 await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
                 received += read;
@@ -367,7 +402,10 @@ internal sealed class TranslationModelStore
         lock (state)
         {
             state.Verified = null;
+            temp = ValidateModelPath(temp);
+            destination = ValidateModelPath(destination);
             File.Move(temp, destination, overwrite: true);
+            _ = ValidateModelPath(destination);
             var info = new FileInfo(destination);
             if (info.Exists && info.Length == file.Bytes)
                 state.Verified = new VerifiedFile(info.Length, info.LastWriteTimeUtc, file.Sha256);
@@ -390,12 +428,13 @@ internal sealed class TranslationModelStore
     /// </summary>
     private bool IsVerified(TranslationModelFile file, CancellationToken cancellationToken)
     {
-        string path = PathFor(file);
+        string path = Path.Combine(ModelDirectory, file.FileName);
         VerificationState state = VerificationFor(path);
         lock (state)
         {
             try
             {
+                _ = ValidateModelPath(path);
                 var info = new FileInfo(path);
                 if (!info.Exists || info.Length != file.Bytes)
                 {
@@ -412,6 +451,7 @@ internal sealed class TranslationModelStore
                     return false;
 
                 // A file changed during hashing must be checked again before it is trusted.
+                _ = ValidateModelPath(path);
                 info.Refresh();
                 if (!info.Exists || info.Length != current.Length || info.LastWriteTimeUtc != current.LastWriteTimeUtc)
                     return false;
@@ -433,8 +473,9 @@ internal sealed class TranslationModelStore
         }
     }
 
-    private static bool HasExpectedHash(string path, string expected, CancellationToken cancellationToken)
+    private bool HasExpectedHash(string path, string expected, CancellationToken cancellationToken)
     {
+        path = ValidateModelPath(path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize,
             FileOptions.SequentialScan);
         using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -457,7 +498,7 @@ internal sealed class TranslationModelStore
             Exception? failure = null;
             foreach (TranslationModelFile file in Files)
             {
-                string path = PathFor(file);
+                string path = Path.Combine(ModelDirectory, file.FileName);
                 VerificationState state = VerificationFor(path);
                 lock (state)
                 {
@@ -489,14 +530,15 @@ internal sealed class TranslationModelStore
     {
         try
         {
+            _ = ValidateModelDirectory();
             if (!Directory.Exists(ModelDirectory)) return;
             foreach (string partial in Directory.EnumerateFiles(ModelDirectory, "*" + TempSuffix))
             {
                 if (TryDeleteFile(partial) is Exception error)
                     _log.LogWarning(error, "Could not remove a partial translation model download");
             }
-            if (!Directory.EnumerateFileSystemEntries(ModelDirectory).Any())
-                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(ModelDirectory);
+            if (!Directory.EnumerateFileSystemEntries(ValidateModelDirectory()).Any())
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(ValidateModelDirectory());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -508,7 +550,7 @@ internal sealed class TranslationModelStore
     {
         try
         {
-            Directory.CreateDirectory(ModelDirectory);
+            ValidatedFilePaths.CreateDirectory(ValidateModelDirectory());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -526,10 +568,17 @@ internal sealed class TranslationModelStore
         new(ex.HResult is DiskFullHResult or HandleDiskFullHResult ? TranslationModelError.DiskFull : TranslationModelError.Disk,
             message, ex);
 
-    private static Exception? TryDeleteFile(string path)
+    private string ValidateModelDirectory() =>
+        ValidatedFilePaths.DirectoryWithinRoot(_modelsRoot, ModelDirectory);
+
+    private string ValidateModelPath(string path) =>
+        ValidatedFilePaths.FileWithinRoot(ValidateModelDirectory(), path);
+
+    private Exception? TryDeleteFile(string path)
     {
         try
         {
+            path = ValidateModelPath(path);
             if (File.Exists(path)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
             return null;
         }

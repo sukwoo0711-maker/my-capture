@@ -52,8 +52,10 @@ public partial class App
     private static FrozenFrame AcquireProbeFrame(bool includeCursor)
     {
         long started = Stopwatch.GetTimestamp();
-        FrozenFrame frame = ResidentProbeImages.DesktopFrame(MonitorEnumerator.GetVirtualDesktopBounds(), Environment.TickCount & 0xFF,
-            s_residentProbe?.Has("frame-cached") == true);
+        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        FrozenFrame frame = s_longRunPrivacy is { } privacy ? privacy.AcquireFrame(desktop)
+            : ResidentProbeImages.DesktopFrame(desktop, Environment.TickCount & 0xFF,
+                s_residentProbe?.Has("frame-cached") == true);
         s_lastProbeAcquisitionMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         return frame;
     }
@@ -93,6 +95,21 @@ public partial class App
 
     private async Task RunResidentProbeAsync(ResidentProbeOptions probe)
     {
+        if (probe.LibraryFirstPage)
+        {
+            await RunLibraryFirstPageProbeAsync(probe);
+            return;
+        }
+        if (probe.LongRunPreflight)
+        {
+            await RunResidentLongRunPreflightAsync(probe);
+            return;
+        }
+        if (probe.LongRun)
+        {
+            await RunResidentLongRunAsync(probe);
+            return;
+        }
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
         PresentationDismissals.UseLegacySettleForProbe = probe.Has("legacy-capture-settle");
@@ -203,6 +220,12 @@ public partial class App
                 await recorder.SettleAsync("soak closed", probe.Quick ? probe.SettleSeconds : [0, 10, 30, 75],
                     () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
                 await recorder.AuditAsync("soak closed");
+                break;
+            case "idle-empty":
+            case "idle-two-fast":
+            case "idle-library-open":
+            case "idle-library-closed":
+                await ProbeIdleCpuAsync(probe, recorder, scenario);
                 break;
             default:
                 throw new ArgumentException("Unknown resident probe scenario: " + scenario);

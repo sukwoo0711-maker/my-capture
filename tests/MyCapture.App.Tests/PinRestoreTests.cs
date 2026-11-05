@@ -288,7 +288,9 @@ public sealed class PinRestoreTests : KoreanCaptionTest
             {
                 PinWindow pin = manager.PinRenderedText(SolidImage(), source, isTable: true);
                 long expectedBytes = pin.PinnedContent.EstimatedRetainedBytes;
-                Assert.Equal((64L * 48 * 4) + (source.Length * 2), expectedBytes);
+                BitmapSource rendered = pin.PinnedContent.Image;
+                Assert.Equal(32, rendered.Format.BitsPerPixel);
+                Assert.Equal(((long)rendered.PixelWidth * rendered.PixelHeight * 4) + (source.Length * 2), expectedBytes);
                 pin.Close();
                 PinHistoryTestSupport.Await(manager.LastClosedEncodingForTest);
                 Assert.InRange(manager.ClosedRetainedBytes, source.Length * 2, expectedBytes - 1);

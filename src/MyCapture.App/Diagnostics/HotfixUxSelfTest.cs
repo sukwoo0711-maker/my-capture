@@ -750,7 +750,7 @@ internal static class HotfixUxSelfTest
             throw new InvalidOperationException($"Input aborted: expected foreground {expected}, actual {actual}.");
     }
     private static void SendKey(IntPtr target, byte key) { InjectKey(target, key, 0); InjectKey(target, key, 2); }
-    private static void Click(IntPtr foreground, FrameworkElement control, StringBuilder? report = null)
+    private static void Click(IntPtr foreground, FrameworkElement control, StringBuilder? report = null, Action<int, int>? observeCursorMove = null)
     {
         Point point = control.PointToScreen(new Point(control.ActualWidth / 2, control.ActualHeight / 2));
         bool moved = false, downSent = false, upSent = false;
@@ -763,7 +763,7 @@ internal static class HotfixUxSelfTest
         }
         try
         {
-            Observe("MOVE_BEFORE"); MoveCursor(foreground, (int)point.X, (int)point.Y); moved = true; Observe("MOVE_AFTER");
+            Observe("MOVE_BEFORE"); MoveCursor(foreground, (int)point.X, (int)point.Y); moved = true; observeCursorMove?.Invoke((int)point.X, (int)point.Y); Observe("MOVE_AFTER");
             Observe("DOWN_BEFORE"); MouseButton(foreground, 0x0002); downSent = true; Observe("DOWN_AFTER");
             Observe("UP_BEFORE"); MouseButton(foreground, 0x0004); upSent = true; Observe("UP_AFTER");
             Pump(100);
@@ -862,29 +862,162 @@ internal static class HotfixUxSelfTest
         check("mouse color swatch returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         SendKey(hwnd, 0x52); Pump(50);
         check("native color swatch click then R selects Rectangle", ((ToggleButton)Button("R")).IsChecked == true);
-        // The hex input and its apply button live in a flyout that the + button opens. The flyout
-        // is a WPF Popup: its own HWND, owned by the editor and never activated (WS_EX_NOACTIVATE),
-        // so the editor stays foreground and every injection still requires the editor HWND.
+        // The actual color content shares the editor HWND; the same input guard applies.
         Button customOpen = window.Editor.CustomColorButtonForTest;
-        Popup customPopup = window.Editor.CustomColorPopupForTest;
+        FrameworkElement customFlyout = window.Editor.CustomColorFlyoutContentForTest;
         customOpen.BringIntoView(); Pump(50);
-        check("native custom color button is visible", customOpen.IsVisible && !customPopup.IsOpen);
+        check("native custom color button is visible", customOpen.IsVisible && !window.Editor.IsCustomColorFlyoutOpenForTest);
         Click(hwnd, customOpen);
-        IntPtr popupHwnd = customPopup.Child is Visual flyout && PresentationSource.FromVisual(flyout) is HwndSource popupSource
-            ? popupSource.Handle : IntPtr.Zero;
-        check($"mouse custom color button opens its owned flyout; popup={popupHwnd}; owner={GetWindow(popupHwnd, 4 /* GW_OWNER */)}; foreground={GetForegroundWindow()}",
-            customPopup.IsOpen && popupHwnd != IntPtr.Zero && popupHwnd != hwnd
-            && GetWindow(popupHwnd, 4 /* GW_OWNER */) == hwnd && GetForegroundWindow() == hwnd);
-        var customInput = Ux402VisualMetrics.Descendants(customPopup.Child).OfType<TextBox>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        IntPtr flyoutHwnd = PresentationSource.FromVisual(customFlyout) is HwndSource flyoutSource
+            ? flyoutSource.Handle : IntPtr.Zero;
+        check($"mouse custom color button opens its inline flyout; host={flyoutHwnd}; owner={hwnd}; foreground={GetForegroundWindow()}",
+            window.Editor.IsCustomColorFlyoutOpenForTest && flyoutHwnd == hwnd && hwnd != IntPtr.Zero
+            && window.Editor.IsAncestorOf(customFlyout) && GetForegroundWindow() == hwnd);
+        var customInput = Ux402VisualMetrics.Descendants(customFlyout).OfType<TextBox>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
         check("custom color flyout focuses its input", ReferenceEquals(Keyboard.FocusedElement, customInput));
-        ClickOwnedPopup(hwnd, popupHwnd, customInput);
-        customInput.Text = "#22AA66";
-        var customApply = Ux402VisualMetrics.Descendants(customPopup.Child).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
-        ClickOwnedPopup(hwnd, popupHwnd, customApply);
-        // Closing the flyout returns focus to the + button that opened it, inside the editor.
-        check("mouse custom color apply closes the flyout, leaves input and returns editor focus",
-            !customPopup.IsOpen && window.Editor.StatusText == UiText.Format("Text_67CAE5B118A3", "#22AA66")
-            && ReferenceEquals(Keyboard.FocusedElement, customOpen) && window.Editor.IsKeyboardFocusWithin && GetForegroundWindow() == hwnd);
+        var customApply = Ux402VisualMetrics.Descendants(customFlyout).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        // Observe the existing input click and apply click; keep both gestures, pumps,
+        // text assignment and assertions unchanged. Buffer only, flush in finally.
+        var customApplyTrace = new List<string>(16);
+        int applyDown = 0, applyUp = 0, applyClicks = 0, popupClosed = 0, dropped = 0;
+        bool? applySame = null;
+        string applyIdentityStatus = "NOT_OBSERVED";
+        ColorTracePoint? inputSetCursorPos = null, applySetCursorPos = null;
+        long applyTraceStarted = Stopwatch.GetTimestamp();
+        string ColorRole(object? value) => ReferenceEquals(value, customInput) ? "INPUT"
+            : ReferenceEquals(value, customApply) ? "APPLY" : ReferenceEquals(value, customOpen) ? "OPENER"
+            : ReferenceEquals(value, window.Editor) ? "EDITOR" : value?.GetType().Name ?? "null";
+        string ObserveNativeColorState()
+        {
+            // Read-only getters and hit testing in the already-owned editor HWND.
+            // No native hook, input, focus change, dispatch or capture release.
+            bool IsApplyHit(IInputElement? hit)
+            {
+                for (DependencyObject? node = hit as DependencyObject; node is not null;)
+                {
+                    if (ReferenceEquals(node, customApply)) return true;
+                    node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                        ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+                }
+                return false;
+            }
+            try
+            {
+                if (!GetCursorPos(out ColorTracePoint cursor)) return "nativeObservation=CURSOR_UNAVAILABLE";
+                IntPtr pointerHwnd = WindowFromPoint(cursor);
+                Point applyCenter = customApply.PointToScreen(new Point(customApply.ActualWidth / 2, customApply.ActualHeight / 2));
+                var applyPoint = new ColorTracePoint { X = (int)applyCenter.X, Y = (int)applyCenter.Y };
+                IntPtr applyHwnd = WindowFromPoint(applyPoint);
+                string cursorHit = "UNAVAILABLE", applyHit = "UNAVAILABLE";
+                bool? cursorHitsApply = null, applyCenterHitsApply = null;
+                if (HwndSource.FromHwnd(hwnd)?.RootVisual is UIElement root)
+                {
+                    IInputElement? underCursor = root.InputHitTest(root.PointFromScreen(new Point(cursor.X, cursor.Y)));
+                    IInputElement? underApply = root.InputHitTest(root.PointFromScreen(new Point(applyPoint.X, applyPoint.Y)));
+                    cursorHit = ColorRole(underCursor);
+                    applyHit = ColorRole(underApply);
+                    cursorHitsApply = IsApplyHit(underCursor);
+                    applyCenterHitsApply = IsApplyHit(underApply);
+                }
+                return $"nativeCapture={GetCapture()}; nativeFocus={GetFocus()}; nativeLeftQueue=0x{unchecked((ushort)GetKeyState(1)):X4}; nativeLeftAsync=0x{unchecked((ushort)GetAsyncKeyState(1)):X4}; cursor={cursor.X},{cursor.Y}; pointerHwnd={pointerHwnd}; pointerIsOwner={pointerHwnd == hwnd}; cursorHit={cursorHit}; cursorHitsApply={cursorHitsApply}; applyScreenPoint={applyPoint.X},{applyPoint.Y}; applyPointHwnd={applyHwnd}; applyPointIsOwner={applyHwnd == hwnd}; applyHit={applyHit}; applyCenterHitsApply={applyCenterHitsApply}";
+            }
+            catch (Exception error) { return "nativeObservation=UNAVAILABLE; observationError=" + error.GetType().Name; }
+        }
+        void ObserveColorApply(string phase)
+        {
+            if (customApplyTrace.Count >= 64) { dropped++; return; }
+            double ms = (Stopwatch.GetTimestamp() - applyTraceStarted) * 1000.0 / Stopwatch.Frequency;
+            string expectedStatus = UiText.Format("Text_67CAE5B118A3", "#22AA66");
+            customApplyTrace.Add($"HOTFIX_COLOR_APPLY_{phase}: elapsedMs={ms:0.000}; open={window.Editor.IsCustomColorFlyoutOpenForTest}; input={customInput.Text}; status={window.Editor.StatusText}; expectedStatus={expectedStatus}; statusMatches={window.Editor.StatusText == expectedStatus}; focus={ColorRole(Keyboard.FocusedElement)}; openerFocused={ReferenceEquals(Keyboard.FocusedElement, customOpen)}; editorFocusWithin={window.Editor.IsKeyboardFocusWithin}; foreground={GetForegroundWindow()}; owner={hwnd}; down={applyDown}; up={applyUp}; clicks={applyClicks}; closed={popupClosed}; pressed={customApply.IsPressed}; captured={ColorRole(Mouse.Captured)}; leftButton={Mouse.LeftButton}; visible={customApply.IsVisible}; enabled={customApply.IsEnabled}; size={customApply.ActualWidth:0.###}x{customApply.ActualHeight:0.###}; applySame={applySame}; applyIdentityStatus={applyIdentityStatus}; inputSetCursorPosObserved={inputSetCursorPos.HasValue}; inputSetCursorPos={inputSetCursorPos?.X},{inputSetCursorPos?.Y}; applySetCursorPosObserved={applySetCursorPos.HasValue}; applySetCursorPos={applySetCursorPos?.X},{applySetCursorPos?.Y}; {ObserveNativeColorState()}.");
+        }
+        MouseButtonEventHandler observeInputPreviewDown = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                ObserveColorApply($"INPUT_PREVIEW_DOWN handled={e.Handled} original={ColorRole(e.OriginalSource)}");
+        };
+        MouseButtonEventHandler observeInputPreviewUp = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                ObserveColorApply($"INPUT_PREVIEW_UP handled={e.Handled} original={ColorRole(e.OriginalSource)}");
+        };
+        MouseButtonEventHandler observeInputDown = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                ObserveColorApply($"INPUT_DOWN handled={e.Handled} original={ColorRole(e.OriginalSource)}");
+        };
+        MouseButtonEventHandler observeInputUp = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
+                ObserveColorApply($"INPUT_UP handled={e.Handled} original={ColorRole(e.OriginalSource)}");
+        };
+        MouseEventHandler observeInputGotCapture = (_, e) =>
+            ObserveColorApply($"INPUT_GOT_CAPTURE original={ColorRole(e.OriginalSource)}");
+        MouseEventHandler observeInputLostCapture = (_, e) =>
+            ObserveColorApply($"INPUT_LOST_CAPTURE original={ColorRole(e.OriginalSource)}");
+        MouseButtonEventHandler observeApplyDown = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left) { applyDown++; ObserveColorApply($"PREVIEW_DOWN handled={e.Handled} original={ColorRole(e.OriginalSource)}"); }
+        };
+        MouseButtonEventHandler observeApplyUp = (_, e) =>
+        {
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left) { applyUp++; ObserveColorApply($"PREVIEW_UP handled={e.Handled} original={ColorRole(e.OriginalSource)}"); }
+        };
+        RoutedEventHandler observeApplyClick = (_, _) => { applyClicks++; ObserveColorApply("CLICK_AFTER_PRODUCT_HANDLER"); };
+        DependencyPropertyChangedEventHandler observePopupClosed = (_, e) =>
+        {
+            if (e.NewValue is false) { popupClosed++; ObserveColorApply("INLINE_CLOSED"); }
+        };
+        customApply.AddHandler(Mouse.PreviewMouseDownEvent, observeApplyDown, handledEventsToo: true);
+        customApply.AddHandler(Mouse.PreviewMouseUpEvent, observeApplyUp, handledEventsToo: true);
+        customApply.AddHandler(ButtonBase.ClickEvent, observeApplyClick, handledEventsToo: true);
+        customFlyout.IsVisibleChanged += observePopupClosed;
+        customInput.AddHandler(Mouse.PreviewMouseDownEvent, observeInputPreviewDown, handledEventsToo: true);
+        customInput.AddHandler(Mouse.PreviewMouseUpEvent, observeInputPreviewUp, handledEventsToo: true);
+        customInput.AddHandler(Mouse.MouseDownEvent, observeInputDown, handledEventsToo: true);
+        customInput.AddHandler(Mouse.MouseUpEvent, observeInputUp, handledEventsToo: true);
+        customInput.AddHandler(Mouse.GotMouseCaptureEvent, observeInputGotCapture, handledEventsToo: true);
+        customInput.AddHandler(Mouse.LostMouseCaptureEvent, observeInputLostCapture, handledEventsToo: true);
+        try
+        {
+            ObserveColorApply("BEFORE_INPUT_CLICK");
+            Click(hwnd, customInput, observeCursorMove: (x, y) => inputSetCursorPos = new ColorTracePoint { X = x, Y = y });
+            ObserveColorApply("AFTER_INPUT_CLICK_BEFORE_TEXT");
+            customInput.Text = "#22AA66";
+            // Observe identity after text assignment; keep the original click target.
+            try
+            {
+                var currentApply = Ux402VisualMetrics.Descendants(customFlyout).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+                applySame = ReferenceEquals(currentApply, customApply);
+                applyIdentityStatus = "OBSERVED";
+            }
+            catch (Exception error) { applyIdentityStatus = "UNAVAILABLE:" + error.GetType().Name; }
+            ObserveColorApply("AFTER_EXISTING_TEXT_ASSIGNMENT");
+            ObserveColorApply("BEFORE_EXISTING_CLICK");
+            Click(hwnd, customApply, observeCursorMove: (x, y) => applySetCursorPos = new ColorTracePoint { X = x, Y = y });
+            ObserveColorApply("AFTER_EXISTING_CLICK_AND_PUMP");
+            // Closing the flyout returns focus to the + button that opened it, inside the editor.
+            check("mouse custom color apply closes the flyout, leaves input and returns editor focus",
+                !window.Editor.IsCustomColorFlyoutOpenForTest && window.Editor.StatusText == UiText.Format("Text_67CAE5B118A3", "#22AA66")
+                && ReferenceEquals(Keyboard.FocusedElement, customOpen) && window.Editor.IsKeyboardFocusWithin && GetForegroundWindow() == hwnd);
+        }
+        finally
+        {
+            customInput.RemoveHandler(Mouse.PreviewMouseDownEvent, observeInputPreviewDown);
+            customInput.RemoveHandler(Mouse.PreviewMouseUpEvent, observeInputPreviewUp);
+            customInput.RemoveHandler(Mouse.MouseDownEvent, observeInputDown);
+            customInput.RemoveHandler(Mouse.MouseUpEvent, observeInputUp);
+            customInput.RemoveHandler(Mouse.GotMouseCaptureEvent, observeInputGotCapture);
+            customInput.RemoveHandler(Mouse.LostMouseCaptureEvent, observeInputLostCapture);
+            customApply.RemoveHandler(Mouse.PreviewMouseDownEvent, observeApplyDown);
+            customApply.RemoveHandler(Mouse.PreviewMouseUpEvent, observeApplyUp);
+            customApply.RemoveHandler(ButtonBase.ClickEvent, observeApplyClick);
+            customFlyout.IsVisibleChanged -= observePopupClosed;
+            foreach (string observation in customApplyTrace)
+            {
+                report.AppendLine(observation); Console.WriteLine(observation);
+            }
+            report.AppendLine($"HOTFIX_COLOR_APPLY_TRACE: count={customApplyTrace.Count}; dropped={dropped}; observation only; existing native gesture/assertion unchanged.");
+        }
         SendKey(hwnd, 0x45); Pump(50);
         check("native custom color apply then E selects Ellipse", ((ToggleButton)Button("E")).IsChecked == true);
         Click(hwnd, Button("X"));
@@ -1088,6 +1221,13 @@ internal static class HotfixUxSelfTest
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll", EntryPoint = "keybd_event")] private static extern void KeyEvent(byte key, byte scan, uint flags, UIntPtr extra);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
+    [StructLayout(LayoutKind.Sequential)] private struct ColorTracePoint { public int X, Y; }
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetCursorPos(out ColorTracePoint point);
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(ColorTracePoint point);
+    [DllImport("user32.dll")] private static extern IntPtr GetCapture();
+    [DllImport("user32.dll")] private static extern IntPtr GetFocus();
+    [DllImport("user32.dll")] private static extern short GetKeyState(int key);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(IntPtr hwnd);
 }

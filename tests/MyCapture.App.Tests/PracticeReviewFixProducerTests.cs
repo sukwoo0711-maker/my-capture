@@ -6,6 +6,7 @@ using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
@@ -174,7 +175,9 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
             releaseFrame.Set();
             PinHistoryTestSupport.Await(coordinator.LastPreparationForTest); Drain();
             Assert.NotNull(selector);
-            Assert.True(selector.IsVisible && selector.Left < -8000 && selector.Top < -8000);
+            Assert.True(selector.IsVisible);
+            var (left, top, right, bottom) = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(selector).Handle);
+            Assert.Equal(frame.ScreenBounds, new RectD(left, top, right - left, bottom - top));
             if (phase == "selecting") Capture(app);
             Assert.True(guide.CapturePending);
             Assert.Equal(request, guide.Session.CaptureRequestId);
@@ -302,8 +305,14 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         }
     }
 
-    internal static ContextMenu OpenMenu(PinWindow pin) => Assert.IsType<ContextMenu>(
-        typeof(PinHoverBar).GetField("_opacityMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pin.HoverBarForTest));
+    internal static ContextMenu OpenMenu(PinWindow pin)
+    {
+        object? menu = typeof(PinHoverBar).GetField("_opacityMenu", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(pin.HoverBarForTest);
+        return CaptureWindowExclusion.SupportsLayeredWindows
+            ? Assert.IsType<ContextMenu>(menu)
+            : Assert.IsType<OpaqueCaptureContextMenu>(menu);
+    }
     internal static void Drain() => Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 }
 

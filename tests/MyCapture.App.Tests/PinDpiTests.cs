@@ -220,7 +220,9 @@ public sealed class PinDpiTests : KoreanCaptionTest
         var pin = new PinWindow(content, state, 0, 0) { ShowActivated = false };
         try
         {
+            Assert.Equal(content.LayoutWidthDip, pin.Width);
             pin.Show();
+            Size shownWindowSize = new(pin.Width, pin.Height);
             pin.SimulateDpiChangeForTest(1.25);
             Image image = Assert.IsType<Image>(Assert.IsType<Grid>(pin.Content).Children[0]);
             Assert.Equal(Stretch.None, image.Stretch);
@@ -228,7 +230,8 @@ public sealed class PinDpiTests : KoreanCaptionTest
             Assert.Equal(VerticalAlignment.Top, image.VerticalAlignment);
             Assert.True(pin.PinnedContent.Image.Width > state.ImageWidthDip);
             Assert.Equal(1, Assert.IsType<ScaleTransform>(image.LayoutTransform).ScaleX);
-            Assert.Equal(content.LayoutWidthDip, pin.Width);
+            Assert.Equal(shownWindowSize, new Size(pin.Width, pin.Height));
+            Assert.Equal(content.LayoutWidthDip, state.WidthDip);
 
             state.SetZoom(zoom);
             pin.Width = state.WidthDip;

@@ -75,7 +75,7 @@ public sealed partial class SettingsThemePreviewTests
     private sealed record LibraryUxFixture(GalleryWindow Window, GalleryViewModel ViewModel, CaptureQueue Queue,
         CaptureFolder Empty, CaptureFolder Design, IReadOnlyList<CaptureRecord> Records);
 
-    private static LibraryUxFixture CreateLibraryUxFixture(string prefix)
+    private static LibraryUxFixture CreateLibraryUxFixture(string prefix, Action<GalleryViewModel>? beforeWindow = null)
     {
         string root = TestRecycleBin.CreateTempSubdirectory(prefix).FullName;
         var paths = AppPaths.CreateForRoot(root);
@@ -105,6 +105,7 @@ public sealed partial class SettingsThemePreviewTests
             NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
         var vm = new GalleryViewModel(controller, record => queue.GetFilePath(record, CaptureFileNames.Thumbnail), 96,
             clock: () => today);
+        beforeWindow?.Invoke(vm);
         var window = new GalleryWindow(vm, controller,
             new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
             new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,

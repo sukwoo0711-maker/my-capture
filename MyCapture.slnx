@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/build/">
+    <Project Path="build/tools/TestHostDpiStartupHook/TestHostDpiStartupHook.csproj" />
     <Project Path="build/tools/TutorialVideoGenerator/MyCapture.TutorialGenerator.csproj" />
   </Folder>
   <Folder Name="/src/">

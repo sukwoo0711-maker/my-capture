@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
@@ -30,14 +31,24 @@ public sealed class VideoEditorCommandButtonTests
         using var culture = UiText.UseLanguage(language);
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         VideoEditorWindow? editor = null;
+        object previousEntrance = DependencyProperty.UnsetValue;
+        bool entranceOverridden = false;
         try
         {
             ShortcutPresentation.ReadEnabled = () => false;
             ShortcutPresentation.Refresh();
             editor = OpenLayout(width);
+            // This test compares settled Alt states, including HWND-global hit targets.
+            // ApplicationIdle does not finish the separate window-entrance clock: its
+            // parent translation can still move integer layout edges between pixels.
+            previousEntrance = editor.ReadLocalValue(FluidMotion.WindowEntranceProperty);
+            entranceOverridden = true;
+            FluidMotion.SetWindowEntrance(editor, false);
             editor.SetDetailsExpandedForTest(true);
             editor.UpdateLayout();
             var layout = (Grid)editor.Content;
+            Assert.True(layout.RenderTransform.Value.IsIdentity);
+            Assert.False(layout.RenderTransform.HasAnimatedProperties);
             Grid bar = Named<Grid>(editor, "VideoEditorCommandBar");
             Grid transport = Named<Grid>(editor, "VideoTransport");
             StackPanel precise = Named<StackPanel>(editor, "VideoPreciseTransport");
@@ -74,7 +85,9 @@ public sealed class VideoEditorCommandButtonTests
                             ShortcutMotionTestScope.AssertState(hint, enabled);
                             Grid face = Assert.IsType<Grid>(button.Content);
                             Assert.Equal(new GridLength(14), face.RowDefinitions[1].Height);
-                            Assert.Equal(CommandButtonPresentation.HintHeight, face.RowDefinitions[1].ActualHeight, 2);
+                            double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
+                            Assert.Equal(Math.Round(CommandButtonPresentation.HintHeight * scale),
+                                face.RowDefinitions[1].ActualHeight * scale, 6);
                             if (enabled) AssertInside(hint, button, button.ActualHeight);
                             else
                             {
@@ -95,18 +108,13 @@ public sealed class VideoEditorCommandButtonTests
                         bool joinedSplitParts = commands[first].Name == "NewCapture" && commands[second].Name == "CaptureOptions";
                         if (joinedSplitParts)
                         {
-                            // WPF includes shared edges in IntersectsWith; joined halves must
-                            // share that edge without covering any part of the other's hit area.
-                            Assert.Equal(firstBounds.Right, secondBounds.Left, 2);
-                            Rect intersection = Rect.Intersect(firstBounds, secondBounds);
-                            Assert.True(intersection.IsEmpty || intersection.Width * intersection.Height == 0);
+                            AssertJoinedSplitPixelsAndHitTargets(commands[first], commands[second], enabled);
                         }
                         else Assert.False(firstBounds.IntersectsWith(secondBounds), $"Commands overlap with hints {enabled}: {firstBounds}, {secondBounds}.");
-                        if (Math.Abs(firstBounds.Top - secondBounds.Top) < 0.5)
+                        if (!joinedSplitParts && Math.Abs(firstBounds.Top - secondBounds.Top) < 0.5)
                         {
                             double gap = Math.Max(firstBounds.Left, secondBounds.Left) - Math.Min(firstBounds.Right, secondBounds.Right);
-                            if (joinedSplitParts) Assert.InRange(gap, 0, .5);
-                            else Assert.True(gap >= 5.5, $"command gap {gap} with hints {enabled}");
+                            Assert.True(gap >= 5.5, $"command gap {gap} with hints {enabled}");
                         }
                     }
                 }
@@ -115,6 +123,12 @@ public sealed class VideoEditorCommandButtonTests
         finally
         {
             editor?.Close();
+            if (editor is not null && entranceOverridden)
+            {
+                if (previousEntrance == DependencyProperty.UnsetValue)
+                    editor.ClearValue(FluidMotion.WindowEntranceProperty);
+                else editor.SetValue(FluidMotion.WindowEntranceProperty, previousEntrance);
+            }
             ShortcutPresentation.ReadEnabled = previous;
             ShortcutPresentation.Refresh();
         }
@@ -306,6 +320,96 @@ public sealed class VideoEditorCommandButtonTests
 
     private static T Named<T>(DependencyObject root, string name) where T : FrameworkElement =>
         Assert.Single(Descendants(root).OfType<T>(), element => element.Name == name);
+
+    private static void AssertJoinedSplitPixelsAndHitTargets(ButtonBase main, ButtonBase options, bool hints)
+    {
+        // OpenLayout shows an actual HWND off-screen; a detached Measure/Arrange tree
+        // would not establish that either half is an input target.
+        HwndSource source = Assert.IsType<HwndSource>(PresentationSource.FromVisual(main));
+        Assert.NotEqual(IntPtr.Zero, source.Handle);
+        Assert.Same(source, PresentationSource.FromVisual(options));
+        UIElement root = Assert.IsAssignableFrom<UIElement>(source.RootVisual);
+        CompositionTarget target = Assert.IsAssignableFrom<CompositionTarget>(source.CompositionTarget);
+        Matrix toPixels = target.TransformToDevice;
+        Assert.True(toPixels.HasInverse);
+        Matrix fromPixels = toPixels;
+        fromPixels.Invert();
+        Assert.True(main.UseLayoutRounding && options.UseLayoutRounding);
+
+        Rect first = PixelBounds(main), second = PixelBounds(options);
+        Assert.True(first.Width > 0 && first.Height > 0 && second.Width > 0 && second.Height > 0);
+        Assert.Equal(first.Top, second.Top);
+        Assert.Equal(first.Bottom, second.Bottom);
+        Assert.Equal(first.Right, second.Left);
+        Rect intersection = Rect.Intersect(first, second);
+        Assert.True(intersection.IsEmpty || intersection.Width * intersection.Height == 0,
+            $"Joined split pixel areas overlap with hints {hints}: {first}, {second}.");
+        Assert.Equal(0, second.Left - first.Right);
+
+        // Check the nearest physical pixel center on each side of the shared edge.
+        // An actual pixel of overlap or a non-hittable half must still fail.
+        double y = Math.Floor((first.Top + first.Bottom) / 2) + 0.5;
+        AssertHit(main, new Point(first.Right - 0.5, y));
+        AssertHit(options, new Point(second.Left + 0.5, y));
+
+        Rect PixelBounds(ButtonBase button)
+        {
+            GeneralTransform toRoot = button.TransformToAncestor(root);
+            Matrix rootMatrix = Assert.IsAssignableFrom<Transform>(toRoot).Value;
+            return new Rect(PixelPoint(new Point()), PixelPoint(new Point(button.ActualWidth, button.ActualHeight)));
+
+            Point PixelPoint(Point local)
+            {
+                Point rootPoint = toRoot.Transform(local);
+                Point raw = toPixels.Transform(rootPoint);
+                Point rootError = AffineRoundoff(local, rootMatrix, rootPoint);
+                Point deviceError = AffineRoundoff(rootPoint, toPixels, raw);
+                double xBudget = deviceError.X + Math.Abs(toPixels.M11) * rootError.X + Math.Abs(toPixels.M21) * rootError.Y;
+                double yBudget = deviceError.Y + Math.Abs(toPixels.M12) * rootError.X + Math.Abs(toPixels.M22) * rootError.Y;
+                return new Point(RoundEdge(raw.X, xBudget), RoundEdge(raw.Y, yBudget));
+            }
+        }
+
+        double RoundEdge(double raw, double budget)
+        {
+            double integer = Math.Round(raw);
+            // Only normalize affine floating-point representation error. A fractional
+            // render transform, gap or overlap must fail before whole-pixel rounding.
+            Assert.True(double.IsFinite(budget) && budget < 0.5 && Math.Abs(raw - integer) <= budget,
+                $"Split edge {raw:R} is not a device-pixel boundary with hints {hints}; integer={integer:R}, ULP budget={budget:R}.");
+            return integer;
+        }
+
+        static Point AffineRoundoff(Point input, Matrix matrix, Point result)
+        {
+            return new Point(
+                CoordinateError(matrix.M11, matrix.M21, matrix.OffsetX, result.X),
+                CoordinateError(matrix.M12, matrix.M22, matrix.OffsetY, result.Y));
+
+            double CoordinateError(double xFactor, double yFactor, double offset, double value)
+            {
+                double x = input.X * xFactor, y = input.Y * yFactor;
+                // Propagate one ULP from represented inputs/matrix coefficients and
+                // each multiply/add, including the composed root translation.
+                return Math.Abs(xFactor) * Ulp(input.X) + Math.Abs(yFactor) * Ulp(input.Y)
+                    + Math.Abs(input.X) * Ulp(xFactor) + Math.Abs(input.Y) * Ulp(yFactor)
+                    + Ulp(x) + Ulp(y) + Ulp(x + y) + Ulp(offset) + Ulp(value);
+            }
+
+            static double Ulp(double value)
+            {
+                double magnitude = Math.Abs(value);
+                return Math.BitIncrement(magnitude) - magnitude;
+            }
+        }
+
+        void AssertHit(ButtonBase expected, Point pixelCenter)
+        {
+            DependencyObject hit = Assert.IsAssignableFrom<DependencyObject>(root.InputHitTest(fromPixels.Transform(pixelCenter)));
+            Assert.True(ReferenceEquals(hit, expected) || expected.IsAncestorOf(hit),
+                $"Split pixel {pixelCenter} must hit {expected.Name} with hints {hints}; hit {hit.GetType().Name}.");
+        }
+    }
 
     private static VideoEditorWindow OpenLayout(int width) => OpenReadyEditor(
         Path.Combine(AppContext.BaseDirectory, "button-spec-in-memory"), 10_000, show: true, width, 760);

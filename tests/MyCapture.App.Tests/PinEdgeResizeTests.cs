@@ -365,8 +365,12 @@ public sealed class PinEdgeResizeTests
             Anchor = new Point(x < 0 ? 0 : x > 0 ? pin.Width : pin.Width / 2,
                 y < 0 ? 0 : y > 0 ? pin.Height : pin.Height / 2);
             DpiScale dpi = VisualTreeHelper.GetDpi(pin);
-            _start = CursorPosition = (pin.PhysicalBounds.Left + (int)Math.Round(Anchor.X * dpi.DpiScaleX),
-                pin.PhysicalBounds.Top + (int)Math.Round(Anchor.Y * dpi.DpiScaleY));
+            int offsetX = (int)Math.Round(Anchor.X * dpi.DpiScaleX);
+            int offsetY = (int)Math.Round(Anchor.Y * dpi.DpiScaleY);
+            // Both input APIs must describe the same integer-pixel pointer sample.
+            // For example, 62 physical pixels are 49.6 DIP at 125%, not 50 DIP.
+            Anchor = new Point(offsetX / dpi.DpiScaleX, offsetY / dpi.DpiScaleY);
+            _start = CursorPosition = (pin.PhysicalBounds.Left + offsetX, pin.PhysicalBounds.Top + offsetY);
             Invoke(pin, "OnMouseLeftButtonDown", new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
                 { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
         }

@@ -59,10 +59,11 @@ public sealed class CompactCaptureBarTests
             };
             pauseCaption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             double pauseWidth = Math.Max(36, Math.Ceiling(pauseCaption.DesiredSize.Width) + 6);
-            Assert.Equal(pauseWidth, window.PauseButtonForTest.ActualWidth);
+            Assert.Equal(pauseWidth, window.PauseButtonForTest.Width);
+            Assert.Equal(RoundedWidth(window.PauseButtonForTest, pauseWidth), window.PauseButtonForTest.ActualWidth);
             // The compact pill keeps its clock room plus three 36-DIP targets; only the
             // assigned pause chord needs additional horizontal room, reserved before Alt.
-            Assert.Equal(216 + pauseWidth - 36, strip.ActualWidth);
+            AssertStripWidth(window, strip, 216 + pauseWidth - 36);
             Assert.Equal(Visibility.Collapsed, status.Visibility);
             Assert.Equal(FontNumeralAlignment.Tabular, Typography.GetNumeralAlignment(clock));
             Assert.Equal("01:23", clock.Text);
@@ -73,7 +74,9 @@ public sealed class CompactCaptureBarTests
             foreach (Button button in new[] { window.PauseButtonForTest, window.PrimaryButtonForTest, window.MoreButtonForTest })
             {
                 Assert.IsType<SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(button));
-                Assert.Equal(ReferenceEquals(button, window.PauseButtonForTest) ? pauseWidth : 36, button.ActualWidth);
+                double requestedWidth = ReferenceEquals(button, window.PauseButtonForTest) ? pauseWidth : 36;
+                Assert.Equal(requestedWidth, button.Width);
+                Assert.Equal(RoundedWidth(button, requestedWidth), button.ActualWidth);
                 Assert.Equal(36, button.ActualHeight);
                 Rect bounds = button.TransformToAncestor(strip).TransformBounds(new Rect(button.RenderSize));
                 Assert.True(bounds.Left >= 0 && bounds.Right <= strip.ActualWidth && bounds.Top >= 0 && bounds.Bottom <= strip.ActualHeight);
@@ -96,7 +99,7 @@ public sealed class CompactCaptureBarTests
 
             window.PreviewRecordingForTest(true, TimeSpan.FromSeconds(83));
             Arrange(strip);
-            Assert.Equal(236 + pauseWidth - 36, strip.ActualWidth);
+            AssertStripWidth(window, strip, 236 + pauseWidth - 36);
             Assert.Equal(pausedLabel, status.Text);
             Assert.Equal(Visibility.Visible, status.Visibility);
             Assert.Equal(Grid.GetColumn(clock), Grid.GetColumn(status));
@@ -416,7 +419,7 @@ public sealed class CompactCaptureBarTests
             Assert.Equal(1, sink.Frames);
             Assert.Null(grabber.ActiveBackend); // Neither GDI nor WGC is opened for this lifecycle test.
             Assert.True(window.IsPaused && recorder.IsPaused);
-            Assert.Equal(236 + Math.Max(0, window.PauseButtonForTest.Width - 36), strip.ActualWidth);
+            AssertStripWidth(window, strip, 236 + Math.Max(0, window.PauseButtonForTest.Width - 36));
             Assert.Equal(Visibility.Visible, indicator.Visibility);
             Assert.Same(pausedGlyph, indicator.Data);
             Assert.False(indicator.HasAnimatedProperties);
@@ -511,6 +514,28 @@ public sealed class CompactCaptureBarTests
         public void WriteFrame(in EncoderFrame frame) => Interlocked.Increment(ref _frames);
         public void Complete() => Completed = true;
         public void Dispose() { }
+    }
+
+    private static double RoundedWidth(Visual element, double width)
+    {
+        double scale = VisualTreeHelper.GetDpi(element).DpiScaleX;
+        return Math.Round(width * scale) / scale;
+    }
+
+    private static void AssertStripWidth(RecordingControlWindow window, Border strip, double requestedWidth)
+    {
+        // The inner composition keeps the requested DIP budget. The opaque HWND's
+        // palette expands its physical left/right edges outward before WPF layout.
+        Assert.Equal(requestedWidth - 2, Assert.IsType<Border>(Assert.IsType<Viewbox>(strip.Child).Child).Width);
+        RectD region = Field<RectD>(window, "_screenRegion");
+        RectD work = MonitorEnumerator.GetFromPoint(region.Center).WorkArea;
+        double scale = VisualTreeHelper.GetDpi(window).DpiScaleX;
+        double widthPixels = Math.Min(work.Width, requestedWidth * scale);
+        double leftPixels = Math.Clamp(region.Center.X - widthPixels / 2,
+            work.Left, Math.Max(work.Left, work.Right - widthPixels));
+        if (!window.AllowsTransparency)
+            widthPixels = Math.Ceiling(leftPixels + widthPixels) - Math.Floor(leftPixels);
+        Assert.Equal(Math.Round(widthPixels), strip.ActualWidth * scale, 6);
     }
 
     private static void Arrange(FrameworkElement element)

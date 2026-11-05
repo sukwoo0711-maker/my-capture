@@ -92,6 +92,8 @@ public sealed class EditorPointerSurfaceEvidenceTests
         var controller = new AnnotationEditorController(AnnotationDocument.CreateFor(320, 240), new UndoStack());
         var surface = new AnnotationEditorSurface(new FrozenFrame(bitmap, rect, null, 0), rect, controller,
             new AnnotationRenderer(new AnnotationImageStore()));
+        // This offscreen visual fixture and its bitmap render targets both use 96 DPI.
+        VisualTreeHelper.SetRootDpi(surface, new DpiScale(1, 1));
         var size = new Size(320 * scale + 32, 240 * scale + 32);
         surface.Measure(size);
         surface.Arrange(new Rect(size));

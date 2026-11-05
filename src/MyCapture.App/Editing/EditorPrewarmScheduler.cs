@@ -10,15 +10,19 @@ internal sealed class EditorPrewarmScheduler(
 {
     private bool _queued;
     private bool _finished;
+    private bool _galleryVisible;
 
     internal void Request()
     {
-        if (_finished || _queued) return;
+        if (_finished || _queued || _galleryVisible) return;
         _queued = true;
         postIdle(TryRun);
     }
 
     internal void EditorOpened() => _finished = true;
+
+    // The host requests again on Hide/Closed. A visible gallery does not poll.
+    internal void SetGalleryVisible(bool visible) => _galleryVisible = visible;
 
     private void TryRun()
     {
@@ -29,6 +33,8 @@ internal sealed class EditorPrewarmScheduler(
             _finished = true;
             return;
         }
+        // Recheck after queueing: the gallery can open before this idle turn.
+        if (_galleryVisible) return;
         if (isBusy())
         {
             // A flow-end event can retry immediately. The host's delayed fallback covers

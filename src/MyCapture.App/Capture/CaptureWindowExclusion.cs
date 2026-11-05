@@ -16,6 +16,9 @@ internal static class CaptureWindowExclusion
 {
     private sealed class AppliedResult { internal bool Succeeded; }
     private static readonly ConditionalWeakTable<Window, AppliedResult> Applied = new();
+    // WPF bindings hold their source weakly. Own each private theme follower only for
+    // its target brush's lifetime, without retaining a closed window or its background.
+    private static readonly ConditionalWeakTable<SolidColorBrush, SolidColorBrush> OpaqueBackgroundSources = new();
 
     internal static bool WasApplied(Window window) =>
         Applied.TryGetValue(window, out AppliedResult? result) && result.Succeeded;
@@ -146,6 +149,7 @@ internal static class CaptureWindowExclusion
         if (token is SolidColorBrush solid)
         {
             // Keep live theme changes, but never copy the floating token's alpha/opacity.
+            OpaqueBackgroundSources.Add(brush, solid);
             BindingOperations.SetBinding(brush, SolidColorBrush.ColorProperty,
                 new Binding(nameof(SolidColorBrush.Color)) { Source = solid, Converter = OpaqueColorConverter.Instance });
         }

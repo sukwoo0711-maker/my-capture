@@ -536,6 +536,21 @@ public sealed partial class SettingsThemePreviewTests
                 // A right click, the Menu key and the More button all open the same instance, aimed at their card.
                 ContextMenu shared = window.TileMenu;
                 Assert.Same(shared, window.FindResource("Gallery.TileContextMenu"));
+                void CloseSharedMenu(string phase)
+                {
+                    bool closed = false;
+                    RoutedEventHandler onClosed = (_, _) => closed = true;
+                    shared.Closed += onClosed;
+                    try
+                    {
+                        shared.IsOpen = false;
+                        _ = PumpLibraryUntil(window, () => shared,
+                            menu => closed && menu is { IsOpen: false },
+                            testName + "/" + phase + ": shared menu Closed");
+                        Assert.Null(shared.PlacementTarget);
+                    }
+                    finally { shared.Closed -= onClosed; }
+                }
                 foreach ((ListBoxItem card, GalleryItemViewModel tile) in new[]
                          { (first, f.ViewModel.FindTile(a.Id)!), (second, f.ViewModel.FindTile(b.Id)!) })
                 {
@@ -545,14 +560,14 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(shared.IsOpen);
                     Assert.Same(card, shared.PlacementTarget);
                     Assert.Same(tile, shared.DataContext);
-                    shared.IsOpen = false;
+                    CloseSharedMenu("right-click");
                     Button more = Descendants(card).OfType<Button>().Single(button =>
                         System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
                     more.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     Assert.True(shared.IsOpen);
                     Assert.Same(more, shared.PlacementTarget);
                     Assert.Same(tile, shared.DataContext);
-                    shared.IsOpen = false;
+                    CloseSharedMenu("More");
                 }
 
                 // The badge menu appears on demand.

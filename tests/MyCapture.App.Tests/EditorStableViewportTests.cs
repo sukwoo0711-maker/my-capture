@@ -348,7 +348,11 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
         Assert.True(viewport.ActualWidth > 0 && viewport.ActualHeight > 0);
         Assert.True(double.IsFinite(inspector.Height) && inspector.Height > 0);
         Rect frameBounds = surface.TransformToAncestor(host.Window).TransformBounds(surface.FrameRectDip);
-        return new ViewportSnapshot(viewport.ActualWidth, viewport.ActualHeight, inspector.Height, surface.DipPerPixel, frameBounds);
+        // A press freezes Height to the device-rounded ActualHeight; the requested
+        // budget is retained separately until release and must remain unchanged too.
+        double budget = Field<double?>(host.Editor, "_inspectorHeightBeforeGesture") ?? inspector.Height;
+        return new ViewportSnapshot(viewport.ActualWidth, viewport.ActualHeight, inspector.ActualHeight,
+            surface.DipPerPixel, frameBounds, budget);
     }
 
     private static void AssertStable(ViewportSnapshot before, EditorWindowHost host, string phase)
@@ -356,7 +360,8 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
         ViewportSnapshot after = Snapshot(host);
         AssertClose(before.ViewportWidth, after.ViewportWidth, phase + " viewport width");
         AssertClose(before.ViewportHeight, after.ViewportHeight, phase + " viewport height");
-        AssertClose(before.InspectorHeight, after.InspectorHeight, phase + " inspector budget");
+        AssertClose(before.InspectorHeight, after.InspectorHeight, phase + " inspector displayed height");
+        AssertClose(before.InspectorBudget, after.InspectorBudget, phase + " inspector budget");
         AssertClose(before.DipPerPixel, after.DipPerPixel, phase + " image scale");
         AssertClose(before.FrameBounds.X, after.FrameBounds.X, phase + " image left");
         AssertClose(before.FrameBounds.Y, after.FrameBounds.Y, phase + " image top");
@@ -386,5 +391,5 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
     }
 
     private readonly record struct ViewportSnapshot(double ViewportWidth, double ViewportHeight,
-        double InspectorHeight, double DipPerPixel, Rect FrameBounds);
+        double InspectorHeight, double DipPerPixel, Rect FrameBounds, double InspectorBudget);
 }

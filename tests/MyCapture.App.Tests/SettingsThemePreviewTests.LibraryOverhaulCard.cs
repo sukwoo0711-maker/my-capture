@@ -500,9 +500,13 @@ public sealed partial class SettingsThemePreviewTests
                 foreach (double textScale in new[] { 1d, 1.5d, 2d })
                 foreach (double dpi in new[] { 1d, 1.25d, 1.5d, 2d })
                 {
+                    string label = $"{language}/{theme}/text{textScale}/dpi{dpi}";
+                    RecordIsolatedProgress($"footer matrix begin {label}");
                     using var scope = UiText.UseLanguage(language);
                     ThemeService.Apply(theme);
+                    RecordIsolatedProgress($"footer matrix theme applied {label}");
                     LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-matrix-");
+                    RecordIsolatedProgress($"footer matrix fixture ready {label}");
                     f.Records[0].Title = "Capture review - toolbar and keyboard navigation";
                     f.Records[0].HasAnnotations = true;
                     f.Records[0].SourcePageUrl = "https://example.com/source";
@@ -510,13 +514,14 @@ public sealed partial class SettingsThemePreviewTests
                     GalleryWindow window = f.Window;
                     window.Resources["FontSize.Body"] = 14d * textScale;
                     window.Resources["FontSize.Caption"] = 12d * textScale;
-                    string label = $"{language}/{theme}/text{textScale}/dpi{dpi}";
                     try
                     {
                         window.Show();
+                        RecordIsolatedProgress($"footer matrix native shown {label}");
                         VisualTreeHelper.SetRootDpi(window, new DpiScale(dpi, dpi));
                         foreach (UIElement element in Descendants(window).Prepend(window).OfType<UIElement>()) { element.InvalidateMeasure(); element.InvalidateArrange(); }
                         SettleGalleryLayout(window);
+                        RecordIsolatedProgress($"footer matrix shown {label}");
                         var rows = (ListBox)window.FindName("RowsList");
                         foreach (bool compact in new[] { false, true })
                         {
@@ -555,7 +560,11 @@ public sealed partial class SettingsThemePreviewTests
                             }
                         }
                     }
-                    finally { window.CloseForExit(); }
+                    finally
+                    {
+                        window.CloseForExit();
+                        RecordIsolatedProgress($"footer matrix closed {label}, failures={failures.Count}");
+                    }
                 }
             }
             finally

@@ -25,6 +25,7 @@ internal sealed partial class GalleryWindow
     }
 
     private ToolbarDensity _toolbarDensity;
+    private System.Windows.Threading.DispatcherOperation? _selectionCommandsRefresh;
 
     internal ToolbarDensity ContentToolbarDensity => _toolbarDensity;
 
@@ -88,15 +89,33 @@ internal sealed partial class GalleryWindow
     private void InitializeCommandBarLayout()
     {
         LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
-        Loaded += (_, _) => { FitSelectionCommands(); FitContentToolbar(); };
+        Loaded += (_, _) => FitSelectionCommands();
         DpiChanged += (_, _) => FitContentToolbar();
         IsVisibleChanged += (_, _) => { if (IsVisible) FitContentToolbar(); };
-        _viewModel.PropertyChanged += (_, e) =>
+        _viewModel.PropertyChanged += OnSelectionCommandsPropertyChanged;
+        Closed += OnCommandBarLayoutClosed;
+    }
+
+    private void OnSelectionCommandsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (null or "" or nameof(GalleryViewModel.HasSelection)
+            or nameof(GalleryViewModel.CanCompareSelected) or nameof(GalleryViewModel.SelectionText))) return;
+        if (_selectionCommandsRefresh is { Status: System.Windows.Threading.DispatcherOperationStatus.Pending }) return;
+
+        // One queued fit reads the latest selection after its related property notifications.
+        _selectionCommandsRefresh = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
         {
-            if (e.PropertyName is null or "" or nameof(GalleryViewModel.HasSelection)
-                or nameof(GalleryViewModel.CanCompareSelected) or nameof(GalleryViewModel.SelectionText))
-                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(FitSelectionCommands));
-        };
+            _selectionCommandsRefresh = null;
+            FitSelectionCommands();
+        }));
+    }
+
+    private void OnCommandBarLayoutClosed(object? sender, EventArgs e)
+    {
+        _viewModel.PropertyChanged -= OnSelectionCommandsPropertyChanged;
+        _selectionCommandsRefresh?.Abort();
+        _selectionCommandsRefresh = null;
+        Closed -= OnCommandBarLayoutClosed;
     }
 
     private void FitSelectionCommands()

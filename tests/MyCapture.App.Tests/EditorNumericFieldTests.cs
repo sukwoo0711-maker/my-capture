@@ -48,7 +48,13 @@ public sealed class EditorNumericFieldTests : KoreanCaptionTest
         });
         Border[] dividers = content.Children.OfType<Border>().ToArray();
         Assert.Equal(2, dividers.Length);
-        Assert.All(dividers, divider => { Assert.Equal(1, divider.ActualWidth); Assert.Equal(20, divider.ActualHeight); });
+        Assert.All(dividers, divider =>
+        {
+            Assert.Equal(1, divider.Width);
+            double scale = VisualTreeHelper.GetDpi(divider).DpiScaleX;
+            Assert.Equal(Math.Round(scale), divider.ActualWidth * scale, 6);
+            Assert.Equal(20, divider.ActualHeight);
+        });
         var peer = new TextBoxAutomationPeer(box);
         Assert.Equal(UiText.Get("Text_70EC2D232B4F"), peer.GetName());
         Assert.IsAssignableFrom<IValueProvider>(peer.GetPattern(PatternInterface.Value));
@@ -263,7 +269,7 @@ public sealed class EditorNumericFieldTests : KoreanCaptionTest
         Assert.Equal(UiText.Get("EditorProperty_CustomColor"), AutomationProperties.GetName(button));
         Assert.Equal("AnnotationCustomColorOpen", AutomationProperties.GetAutomationId(button));
         button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-        Assert.True(host.Editor.CustomColorPopupForTest.IsOpen);
+        Assert.True(host.Editor.IsCustomColorFlyoutOpenForTest);
     });
 
     private static AnnotationEditorController SelectTwoShapes(AnnotationEditorControl editor)

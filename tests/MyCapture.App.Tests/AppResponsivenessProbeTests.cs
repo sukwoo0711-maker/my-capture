@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -46,6 +47,13 @@ namespace MyCapture.App.Tests;
 /// app; <c>MYCAPTURE_APP_PERF_SECTIONS</c> (for example <c>done,library-5000</c>) narrows the run.
 /// Each section writes the editor probe's CSV set (prefix <c>app-responsiveness</c>) in its own
 /// folder, and the parent joins the scenario rows and the summaries at the top level.
+/// </para>
+/// <para>
+/// Set <c>MYCAPTURE_APP_PERF_LIBRARY_ONSCREEN=1</c> for visible library/startup measurements,
+/// for example sections <c>library-0,library-100,library-1000,library-10000</c> (or startup-).
+/// <c>MYCAPTURE_APP_PERF_LIBRARY_REOPENS</c> defaults to five additional hide/show repetitions;
+/// this diagnostic sample is separate from the release plan's 100-reopen gate.
+/// <c>MYCAPTURE_APP_PERF_STACKS=1</c> enables the existing stall stack sampler.
 /// </para>
 /// <para>
 /// Libraries are generated in isolated temporary roots (small PNG files, records spread over the
@@ -185,12 +193,22 @@ internal sealed partial class AppResponsivenessProbe
     private PreciseDelay _delay = null!;
     private string _size = "-";
     private string _variant = "-";
+    private readonly bool _libraryOnScreen;
+    private readonly int _libraryReopens;
 
     private AppResponsivenessProbe(string section, string output, string? library)
     {
         _section = section;
         _output = output;
         _library = library;
+        _libraryOnScreen = Environment.GetEnvironmentVariable("MYCAPTURE_APP_PERF_LIBRARY_ONSCREEN") == "1";
+        if (_libraryOnScreen)
+        {
+            string requested = Environment.GetEnvironmentVariable("MYCAPTURE_APP_PERF_LIBRARY_REOPENS") ?? "5";
+            if (!int.TryParse(requested, NumberStyles.None, CultureInfo.InvariantCulture, out _libraryReopens)
+                || _libraryReopens is < 5 or > 100)
+                throw new ArgumentException("MYCAPTURE_APP_PERF_LIBRARY_REOPENS must be between 5 and 100.");
+        }
     }
 
     internal static int? LibrarySize(string section) =>
@@ -237,8 +255,16 @@ internal sealed partial class AppResponsivenessProbe
         // The receipt sections time the dispatcher's own idle order: an 8 ms Input-priority beat would
         // sit in front of the card's ContextIdle turn, so they run without it.
         bool beat = !IsReceiptSection(_section);
+        bool sampleStacks = Environment.GetEnvironmentVariable("MYCAPTURE_APP_PERF_STACKS") == "1";
+        _environment.Add($"UI-thread stall stack sampling requested: {sampleStacks}; active: {beat && sampleStacks} (receipt sections have no heartbeat).");
+        _environment.Add($"Library presentation: {(_libraryOnScreen ? "on-screen" : "offscreen (default)")}; additional diagnostic reopens: {_libraryReopens}.");
+        if (_libraryOnScreen)
+        {
+            _environment.Add("First-page readiness enumerates the visual tree on the UI thread; its measured overhead is included. Thumbnail rectangles intersect window, ancestor clips and ScrollContentPresenter viewport; overscan-only images are excluded.");
+            _environment.Add("Input-ready means an Input-priority dispatcher callback completed, not a keyboard action. Post-ready CompositionTarget.Rendering is a WPF rendering event, not physical display presentation. Reopen samples alone do not satisfy the release 100-reopen gate.");
+        }
         using (var tracker = new DispatcherOperationTracker(_ui, _recorder))
-        using (UiHeartbeat? heartbeat = beat ? new UiHeartbeat(_ui, _recorder, tracker, hang, sampleStacks: false) : null)
+        using (UiHeartbeat? heartbeat = beat ? new UiHeartbeat(_ui, _recorder, tracker, hang, sampleStacks) : null)
         {
             _environment.Add(heartbeat is null ? "Heartbeat: off (receipt section)"
                 : "Heartbeat timer: " + (heartbeat.HighResolution ? "high-resolution waitable timer, 8 ms" : "Thread.Sleep(8) fallback"));
@@ -668,10 +694,12 @@ internal sealed partial class AppResponsivenessProbe
         try
         {
             GalleryWindow window = OpenLibrary(library, "library window first open");
+            MeasureLibraryFirstSelection(library);
             ProbeScenario hide = Begin("library window close (hide)");
             Op(hide, "GalleryWindow.Close", window.Close, idle: true);
             End(hide);
             _ = OpenLibrary(library, "library window second open");
+            MeasureLibraryReopens(library);
             StartupBreakdown(paths, settings);
         }
         finally
@@ -742,44 +770,369 @@ internal sealed partial class AppResponsivenessProbe
         long started = 0, constructed = 0, renderedAt = 0;
         ProbeScenario s = Begin(name);
         bool first = library.Window is null;
-        Op(s, first ? "EnsureGalleryWindow (GalleryViewModel + GalleryWindow)" : "(window exists)", () =>
+        bool timing = _libraryOnScreen &&
+            Environment.GetEnvironmentVariable("MYCAPTURE_APP_PERF_LIBRARY_TIMING") == "1";
+        List<GalleryWindow.GalleryOpenTiming>? observations = timing ? [] : null;
+        GalleryWindow? observedWindow = null;
+        int checksAtSubscribe = 0;
+        bool subscribed = false;
+        try
         {
-            started = Stopwatch.GetTimestamp();
-            library.EnsureWindow();
-            constructed = Stopwatch.GetTimestamp();
-            if (!first)
+            Op(s, first ? "EnsureGalleryWindow (GalleryViewModel + GalleryWindow)" : "(window exists)", () =>
             {
-                // ContentRendered is raised once per window, on its first show.
-                rendered.Set();
-                return;
-            }
+                started = Stopwatch.GetTimestamp();
+                library.EnsureWindow();
+                constructed = Stopwatch.GetTimestamp();
+                if (observations is not null)
+                {
+                    observedWindow = library.Window!;
+                    if (observedWindow.OpenTimingObserverForTest is not null)
+                        throw new InvalidOperationException("The gallery already has an open-timing observer.");
+                    checksAtSubscribe = observedWindow.MetadataWidthChecks;
+                    observedWindow.OpenTimingObserverForTest = observations.Add;
+                    subscribed = true;
+                }
+                if (!first)
+                {
+                    // ContentRendered is raised once per window, on its first show.
+                    rendered.Set();
+                    return;
+                }
 
-            EventHandler? onRendered = null;
-            onRendered = (_, _) =>
+                EventHandler? onRendered = null;
+                onRendered = (_, _) =>
+                {
+                    library.Window!.ContentRendered -= onRendered;
+                    renderedAt = Stopwatch.GetTimestamp();
+                    rendered.Set();
+                };
+                library.Window!.ContentRendered += onRendered;
+            }, idle: false);
+            GalleryWindow window = library.Window!;
+            Op(s, "GalleryWindow.ShowGallery", () =>
             {
-                library.Window!.ContentRendered -= onRendered;
+                window.WindowStartupLocation = WindowStartupLocation.Manual;
+                if (_libraryOnScreen)
+                {
+                    Rect work = SystemParameters.WorkArea;
+                    if (work.Width < window.MinWidth || work.Height < window.MinHeight)
+                        throw new InvalidOperationException("The primary work area cannot contain the library's minimum size.");
+                    window.Width = Math.Min(window.Width, work.Width);
+                    window.Height = Math.Min(window.Height, work.Height);
+                    window.Left = work.Left + (work.Width - window.Width) / 2;
+                    window.Top = work.Top + (work.Height - window.Height) / 2;
+                }
+                else
+                {
+                    window.Left = -30000;
+                    window.Top = -30000;
+                }
+                window.ShowActivated = false;
+                window.ShowGallery();
+            }, idle: false);
+            Wait(rendered, "library window render");
+            if (_libraryOnScreen) MeasureLibraryFirstPage(library, s, started);
+            End(s);
+            s.Extra["construct-ms"] = Ms(started, constructed);
+            if (renderedAt != 0) s.Extra["first-render-ms"] = Ms(started, renderedAt);
+            s.Extra["open-to-idle-ms"] = Ms(started, s.EndTimestamp);
+            s.Notes = $"visible tiles {Ui(() => library.ViewModel!.VisibleCount)}, rows {Ui(() => library.ViewModel!.Rows.Count)}";
+            return window;
+        }
+        finally
+        {
+            if (subscribed)
+                Ui(() => observedWindow!.OpenTimingObserverForTest = null);
+            if (observations is not null)
+                RecordLibraryOpenTimings(s, observations, first, checksAtSubscribe);
+        }
+    }
+
+    private void RecordLibraryOpenTimings(ProbeScenario scenario,
+        List<GalleryWindow.GalleryOpenTiming> observations, bool first, int checksAtSubscribe)
+    {
+        scenario.Extra["metadata-checks-before-subscribe"] = checksAtSubscribe;
+        GalleryWindow.GalleryOpenTiming[] metadata = observations
+            .Where(value => value.Stage == "metadata-minimum-widths").ToArray();
+        scenario.Extra["metadata-observed-call-count"] = metadata.Length;
+        scenario.Extra["metadata-cache-hit-count"] = metadata.Count(value => value.CacheHit == true);
+        scenario.Extra["metadata-cache-miss-count"] = metadata.Count(value => value.CacheHit == false);
+        bool coldObserved = first && checksAtSubscribe == 0 &&
+            metadata.Any(value => value.CacheHit == false && value.Completed && value.MeasureCount == 24);
+        if (first) scenario.Extra["metadata-real-first-cold-observed"] = coldObserved ? 1 : 0;
+        if (first && !coldObserved)
+        {
+            string missing = "NOT_OBSERVED: real first cold metadata measurement; no cache was reset.";
+            scenario.Notes += "; " + missing;
+            _environment.Add(scenario.Name + ": " + missing);
+        }
+        for (int index = 0; index < metadata.Length; index++)
+        {
+            GalleryWindow.GalleryOpenTiming value = metadata[index];
+            string key = $"metadata-call-{index + 1}";
+            scenario.Extra[key + "-window-ordinal"] = value.CallNumber;
+            scenario.Extra[key + "-completed"] = value.Completed ? 1 : 0;
+            scenario.Extra[key + "-cache-hit"] = value.CacheHit == true ? 1 : 0;
+            scenario.Extra[key + "-total-ms"] = value.TotalMilliseconds;
+            scenario.Extra[key + "-measure-count"] = value.MeasureCount;
+            scenario.Extra[key + "-measure-total-ms"] = value.MeasureTotalMilliseconds;
+            scenario.Extra[key + "-measure-max-ms"] = value.MeasureMaximumMilliseconds;
+            _environment.Add($"{scenario.Name}/{key}: font={value.FontSize}; family={value.FontFamily}; " +
+                $"culture={value.Culture}; dpi={value.Dpi}; mode={value.FormattingMode}; completed={value.Completed}.");
+        }
+        foreach (IGrouping<string, GalleryWindow.GalleryOpenTiming> group in observations
+            .Where(value => value.Stage != "metadata-minimum-widths").GroupBy(value => value.Stage))
+        {
+            scenario.Extra["open-stage-" + group.Key + "-count"] = group.Count();
+            scenario.Extra["open-stage-" + group.Key + "-total-ms"] = group.Sum(value => value.TotalMilliseconds);
+            scenario.Extra["open-stage-" + group.Key + "-max-ms"] = group.Max(value => value.TotalMilliseconds);
+        }
+        _environment.Add(scenario.Name + ": internal timing opt-in; metadata intervals can nest inside Show/foreground; " +
+            "do not add overlapping intervals. Observer collection and clock overhead are included in open timing.");
+    }
+
+    private void MeasureLibraryFirstSelection(ProbeLibraryServices library)
+    {
+        if (!_libraryOnScreen || Environment.GetEnvironmentVariable("MYCAPTURE_APP_PERF_LIBRARY_FIRST_SELECTION") != "1") return;
+        if (Ui(() => library.Queue.Count) == 0)
+        {
+            _environment.Add("first selection: NOT_APPLICABLE, empty synthetic library.");
+            return;
+        }
+        GalleryWindow window = library.Window!;
+        GalleryViewModel vm = library.ViewModel!;
+        GalleryItemViewModel tile = Ui(() =>
+        {
+            if (vm.HasSelection) throw new InvalidOperationException("The first-selection probe requires no prior selection.");
+            var rows = (ListBox)window.FindName("RowsList");
+            // Choose an already visible first-page record without reading its Thumbnail getter
+            // or preparing selected-details controls before the measurement starts.
+            return LibraryVisualDescendants(rows).OfType<GalleryThumbnailImage>()
+                .First(image => image.Source is not null &&
+                    LibraryVisibleArea(LibraryPreviewSlot(image), window, requireScrollViewport: true))
+                .DataContext as GalleryItemViewModel
+                ?? throw new InvalidOperationException("The first visible thumbnail has no capture tile.");
+        });
+        ProbeScenario scenario = Begin("library first selection: details + input + rendering");
+        using var rendered = new ManualResetEventSlim();
+        var observations = new List<GalleryWindow.GalleryOpenTiming>();
+        long started = 0, readyAt = 0, inputAt = 0, renderedAt = 0;
+        int checks = 0;
+        double checkMs = 0;
+        Exception? failure = null;
+        bool subscribed = false;
+        bool Check()
+        {
+            long begin = Stopwatch.GetTimestamp();
+            try
+            {
+                if (vm.SingleSelectedTile?.Id != tile.Id)
+                    throw new InvalidOperationException("Selection changed during the first-selection measurement.");
+                if (window.FindName("GalleryDetailsContent") is not FrameworkElement content
+                    || !content.IsVisible || !content.IsMeasureValid || !content.IsArrangeValid
+                    || !ReferenceEquals(content.DataContext, vm.SingleSelectedTile)) return false;
+                // Geometry alone intentionally ignores opacity for pending first-page images.
+                // Selected details must also finish the pane's real arrival fade before ready.
+                for (DependencyObject? node = content; node is not null; node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+                {
+                    if (node is UIElement visual && visual.Opacity != 1) return false;
+                    if (ReferenceEquals(node, window)) break;
+                }
+                if (window.FindName("SelectedDetailThumbnail") is not Image picture
+                    || picture.Source is null || !LibraryVisibleArea(picture, window, false)) return false;
+                foreach (string name in new[] { "DetailsEditButton", "DetailsFloatButton", "DetailsCopyButton" })
+                    if (window.FindName(name) is not Button button || !button.IsEnabled
+                        || !ReferenceEquals(button.DataContext, vm.SingleSelectedTile)
+                        || !LibraryVisibleArea(button, window, false)) return false;
+                return true;
+            }
+            finally { checks++; checkMs += Ms(begin); }
+        }
+        EventHandler onRendering = (_, _) =>
+        {
+            if (renderedAt != 0 || failure is not null || inputAt == 0) return;
+            try
+            {
+                if (!Check()) return;
                 renderedAt = Stopwatch.GetTimestamp();
                 rendered.Set();
-            };
-            library.Window!.ContentRendered += onRendered;
-        }, idle: false);
-        GalleryWindow window = library.Window!;
-        Op(s, "GalleryWindow.ShowGallery", () =>
+            }
+            catch (Exception ex) { failure = ex; rendered.Set(); }
+        };
+        try
         {
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Left = -30000;
-            window.Top = -30000;
-            window.ShowActivated = false;
-            window.ShowGallery();
-        }, idle: false);
-        Wait(rendered, "library window render");
-        End(s);
-        s.Extra["construct-ms"] = Ms(started, constructed);
-        if (renderedAt != 0) s.Extra["first-render-ms"] = Ms(started, renderedAt);
-        s.Extra["open-to-idle-ms"] = Ms(started, s.EndTimestamp);
-        s.Notes = $"visible tiles {Ui(() => library.ViewModel!.VisibleCount)}, rows {Ui(() => library.ViewModel!.Rows.Count)}";
-        return window;
+            Ui(() =>
+            {
+                if (window.OpenTimingObserverForTest is not null)
+                    throw new InvalidOperationException("The gallery already has a timing observer.");
+                window.OpenTimingObserverForTest = observations.Add;
+                subscribed = true;
+                scenario.Extra["details-controls-exist-before-selection"] = window.FindName("GalleryDetailsContent") is null ? 0 : 1;
+            });
+            Op(scenario, "GalleryViewModel.Select + open details pane", () =>
+            {
+                started = Stopwatch.GetTimestamp();
+                window.SetDetailsPaneOpen(true);
+                vm.Select(tile.Id);
+            }, idle: false);
+            bool ready = false;
+            while (!ready && Ms(started) < 30_000)
+            {
+                ready = Ui(() =>
+                {
+                    if (!Check()) return false;
+                    readyAt = Stopwatch.GetTimestamp();
+                    return true;
+                });
+                if (!ready) _delay.Wait(16);
+            }
+            if (!ready) throw new TimeoutException("Selected details were not ready within 30 s.");
+            Ui(() =>
+            {
+                if (!Check()) throw new InvalidOperationException("Selected details changed before the Input callback.");
+                inputAt = Stopwatch.GetTimestamp();
+                CompositionTarget.Rendering += onRendering;
+            });
+            if (!rendered.Wait(TimeSpan.FromSeconds(30)))
+                throw new TimeoutException("No selected-details rendering event followed the Input callback within 30 s.");
+            if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+            End(scenario);
+        }
+        finally
+        {
+            Ui(() =>
+            {
+                CompositionTarget.Rendering -= onRendering;
+                if (subscribed) window.OpenTimingObserverForTest = null;
+            });
+            foreach ((string key, long at) in new[] { ("details-ready-ms", readyAt),
+                ("input-callback-ready-ms", inputAt), ("post-ready-rendering-ms", renderedAt) })
+            {
+                if (at != 0) scenario.Extra[key] = Ms(started, at);
+                else _environment.Add(scenario.Name + ": NOT_OBSERVED: " + key);
+            }
+            scenario.Extra["readiness-checks"] = checks;
+            scenario.Extra["readiness-check-ms"] = checkMs;
+            var creation = observations.Where(value => value.Stage == "details-create").ToArray();
+            scenario.Extra["details-create-observed-count"] = creation.Length;
+            if (creation.Length != 0)
+            {
+                scenario.Extra["details-create-total-ms"] = creation.Sum(value => value.TotalMilliseconds);
+                scenario.Extra["details-create-completed-count"] = creation.Count(value => value.Completed);
+            }
+            _environment.Add("First-selection observations include UI checks/clock/observer overhead; rendering is a WPF callback, " +
+                "not a physical present or real-keyboard latency. Creation nests inside selection; do not add intervals. " +
+                "Selection is cleared afterward only to restore the later diagnostic scenarios.");
+            Ui(vm.ClearSelection);
+            WaitIdle();
+        }
     }
+
+    private void MeasureLibraryReopens(ProbeLibraryServices library)
+    {
+        if (!_libraryOnScreen) return;
+        for (int round = 1; round <= _libraryReopens; round++)
+        {
+            ProbeScenario close = Begin($"diagnostic reopen {round}/{_libraryReopens}: close (hide)");
+            Op(close, "GalleryWindow.Close", library.Window!.Close, idle: true);
+            if (Ui(() => library.Window!.IsVisible))
+                throw new InvalidOperationException("The library did not hide before the reopen measurement.");
+            End(close);
+            _ = OpenLibrary(library, $"diagnostic reopen {round}/{_libraryReopens}: first page");
+        }
+    }
+
+    private void MeasureLibraryFirstPage(ProbeLibraryServices library, ProbeScenario scenario, long started)
+    {
+        _recorder.Step = "visible first-page thumbnails + fade + Input callback + rendering";
+        using var rendered = new ManualResetEventSlim();
+        long readyAt = 0, inputAt = 0, renderedAt = 0;
+        int visible = 0, checks = 0;
+        double checkMs = 0;
+        bool ready = false;
+        Exception? failure = null;
+        long deadline = Stopwatch.GetTimestamp();
+        bool Check()
+        {
+            long checkStart = Stopwatch.GetTimestamp();
+            try { return LibraryFirstPageReady(library, out visible); }
+            finally { checkMs += Ms(checkStart); checks++; }
+        }
+        EventHandler onRendering = (_, _) =>
+        {
+            if (renderedAt != 0 || failure is not null) return;
+            try
+            {
+                // Verify the state again on a later render turn, after the Input callback.
+                if (inputAt != 0 && Check())
+                {
+                    renderedAt = Stopwatch.GetTimestamp();
+                    rendered.Set();
+                }
+            }
+            catch (Exception ex) { failure = ex; rendered.Set(); }
+        };
+        try
+        {
+            while (!ready && Ms(deadline) < 30_000)
+            {
+                ready = Ui(() =>
+                {
+                    if (!Check()) return false;
+                    readyAt = Stopwatch.GetTimestamp();
+                    return true;
+                });
+                if (!ready) _delay.Wait(16);
+            }
+            if (!ready) throw new TimeoutException($"First page was not ready after 30 s; visible thumbnails: {visible}.");
+            Ui(() =>
+            {
+                // A separate callback is ordered after the ready observation at Input priority.
+                if (!Check()) throw new InvalidOperationException("First-page readiness changed before the Input callback.");
+                inputAt = Stopwatch.GetTimestamp();
+                CompositionTarget.Rendering += onRendering;
+            });
+            if (!rendered.Wait(TimeSpan.FromSeconds(30)))
+                throw new TimeoutException("No ready first-page rendering event followed the Input callback within 30 s.");
+            if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+        finally
+        {
+            Ui(() => CompositionTarget.Rendering -= onRendering);
+            var unobserved = new List<string>();
+            foreach ((string metric, long observedAt) in new[]
+            {
+                ("first-page-ready-ms", readyAt),
+                ("input-callback-ready-ms", inputAt),
+                ("post-ready-rendering-ms", renderedAt),
+            })
+            {
+                if (observedAt != 0) scenario.Extra[metric] = Ms(started, observedAt);
+                else unobserved.Add(metric);
+            }
+            if (unobserved.Count != 0)
+            {
+                scenario.Notes = "NOT_OBSERVED: " + string.Join(", ", unobserved);
+                // A failed open never reaches End(s), so also retain this in the failure report.
+                _environment.Add(scenario.Name + ": " + scenario.Notes);
+            }
+            scenario.Extra["visible-thumbnail-count"] = visible;
+            scenario.Extra["first-page-readiness-checks"] = checks;
+            scenario.Extra["first-page-readiness-check-ms"] = checkMs;
+            scenario.Extra["queue-record-count-at-open"] = Ui(() => library.Queue.Count);
+        }
+    }
+
+    private static bool LibraryFirstPageReady(ProbeLibraryServices library, out int visible) =>
+        GalleryFirstPageProbe.Ready(library.Window!, library.ViewModel!, library.Queue.Count, out visible);
+
+    private static FrameworkElement LibraryPreviewSlot(GalleryThumbnailImage image) => GalleryFirstPageProbe.LibraryPreviewSlot(image);
+
+    private static bool LibraryVisibleArea(FrameworkElement element, Window window, bool requireScrollViewport) =>
+        GalleryFirstPageProbe.LibraryVisibleArea(element, window, requireScrollViewport);
+
+    private static IEnumerable<DependencyObject> LibraryVisualDescendants(DependencyObject root) =>
+        GalleryFirstPageProbe.LibraryVisualDescendants(root);
 
     // ---- Library refresh after a save or OCR -------------------------------------------------
 
@@ -811,6 +1164,8 @@ internal sealed partial class AppResponsivenessProbe
         try
         {
             _ = OpenLibrary(library, "setup open");
+            MeasureLibraryFirstSelection(library);
+            MeasureLibraryReopens(library);
             foreach (bool visible in new[] { false, true })
             {
                 _variant = visible ? "library window open" : "library window closed (tray)";
@@ -1212,11 +1567,16 @@ internal sealed class ProbeLibraryServices : IDisposable
     internal GalleryViewModel? ViewModel { get; private set; }
     internal GalleryWindow? Window { get; private set; }
 
-    internal void EnsureWindow()
+    // The performance path follows App.EnsureGalleryWindow; only explicit factory regressions defer.
+    internal void EnsureWindow(bool deferInitialProjection = false)
     {
         if (Window is not null) return;
-        ViewModel = new GalleryViewModel(Controller, record => Path.Combine(Queue.GetDirectory(record), CaptureFileNames.Thumbnail),
-            Settings.Queue.ThumbnailLongEdge, imageRetentionHours: () => Settings.Queue.ImageRetentionHours);
+        ViewModel = deferInitialProjection
+            ? GalleryViewModel.CreateForWindow(Controller, record => Path.Combine(Queue.GetDirectory(record), CaptureFileNames.Thumbnail),
+                Settings.Queue.ThumbnailLongEdge, imageRetentionHours: () => Settings.Queue.ImageRetentionHours)
+            : new GalleryViewModel(Controller, record => Path.Combine(Queue.GetDirectory(record), CaptureFileNames.Thumbnail),
+                Settings.Queue.ThumbnailLongEdge, imageRetentionHours: () => Settings.Queue.ImageRetentionHours);
+        ViewModel.ConfigureAsyncThumbnailPathRequests(record => GalleryThumbnailLoader.CreateQueuePathRequest(Queue, record));
         Window = new GalleryWindow(ViewModel, Controller, Reedit, Commit, Queue, Videos, Paths, NullLoggerFactory.Instance,
             Presenter, () => Settings.Ocr, Indexing, new NoPrivacy(), NullLogger.Instance);
     }
@@ -1259,7 +1619,7 @@ internal sealed class ProbeLibraryServices : IDisposable
 /// </summary>
 internal static class ProbeLibrary
 {
-    internal static string Create(int count)
+    internal static string Create(int count, bool fullyIndexed = false)
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mcap-lib-").FullName;
         byte[] original = [], thumbnail = [];
@@ -1274,7 +1634,7 @@ internal static class ProbeLibrary
         var settings = new AppSettings();
         settings.General.IsFirstRun = false;
         settings.Queue.MaxItems = count + 1000;
-        settings.Queue.MaxBytes = 1L << 40;
+        settings.Queue.MaxBytes = fullyIndexed ? 512L << 30 : 1L << 40;
         new SettingsStore(paths, NullLogger<SettingsStore>.Instance).Save(settings);
 
         DateTimeOffset now = DateTimeOffset.Now;
@@ -1291,9 +1651,9 @@ internal static class ProbeLibrary
                 SourceWindowTitle = $"Probe window {i % 37}",
                 Title = i % 5 == 0 ? $"Probe title {i}" : string.Empty,
                 Tags = i % 7 == 0 ? "probe" : string.Empty,
-                OcrText = i % 3 == 0 ? $"probe recognized text {i}" : null,
-                OcrLanguage = i % 3 == 0 ? "ko" : null,
-                OcrContentRevision = i % 3 == 0 ? 0 : null,
+                OcrText = fullyIndexed || i % 3 == 0 ? $"probe recognized text {i}" : null,
+                OcrLanguage = fullyIndexed || i % 3 == 0 ? "ko" : null,
+                OcrContentRevision = fullyIndexed || i % 3 == 0 ? 0 : null,
                 TotalBytes = original.Length + thumbnail.Length,
             };
             record.RelativeDirectory = CaptureQueue.BuildRelativeDirectory(record.Id, created);
@@ -1307,6 +1667,9 @@ internal static class ProbeLibrary
         var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
         IReadOnlyList<CaptureRecord> restored = queue.RestoreRecordsAsync(records).GetAwaiter().GetResult();
         if (restored.Count != count) throw new InvalidOperationException($"The probe library indexed {restored.Count} of {count} captures.");
+        // RestoreRecordsAsync(empty) deliberately performs no publication; startup's index breakdown
+        // still needs a valid empty index prepared before the measured child process starts.
+        if (count == 0) queue.SaveAsync().GetAwaiter().GetResult();
         return root;
     }
 

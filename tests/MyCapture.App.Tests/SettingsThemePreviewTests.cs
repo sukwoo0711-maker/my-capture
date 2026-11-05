@@ -82,7 +82,9 @@ public sealed partial class SettingsThemePreviewTests
             {
                 child.Kill(entireProcessTree: true);
                 await child.WaitForExitAsync();
-                Assert.Fail("The isolated WPF test timed out.\n" + await output + Environment.NewLine + await error);
+                string progressPath = Path.Combine(receiptRoot, "progress.log");
+                string progress = File.Exists(progressPath) ? File.ReadAllText(progressPath) : "No stage progress recorded.";
+                Assert.Fail("The isolated WPF test timed out.\n" + progress + "\n" + await output + Environment.NewLine + await error);
             }
             Assert.True(child.ExitCode == 0, await output + Environment.NewLine + await error);
             // VSTest may exit successfully when a filter matches no cases. Require proof
@@ -93,6 +95,19 @@ public sealed partial class SettingsThemePreviewTests
         finally
         {
             if (!child.HasExited) child.Kill(entireProcessTree: true);
+        }
+    }
+
+    private static void RecordIsolatedProgress(string stage)
+    {
+        string? root = Environment.GetEnvironmentVariable(ReceiptRoot);
+        if (root is not null)
+        {
+            using Process process = Process.GetCurrentProcess();
+            File.AppendAllText(DiagnosticOutputPaths.Child(root, "progress.log"),
+                $"{DateTime.UtcNow:O} {stage}; cpuMs={process.TotalProcessorTime.TotalMilliseconds:R}; "
+                + $"privateBytes={process.PrivateMemorySize64}; openWindows={Application.Current?.Windows.Count}; "
+                + $"gc={GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}{Environment.NewLine}");
         }
     }
 

@@ -598,7 +598,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
         if (_commitInProgress) return true;
-        if (_customColorPopup is { IsOpen: true } && key == Key.Escape && modifiers == ModifierKeys.None)
+        if (IsCustomColorFlyoutOpen && key == Key.Escape && modifiers == ModifierKeys.None)
         {
             _customColorInput.Text = ColorCode(CurrentPropertyColor());
             CloseCustomColorFlyout(returnFocus: true);
@@ -821,7 +821,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _lastPointerControl;
     private bool _pointerInside;
     private Window? _pointerWindow;
-    private Popup? _pointerColorPopup;
     private EditorCursorKind _canvasCursorKind;
 
     /// <summary>A left press on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
@@ -1236,11 +1235,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void RefreshPointerFeedback()
     {
         if (_viewport is null || _surface is null) return;
-        if (_customColorPopup is not null && !ReferenceEquals(_pointerColorPopup, _customColorPopup))
-        {
-            _pointerColorPopup = _customColorPopup;
-            _pointerColorPopup.Opened += (_, _) => HidePointerPreview();
-        }
         ConfigurePointerScale();
         if (_lastPointerDip is not Point dip)
         {
@@ -1261,7 +1255,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void UpdatePointerPreview(PointD image) => _surface.UpdatePointerPreview(image,
         _pointerInside && _activeTextBox is null && _crop is null && !_mosaicDragging
-        && _customColorPopup is not { IsOpen: true }
+        && !IsCustomColorFlyoutOpen
         && (_simulatingPointer || _pointerWindow?.IsActive != false));
 
     private void HidePointerPreview()
@@ -1940,6 +1934,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         UIElement statusBar = BuildStatusBar();
         Grid.SetRow(statusBar, 2);
         Children.Add(statusBar);
+        AttachColorFlyoutLayer();
     }
 
     private Border BuildCommandBar()

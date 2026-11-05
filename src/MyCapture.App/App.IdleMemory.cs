@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Pinning;
+using MyCapture.App.Diagnostics;
 
 namespace MyCapture.App;
 
@@ -56,10 +57,29 @@ public partial class App
             // Remain on the dispatcher: no background check/collect race with a capture
             // starting on the UI thread. Input and capture work outrank ContextIdle.
             long started = Stopwatch.GetTimestamp();
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            TrimProcessHeap();
-            _log?.LogInformation("Idle memory collection completed in {PauseMs:F2} ms",
-                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            ResidentLongRunEvidence? evidence = _longRunEvidence;
+            int before = evidence is null ? 0 : GC.CollectionCount(2);
+            evidence?.ObserveIdleGc(new("start", started, started, before, before, null, null, null));
+            double? collectMs = null;
+            double? workMs = null;
+            Exception? failure = null;
+            try
+            {
+                long workStart = evidence is null ? 0 : Stopwatch.GetTimestamp();
+                GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                if (evidence is not null) collectMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
+                TrimProcessHeap();
+                if (evidence is not null) workMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
+                _log?.LogInformation("Idle memory collection completed in {PauseMs:F2} ms",
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+            catch (Exception error) { failure = error; throw; }
+            finally
+            {
+                evidence?.ObserveIdleGc(new("finish", started, Stopwatch.GetTimestamp(), before,
+                    GC.CollectionCount(2), collectMs, workMs,
+                    failure?.GetType().FullName));
+            }
         });
     }
 

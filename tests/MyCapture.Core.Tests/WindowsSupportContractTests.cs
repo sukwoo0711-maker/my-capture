@@ -187,10 +187,25 @@ public sealed class WindowsSupportContractTests
     {
         string relative = Path.GetRelativePath(root, path);
         string[] parts = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Any(p =>
+        return (parts.Length >= 2
+                && parts[0].Equals("build", StringComparison.OrdinalIgnoreCase)
+                && parts[1].Equals("logs", StringComparison.OrdinalIgnoreCase))
+            || parts.Any(p =>
             p.Equals("bin", StringComparison.OrdinalIgnoreCase)
             || p.Equals("obj", StringComparison.OrdinalIgnoreCase)
             || p.Equals("artifacts", StringComparison.OrdinalIgnoreCase)
             || p.Equals("dist", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("build/logs/test-results.json", true)]
+    [InlineData("build/logs/probe/src/Program.cs", true)]
+    [InlineData("build/tools/Probe/Program.cs", false)]
+    [InlineData("build/tests/package-contract.json", false)]
+    [InlineData("src/MyCapture.App/Resources/Strings.resx", false)]
+    public void SupportClaimScanExcludesDiagnosticOutputsButRetainsShippedSource(string relativePath, bool excluded)
+    {
+        string root = RepositoryRoot();
+        Assert.Equal(excluded, IsBuildOutput(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)), root));
     }
 }

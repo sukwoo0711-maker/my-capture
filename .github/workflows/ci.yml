@@ -35,16 +35,103 @@ jobs:
         shell: powershell
         run: .\build\build.ps1 -Configuration Release -Test
 
-      - name: Require hosted file-symlink regression pass
+      - name: Require hosted file-symlink regressions to pass
         shell: powershell
         run: |
-          $testName = 'MyCapture.App.Tests.GalleryBatchDragTests.FinalSourceSymlinkIsRejected_AndExternalTargetIsPreserved'
-          $resultPattern = '^\s*(Passed|Skipped|Failed)\s+' + [regex]::Escape($testName) + '\s+\[[^\]]+\]\s*$'
-          $results = @(Select-String -LiteralPath 'build/logs/test.log' -Pattern $resultPattern -CaseSensitive -ErrorAction Stop)
-          if ($results.Count -ne 1 -or $results[0].Line -cnotmatch '^\s*Passed\s+') {
-              throw "Required hosted regression did not record exactly one Passed result: $testName"
+          $ErrorActionPreference = 'Stop'
+          $requiredTests = @(
+              'MyCapture.App.Tests.GalleryBatchDragTests.FinalSourceSymlinkIsRejected_AndExternalTargetIsPreserved'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Ocr_DownloadFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Translation_DownloadFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Ocr_FinalFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Translation_FinalFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.TranslationNativeLoadPathBoundaryTests.DefaultFactoryRejectsCatalogLeafSymlinkBeforeNativeLoad'
+              'MyCapture.App.Tests.TranslationNativeLoadPathBoundaryTests.DirectionFactoryRejectsCatalogLeafSymlinkBeforeNativeLoad'
+          )
+          if ($requiredTests.Count -ne 7 -or @($requiredTests | Select-Object -Unique).Count -ne 7) {
+              throw 'The hosted symlink gate requires seven distinct exact test names.'
           }
-          Write-Host $results[0].Line
+
+          function Assert-RequiredHostedPassResults {
+              param([AllowEmptyCollection()][string[]]$Lines)
+              $boundaryResultFailure = '^\s*(?:Skipped|Failed)\s+MyCapture\.App\.Tests\.(?:ModelDownloadPathBoundaryTests|TranslationNativeLoadPathBoundaryTests)\.'
+              $boundaryDiagnosticFailure = '^\s*\[xUnit\.net[^\]]*\]\s+MyCapture\.App\.Tests\.(?:ModelDownloadPathBoundaryTests|TranslationNativeLoadPathBoundaryTests)\.[^\r\n]*\[(?:FAIL|SKIP)\]\s*$'
+              if (@($Lines | Where-Object { $_ -cmatch $boundaryResultFailure -or $_ -cmatch $boundaryDiagnosticFailure }).Count -ne 0) {
+                  throw 'Every model-download and native-load boundary test must execute without Failed or Skipped results.'
+              }
+              $passed = [System.Collections.Generic.List[string]]::new()
+              foreach ($testName in $requiredTests) {
+                  $escaped = [regex]::Escape($testName)
+                  $resultPattern = '^\s*(Passed|Skipped|Failed)\s+' + $escaped + '\s+\[[^\]\r\n]+\]\s*$'
+                  $badDiagnosticPattern = '^\s*\[xUnit\.net[^\]]*\]\s+' + $escaped + '\s+\[(FAIL|SKIP)\]\s*$'
+                  $results = @($Lines | Where-Object { $_ -cmatch $resultPattern })
+                  $badDiagnostics = @($Lines | Where-Object { $_ -cmatch $badDiagnosticPattern })
+                  if ($results.Count -ne 1 -or $results[0] -cnotmatch '^\s*Passed\s+' -or $badDiagnostics.Count -ne 0) {
+                      throw "Required hosted regression must have exactly one Passed result, zero Skipped/Failed and no FAIL/SKIP diagnostic: $testName"
+                  }
+                  $passed.Add($results[0])
+              }
+              return $passed.ToArray()
+          }
+
+          # Exercise the exact parser before it can accept the real console log. These are
+          # synthetic strings only; they do not create links, change privileges or run tests.
+          $fixture = @($requiredTests | ForEach-Object { "  Passed $_ [1 ms]" })
+          $positive = @(Assert-RequiredHostedPassResults -Lines $fixture)
+          if ($positive.Count -ne 7) { throw 'Parser positive fixture did not return exactly seven results.' }
+          $noisy = @('Starting test execution, please wait...', '  Failed Unrelated.Tests.Case [2 ms]') + $fixture
+          if (@(Assert-RequiredHostedPassResults -Lines $noisy).Count -ne 7) { throw 'Parser noise fixture failed.' }
+          $negativeCases = [System.Collections.Generic.List[object]]::new()
+          $negativeCases.Add(@{ Name = 'empty log'; Lines = @() })
+          for ($index = 0; $index -lt $requiredTests.Count; $index++) {
+              $testName = $requiredTests[$index]
+              $missing = @(for ($other = 0; $other -lt $fixture.Count; $other++) { if ($other -ne $index) { $fixture[$other] } })
+              $negativeCases.Add(@{ Name = "missing $index"; Lines = $missing })
+              foreach ($status in @('Skipped', 'Failed')) {
+                  $changed = @($fixture)
+                  $changed[$index] = "  $status $testName [1 ms]"
+                  $negativeCases.Add(@{ Name = "$status $index"; Lines = $changed })
+              }
+              $negativeCases.Add(@{ Name = "duplicate pass $index"; Lines = @($fixture) + @($fixture[$index]) })
+              foreach ($suffix in @('.Other', '(argument: 1)')) {
+                  $changed = @($fixture)
+                  $changed[$index] = "  Passed $testName$suffix [1 ms]"
+                  $negativeCases.Add(@{ Name = "different exact name $index $suffix"; Lines = $changed })
+              }
+              $changed = @($fixture)
+              $changed[$index] = "  Passed $($testName.ToLowerInvariant()) [1 ms]"
+              $negativeCases.Add(@{ Name = "wrong case $index"; Lines = $changed })
+              $changed = @($fixture)
+              $changed[$index] = "  Passed $testName"
+              $negativeCases.Add(@{ Name = "truncated result $index"; Lines = $changed })
+              foreach ($diagnostic in @('FAIL', 'SKIP')) {
+                  $negativeCases.Add(@{ Name = "conflicting xUnit $diagnostic $index";
+                      Lines = @($fixture) + @("[xUnit.net 00:00:01.00]     $testName [$diagnostic]") })
+              }
+          }
+          foreach ($boundaryClass in @('ModelDownloadPathBoundaryTests', 'TranslationNativeLoadPathBoundaryTests')) {
+              foreach ($status in @('Skipped', 'Failed')) {
+                  $negativeCases.Add(@{ Name = "unlisted boundary $boundaryClass $status";
+                      Lines = @($fixture) + @("  $status MyCapture.App.Tests.$boundaryClass.UnlistedBoundary [1 ms]") })
+              }
+              foreach ($diagnostic in @('FAIL', 'SKIP')) {
+                  $negativeCases.Add(@{ Name = "unlisted boundary diagnostic $boundaryClass $diagnostic";
+                      Lines = @($fixture) + @("[xUnit.net 00:00:01.00] MyCapture.App.Tests.$boundaryClass.UnlistedBoundary [$diagnostic]") })
+              }
+          }
+          foreach ($case in $negativeCases) {
+              $accepted = $false
+              try { $null = Assert-RequiredHostedPassResults -Lines $case.Lines; $accepted = $true }
+              catch { }
+              if ($accepted) { throw "Required-test parser accepted an invalid synthetic log: $($case.Name)" }
+          }
+          Write-Host "Required-test parser self-check: 2 positive / $($negativeCases.Count) negative fixtures passed."
+
+          $lines = @(Get-Content -LiteralPath 'build/logs/test.log' -Encoding UTF8 -ErrorAction Stop)
+          $actual = @(Assert-RequiredHostedPassResults -Lines $lines)
+          if ($actual.Count -ne 7) { throw 'The real log did not produce exactly seven required pass results.' }
+          $actual | ForEach-Object { Write-Host $_ }
+          Write-Host 'Hosted file-symlink gate: 7 Passed, 0 Skipped, 0 Failed (Gallery 1 + model download 4 + native-load leaf 2).'
 
       - name: Upload source build and test logs
         if: always()
