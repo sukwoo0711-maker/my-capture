@@ -26,6 +26,9 @@ public sealed partial class SettingsThemePreviewTests
                 // Keep the eager first projection and test the real width-change handler.
                 Assert.NotEmpty(f.ViewModel.Rows);
                 window.Width = 2000;
+                // CI's real desktop (about 1024x768) clamps 2000 to near MinWidth 980, so the
+                // column count cannot change. Admit the requested width at any DPI up to 300%.
+                using var tracking = new WindowTrackSizeScope(window, new Size(2000 * 3 + 100, 0));
                 window.Show(); window.Activate(); SettleGalleryLayout(window);
                 Assert.True(window.IsActive, "This native focus regression requires the active test window.");
                 var rows = (ListBox)window.FindName("RowsList");
