@@ -211,15 +211,21 @@ public sealed partial class CaptureQueue
         _paths.EnsureCreated();
         AtomicFile.CleanUpTemp(_paths.IndexFile);
 
+        CaptureIndexFile? acceptedIndex = null;
         string? text = AtomicFile.ReadAllTextWithRecovery(
             _paths.IndexFile,
-            candidate => TryParseIndex(candidate, out _));
+            candidate =>
+            {
+                if (!TryParseIndex(candidate, out CaptureIndexFile? parsed)) return false;
+                acceptedIndex = parsed;
+                return true;
+            });
 
         List<CaptureRecord> records;
         CaptureFolderState? loadedFolderState = null;
         RestoreSavedSearches(null);
 
-        if (text is not null && TryParseIndex(text, out CaptureIndexFile? index) && index is not null)
+        if (text is not null && acceptedIndex is { } index)
         {
             records = index.Records;
             loadedFolderState = index.FolderState;
@@ -607,8 +613,8 @@ public sealed partial class CaptureQueue
         lock (_writeGate)
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);
-            string metadata = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            string index = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
+            byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(record, MetaSerializerOptions);
+            byte[] index = JsonSerializer.SerializeToUtf8Bytes(CreateIndexSnapshot(), SerializerOptions);
             return EnqueuePublication(reservation, [(path, metadata), .. BuildIndexWrites(index)]);
         }
     }
@@ -617,6 +623,24 @@ public sealed partial class CaptureQueue
     // not poison later writes: each caller observes its own failure, and recovery may publish next.
     private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
         Action? afterDurableWrite = null)
+        => EnqueuePublication(reservation, files, (path, content) =>
+        {
+            BeforePublicationWriteForTest?.Invoke(path, content);
+            AtomicFile.WriteAllText(path, content);
+        }, afterDurableWrite);
+
+    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, byte[] Content)[] files,
+        Action? afterDurableWrite = null)
+        => EnqueuePublication(reservation, files, (path, content) =>
+        {
+            // Keep the existing correctness seam without re-creating strings in normal runs.
+            if (BeforePublicationWriteForTest is { } observe)
+                observe(path, System.Text.Encoding.UTF8.GetString(content));
+            AtomicFile.WriteAllBytes(path, content);
+        }, afterDurableWrite);
+
+    private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, (string Path, T Content)[] files,
+        Action<string, T> writeFile, Action? afterDurableWrite)
     {
         if (_migrationPublicationBlocked) throw new IOException("Complete migration recovery before saving the library.");
         // Synchronous owner saves bypass the async pool: slots can belong to awaiters whose
@@ -630,10 +654,9 @@ public sealed partial class CaptureQueue
         {
             try
             {
-                foreach ((string path, string content) in files)
+                foreach ((string path, T content) in files)
                 {
-                    BeforePublicationWriteForTest?.Invoke(path, content);
-                    AtomicFile.WriteAllText(path, content);
+                    writeFile(path, content);
                 }
                 afterDurableWrite?.Invoke();
             }

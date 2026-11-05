@@ -213,6 +213,60 @@ public sealed class TranslationModelStoreTests
         Assert.True(store.IsInstalled);
     }
 
+    [Fact]
+    public async Task SlowLocalProgressBetweenChunksDoesNotConsumeNetworkStallTimeout()
+    {
+        using var workspace = new Workspace(4_000);
+        using var lifetime = new CancellationTokenSource(Wait);
+        TranslationModelFile file = Assert.Single(workspace.Files);
+        byte[] payload = workspace.Payloads[file.FileName];
+        workspace.Server.Respond = (_, _) => Task.FromResult(Ok(new ScriptedContent(payload, payload.Length,
+            chunk: 400, readDelay: TimeSpan.FromMilliseconds(100))));
+        TimeSpan stallTimeout = TimeSpan.FromMilliseconds(600);
+        TranslationModelStore store = workspace.CreateStore(stallTimeout: stallTimeout);
+        var reports = new ProgressLog();
+        int delays = 0;
+        TimeSpan localElapsed = TimeSpan.Zero;
+        var progress = new InlineProgress(value =>
+        {
+            reports.Report(value);
+            if (delays != 0 || value.ReceivedBytes <= 0 || value.ReceivedBytes >= value.TotalBytes) return;
+            delays++;
+            long started = Stopwatch.GetTimestamp();
+            lifetime.Token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(1_200));
+            lifetime.Token.ThrowIfCancellationRequested();
+            localElapsed = Stopwatch.GetElapsedTime(started);
+        });
+        Task? download = null;
+        try
+        {
+            download = store.DownloadAsync(progress, lifetime.Token);
+            await download.WaitAsync(Wait);
+
+            Assert.Equal(1, delays);
+            Assert.True(localElapsed > stallTimeout, $"Local callback lasted {localElapsed.TotalMilliseconds:F1} ms.");
+            Assert.False(lifetime.IsCancellationRequested);
+            Assert.True(store.IsInstalled);
+            Assert.Equal(payload, File.ReadAllBytes(store.PathFor(file)));
+            AssertProgress(reports.Reports, store.TotalBytes, firstReceived: 0);
+            Assert.Empty(Directory.GetFiles(store.ModelDirectory, "*.download"));
+            download = store.DownloadAsync(null, lifetime.Token);
+            await download.WaitAsync(Wait);
+            Assert.Single(workspace.Server.Requests);
+        }
+        finally
+        {
+            lifetime.Cancel();
+            // Join the owned operation before Workspace recycles its files, even if a
+            // test assertion or WaitAsync fails. The synthetic body observes this token.
+            if (download is not null)
+            {
+                try { await download; }
+                catch (Exception) { /* The body asserts the operation's result. */ }
+            }
+        }
+    }
+
     [Theory]
     [InlineData("status")]
     [InlineData("connect")]
@@ -630,6 +684,11 @@ public sealed class TranslationModelStoreTests
             _requests.Enqueue(name);
             return Respond is { } respond ? respond(name, cancellationToken) : Task.FromResult(Serve(name));
         }
+    }
+
+    private sealed class InlineProgress(Action<TranslationDownloadProgress> report) : IProgress<TranslationDownloadProgress>
+    {
+        public void Report(TranslationDownloadProgress value) => report(value);
     }
 
     private sealed class ProgressLog : IProgress<TranslationDownloadProgress>

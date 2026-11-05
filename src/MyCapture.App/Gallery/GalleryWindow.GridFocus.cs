@@ -19,6 +19,47 @@ internal sealed partial class GalleryWindow
 {
     private Guid? _lastActiveTile;
     private Guid? _lastActiveFolder;
+    private DispatcherOperation? _gridResizeFocusRestore;
+    private int _gridResizeFocusVersion;
+
+    internal bool GridResizeFocusRestorePendingForTest =>
+        _gridResizeFocusRestore?.Status == DispatcherOperationStatus.Pending;
+
+    private void InitializeGridResizeFocusRestoration()
+    {
+        // These publishers are this window; no external subscription retains a closed window.
+        PreviewMouseDown += (_, _) => CancelGridResizeFocusRestoration();
+        PreviewKeyDown += (_, _) => CancelGridResizeFocusRestoration();
+        Deactivated += (_, _) => CancelGridResizeFocusRestoration();
+        IsVisibleChanged += (_, _) => { if (!IsVisible) CancelGridResizeFocusRestoration(); };
+        Closed += (_, _) => CancelGridResizeFocusRestoration();
+    }
+
+    private void CancelGridResizeFocusRestoration()
+    {
+        unchecked { _gridResizeFocusVersion++; }
+        _ = _gridResizeFocusRestore?.Abort();
+        _gridResizeFocusRestore = null;
+    }
+
+    private void QueueGridResizeFocusRestoration(IInputElement? focusedBeforeResize)
+    {
+        if (GridResizeFocusRestorePendingForTest) return;
+        int version = _gridResizeFocusVersion;
+        bool StillWanted()
+        {
+            if (version != _gridResizeFocusVersion || !IsVisible || !IsActive) return false;
+            IInputElement? focused = Keyboard.FocusedElement;
+            return focused is null || ReferenceEquals(focused, focusedBeforeResize)
+                || ReferenceEquals(focused, this) || ReferenceEquals(focused, RowsList);
+        }
+        _gridResizeFocusRestore = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            _gridResizeFocusRestore = null;
+            if (StillWanted() && !FocusGridEntry(StillWanted) && StillWanted()) _ = RowsList.Focus();
+        }));
+    }
+
 
     /// <summary>Remembers the card that takes focus; sends a keyboard entry into the list itself to a card.</summary>
     private void OnRowsListGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -60,15 +101,16 @@ internal sealed partial class GalleryWindow
     /// Puts keyboard focus on the card the user left, or the best card or folder card to start from. False
     /// when the grid has nothing to focus.
     /// </summary>
-    internal bool FocusGridEntry()
+    internal bool FocusGridEntry(Func<bool>? stillWanted = null)
     {
+        if (stillWanted is not null && !stillWanted()) return false;
         GalleryFolderCardViewModel[] folders = _viewModel.Rows.OfType<GalleryFolderRow>().SelectMany(row => row.Folders).ToArray();
         // The remembered kind wins over every fallback. A selected capture must not steal re-entry
         // from the folder card the user actually left in this mixed grid.
         if (_lastActiveFolder is { } lastFolder
             && folders.FirstOrDefault(folder => folder.FolderId == lastFolder) is { } rememberedFolder)
         {
-            FocusFolderCard(rememberedFolder);
+            FocusFolderCard(rememberedFolder, stillWanted);
             return true;
         }
 
@@ -83,13 +125,16 @@ internal sealed partial class GalleryWindow
             GalleryTileRow row = tileRows.First(candidate => candidate.Tiles.Contains(target));
             if (FocusTile(RowsList, target)) return true;
             RowsList.ScrollIntoView(row);
-            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, target)));
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (stillWanted is null || stillWanted()) _ = FocusTile(RowsList, target);
+            }));
             return true;
         }
 
         GalleryFolderCardViewModel? card = folders.FirstOrDefault();
         if (card is null) return false;
-        FocusFolderCard(card);
+        FocusFolderCard(card, stillWanted);
         return true;
     }
 

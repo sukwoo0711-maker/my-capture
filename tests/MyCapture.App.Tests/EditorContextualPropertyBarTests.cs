@@ -42,7 +42,7 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
             Assert.True(bar.IsAncestorOf(section), $"{tool}: {group} is outside the property bar.");
         }
 
-        Assert.False(host.Editor.CustomColorPopupForTest.IsOpen);
+        Assert.False(host.Editor.IsCustomColorFlyoutOpenForTest);
         Assert.False(host.Editor.CustomColorInputForTest.IsVisible);
         foreach (Control control in InteractiveControls(bar).Where(control => control.IsVisible))
             AssertAccessibleControl(control, tool);
@@ -57,19 +57,19 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         controller.Document.Add(shape);
         controller.SetSelected(shape);
         TextBox input = ColorInput(host.Editor);
-        Popup popup = host.Editor.CustomColorPopupForTest;
-        Button apply = Descendants(popup.Child).OfType<Button>().Single();
+        FrameworkElement flyout = host.Editor.CustomColorFlyoutContentForTest;
+        Button apply = Descendants(flyout).OfType<Button>().Single();
         Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(apply)));
         input.Text = "#12";
         apply.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-        Assert.True(popup.IsOpen);
+        Assert.True(host.Editor.IsCustomColorFlyoutOpenForTest);
         Assert.Equal(UiText.Get("Tools.InvalidColor"), host.Editor.StatusText);
         Assert.Equal(ColorRgba.Black, shape.Stroke);
         Assert.Equal(0, controller.Undo.UndoCount);
 
         input.Text = "#8055aacc";
         apply.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-        Assert.False(popup.IsOpen);
+        Assert.False(host.Editor.IsCustomColorFlyoutOpenForTest);
         Assert.Equal(new ColorRgba(0x80, 0x55, 0xAA, 0xCC), shape.Stroke);
         Assert.Equal("#8055AACC", input.Text);
         Assert.Equal(1, controller.Undo.UndoCount);
@@ -90,12 +90,12 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         ColorRgba before = controller.StrokeColor;
         TextBox input = ColorInput(host.Editor);
         UIElement target = fromApplyButton
-            ? Descendants(host.Editor.CustomColorPopupForTest.Child).OfType<Button>().Single()
+            ? Descendants(host.Editor.CustomColorFlyoutContentForTest).OfType<Button>().Single()
             : input;
         Assert.True(target.Focus());
         input.Text = "#778899";
         Assert.True(Press(target, Key.Escape, ime: false));
-        Assert.False(host.Editor.CustomColorPopupForTest.IsOpen);
+        Assert.False(host.Editor.IsCustomColorFlyoutOpenForTest);
         Assert.Equal(before, controller.StrokeColor);
         Assert.Equal(AnnotationEditorControl.ColorCode(before), input.Text);
         Assert.Equal(0, controller.Undo.UndoCount);
@@ -210,7 +210,7 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         Assert.Same(caption, controller.Selected);
         Assert.Equal("Typed caption", caption.Text);
         Assert.Equal(ColorRgba.Black, caption.Foreground);
-        Assert.True(host.Editor.CustomColorPopupForTest.IsOpen);
+        Assert.True(host.Editor.IsCustomColorFlyoutOpenForTest);
         // Both a first commit and an existing-caption edit are one history entry.
         const int committedUndoCount = 1;
         Assert.Equal(committedUndoCount, controller.Undo.UndoCount);
@@ -323,10 +323,10 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         host.Window.Height = 640 * scale;
         SelectTool(host.Editor, "Rectangle");
         TextBox input = ColorInput(host.Editor);
-        var flyout = Assert.IsAssignableFrom<FrameworkElement>(host.Editor.CustomColorPopupForTest.Child);
+        var flyout = Assert.IsAssignableFrom<FrameworkElement>(host.Editor.CustomColorFlyoutContentForTest);
         flyout.UpdateLayout();
 
-        // Popup content lives in a separate visual tree, so scanning the bar cannot cover it.
+        // Flyout content is outside the property bar; inspect its actual content separately.
         Assert.DoesNotContain(input, InteractiveControls(PropertyBar(host.Editor)));
         Control[] controls = InteractiveControls(flyout).Where(control => control.IsVisible).ToArray();
         Assert.Equal(2, controls.Length);
@@ -360,7 +360,7 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         if (targetName is "hexInput" or "hexApply")
         {
             TextBox input = ColorInput(host.Editor);
-            var flyout = Assert.IsAssignableFrom<FrameworkElement>(host.Editor.CustomColorPopupForTest.Child);
+            var flyout = Assert.IsAssignableFrom<FrameworkElement>(host.Editor.CustomColorFlyoutContentForTest);
             flyout.UpdateLayout();
             root = flyout;
             target = targetName == "hexInput" ? input : InteractiveControls(flyout).OfType<Button>().Single();

@@ -571,8 +571,10 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     {
         Grid face = Assert.IsType<Grid>(button.Content);
         double content = Math.Max(((FrameworkElement)face.Children[0]).DesiredSize.Width, CommandButtonPresentation.CaptionWidth(face));
-        return Math.Max(button.MinWidth, content + button.Padding.Left + button.Padding.Right
+        double requested = Math.Max(button.MinWidth, content + button.Padding.Left + button.Padding.Right
             + button.BorderThickness.Left + button.BorderThickness.Right);
+        double scale = VisualTreeHelper.GetDpi(button).DpiScaleX;
+        return Math.Round(requested * scale) / scale;
     }
 
     private static void AssertCommandGeometry(Grid face, bool revealed)

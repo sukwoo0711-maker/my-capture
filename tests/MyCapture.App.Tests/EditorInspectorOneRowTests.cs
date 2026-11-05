@@ -381,7 +381,7 @@ internal sealed class InspectorContractHost : IDisposable
     private readonly Func<bool>? _sourceTitle = AnnotationEditorPreferences.ReadShowSourceWindowTitle;
     private readonly bool? _animations = FluidMotion.AnimationsEnabledOverrideForTest;
 
-    internal InspectorContractHost(double width = 1000)
+    internal InspectorContractHost(double width = 1000, Action<Window>? beforeShow = null)
     {
         AnnotationEditorPreferences.Read = () => new AnnotationDefaults { LastTool = "Select", StrokeThickness = 3 };
         AnnotationEditorPreferences.Write = _ => { };
@@ -398,14 +398,23 @@ internal sealed class InspectorContractHost : IDisposable
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
             Left = -6000, Top = -6000, ShowActivated = false, ShowInTaskbar = false,
         };
-        Window.Show();
-        VisualTreeHelper.SetRootDpi(Window, new DpiScale(1, 1));
-        foreach (UIElement element in Descendants(Window).Prepend(Window).OfType<UIElement>())
+        try
         {
-            element.InvalidateMeasure();
-            element.InvalidateArrange();
+            beforeShow?.Invoke(Window);
+            Window.Show();
+            VisualTreeHelper.SetRootDpi(Window, new DpiScale(1, 1));
+            foreach (UIElement element in Descendants(Window).Prepend(Window).OfType<UIElement>())
+            {
+                element.InvalidateMeasure();
+                element.InvalidateArrange();
+            }
+            Settle();
         }
-        Settle();
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     internal Window Window { get; }

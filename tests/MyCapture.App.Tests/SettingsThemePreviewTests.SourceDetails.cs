@@ -117,12 +117,13 @@ public sealed partial class SettingsThemePreviewTests
             window.SetDetailsPaneOpen(true);
             SettleGalleryLayout(window);
             var details = (Border)window.FindName("GalleryDetailsPanel");
-            var metadata = (ScrollViewer)window.FindName("GalleryDetailsScroll");
+            ScrollViewer? metadata = null;
             Assert.Equal(new Thickness(16), details.Padding);
             foreach ((string kind, _, _, _) in sources)
             {
                 vm.Select(ids[kind]);
                 SettleGalleryLayout(window);
+                metadata ??= (ScrollViewer)window.FindName("GalleryDetailsScroll");
                 // Edit, pin and copy sit above the information and are never scrolled away; the
                 // information area is the panel's only scrolling surface and holds no text box.
                 metadata.ScrollToBottom();

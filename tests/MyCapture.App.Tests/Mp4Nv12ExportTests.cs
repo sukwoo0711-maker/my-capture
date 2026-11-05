@@ -1,7 +1,10 @@
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
@@ -306,17 +309,79 @@ public sealed class Mp4Nv12ExportTests
         string root = OwnedTestDirectory.Create("mc-nv12-trim-");
         try
         {
+            string? evidence = TestDiagnosticArtifacts.Create("MYCAPTURE_NV12_QUALITY_EVIDENCE", $"plain-trim-{width}x{height}");
+            var encoderOptions = new List<VideoEncoderOptions>();
             RecordingResult recording = SyntheticDocumentClip.Encode(Path.Combine(root, "source.mp4"), width, height, 30, 45);
-            (Mp4RenderStatistics nv12, string nv12Path) = Trim(root, "nv12.mp4", recording, [], null);
-            (Mp4RenderStatistics rgb, string rgbPath) = Trim(root, "rgb.mp4", recording, [], new Mp4RenderOptions { PassThroughNv12 = false });
+            (Mp4RenderStatistics nv12, string nv12Path) = Trim(root, "nv12.mp4", recording, [], null,
+                observeEncoder: evidence is null ? null : encoderOptions.Add);
+            (Mp4RenderStatistics rgb, string rgbPath) = Trim(root, "rgb.mp4", recording, [], new Mp4RenderOptions { PassThroughNv12 = false },
+                observeEncoder: evidence is null ? null : encoderOptions.Add);
+            if (evidence is not null)
+            {
+                var retained = new List<object>();
+                foreach (string path in new[] { recording.OutputPath, nv12Path, rgbPath })
+                {
+                    string name = Path.GetFileName(path);
+                    string copy = DiagnosticOutputPaths.Child(evidence, name);
+                    File.Copy(path, copy, overwrite: false);
+                    string hash = TestDiagnosticArtifacts.HashFile(path);
+                    Assert.Equal(hash, TestDiagnosticArtifacts.HashFile(copy));
+                    retained.Add(new { file = name, bytes = new FileInfo(copy).Length, sha256 = hash,
+                        avc = Mp4ExportBenchmarkTests.ReadAvcConfiguration(copy),
+                        presentationMs = Mp4SampleTable.Read(copy).PresentationMs,
+                        syncSampleIndexes = Mp4SampleTable.Read(copy).SyncSampleIndexes,
+                        durationMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(copy) });
+                }
+                TestDiagnosticArtifacts.WriteJson(evidence, "encode-evidence.json", new
+                {
+                    runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
+                    platformAssemblySha256 = TestDiagnosticArtifacts.HashFile(typeof(MediaFoundationVideoEncoder).Assembly.Location),
+                    width, height, fps = 30, sourceFrames = 45, trimInMs = 300, trimOutMs = 1300,
+                    sourceFixture = "SyntheticDocumentClip.Encode; default BGRA32 options with derived bitrate",
+                    sourceBitrate = VideoEncoderOptions.DeriveBitrate(width, height, 30),
+                    encoderOptions = encoderOptions.Select(value => value with { OutputPath = Path.GetFileName(value.OutputPath) }).ToArray(),
+                    selectedEncoderIdentity = "Media Foundation's chosen MFT is not exposed by the current encoder API; AllowHardwareEncoder is a request, not an observed hardware selection.",
+                    nv12, rgb, retained,
+                });
+            }
 
             Assert.StartsWith("nv12-", nv12.FrameSource, StringComparison.Ordinal);
             Assert.Equal("rgb-software", rgb.FrameSource);
             Assert.Equal((30, 0), (nv12.Frames, nv12.ComposedFrames));
             AssertSameTimeline(rgbPath, nv12Path);
-            double nv12Psnr = PsnrAgainstSource(recording.OutputPath, nv12Path, 300, nv12.Frames);
-            double rgbPsnr = PsnrAgainstSource(recording.OutputPath, rgbPath, 300, rgb.Frames);
+            var frameEvidence = new List<object>();
+            double nv12Psnr = PsnrAgainstSource(recording.OutputPath, nv12Path, 300, nv12.Frames, Capture("nv12", nv12.Frames));
+            double rgbPsnr = PsnrAgainstSource(recording.OutputPath, rgbPath, 300, rgb.Frames, Capture("rgb", rgb.Frames));
+            if (evidence is not null)
+                TestDiagnosticArtifacts.WriteJson(evidence, "quality-evidence.json", new
+                {
+                    nv12Psnr = nv12Psnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    rgbPsnr = rgbPsnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    frameEvidence,
+                });
             Assert.True(nv12Psnr >= rgbPsnr, $"NV12 pass-through {nv12Psnr:F2} dB is below the RGB path's {rgbPsnr:F2} dB.");
+
+            Action<int, DecodedVideoFrame, DecodedVideoFrame, double>? Capture(string arm, int frames) => evidence is null ? null : (index, reference, actual, squaredError) =>
+            {
+                var images = new List<string>();
+                if (index == 0 || index == frames / 2 || index == frames - 1)
+                    foreach ((string kind, DecodedVideoFrame frame) in new[] { ("source", reference), ("output", actual) })
+                    {
+                        string name = $"{arm}-{index:D3}-{kind}.png";
+                        BitmapSource bitmap = BitmapSource.Create(frame.Width, frame.Height, 96, 96,
+                            PixelFormats.Bgr32, null, frame.Pixels, frame.Stride);
+                        TestDiagnosticArtifacts.SavePng(evidence, name, bitmap);
+                        images.Add(name);
+                    }
+                frameEvidence.Add(new
+                {
+                    arm, index, referenceTimestampMs = reference.TimestampMs, outputTimestampMs = actual.TimestampMs,
+                    reference.Width, reference.Height, reference.Stride, squaredError,
+                    samples = reference.Width * reference.Height * 3L,
+                    sourceSha256 = Convert.ToHexString(SHA256.HashData(reference.Pixels)),
+                    outputSha256 = Convert.ToHexString(SHA256.HashData(actual.Pixels)), images,
+                });
+            };
         }
         finally
         {
@@ -595,7 +660,8 @@ public sealed class Mp4Nv12ExportTests
         IReadOnlyList<TimedTextOverlay> overlays,
         Mp4RenderOptions? options,
         double inMs = 300,
-        double outMs = 1300)
+        double outMs = 1300,
+        Action<VideoEncoderOptions>? observeEncoder = null)
     {
         string path = Path.Combine(root, name);
         Mp4RenderStatistics statistics = TrimReencoder.ReencodeWithStatistics(
@@ -604,7 +670,11 @@ public sealed class Mp4Nv12ExportTests
             inMs,
             outMs,
             recording,
-            encoderOptions => new MediaFoundationVideoEncoder(encoderOptions, NullLogger.Instance),
+            encoderOptions =>
+            {
+                observeEncoder?.Invoke(encoderOptions);
+                return new MediaFoundationVideoEncoder(encoderOptions, NullLogger.Instance);
+            },
             NullLogger.Instance,
             overlays,
             renderOptions: options);
@@ -621,7 +691,8 @@ public sealed class Mp4Nv12ExportTests
         Assert.Equal(Mp4ExportBenchmarkTests.ReadAvcConfiguration(expected), Mp4ExportBenchmarkTests.ReadAvcConfiguration(actual));
     }
 
-    private static double PsnrAgainstSource(string source, string output, double inMs, int frames)
+    private static double PsnrAgainstSource(string source, string output, double inMs, int frames,
+        Action<int, DecodedVideoFrame, DecodedVideoFrame, double>? observeFrame = null)
     {
         using var expected = new MediaFoundationVideoFrameReader(source);
         using var actual = new MediaFoundationVideoFrameReader(output);
@@ -631,7 +702,9 @@ public sealed class Mp4Nv12ExportTests
         {
             DecodedVideoFrame reference = expected.ReadFrameAt(inMs + (index * 1000.0 / 30));
             DecodedVideoFrame encoded = actual.ReadFrameAt(index * 1000.0 / 30);
-            error += SquaredError(reference.Pixels, encoded.Pixels);
+            double squaredError = SquaredError(reference.Pixels, encoded.Pixels);
+            error += squaredError;
+            observeFrame?.Invoke(index, reference, encoded, squaredError);
             samples += reference.Width * reference.Height * 3L;
         }
 

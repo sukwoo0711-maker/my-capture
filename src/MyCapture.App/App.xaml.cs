@@ -126,6 +126,12 @@ public partial class App : Application
         s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
         if (s_residentProbe is not null)
             ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
+        if (s_residentProbe?.LibraryFirstPage == true) ValidateLibraryFirstPageInput(s_residentProbe, e.Args);
+        if (s_residentProbe?.LongRun == true || s_residentProbe?.LibraryFirstPage == true)
+        {
+            s_longRunPrivacy = new ResidentLongRunPrivacy();
+            ClipboardAvailability.InstallTestOverride(s_longRunPrivacy.ClipboardAvailable);
+        }
         if (s_residentProbe?.SoftwareRender == true)
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
@@ -199,7 +205,9 @@ public partial class App : Application
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
             if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
+            if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
+            if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellFinished = System.Diagnostics.Stopwatch.GetTimestamp();
             StartActivationListener();
             _residentReady.MarkReady();
             _launchStatus.Complete();
@@ -1807,7 +1815,9 @@ public partial class App : Application
             _galleryWindow?.RefreshFromQueue();
             if (_tray?.IsInitialized == true) _tray.SetCaptureCount(queue.Count);
         });
+        if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageQueueLoadStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         queue.Load();
+        if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageQueueLoadFinished = System.Diagnostics.Stopwatch.GetTimestamp();
 
         _queue = queue;
         _capturePaths = paths;
@@ -2005,30 +2015,50 @@ public partial class App : Application
         }
 
         AppPaths paths = _capturePaths;
-        var viewModel = new GalleryViewModel(
-            _galleryController,
-            record => Path.Combine(_queue.GetDirectory(record), CaptureFileNames.Thumbnail),
-            _settings.Queue.ThumbnailLongEdge,
-            imageRetentionHours: () => _settings!.Queue.ImageRetentionHours);
+        CaptureQueue galleryQueue = _queue;
+        GalleryViewModel viewModel;
+        using (var timing = _libraryFirstPageTiming?.Begin("gallery-viewmodel-create-configure"))
+        {
+            viewModel = new GalleryViewModel(
+                _galleryController,
+                record => Path.Combine(galleryQueue.GetDirectory(record), CaptureFileNames.Thumbnail),
+                _settings.Queue.ThumbnailLongEdge,
+                imageRetentionHours: () => _settings!.Queue.ImageRetentionHours);
+            viewModel.ConfigureAsyncThumbnailPathRequests(
+                record => GalleryThumbnailLoader.CreateQueuePathRequest(galleryQueue, record));
+            timing?.Complete();
+        }
 
         OcrIndexingService ocrIndexing = _automaticIndexer
             ?? throw new InvalidOperationException("Capture indexing is unavailable.");
 
-        var window = new GalleryWindow(
-            viewModel,
-            _galleryController,
-            _reeditLoader,
-            _commit,
-            _queue,
-            _videoLibrary,
-            paths,
-            _services.GetRequiredService<ILoggerFactory>(),
-            _ocrPresenter!,
-            () => _settings!.Ocr,
-            ocrIndexing,
-            _privacyRedactionService
-                ?? throw new InvalidOperationException("Privacy redaction is unavailable."),
-            _services.GetRequiredService<ILogger<GalleryWindow>>());
+        GalleryWindow window;
+        using (var timing = _libraryFirstPageTiming?.Begin("gallery-window-constructor"))
+        {
+            window = new GalleryWindow(
+                viewModel,
+                _galleryController,
+                _reeditLoader,
+                _commit,
+                _queue,
+                _videoLibrary,
+                paths,
+                _services.GetRequiredService<ILoggerFactory>(),
+                _ocrPresenter!,
+                () => _settings!.Ocr,
+                ocrIndexing,
+                _privacyRedactionService
+                    ?? throw new InvalidOperationException("Privacy redaction is unavailable."),
+                _services.GetRequiredService<ILogger<GalleryWindow>>());
+            timing?.Complete();
+        }
+        if (_libraryFirstPageTiming is { } observer)
+        {
+            if (window.OpenTimingObserverForTest is not null)
+                throw new InvalidOperationException("Gallery timing observer already installed.");
+            observer.SubscribedToGallery(window.MetadataWidthChecks);
+            window.OpenTimingObserverForTest = observer.ObserveGallery;
+        }
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         window.FrameCaptureService = _videoFrameCapture;
@@ -2158,11 +2188,15 @@ public partial class App : Application
         }
 
         ScreenCaptureEngine captureEngine = _services.GetRequiredService<ScreenCaptureEngine>();
+        if (s_residentProbe?.Has("no-engine-prewarm") != true) _libraryFirstPageTiming?.Queued("engine-prewarm");
         if (s_residentProbe?.Has("no-engine-prewarm") != true) _ = Task.Run(() =>
         {
             try
             {
-                captureEngine.Prewarm();
+                using var timing = _libraryFirstPageTiming?.Begin("engine-prewarm");
+                if (s_longRunPrivacy is { } privacy) privacy.PrewarmSyntheticPixel();
+                else captureEngine.Prewarm();
+                timing?.Complete();
             }
             catch (Exception ex)
             {
@@ -2173,13 +2207,18 @@ public partial class App : Application
 
         // The selector's own first-use costs (mode bar templates, fonts, guide strips for this
         // desktop) are paid once while the app is idle after launch instead of on the first hotkey.
+        _libraryFirstPageTiming?.Queued("overlay-prewarm-callback");
         _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
         {
             if (_overlay?.IsActive == true) return;
             try
             {
                 if (s_residentProbe?.Has("no-overlay-prewarm") != true)
+                {
+                    using var timing = _libraryFirstPageTiming?.Begin("overlay-prewarm");
                     CaptureOverlayPrewarm.Run(MonitorEnumerator.GetVirtualDesktopBounds());
+                    timing?.Complete();
+                }
             }
             catch (Exception ex)
             {
@@ -2187,6 +2226,7 @@ public partial class App : Application
             }
 
             // Reader/window-list first use runs on its own idle turn, after shell startup.
+            _libraryFirstPageTiming?.Queued("reader-prewarm-callback");
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
                 if (_shutdownRequested || _overlay?.IsActive == true || _preparingAdvancedCapture
@@ -2206,11 +2246,15 @@ public partial class App : Application
         if (_services is null || _overlay is null) return;
         try
         {
+            using var timing = _libraryFirstPageTiming?.Begin("reader-prewarm-async");
             await CaptureReaderPrewarm.RunAsync(
-                () => _services.GetRequiredService<WindowCandidateService>()
-                    .GetCandidates(MonitorEnumerator.GetVirtualDesktopBounds()),
+                () => s_longRunPrivacy is { } privacy
+                    ? privacy.ReadWindows(MonitorEnumerator.GetVirtualDesktopBounds())
+                    : _services.GetRequiredService<WindowCandidateService>()
+                        .GetCandidates(MonitorEnumerator.GetVirtualDesktopBounds()),
                 windows => _overlay.ReadPageUrls(windows),
                 _overlay.ReadWindowSources is { } readApplications ? windows => readApplications(windows) : null);
+            timing?.Complete();
         }
         catch (Exception ex)
         {
@@ -2535,11 +2579,22 @@ public partial class App : Application
         services.AddSingleton<WindowCandidateService>();
         services.AddSingleton<WindowTitleService>();
         services.AddSingleton<IScrollInputSink, NativeScrollInputSink>();
-        services.AddSingleton(serviceProvider => new CaptureOverlayCoordinator(
-            serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
-            serviceProvider.GetRequiredService<WindowCandidateService>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
-            acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame));
+        services.AddSingleton(serviceProvider =>
+        {
+            ResidentLongRunPrivacy? privacy = s_longRunPrivacy;
+            var coordinator = new CaptureOverlayCoordinator(
+                serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
+                serviceProvider.GetRequiredService<WindowCandidateService>(),
+                serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
+                acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame,
+                readWindowCandidates: privacy is null ? null : privacy.ReadWindows);
+            if (privacy is not null)
+            {
+                coordinator.ReadPageUrls = privacy.ReadPages;
+                coordinator.ReadWindowSources = privacy.ReadSources;
+            }
+            return coordinator;
+        });
         services.AddSingleton<NativeMessageWindow>();
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
@@ -2553,7 +2608,9 @@ public partial class App : Application
             serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
         services.AddSingleton(serviceProvider => new NeuralOcrEngine(
             serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
+            serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>(),
+            wholeSessionInitializing: s_longRunPrivacy is null ? null : ObserveLongRunNeuralSession,
+            wholeResultObserved: s_longRunPrivacy is null ? null : ObserveLongRunNeural));
         services.AddSingleton<WindowsOcrService>();
         // OCR and text pins share the local translator; model downloads require an explicit install action.
         services.AddSingleton(serviceProvider => new TranslationModelStore(

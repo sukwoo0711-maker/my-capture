@@ -29,6 +29,17 @@ powershell.exe -NoProfile -File build\build.ps1 -Configuration Release -Test
 
 `bootstrap-sdk.ps1`은 Microsoft의 공식 `dotnet-install.ps1`을 사용해 정확한 SDK를 `%LOCALAPPDATA%\MyCapture\dotnet-sdk`에 설치합니다. `doctor.ps1`, `build.ps1`, `package.ps1`은 이 격리 SDK와 `%LOCALAPPDATA%\Microsoft\dotnet`의 일반 사용자별 SDK를 자동으로 찾고, 빌드 실패 시 `build\logs\`에 UTF-8 진단 로그를 남깁니다.
 
+Windows PowerShell의 실행 정책으로 `.ps1` 실행이 차단된 환경에서는 정책을 변경하지 않고 다음 진입점을 사용할 수 있습니다. 같은 `global.json`의 SDK 선택과 전체 솔루션 빌드·테스트를 사용하며, 현재 셸의 PATH와 실행 정책을 변경하지 않습니다.
+
+```cmd
+build\build.cmd -Doctor
+build\build.cmd -Configuration Release -Test
+```
+
+`-NoRestore`는 이미 복원한 의존성으로 빌드할 때 사용합니다. 로그는 기존 `build\logs\build.log`, `test.log`와 SDK 확인용 `sdk-cmd.log`에 저장됩니다.
+
+전체 테스트에는 설치 테스트가 포함됩니다. 기존 MyCapture가 실행 중이면 설치 보호 검사에서 종료 코드 `15`가 발생하므로, 작업을 저장하고 앱을 종료한 상태에서 실행합니다.
+
 직접 실행하려면 다음 명령을 사용합니다.
 
 ```powershell
@@ -36,6 +47,18 @@ dotnet run --project src\MyCapture.App\MyCapture.App.csproj
 ```
 
 앱은 트레이에 상주하므로 디버깅을 마칠 때 트레이 메뉴의 **종료**를 선택하십시오.
+
+## 실제 OCR 모델 검증
+
+`NeuralOcrEngineLiveTests`는 `MYCAPTURE_OCR_LIVE_MODELS`를 지정한 경우 실제 모델을 격리된 테스트 프로필에 복사하고 크기·SHA-256을 확인한 뒤 실행합니다. 모델을 지정하지 않은 일반 테스트에서는 다섯 검사가 건너뜀으로 기록됩니다. 필수 검증 모드(`MYCAPTURE_REQUIRE_OCR_LIVE=1`)에서 모델이 없거나 손상되면 실패합니다.
+
+Release 빌드 후 Python 3.9 이상에서 다음 명령을 실행합니다. 출력 경로는 새 디렉터리여야 합니다.
+
+```powershell
+python build/validate-ocr-live.py --dotnet '<SDK>/dotnet.exe' --models '<catalog-model-folder>' --output artifacts/validation/ocr-live-01
+```
+
+이 검증기는 다섯 검사 모두의 실제 통과·모델 해시·TRX를 확인하고, 실행 명령과 소스 상태 및 실행한 바이너리 해시를 `validation.json`에 기록합니다. 모델을 다운로드하지 않으며 기존 모델과 결과를 삭제하지 않습니다. OCR 성능·300건 품질 평가는 별도 실행 항목입니다.
 
 ## 자체 진단(self-test)
 
@@ -64,4 +87,4 @@ Windows 10 22H2(build 19045) 이상에서 사용할 x86판은 Windows 기본 OCR
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:Platform=x86 -p:PublishProfile=win-x86-self-contained --self-contained true -o artifacts/local-win-x86
 ```
 
-정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 5.0.1 -Architecture x64` 다음 `build/package.ps1 -Version 5.0.1 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/5.0.1/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.
+정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 5.1.0 -Architecture x64` 다음 `build/package.ps1 -Version 5.1.0 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/5.1.0/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.

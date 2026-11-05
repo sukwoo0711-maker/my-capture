@@ -233,7 +233,7 @@ public sealed class EditorStampTests
                 Path.GetFullPath(Path.Combine(stampFolder, "stamp.png")),
                 store.SourcesFor([first.AssetFileName])[first.AssetFileName]);
 
-            File.Delete(original);
+            TestRecycleBin.DeleteFile(original);
             Run(editor.PlaceStampAsync());
 
             Assert.Equal(1, pickerCalls);
@@ -1050,7 +1050,7 @@ public sealed class EditorStampTests
             string source = Path.Combine(scratch, $"seed-{width}x{height}.png");
             ImageCodec.SavePng(Solid(width, height, value), source);
             StampStore.Save(ImageCodec.TryLoad(source)!, Folder);
-            File.Delete(source);
+            TestRecycleBin.DeleteFile(source);
         }
 
         public void Dispose()

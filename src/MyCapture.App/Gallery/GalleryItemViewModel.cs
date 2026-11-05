@@ -38,16 +38,19 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     private bool _thumbnailLoadingEnabled = true;
     private GalleryThumbnailLoader? _loader;
     private Dispatcher? _dispatcher;
+    private Func<CaptureRecord, Func<string>>? _pathRequestFactory;
     private CancellationTokenSource? _loadCancellation;
     private int _generation;
     private (bool IsFile, bool IsUnsaved, string Action) _publishedSourceLocation;
     internal Task PendingThumbnailLoad { get; private set; } = Task.CompletedTask;
 
-    internal void ConfigureAsyncLoading(GalleryThumbnailLoader loader, Dispatcher dispatcher)
+    internal void ConfigureAsyncLoading(GalleryThumbnailLoader loader, Dispatcher dispatcher,
+        Func<CaptureRecord, Func<string>>? pathRequestFactory = null)
     {
         ReleaseThumbnail();
         _loader = loader;
         _dispatcher = dispatcher;
+        _pathRequestFactory = pathRequestFactory;
     }
     internal Action<GalleryItemViewModel>? ThumbnailAccessed { get; set; }
     internal long CachedThumbnailBytes => _thumbnail is null ? 0
@@ -407,14 +410,23 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
         _thumbnailRequested = true;
 
-        string path = _thumbnailPathResolver(Record);
-        if (_loader is not null && _dispatcher is not null)
+        if (_loader is { } loader && _dispatcher is { } dispatcher)
         {
+            Func<string> request;
+            if (_pathRequestFactory is { } factory)
+                request = factory(Record);
+            else
+            {
+                // Existing callers may have thread-affine resolvers; only opt-in requests move I/O.
+                string resolvedPath = _thumbnailPathResolver(Record);
+                request = () => resolvedPath;
+            }
             var cancellation = new CancellationTokenSource();
             _loadCancellation = cancellation;
-            PendingThumbnailLoad = LoadAndPublishAsync(path, _generation, cancellation.Token);
+            PendingThumbnailLoad = LoadAndPublishAsync(loader, dispatcher, request, _generation, cancellation.Token);
             return;
         }
+        string path = _thumbnailPathResolver(Record);
         BitmapSource? decoded = SafeLoad(path);
         if (decoded is null)
         {
@@ -426,20 +438,20 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         ThumbnailAccessed?.Invoke(this);
     }
 
-    private async Task LoadAndPublishAsync(string path, int generation, CancellationToken cancellationToken)
+    private async Task LoadAndPublishAsync(GalleryThumbnailLoader loader, Dispatcher dispatcher,
+        Func<string> request, int generation, CancellationToken cancellationToken)
     {
         BitmapSource? decoded;
         try
         {
-            decoded = await _loader!.LoadAsync(path, _decodePixelWidth, cancellationToken).ConfigureAwait(false);
+            decoded = await loader.LoadAsync(request, _decodePixelWidth, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { return; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException
             or NotSupportedException or ArgumentException or InvalidOperationException)
         {
             decoded = null;
         }
-        Dispatcher dispatcher = _dispatcher!;
         if (dispatcher.HasShutdownStarted || cancellationToken.IsCancellationRequested) return;
         try
         {

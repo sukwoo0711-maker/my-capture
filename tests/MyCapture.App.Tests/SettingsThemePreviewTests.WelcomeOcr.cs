@@ -16,6 +16,8 @@ public sealed partial class SettingsThemePreviewTests
     public Task WelcomeOcr_LayoutAndEvidenceInBothLanguages() =>
         RunIsolated(nameof(WelcomeOcr_LayoutAndEvidenceInBothLanguages), () =>
         {
+            // This evidence fixture renders at 96 DPI, including on a scaled desktop.
+            using var dpiContext = TestDpiContext.At96Dpi();
             Application application = CreateThemedApplication();
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             try
@@ -37,6 +39,7 @@ public sealed partial class SettingsThemePreviewTests
                         OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
                         welcome.Show();
                         Drain(welcome);
+                        TestDpiContext.Assert96Dpi(welcome);
                         Assert.Equal(WelcomeWindow.DefaultWidth, welcome.Width);
                         Assert.True(welcome.UseAccurateOcr);
                         TextBlock label = Descendants(welcome.AccurateOcrCheck).OfType<TextBlock>()

@@ -369,8 +369,11 @@ public sealed class PracticeMotionTests
             Assert.Equal(UiText.Get(key), AutomationProperties.GetName(button));
             Assert.Equal(UiText.Get(key), button.ToolTip);
             Assert.IsNotType<string>(button.Content);
-            Assert.Equal(30, button.ActualWidth, 3);
-            Assert.Equal(30, button.ActualHeight, 3);
+            Assert.Equal(30, button.Width);
+            Assert.Equal(30, button.Height);
+            DpiScale dpi = VisualTreeHelper.GetDpi(button);
+            Assert.Equal(Math.Round(30 * dpi.DpiScaleX), button.ActualWidth * dpi.DpiScaleX, 6);
+            Assert.Equal(Math.Round(30 * dpi.DpiScaleY), button.ActualHeight * dpi.DpiScaleY, 6);
             Rect bounds = button.TransformToAncestor(guide.PreviewFrame).TransformBounds(new Rect(button.RenderSize));
             Assert.InRange(bounds.Left, 0, guide.PreviewFrame.ActualWidth);
             Assert.InRange(bounds.Right, 0, guide.PreviewFrame.ActualWidth);

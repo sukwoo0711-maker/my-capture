@@ -14,6 +14,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MyCapture.App\MyCapture.App.csproj" />
     <ProjectReference Include="..\..\src\MyCapture.Setup\MyCapture.Setup.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\..\build\tools\TestHostDpiStartupHook\TestHostDpiStartupHook.csproj"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+                      ReferenceOutputAssembly="false" Private="false" OutputItemType="_MyCaptureTestHostDpiHook" />
     <Compile Include="..\Shared\TestRecycleBin.cs" Link="TestRecycleBin.cs" />
     <Compile Include="..\Shared\RecordingClipboard.cs" Link="RecordingClipboard.cs" />
     <Using Include="MyCapture.Tests" />
@@ -50,5 +53,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="RapidOcrNet" />
   </ItemGroup>
+
+  <Import Project="..\..\build\tools\TestHostDpiStartupHook\TestHostDpiStartupHook.targets"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
 
 </Project>

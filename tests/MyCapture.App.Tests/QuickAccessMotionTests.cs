@@ -63,7 +63,7 @@ public sealed class QuickAccessMotionTests
         int closed = 0, edited = 0, library = 0;
         QuickAccessWindow card = new(Image(), () => Task.FromResult(true), () => edited++, () => Task.CompletedTask,
             () => Task.FromResult(true), () => library++, () => Task.FromResult("unused.png"),
-            targetMonitor: Offscreen(), keyboardRouter: router);
+            excludeFromCapture: false, targetMonitor: Offscreen(), keyboardRouter: router);
         card.Closed += (_, _) => closed++;
         try
         {
@@ -150,6 +150,29 @@ public sealed class QuickAccessMotionTests
             Assert.False(router.Activate());
         }
         finally { router.Remove(notice); card.CloseNow(); }
+    });
+
+    [Fact]
+    public void OpaqueCaptureExcludedCardClosesImmediatelyEvenWithMotionEnabled() => Run(motion: true, router =>
+    {
+        using var mode = new ExclusionMode(false);
+        var card = new QuickAccessWindow(Image(), () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
+            () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"),
+            targetMonitor: Offscreen(), keyboardRouter: router);
+        int closed = 0;
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            card.Show();
+            ControlStateMotionTests.Drain(card);
+            Assert.False(card.AllowsTransparency);
+            card.RequestClose();
+            Assert.Equal(1, closed);
+            Assert.False(FluidMotion.IsExiting(card));
+            Assert.False(router.IsRegisteredFor(card));
+            Assert.Contains("enabled=False", card.TimeoutStateForTest, StringComparison.Ordinal);
+        }
+        finally { card.CloseNow(); }
     });
 
     [Fact]
@@ -293,7 +316,9 @@ public sealed class QuickAccessMotionTests
     {
         var card = new QuickAccessWindow(Image(), copy ?? (() => Task.FromResult(true)), () => { },
             () => Task.CompletedTask, save ?? (() => Task.FromResult(true)), () => { }, () => Task.FromResult("unused.png"),
-            targetMonitor: Offscreen(), keyboardRouter: router);
+            // These synthetic windows exercise motion. Native exclusion capability is
+            // covered separately, including the opaque immediate-close case above.
+            excludeFromCapture: false, targetMonitor: Offscreen(), keyboardRouter: router);
         card.Resources["Icon.Check"] = CheckGeometry;
         card.Resources["State.Success"] = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
         card.Resources["Text.Primary"] = new SolidColorBrush(Color.FromRgb(0xF2, 0xF0, 0xEB));

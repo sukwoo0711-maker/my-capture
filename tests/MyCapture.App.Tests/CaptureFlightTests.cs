@@ -574,7 +574,8 @@ public sealed class CaptureFlightTests
 
     private static QuickAccessWindow Card(BitmapSource image, MonitorInfo? monitor, ReceiptKeyboardRouter? router) =>
         new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { },
-            () => Task.FromResult("unused.png"), capturedRegion: SourceOn(), targetMonitor: monitor, keyboardRouter: router);
+            () => Task.FromResult("unused.png"), excludeFromCapture: false,
+            capturedRegion: SourceOn(), targetMonitor: monitor, keyboardRouter: router);
 
     private static bool PumpUntil(Func<bool> done)
     {

@@ -34,6 +34,16 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private bool _thumbnailLoadingEnabled = true;
     private GalleryThumbnailLoader? _thumbnailLoader;
     private Dispatcher? _thumbnailDispatcher;
+    private Func<CaptureRecord, Func<string>>? _thumbnailPathRequestFactory;
+
+    internal void ConfigureAsyncThumbnailPathRequests(Func<CaptureRecord, Func<string>> factory)
+    {
+        _thumbnailDispatcher?.VerifyAccess();
+        _thumbnailPathRequestFactory = factory;
+        if (_thumbnailLoader is { } loader && _thumbnailDispatcher is { } dispatcher)
+            foreach (GalleryItemViewModel tile in _tileCache.Values)
+                tile.ConfigureAsyncLoading(loader, dispatcher, factory);
+    }
 
     internal void EnableAsyncThumbnailLoading(Dispatcher dispatcher, GalleryThumbnailLoader? loader = null)
     {
@@ -41,7 +51,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         _thumbnailDispatcher = dispatcher;
         _thumbnailLoader = loader ?? new GalleryThumbnailLoader();
         foreach (GalleryItemViewModel tile in _tileCache.Values)
-            tile.ConfigureAsyncLoading(_thumbnailLoader, dispatcher);
+            tile.ConfigureAsyncLoading(_thumbnailLoader, dispatcher, _thumbnailPathRequestFactory);
     }
     internal const long ThumbnailCacheBudgetBytes = 16L * 1024 * 1024;
     internal long CachedThumbnailBytes => _tileCache.Values.Sum(tile => tile.CachedThumbnailBytes);
@@ -166,6 +176,29 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         int decodePixelWidth,
         Func<DateTimeOffset>? clock = null,
         Func<int>? imageRetentionHours = null)
+        : this(controller, thumbnailPathResolver, decodePixelWidth, clock, imageRetentionHours, refreshImmediately: true)
+    {
+    }
+
+    // Retained for explicit deferred-projection regression coverage. The App uses the eager constructor.
+    // Keep the public constructor eager for callers that inspect or preselect tiles.
+    internal static GalleryViewModel CreateForWindow(
+        GalleryController controller,
+        Func<CaptureRecord, string> thumbnailPathResolver,
+        int decodePixelWidth,
+        Func<DateTimeOffset>? clock = null,
+        Func<int>? imageRetentionHours = null) =>
+        new(controller, thumbnailPathResolver, decodePixelWidth, clock, imageRetentionHours, refreshImmediately: false);
+
+    internal bool NeedsInitialRefresh { get; private set; } = true;
+
+    private GalleryViewModel(
+        GalleryController controller,
+        Func<CaptureRecord, string> thumbnailPathResolver,
+        int decodePixelWidth,
+        Func<DateTimeOffset>? clock,
+        Func<int>? imageRetentionHours,
+        bool refreshImmediately)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
@@ -175,7 +208,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
         Groups = new ReadOnlyObservableCollection<GalleryGroupViewModel>(_groups);
         Rows = new ReadOnlyObservableCollection<GalleryRow>(_rows);
-        Refresh();
+        if (refreshImmediately) Refresh();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -373,6 +406,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(SummaryText));
         RefreshNavigation();
         RefreshTags();
+        NeedsInitialRefresh = false;
     }
 
     internal void SetMetadataMinimumTrackWidths(double full, double compact, double fullFolderReason = 0, double compactFolderReason = 0)
@@ -511,7 +545,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             FolderFileName = _controller.Queue.GetExportFileName,
         };
         if (_thumbnailLoader is not null && _thumbnailDispatcher is not null)
-            tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher);
+            tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher, _thumbnailPathRequestFactory);
         tile.SetThumbnailLoadingEnabled(_thumbnailLoadingEnabled);
         tile.ThumbnailAccessed = OnThumbnailAccessed;
         _tileCache[record.Id] = tile;

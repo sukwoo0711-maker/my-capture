@@ -67,14 +67,13 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
     private volatile bool _disposed;
 
     internal TextTranslationService(TranslationModelStore store, ILogger<TextTranslationService> log)
-        : this(store, () => MarianTranslator.Load(store.ModelDirectory, TranslationModelCatalog.ModelFiles,
-            MarianTranslator.DefaultThreads), log, TimeSpan.FromMinutes(1))
+        : this(store, log, TranslationModelCatalog.ModelFiles)
     {
     }
 
     /// <summary>A service for another translation direction's model.</summary>
     internal TextTranslationService(TranslationModelStore store, ILogger<TextTranslationService> log, MarianModelFiles files)
-        : this(store, () => MarianTranslator.Load(store.ModelDirectory, files, MarianTranslator.DefaultThreads), log,
+        : this(store, () => MarianTranslator.Load(store.GetValidatedModelDirectoryForLoad(files), files, MarianTranslator.DefaultThreads), log,
             TimeSpan.FromMinutes(1))
     {
     }

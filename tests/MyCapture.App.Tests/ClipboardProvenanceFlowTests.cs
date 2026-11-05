@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Capture;
@@ -131,7 +132,10 @@ public sealed class ClipboardProvenanceFlowTests
             Assert.Equal(Visibility.Visible, bar.SourceButton.Visibility);
             Assert.Contains(source.DisplayText, Assert.IsType<string>(bar.SourceButton.ToolTip));
             Assert.Contains(source.DisplayText, AutomationProperties.GetName(bar.SourceButton));
-            Assert.NotEmpty(Assert.IsType<ContextMenu>(bar.SourceButton.ContextMenu).Items);
+            ContextMenu sourceMenu = CaptureWindowExclusion.SupportsLayeredWindows
+                ? Assert.IsType<ContextMenu>(bar.SourceButton.ContextMenu)
+                : Assert.IsType<OpaqueCaptureContextMenu>(bar.SourceButton.ContextMenu);
+            Assert.NotEmpty(sourceMenu.Items);
             CaptureProvenance? opened = null;
             first.OpenSource = actual => { opened = actual; return Task.FromResult(string.Empty); };
             Wait(first.OpenSourceAsync());

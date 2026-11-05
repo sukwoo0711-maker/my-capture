@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyCapture.LibraryPerformanceProbe</RootNamespace>
+    <AssemblyName>MyCapture.LibraryPerformanceProbe</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\MyCapture.Core\MyCapture.Core.csproj" />
+  </ItemGroup>
+</Project>

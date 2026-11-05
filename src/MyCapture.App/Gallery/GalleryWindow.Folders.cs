@@ -258,12 +258,16 @@ internal sealed partial class GalleryWindow
         }));
     }
 
-    private void FocusFolderCard(GalleryFolderCardViewModel card)
+    private void FocusFolderCard(GalleryFolderCardViewModel card, Func<bool>? stillWanted = null)
     {
+        if (stillWanted is not null && !stillWanted()) return;
         GalleryFolderRow? row = _viewModel.Rows.OfType<GalleryFolderRow>().FirstOrDefault(r => r.Folders.Contains(card));
         if (row is null) return;
         RowsList.ScrollIntoView(row);
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusFolderCard(RowsList, card)));
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (stillWanted is null || stillWanted()) _ = FocusFolderCard(RowsList, card);
+        }));
     }
 
     private static bool FocusFolderCard(DependencyObject parent, GalleryFolderCardViewModel card)

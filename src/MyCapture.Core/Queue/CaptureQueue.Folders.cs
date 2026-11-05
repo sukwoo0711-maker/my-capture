@@ -492,6 +492,10 @@ public sealed partial class CaptureQueue
         ? [(FolderRecoveryFile, JsonSerializer.Serialize(CreateFolderState(), SerializerOptions)), (_paths.IndexFile, json)]
         : [(_paths.IndexFile, json)];
 
+    private (string Path, byte[] Content)[] BuildIndexWrites(byte[] json) => _folderStateActivated
+        ? [(FolderRecoveryFile, JsonSerializer.SerializeToUtf8Bytes(CreateFolderState(), SerializerOptions)), (_paths.IndexFile, json)]
+        : [(_paths.IndexFile, json)];
+
     private void RestoreFolderState(CaptureFolderState? state, List<CaptureRecord> records)
     {
         if (state is null || !IsValidFolderState(state))
