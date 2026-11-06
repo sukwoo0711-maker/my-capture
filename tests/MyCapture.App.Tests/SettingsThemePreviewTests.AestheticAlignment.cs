@@ -19,7 +19,8 @@ namespace MyCapture.App.Tests;
 /// capture guide colour swatch takes the combo box's corner radius and the 8 spacing step beside
 /// it; the font label sits on the font list's line, not between the list and its reset button; the
 /// finish step's shortcut link sits on the start-at-sign-in label's line; the settings guide's
-/// before/after panels take the card radius; and every guide button centres on the row it explains.
+/// before/after panels take the card radius; every guide button centres on the row it explains; and
+/// a shortcut help search result keeps its category under its name beside a tutorial button.
 /// </summary>
 /// <remarks>
 /// With <c>MYCAPTURE_AES_SO_FIX_EVIDENCE</c> set to a folder, each check first writes the area it
@@ -54,6 +55,10 @@ public sealed partial class SettingsThemePreviewTests
             if (misaligned.Count > 0)
                 Assert.Fail($"Guide buttons off their row's line (DIP below): {string.Join("; ", misaligned)}");
         });
+
+    [Fact]
+    public Task AestheticAlignment_HelpResultsKeepTheCategoryUnderTheName() =>
+        RunIsolated(nameof(AestheticAlignment_HelpResultsKeepTheCategoryUnderTheName), VerifyHelpResultRows);
 
     private static void InSettingsWindows(Action<SettingsWindow, TabControl, string> verify)
     {
@@ -210,6 +215,70 @@ public sealed partial class SettingsThemePreviewTests
             DependencyObject? node = image;
             while ((node = VisualTreeHelper.GetParent(node)) is not null and not Border) { }
             return Assert.IsType<Border>(node);
+        }
+    }
+
+    // A help search result keeps its category 1 under its name whether or not it has a tutorial
+    // button: the 36-high button stands beside both lines instead of on the name's line.
+    private static void VerifyHelpResultRows()
+    {
+        Application application = CreateThemedApplication();
+        Func<HotkeySettings> previous = ShortcutHelpWindow.ReadHotkeys;
+        ShortcutHelpWindow.ReadHotkeys = () => new HotkeySettings();
+        try
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            ThemeService.Apply(AppTheme.Glass);
+            var help = new ShortcutHelpWindow
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
+            };
+            FluidMotion.SetWindowEntrance(help, false);
+            try
+            {
+                help.Show();
+                Drain(help);
+                ShortcutHelpSearchTests.HelpView view = ShortcutHelpSearchTests.View(help);
+                int withTutorial = 0, withoutTutorial = 0;
+                foreach (string query in new[] { "F2", "Ctrl+C", UiText.Get("Help.Video") })
+                {
+                    view.Search.Text = query;
+                    Drain(help);
+                    var gaps = new List<double>();
+                    var tutorials = new List<(Rect Button, double TextRight)>();
+                    foreach (Border row in view.VisibleResults())
+                    {
+                        TextBlock[] texts = Descendants(row).OfType<TextBlock>().ToArray();
+                        Rect name = BoundsIn(texts[0], help), category = BoundsIn(texts[1], help);
+                        gaps.Add(category.Top - name.Bottom);
+                        Button? tutorial = Descendants(row).OfType<Button>().SingleOrDefault();
+                        if (tutorial is null) { withoutTutorial++; continue; }
+                        withTutorial++;
+                        tutorials.Add((BoundsIn(tutorial, help), Math.Max(name.Right, category.Right)));
+                    }
+                    SaveAlignmentEvidence(help, "help-results-" + (query == "F2" ? "f2" : query == "Ctrl+C" ? "ctrl-c" : "video"),
+                        BoundsIn(view.ResultsView, help));
+                    Assert.True(gaps.Count > 1, $"{query}: expected several results.");
+                    Assert.True(gaps.Max() - gaps.Min() <= 1,
+                        $"{query}: the gaps between a result's name and its category are {string.Join(", ", gaps.Select(gap => gap.ToString("0.#")))}.");
+                    // The tutorial button stands beside the name and the category, over neither.
+                    foreach ((Rect button, double textRight) in tutorials)
+                        Assert.True(button.Left >= textRight - 0.5,
+                            $"{query}: the tutorial button at {button.Left:0.#} starts before the result's text ends at {textRight:0.#}.");
+                }
+                Assert.True(withTutorial > 0 && withoutTutorial > 0,
+                    $"The queries must cover rows with ({withTutorial}) and without ({withoutTutorial}) a tutorial button.");
+            }
+            finally
+            {
+                help.Close();
+            }
+        }
+        finally
+        {
+            ShortcutHelpWindow.ReadHotkeys = previous;
+            application.Shutdown();
         }
     }
 

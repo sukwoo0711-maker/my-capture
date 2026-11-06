@@ -76,8 +76,15 @@ internal sealed partial class SettingsWindow
         }
         if (CategoryTabs.SelectedItem is not TabItem selected || selected.Visibility != Visibility.Visible)
             CategoryTabs.SelectedItem = CategoryTabs.Items.OfType<TabItem>().FirstOrDefault(tab => tab.Visibility == Visibility.Visible);
+        bool noMatch = CategoryTabs.SelectedItem is null;
+        Visibility noMatchState = noMatch ? Visibility.Visible : Visibility.Collapsed;
         if (CategoryTabs.Template.FindName("SettingsSearchEmpty", CategoryTabs) is TextBlock empty)
-            empty.Visibility = CategoryTabs.SelectedItem is null ? Visibility.Visible : Visibility.Collapsed;
+            empty.Visibility = noMatchState;
+        // The content area says it too, instead of standing blank beside the search box.
+        if (CategoryTabs.Template.FindName("SettingsSearchNoMatch", CategoryTabs) is FrameworkElement centred)
+            centred.Visibility = noMatchState;
+        if (CategoryTabs.Template.FindName("SettingsSearchNoMatchQuery", CategoryTabs) is TextBlock searched)
+            searched.Text = noMatch ? UiText.Format("Settings_SearchNoMatchQuery", _searchQuery) : string.Empty;
         RevealSearchMatch();
     }
 

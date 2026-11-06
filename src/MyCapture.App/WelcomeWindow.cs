@@ -65,6 +65,7 @@ internal sealed class WelcomeWindow : Window
     private readonly PracticeStepResult[] _renderedResults = new PracticeStepResult[PracticeSession.Steps.Length];
     private readonly TextBlock _title = new();
     private readonly TextBlock _instruction = new();
+    private readonly string _coreShortcutKeyListText;
     private readonly TextBlock _status = new();
     private readonly TextBlock _successText = new();
     private readonly Border _successChip = new();
@@ -113,7 +114,7 @@ internal sealed class WelcomeWindow : Window
         _stepMotion = new(Dispatcher); _chipMotion = new(Dispatcher);
         _keyMotion = new(Dispatcher); _labelMotion = new(Dispatcher);
         _segmentMotions = PracticeSession.Steps.Select(_ => new WelcomeMotion(Dispatcher)).ToArray();
-        _showingConsent = _options.ShowCoreShortcutsConsent;
+        _showingConsent = _options.ShowCoreShortcutsConsent || _options.CoreShortcutsNotice;
         Session = new PracticeSession(_options.FeaturePractice);
         _textScale = double.IsFinite(_options.TextScale) ? Math.Clamp(_options.TextScale, 1, 3) : 1;
         _captureAvailable = keys.Capture.IsAssigned;
@@ -168,6 +169,10 @@ internal sealed class WelcomeWindow : Window
         ConfigureText(_instruction, TypeScale.BodyLarge);
         _instruction.Margin = new Thickness(0, 0, 0, 14);
         _instruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        // Only a window that opens on the shortcut page lists the core keys: any other window names
+        // no key the user has not assigned, not even in collapsed text.
+        _coreShortcutKeyListText = _showingConsent ? BuildCoreShortcutKeyList() : string.Empty;
+        ConfigureText(CoreShortcutParagraphs, TypeScale.BodyLarge, secondary: true);
         _keyDisplay.HorizontalAlignment = HorizontalAlignment.Left;
         _keyDisplay.Margin = new Thickness(0, 0, 0, 14);
 
@@ -211,7 +216,11 @@ internal sealed class WelcomeWindow : Window
         AutomationProperties.SetName(SkipButton, UiText.Get("Welcome_Skip"));
         SkipButton.Click += (_, _) =>
         {
-            if (CurrentStep == WelcomeStep.Consent) AnswerCoreShortcuts(false);
+            if (CurrentStep == WelcomeStep.Consent)
+            {
+                if (_options.CoreShortcutsNotice) AcknowledgeCoreShortcutsNotice(openSettings: true);
+                else AnswerCoreShortcuts(false);
+            }
             else CloseWith(WelcomeOutcome.Closed);
         };
         var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
@@ -353,7 +362,7 @@ internal sealed class WelcomeWindow : Window
 
         var body = new StackPanel { Margin = new Thickness(28, 18, 28, 14) };
         body.Children.Add(progress);
-        _motionParts = [_title, _instruction, _statusRow, _practiceTable, _keyDisplay, _changeKeyRow,
+        _motionParts = [_title, _instruction, CoreShortcutKeyList, CoreShortcutParagraphs, _statusRow, _practiceTable, _keyDisplay, _changeKeyRow,
             _conflict, _previewFrame, _groups, _trayDiagram, _recap, _preferences];
         foreach (FrameworkElement part in _motionParts) _stepBody.Children.Add(part);
         body.Children.Add(_stepBody);
@@ -389,7 +398,7 @@ internal sealed class WelcomeWindow : Window
         IsVisibleChanged += (_, _) => _preview.Suspend(!IsVisible || WindowState == WindowState.Minimized);
         Closed += (_, _) =>
         {
-            if (CurrentStep == WelcomeStep.Consent && !_consentAnswered)
+            if (CurrentStep == WelcomeStep.Consent && !_consentAnswered && !_options.CoreShortcutsNotice)
             {
                 _consentAnswered = true;
                 CoreShortcutsAnswered?.Invoke(false);
@@ -410,6 +419,7 @@ internal sealed class WelcomeWindow : Window
     internal event EventHandler? LibraryRequested;
     internal event EventHandler? EditorRequested;
     internal event Action<bool>? CoreShortcutsAnswered;
+    internal event Action<bool>? CoreShortcutsNoticeAcknowledged;
     internal event Action<GlobalHotkeyCommand>? ShortcutChangeRequested;
 
     internal WelcomeStep CurrentStep => _showingConsent ? WelcomeStep.Consent : Session.Step switch
@@ -465,6 +475,8 @@ internal sealed class WelcomeWindow : Window
     internal IReadOnlyList<Border> ProgressFills => _progressFills;
     internal Border SuccessChip => _successChip;
     internal TextBlock InstructionBlock => _instruction;
+    internal Grid CoreShortcutKeyList { get; } = new() { Margin = new Thickness(0, 0, 0, 14) };
+    internal TextBlock CoreShortcutParagraphs { get; } = new() { Margin = new Thickness(0, 0, 0, 14) };
     internal Border PreviewFrame => _previewFrame;
     private bool ReducedMotion => _options.ReducedMotion ?? !FluidMotion.AnimationsEnabled;
 
@@ -522,7 +534,12 @@ internal sealed class WelcomeWindow : Window
     private void RunPrimaryAction()
     {
         if (_closed || Session.CapturePending || Session.PinRestorePending) return;
-        if (_showingConsent) { AnswerCoreShortcuts(true); return; }
+        if (_showingConsent)
+        {
+            if (_options.CoreShortcutsNotice) AcknowledgeCoreShortcutsNotice(openSettings: false);
+            else AnswerCoreShortcuts(true);
+            return;
+        }
         Session.ClearFeedback();
         PracticeStep step = Session.Step;
         if (step is >= PracticeStep.B2 and <= PracticeStep.B6 && Session.WindowPinId is null)
@@ -572,6 +589,48 @@ internal sealed class WelcomeWindow : Window
         _consentAnswered = true; _showingConsent = false;
         CoreShortcutsAnswered?.Invoke(accept);
         RenderStep();
+    }
+
+    // Two columns: every key takes the widest key's width, so the names start on one line.
+    private string BuildCoreShortcutKeyList()
+    {
+        CoreShortcutKeyList.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        CoreShortcutKeyList.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        (Hotkey Key, string Name)[] coreShortcuts =
+        [
+            (CoreShortcuts.Capture, "CoreShortcuts.Capture"),
+            (CoreShortcuts.RecordRegion, "CoreShortcuts.RecordRegion"),
+            (CoreShortcuts.OpenLibrary, "CoreShortcuts.OpenLibrary"),
+            (CoreShortcuts.PasteToScreen, "CoreShortcuts.PasteToScreen"),
+        ];
+        for (int row = 0; row < coreShortcuts.Length; row++)
+        {
+            CoreShortcutKeyList.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            double bottom = row < coreShortcuts.Length - 1 ? 4 : 0;
+            var key = new TextBlock { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 16, bottom) };
+            ConfigureText(key, TypeScale.BodyLarge);
+            key.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+            SetText(key, coreShortcuts[row].Key.ToString());
+            Grid.SetRow(key, row);
+            CoreShortcutKeyList.Children.Add(key);
+            var name = new TextBlock { FontWeight = FontWeights.Normal, Margin = new Thickness(0, 0, 0, bottom) };
+            ConfigureText(name, TypeScale.BodyLarge);
+            name.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+            SetText(name, UiText.Get(coreShortcuts[row].Name));
+            Grid.SetRow(name, row);
+            Grid.SetColumn(name, 1);
+            CoreShortcutKeyList.Children.Add(name);
+        }
+        return string.Join("\n", coreShortcuts.Select(shortcut => $"{shortcut.Key} {UiText.Get(shortcut.Name)}"));
+    }
+
+    private void AcknowledgeCoreShortcutsNotice(bool openSettings)
+    {
+        if (_consentAnswered || _closed) return;
+        _consentAnswered = true;
+        _showingConsent = false;
+        RenderStep();
+        CoreShortcutsNoticeAcknowledged?.Invoke(openSettings);
     }
     private void RequestShortcutChange()
     { if (CurrentCommand() is { } command) ShortcutChangeRequested?.Invoke(command); }
@@ -626,10 +685,11 @@ internal sealed class WelcomeWindow : Window
         _caps.Clear();
         bool finish = step == PracticeStep.Results && !_showingConsent;
         bool groups = step == PracticeStep.Groups;
+        bool shortcutNotice = _showingConsent && _options.CoreShortcutsNotice;
         SkipButton.Visibility = finish ? Visibility.Collapsed : Visibility.Visible;
         SkipButton.IsTabStop = !finish; SkipButton.IsCancel = !_showingConsent;
-        SkipButton.Content = UiText.Get(_showingConsent ? "Practice.KeepCurrent" : "Welcome_Skip");
-        SkipButton.ToolTip = (string)SkipButton.Content + "  Esc";
+        SkipButton.Content = UiText.Get(shortcutNotice ? "CoreShortcuts.OpenSettings" : _showingConsent ? "Practice.KeepCurrent" : "Welcome_Skip");
+        SkipButton.ToolTip = (string)SkipButton.Content + (shortcutNotice ? string.Empty : "  Esc");
         AutomationProperties.SetName(SkipButton, (string)SkipButton.Content);
         BackButton.Visibility = SkipStepButton.Visibility = _showingConsent || groups ? Visibility.Collapsed : Visibility.Visible;
         SkipStepButton.Visibility = finish ? Visibility.Collapsed : SkipStepButton.Visibility;
@@ -645,11 +705,19 @@ internal sealed class WelcomeWindow : Window
         _captionRow.MinHeight = _showingConsent ? 0 : 26 * _textScale;
         ApplyPrimarySlot();
         RenderProgress(pageChanged);
-        SetText(_title, UiText.Get(_showingConsent ? "CoreShortcuts.Title" : $"Journey.{step}.Title"));
-        string instruction = _showingConsent ? UiText.Get("CoreShortcuts.Body") : step == PracticeStep.B1
+        SetText(_title, UiText.Get(shortcutNotice ? "CoreShortcuts.NoticeTitle" : _showingConsent ? "CoreShortcuts.Title" : $"Journey.{step}.Title"));
+        string instruction = _showingConsent ? UiText.Get(shortcutNotice ? "CoreShortcuts.NoticeBody" : "CoreShortcuts.Body") : step == PracticeStep.B1
             ? _pinAvailable ? UiText.Format("Journey.B1.Body", _keys.PasteToScreen) : UiText.Get("Journey.B1.NoKey")
             : UiText.Get(step == PracticeStep.B6 && Session.WindowPinId is not null ? "Journey.PinAlreadyRestored" : $"Journey.{step}.Body");
         SetText(_instruction, instruction);
+        CoreShortcutKeyList.Visibility = CoreShortcutParagraphs.Visibility = _showingConsent ? Visibility.Visible : Visibility.Collapsed;
+        string shortcutParagraphs = string.Empty;
+        if (_showingConsent)
+        {
+            shortcutParagraphs = UiText.Get("CoreShortcuts.Takeover") + "\n\n"
+                + UiText.Get(shortcutNotice ? "CoreShortcuts.NoticeChange" : "CoreShortcuts.Question");
+            SetText(CoreShortcutParagraphs, shortcutParagraphs);
+        }
         if (!_showingConsent) EmphasizeInstruction();
         Hotkey key = _showingConsent ? Hotkey.None : CurrentKey();
         _keyDisplay.Content = key.IsAssigned ? Keycaps(key) : null;
@@ -666,7 +734,7 @@ internal sealed class WelcomeWindow : Window
         _previewFrame.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
         ReplayButton.Visibility = PauseButton.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
         if (_preview.AssetPath is not { } existing || feature is null || !System.IO.Path.GetFileName(existing).StartsWith(feature + ".", StringComparison.Ordinal)) _preview.SelectFeature(feature);
-        string action = UiText.Get(_showingConsent ? "Practice.Start" : step switch
+        string action = UiText.Get(shortcutNotice ? "Dialog.OK" : _showingConsent ? "Practice.Start" : step switch
         {
             PracticeStep.A1 or PracticeStep.A2 => "Onboarding.StartCapture",
             PracticeStep.A3 => "Journey.A3.Title", PracticeStep.B0 => "Journey.B0.Title", PracticeStep.B1 => "Journey.ShowPicture",
@@ -688,7 +756,8 @@ internal sealed class WelcomeWindow : Window
         TryNowButton.SetResourceReference(StyleProperty, style);
         bool labelChanged = AutomationProperties.GetName(TryNowButton) != action;
         TryNowButton.Content = action; AutomationProperties.SetName(TryNowButton, action);
-        AutomationProperties.SetHelpText(TryNowButton, instruction);
+        AutomationProperties.SetHelpText(TryNowButton, _showingConsent
+            ? instruction + "\n\n" + _coreShortcutKeyListText + "\n\n" + shortcutParagraphs : instruction);
         TryNowButton.ToolTip = action + (waitingElsewhere ? string.Empty : "  Enter");
         TryNowButton.Visibility = Visibility.Visible;
         TryNowButton.IsDefault = TryNowButton.IsTabStop = !waitingElsewhere;

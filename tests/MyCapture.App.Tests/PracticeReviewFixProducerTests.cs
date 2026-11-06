@@ -269,7 +269,7 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         return app;
     }
     private static void Set(App app, string name, object value) => typeof(App).GetField(name, Private)!.SetValue(app, value);
-    private static WelcomeWindow Guide(App app) => (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false])!;
+    private static WelcomeWindow Guide(App app) => (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false, false])!;
     private static void Capture(App app) => typeof(App).GetMethod("HandleCaptureRequested", Private)!.Invoke(app, null);
     private static FrozenFrame Frame() => new(EditorKeysTests.Solid(320, 200, 80), new RectD(-10000, -10000, 320, 200), null, 0);
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(

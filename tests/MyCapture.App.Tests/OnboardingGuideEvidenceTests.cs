@@ -103,7 +103,11 @@ public sealed class OnboardingGuideEvidenceTests
         {
             var clipboard = new OnboardingGuideTests.FakeClipboard();
             HotkeySettings? keys = noLibraryKey ? NewInstallDefaults.Create().Hotkeys : null;
-            if (noLibraryKey) Assert.Equal(Hotkey.None, keys!.OpenLibrary);
+            if (noLibraryKey)
+            {
+                keys!.OpenLibrary = Hotkey.None;
+                Assert.Equal(Hotkey.None, keys.OpenLibrary);
+            }
             WelcomeWindow guide = OnboardingGuideTests.Create(clipboard,
                 new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor,
                     ShowCoreShortcutsConsent = step is null }, keys);

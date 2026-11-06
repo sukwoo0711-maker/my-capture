@@ -277,27 +277,39 @@
                                           FocusVisualStyle="{x:Null}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="Chrome"
-                                                Background="Transparent"
-                                                BorderBrush="Transparent"
-                                                BorderThickness="1"
-                                                CornerRadius="{DynamicResource Radius.Md}"
-                                                Padding="{TemplateBinding Padding}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <themes:SymbolIcon Size="16" x:Name="Chevron"
-                                                      Data="{StaticResource Icon.ChevronDown}"
-                                                      Stroke="{DynamicResource Text.Secondary}"
-                                                      VerticalAlignment="Center"
-                                                      RenderTransformOrigin="0.5,0.5">
-                                                    <themes:SymbolIcon.RenderTransform>
-                                                        <RotateTransform Angle="-90" />
-                                                    </themes:SymbolIcon.RenderTransform>
-                                                </themes:SymbolIcon>
-                                                <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"
-                                                                  TextElement.FontSize="{StaticResource FontSize.Subtitle}"
-                                                                  TextElement.FontWeight="Bold" />
-                                            </StackPanel>
-                                        </Border>
+                                        <Grid>
+                                            <Border x:Name="Chrome"
+                                                    Background="Transparent"
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{DynamicResource Radius.Md}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <themes:SymbolIcon Size="16" x:Name="Chevron"
+                                                          Data="{StaticResource Icon.ChevronDown}"
+                                                          Stroke="{DynamicResource Text.Secondary}"
+                                                          VerticalAlignment="Center"
+                                                          RenderTransformOrigin="0.5,0.5">
+                                                        <themes:SymbolIcon.RenderTransform>
+                                                            <RotateTransform Angle="-90" />
+                                                        </themes:SymbolIcon.RenderTransform>
+                                                    </themes:SymbolIcon>
+                                                    <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                      TextElement.FontSize="{StaticResource FontSize.Subtitle}"
+                                                                      TextElement.FontWeight="Bold" />
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- The shared buttons' inset focus ring, as on the controls inside the
+                                                 section: no layout impact, toggled by opacity. The category tabs
+                                                 keep their own 1 px focus outline. -->
+                                            <Border x:Name="FocusRing"
+                                                    Margin="1"
+                                                    BorderBrush="{DynamicResource Border.Focus}"
+                                                    BorderThickness="{DynamicResource Focus.RingThickness}"
+                                                    CornerRadius="{DynamicResource Radius.Sm}"
+                                                    IsHitTestVisible="False"
+                                                    Opacity="0" />
+                                        </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="Chevron" Property="RenderTransform">
@@ -312,6 +324,7 @@
                                             </Trigger>
                                             <Trigger Property="IsKeyboardFocused" Value="True">
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -510,6 +523,18 @@
                                                   ContentSource="SelectedContent"
                                                   Margin="24,18,18,18" /></AdornerDecorator>
                             </Border>
+                            <!-- With no matching category the card above would be blank: the same state in
+                                 its centre (the card's 16 offset plus 24 on every side). The query has a
+                                 line of its own, so no particle has to follow what the user typed. -->
+                            <StackPanel x:Name="SettingsSearchNoMatch" Grid.Column="1" Visibility="Collapsed" MaxWidth="360"
+                                        Margin="40,24,24,24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Text Settings_SearchNoMatch}" Foreground="{DynamicResource Text.Primary}"
+                                           FontSize="{StaticResource FontSize.BodyLarge}" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" TextAlignment="Center" />
+                                <TextBlock x:Name="SettingsSearchNoMatchQuery" Style="{StaticResource Settings.Description}"
+                                           Margin="0,6,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           TextAlignment="Center" />
+                            </StackPanel>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -533,10 +558,9 @@
         <Style x:Key="About.Heading" TargetType="TextBlock" BasedOn="{StaticResource Settings.GroupHeading}">
             <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
-        <Style x:Key="About.Body" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
-            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
+        <!-- The privacy statements read as the tab's other descriptions: same size, colour and
+             weight. Only the gap between statements is wider than under a label. -->
+        <Style x:Key="About.Body" TargetType="TextBlock" BasedOn="{StaticResource Settings.Description}">
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
 
@@ -1463,7 +1487,7 @@
                                     <DockPanel LastChildFill="True" HorizontalAlignment="Left">
                                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                     </DockPanel>
-                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="Ctrl+Shift+Z" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                                 </StackPanel>
 
                                 <StackPanel Style="{StaticResource Settings.Field}">
@@ -1586,7 +1610,9 @@
                             <TextBlock x:Name="UpdateDescription" Style="{StaticResource Settings.Description}" />
                         </StackPanel>
 
+                        <!-- Its own section: at the end of updates the guide read as an update feature. -->
                         <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_HelpHeading}" />
                             <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
                                     AutomationProperties.Name="{loc:Text Onboarding.Replay}"
                                     Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"

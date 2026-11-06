@@ -29,6 +29,9 @@ public sealed class CoreShortcutSettingsApplyTests
             if (failSave) Directory.CreateDirectory(paths.SettingsFile);
             var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
             AppSettings live = NewInstallDefaults.Create();
+            live.Hotkeys.ForceCoreShortcuts = false;
+            live.Hotkeys.CoreShortcutsAsked = false;
+            live.Hotkeys.OpenLibrary = Hotkey.None;
             AppSettings before = live;
             using var native = new NativeMessageWindow();
             using var hotkeys = new GlobalHotkeyService(native, new Registrar(false),
@@ -96,6 +99,8 @@ public sealed class CoreShortcutSettingsApplyTests
         {
             var store = new SettingsStore(AppPaths.CreateForRoot(ExportTestDirectory.Create()), NullLogger<SettingsStore>.Instance);
             AppSettings published = NewInstallDefaults.Create();
+            published.Hotkeys.ForceCoreShortcuts = false;
+            published.Hotkeys.OpenLibrary = Hotkey.None;
             published.Hotkeys.CoreShortcutsAsked = previouslyAsked;
             using var window = new NativeMessageWindow();
             using var hotkeys = new GlobalHotkeyService(window, new Registrar(blocked),
@@ -140,6 +145,9 @@ public sealed class CoreShortcutSettingsApplyTests
             if (failSave) Directory.CreateDirectory(paths.SettingsFile);
             var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
             AppSettings published = NewInstallDefaults.Create();
+            published.Hotkeys.ForceCoreShortcuts = false;
+            published.Hotkeys.CoreShortcutsAsked = false;
+            published.Hotkeys.OpenLibrary = Hotkey.None;
             AppSettings original = published;
             Assert.True(original.General.LaunchAtLogin);
             using var window = new NativeMessageWindow();

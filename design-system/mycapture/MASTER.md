@@ -128,9 +128,12 @@ accessible name and a tooltip. Colour is never the only signal: keep labels, sha
 ## Commands and settled product decisions
 
 New-install defaults (`NewInstallDefaults`, `AppSettings`): `Ctrl+Shift+C` captures a region,
-`Ctrl+Shift+X` starts or stops region recording, `F3` pins clipboard content, `Shift+F3` hides or shows
-the pins. The library and upload have no shortcut on new installs; existing users keep `Ctrl+Shift+Z` and
-`F9`. A lone `Ctrl+X` is never presented as the recording default: Windows users read it as Cut.
+`Ctrl+Shift+X` starts or stops region recording, `Ctrl+Shift+Z` opens the library, `F3` pins clipboard
+content, `Shift+F3` hides or shows the pins. The first four are taken ahead of other programs
+(`ForceCoreShortcuts`), and the first run says so in a "Core shortcuts" notice instead of asking
+(2026-11-07 decision); an upgrade that never answered still gets the question. Upload has no shortcut on
+new installs; existing users keep `Ctrl+Shift+Z` and `F9`. A lone `Ctrl+X` is never presented as the
+recording default: Windows users read it as Cut.
 Reviews must not reverse these decisions: editor Ctrl+C copies and closes; Alt reveals shortcut labels;
 pin hover-bar labels all show or all hide; there are no pin boards. Prefer the smallest change to existing
 UI over new overlays or badges. Follow Windows conventions: Explorer menu order, Properties last, and an

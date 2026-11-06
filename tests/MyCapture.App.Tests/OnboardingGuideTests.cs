@@ -241,6 +241,7 @@ public sealed class OnboardingGuideTests
     {
         using var language = UiText.UseLanguage(culture);
         HotkeySettings defaults = NewInstallDefaults.Create().Hotkeys;
+        defaults.OpenLibrary = Hotkey.None;
         Assert.Equal(Hotkey.None, defaults.OpenLibrary);
         defaults.Capture = Hotkey.None; defaults.PasteToScreen = Hotkey.None;
         var guide = Create(new(), keys: defaults);
@@ -575,7 +576,8 @@ public sealed class OnboardingGuideTests
             : new WelcomeOptions
             {
                 Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = options.ReducedMotion ?? true, MediaFactory = options.MediaFactory ?? (() => new FakeMedia()),
-                Replay = options.Replay, ShowCoreShortcutsConsent = options.ShowCoreShortcutsConsent, FeaturePractice = options.FeaturePractice, StartAtSignIn = options.StartAtSignIn, UseAccurateOcr = options.UseAccurateOcr, TextScale = options.TextScale,
+                Replay = options.Replay, ShowCoreShortcutsConsent = options.ShowCoreShortcutsConsent, CoreShortcutsNotice = options.CoreShortcutsNotice,
+                FeaturePractice = options.FeaturePractice, StartAtSignIn = options.StartAtSignIn, UseAccurateOcr = options.UseAccurateOcr, TextScale = options.TextScale,
                 MonitorProvider = options.MonitorProvider, HintDelay = options.HintDelay,
             }) { WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
 
