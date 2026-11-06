@@ -109,18 +109,33 @@ public sealed class StoreRatingPolicyTests
     }
 
     [Fact]
-    public void SecondShowing_AFutureStampWaitsForTwentyFourHoursAfterThatStamp()
+    public void SecondShowing_AFutureStampWaitsOnlyWithinTheFirstSeenClockTolerance()
     {
+        // A clock that ran a few hours fast at the first showing: the second waits 24 hours after that stamp.
         StoreRatingState state = Eligible();
-        DateTimeOffset shown = Start.AddYears(3);
-        StoreRatingPolicy.MarkInvitationShown(state, shown);
-
+        DateTimeOffset nearFuture = Start.AddHours(20);
+        StoreRatingPolicy.MarkInvitationShown(state, nearFuture);
         Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: nearFuture.AddDays(1).AddSeconds(-1)));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: nearFuture.AddDays(1)));
+
+        // The tolerance of the first-seen stamp (EnsureFirstSeen): one day ahead still holds the second showing back.
+        state.InvitationShownUtc = Start.AddDays(1);
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+        // Further ahead, the stamp came from a clock that was later corrected: it never defers the second showing.
+        state.InvitationShownUtc = Start.AddDays(1).AddTicks(1);
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+        DateTimeOffset shown = Start.AddYears(3);
+        state.InvitationShownUtc = shown;
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+
+        // Once the clock has reached it, the stamp is a showing like any other.
         Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown));
         Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown.AddDays(1).AddSeconds(-1)));
         Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown.AddDays(1)));
         state.InvitationShownUtc = DateTimeOffset.MaxValue;
         Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: DateTimeOffset.MaxValue));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Fact]
