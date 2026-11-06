@@ -62,10 +62,12 @@ public sealed partial class SettingsThemePreviewTests
     /// item (<see cref="LibraryDeleteShell"/>), with the deletion journal under its 200 entries and
     /// with a delete that takes it over them. <see cref="MeasureDeleteUndoAndMenu"/> holds the budget.
     /// With <c>MYCAPTURE_LIBSET_EVIDENCE</c> set, the times are added to its timings file.
+    /// The child used 94 to 101 s of the default 150 s on four CPUs, most of it building the library
+    /// of 1,000, so it counts as hung only after 300 s; the budgets above are unchanged.
     /// </summary>
     [Fact]
     public Task LibraryDelete_124Of1000ThroughASlowShell_StaysWithinItsBudget() =>
-        RunIsolated(nameof(LibraryDelete_124Of1000ThroughASlowShell_StaysWithinItsBudget), () =>
+        RunIsolated(nameof(LibraryDelete_124Of1000ThroughASlowShell_StaysWithinItsBudget), hungAfter: TimeSpan.FromSeconds(300), verify: () =>
         {
             Application application = CreateLibraryApplication();
             var timings = new List<string>();

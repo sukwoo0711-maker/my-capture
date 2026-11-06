@@ -28,7 +28,11 @@ public sealed partial class SettingsThemePreviewTests
     public Task ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette() =>
         RunIsolated(nameof(ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette), VerifyPreviewLifecycle);
 
-    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null)
+    /// <param name="hungAfter">
+    /// When the child counts as hung (150 s by default). A test whose own work is long on a slow
+    /// runner passes a longer limit; its assertions keep their own budgets.
+    /// </param>
+    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null, TimeSpan? hungAfter = null)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
@@ -73,7 +77,7 @@ public sealed partial class SettingsThemePreviewTests
             // The GIF preview check renders and plays real samples in six themes: about 20 s on a
             // developer PC but over 60 s on a loaded GPU-less CI runner. The limit only guards
             // against a hung child; no assertion depends on it.
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+            using var timeout = new CancellationTokenSource(hungAfter ?? TimeSpan.FromSeconds(150));
             try
             {
                 await child.WaitForExitAsync(timeout.Token);

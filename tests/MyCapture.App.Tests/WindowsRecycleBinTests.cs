@@ -167,8 +167,16 @@ public sealed class WindowsRecycleBinTests(ITestOutputHelper output)
         trash.DiagnosticStageForTest = stage => { lock (stages) stages.Add(stage); };
         string[] TakeStages() { lock (stages) { string[] taken = stages.ToArray(); stages.Clear(); return taken; } }
 
+        // A move or restore of one directory that throws is kept for the assertions while the rest go
+        // on, so that every directory that moved comes back.
+        var aloneReceipts = new List<RecycledPathReceipt>(count);
+        var aloneFailures = new List<Exception>();
         var clock = Stopwatch.StartNew();
-        RecycledPathReceipt[] aloneReceipts = alone.Select(path => trash.RecycleDirectory(path)).ToArray();
+        foreach (string path in alone)
+        {
+            try { aloneReceipts.Add(trash.RecycleDirectory(path)); }
+            catch (Exception ex) { aloneFailures.Add(ex); }
+        }
         TimeSpan moveAlone = clock.Elapsed;
         TakeStages();
         var progress = new List<int>();
@@ -180,7 +188,11 @@ public sealed class WindowsRecycleBinTests(ITestOutputHelper output)
 
         // Everything comes back before any assertion, so a failure leaves nothing in the Recycle Bin.
         clock.Restart();
-        foreach (RecycledPathReceipt receipt in aloneReceipts) trash.RestoreDirectory(receipt);
+        foreach (RecycledPathReceipt receipt in aloneReceipts)
+        {
+            try { trash.RestoreDirectory(receipt); }
+            catch (Exception ex) { aloneFailures.Add(ex); }
+        }
         TimeSpan restoreAlone = clock.Elapsed;
         TakeStages();
         RecycledPathReceipt[] togetherReceipts = outcomes.Where(outcome => outcome.Receipt is not null).Select(outcome => outcome.Receipt!).ToArray();
@@ -193,6 +205,7 @@ public sealed class WindowsRecycleBinTests(ITestOutputHelper output)
             + $"restore one at a time {restoreAlone.TotalSeconds:F2} s, together {restoreTogether.TotalSeconds:F2} s";
         output.WriteLine(report);
         File.WriteAllText(Path.Combine(root, "timings.txt"), report);
+        Assert.True(aloneFailures.Count == 0, string.Join(Environment.NewLine, aloneFailures));
         Assert.All(outcomes, outcome => Assert.Null(outcome.Failure));
         Assert.Equal(count, togetherReceipts.Length);
         Assert.True(movedAway);
