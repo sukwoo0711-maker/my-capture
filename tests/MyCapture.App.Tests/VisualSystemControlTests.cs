@@ -74,7 +74,7 @@ public sealed class VisualSystemControlTests
             Assert.NotEqual(ColorOf(resources, "Accent.Default"), ColorOf(sheet.Danger.Background));
             foreach ((Control control, string part) in new[]
             {
-                ((Control)sheet.Toggle, "CheckedLayer"), (sheet.Rail, "CheckedLayer"),
+                ((Control)sheet.Rail, "CheckedLayer"),
                 (sheet.SelectedTab, "SelectedLayer"), (sheet.ListItem, "SelectedLayer"),
             })
             {
@@ -85,6 +85,17 @@ public sealed class VisualSystemControlTests
                 Assert.Equal(1d, selected.Opacity);
             }
         }
+
+        // An on toggle is the selected fill with primary text. Its 2-DIP primary-text edge read
+        // as the focus ring (2026-11-06 aesthetic review), so only the contrast theme, where
+        // every tool has a border, keeps it, as one 2-DIP line.
+        Border toggleOn = Part<Border>(sheet.Toggle, "CheckedLayer");
+        Assert.Null(toggleOn.Child);
+        Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(toggleOn.Background));
+        Assert.Equal(new Thickness(contrast ? 2 : 0), toggleOn.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(toggleOn.BorderBrush));
+        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(sheet.Toggle.Foreground));
+        Assert.Equal(1d, toggleOn.Opacity);
 
         // A focus transition may change ink and opacity, never the command's layout box.
         Size focusedSize = sheet.Focused.RenderSize;
@@ -190,6 +201,38 @@ public sealed class VisualSystemControlTests
         TextBlock Caption, Button Primary, Button Secondary, Button Tool, Button Danger, Button Focused,
         ToggleButton Toggle, ToggleButton Rail, TabItem SelectedTab, ListBoxItem ListItem,
         TextBox Input, ComboBox Combo, Border Card);
+
+    // In a Windows contrast theme the selected fill is Window, the colour of the toggle's own
+    // surface, so an on toggle shows its state only through its 2-DIP WindowText edge there.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OnToggleKeepsAnEdgeOnlyInAWindowsContrastTheme(bool systemContrast) => Run(() =>
+    {
+        ResourceDictionary resources = LoadResources();
+        ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: systemContrast, accent: AppAccent.Red);
+        var toggle = new ToggleButton { Content = "자세히", IsChecked = true, Style = (Style)resources[typeof(ToggleButton)] };
+        var root = new Border { Width = 200, Height = 80, Resources = resources, Child = toggle };
+        Layout(root);
+        Border layer = Part<Border>(toggle, "CheckedLayer");
+        Assert.Equal(1d, layer.Opacity);
+        Assert.Equal(new Thickness(systemContrast ? 2 : 0), layer.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(layer.BorderBrush));
+        Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(layer.Background));
+        if (systemContrast)
+        {
+            Assert.Equal(ColorOf(resources, "Surface.Base"), ColorOf(layer.Background));
+            Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(resources, "Text.Primary")),
+                ToThemeColor(ColorOf(resources, "Surface.Base"))) >= 3, "the contrast edge must show on Window");
+        }
+        else
+        {
+            Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(toggle.Foreground)),
+                ToThemeColor(ColorOf(layer.Background))) >= 4.5, "on-toggle text must stay readable on the selected fill");
+        }
+    });
+
+    private static ThemeColor ToThemeColor(Color color) => ThemeColor.Argb(color.A, color.R, color.G, color.B);
 
     private static Sheet CreateSheet(ResourceDictionary resources, double scale)
     {

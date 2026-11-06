@@ -538,7 +538,9 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!--   Selected state uses a primary-text outline and a neutral fill; focus is an overlay. -->
+    <!--   The on state is the neutral selected fill; focus is an overlay. A 2-DIP primary-text
+           outline on every on toggle read as the focus ring, so only the contrast themes keep
+           it, where the fill is Window and would not show the state. -->
     <!-- ============================================================= -->
     <Style TargetType="{x:Type ToggleButton}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
@@ -563,7 +565,8 @@
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
-                        <!-- Above the hover wash, so a checked tool keeps its selected fill on hover. -->
+                        <!-- Above the hover wash, so a checked tool keeps its selected fill on hover.
+                             Its 2-DIP edge shows only where tools have a border: the contrast themes. -->
                         <Border x:Name="CheckedLayer"
                                 Style="{StaticResource StateLayer.Selected}"
                                 BorderThickness="2" />
@@ -588,6 +591,9 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="BorderThickness" Value="0">
+                            <Setter TargetName="CheckedLayer" Property="BorderThickness" Value="0" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />

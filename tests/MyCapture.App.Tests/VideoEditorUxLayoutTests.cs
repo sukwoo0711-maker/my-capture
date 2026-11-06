@@ -35,7 +35,7 @@ public sealed class VideoEditorUxLayoutTests
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.DoesNotContain(texts, text => text.Text == "동영상 편집");
             TextBlock details = Assert.Single(texts, text => text.Name == "VideoHeaderDetails");
-            Assert.StartsWith("동영상 0:10.000 · 640×360 · 30fps", details.Text);
+            Assert.StartsWith("동영상 0:10.000 · 640 × 360 · 30fps", details.Text);
             Assert.True(details.ActualHeight > 0);
             var commands = Assert.Single(Descendants(bar).OfType<MyCapture.App.Editing.CommandGroupsPanel>());
             Assert.True(details.TranslatePoint(default, bar).Y >= commands.TranslatePoint(default, bar).Y + commands.ActualHeight);
@@ -444,6 +444,110 @@ public sealed class VideoEditorUxLayoutTests
         finally
         {
             editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    /// <summary>
+    /// An empty layer list said nothing between its heading and the edit commands, while the
+    /// tracks said 텍스트 레이어 없음. It now says so in one muted caption in its first row,
+    /// starting where a row's icon starts, and gives the row back once a layer exists.
+    /// </summary>
+    [Theory]
+    [InlineData("ko-KR", "레이어 없음")]
+    [InlineData("en-US", "No layers")]
+    public void EmptyLayerListSaysSoInItsFirstRow(string language, string expected) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string root = OwnedTestDirectory.Create("mc-video-ux-empty-layers-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
+            editor.SetDetailsExpandedForTest(true);
+            void Settle() => editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            Settle();
+            ListBox list = Field<ListBox>(editor, "_overlayList");
+            Border empty = Field<Border>(editor, "_layerListEmpty");
+            TextBlock text = Assert.IsType<TextBlock>(empty.Child);
+            Assert.Empty(list.Items);
+            Assert.True(empty.IsVisible);
+            Assert.False(empty.IsHitTestVisible);
+            Assert.Equal(expected, text.Text);
+            // The tracks draw their empty text in Text.Secondary at caption size on one line.
+            Assert.Equal(MyCapture.App.Themes.TypeScale.Caption, text.FontSize);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Text.Secondary")).Color, ((SolidColorBrush)text.Foreground).Color);
+            Assert.Equal(TextWrapping.NoWrap, text.TextWrapping);
+            Assert.Equal(TextTrimming.CharacterEllipsis, text.TextTrimming);
+            Point textAt = text.TranslatePoint(new Point(), list);
+            Assert.True(textAt.Y >= 0 && textAt.Y + text.ActualHeight <= list.ActualHeight + 0.5,
+                $"the empty text {textAt.Y}..{textAt.Y + text.ActualHeight} is outside the {list.ActualHeight} DIP list");
+
+            typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            Settle();
+            Assert.False(empty.IsVisible);
+            var row = Assert.IsType<ListBoxItem>(Assert.Single(list.Items));
+            MyCapture.App.Themes.SymbolIcon icon = Assert.Single(Descendants(row).OfType<MyCapture.App.Themes.SymbolIcon>());
+            Point iconAt = icon.TranslatePoint(new Point(), list);
+            Point rowAt = row.TranslatePoint(new Point(), list);
+            Assert.True(Math.Abs(iconAt.X - textAt.X) < 0.5, $"the empty text starts at {textAt.X} DIP and a row's icon at {iconAt.X} DIP");
+            double middle = textAt.Y + (text.ActualHeight / 2);
+            Assert.True(middle > rowAt.Y && middle < rowAt.Y + row.ActualHeight,
+                $"the empty text's middle {middle} DIP is outside the first row {rowAt.Y}..{rowAt.Y + row.ActualHeight}");
+
+            typeof(VideoEditorWindow).GetMethod("RestoreEdit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            Settle();
+            Assert.Empty(list.Items);
+            Assert.True(empty.IsVisible);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    /// <summary>
+    /// The on 자세히 toggle is the selected fill without the 2-DIP edge that read as the focus
+    /// ring, and its chevron turns from down to up and back. The Alt reveal scales the box the
+    /// chevron sits in, so the reveal and the turn never replace each other's transform.
+    /// </summary>
+    [Fact]
+    public void DetailsToggleFillsAndTurnsItsChevronWhileOn() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-video-ux-details-chevron-");
+        VideoEditorWindow? editor = null;
+        bool? previousMotion = MyCapture.App.Themes.FluidMotion.AnimationsEnabledOverrideForTest;
+        try
+        {
+            MyCapture.App.Themes.FluidMotion.AnimationsEnabledOverrideForTest = false;
+            editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
+            void Settle() => editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            var toggle = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
+                item => item.Name == "VideoDetailsToggle");
+            var chevron = Assert.Single(Descendants(toggle).OfType<MyCapture.App.Themes.SymbolIcon>());
+            var box = Assert.IsType<Border>(chevron.Parent);
+            double Angle() => chevron.RenderTransform is RotateTransform rotate ? rotate.Angle : 0;
+            Assert.Equal(0, Angle());
+
+            editor.SetDetailsExpandedForTest(true);
+            Settle();
+            Assert.Equal(180, Angle());
+            Assert.Equal(new Point(0.5, 0.5), chevron.RenderTransformOrigin);
+            Assert.False(ReferenceEquals(box.RenderTransform, chevron.RenderTransform));
+            var layer = Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle));
+            Assert.Equal(1, layer.Opacity);
+            Assert.Equal(new Thickness(0), layer.BorderThickness);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Surface.Selected")).Color, ((SolidColorBrush)layer.Background).Color);
+
+            editor.SetDetailsExpandedForTest(false);
+            Settle();
+            Assert.Equal(0, Angle());
+        }
+        finally
+        {
+            editor?.Close();
+            MyCapture.App.Themes.FluidMotion.AnimationsEnabledOverrideForTest = previousMotion;
             OwnedTestDirectory.Delete(root);
         }
     });

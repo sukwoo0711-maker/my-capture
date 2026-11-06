@@ -40,7 +40,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_01EC445E93F5" xml:space="preserve">
-    <value>F  Frame</value>
+    <value>Frame</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0226F79FE6FB" xml:space="preserve">
@@ -937,7 +937,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_541F62E38579" xml:space="preserve">
-    <value>T  Text</value>
+    <value>Text</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_542965B456C7" xml:space="preserve">
@@ -1980,7 +1980,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_AD80E1DD716A" xml:space="preserve">
-    <value>T  Text {0}</value>
+    <value>Text {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_AD823133F009" xml:space="preserve">
@@ -2818,7 +2818,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
   </data>
   <data name="Text_F085C7366DEB" xml:space="preserve">
-    <value>F  Frame {0}</value>
+    <value>Frame {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_F09A6C5A6A10" xml:space="preserve">
@@ -3147,7 +3147,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_SizeOriginalHelp" xml:space="preserve"><value>Encodes at the standard bitrate. Resolution and frame rate stay unchanged.</value></data>
   <data name="MediaExport_SizePresetHelp" xml:space="preserve"><value>Lowers the bitrate by about {0}%. Resolution and frame rate stay unchanged; quality may decrease.</value></data>
   <data name="MediaExport_Advanced" xml:space="preserve"><value>Advanced</value></data>
-  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>Estimated size about {0} · {1} · {2}×{3}</value></data>
+  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>Estimated size about {0} · {1} · {2} × {3}</value></data>
   <data name="MediaExport_GifSummary" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="MediaExport_SizeMb" xml:space="preserve"><value>{0:0.0} MB</value></data>
   <data name="MediaExport_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
@@ -3209,6 +3209,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>Start</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>End</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
+  <data name="Video.NoLayers" xml:space="preserve"><value>No layers</value></data>
   <data name="VideoEditorUx_LayerInterval" xml:space="preserve">
     <value>{0}–{1}</value>
   </data>
@@ -4062,7 +4063,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Video editor</value></data>
   <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Video editor window</value></data>
   <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Video editor</value></data>
-  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1}×{2} · {3} fps</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1} × {2} · {3} fps</value></data>
   <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>Video editing commands</value></data>
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
