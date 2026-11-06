@@ -41,7 +41,7 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         Assert.Equal(0, input.SelectionLength);
         Assert.False(mouse.ViewValidAtRelease);
         Assert.Null(Mouse.Captured);
-        Assert.NotEqual(mouse.Handle, GetCapture());
+        Assert.False(mouse.NativeCaptureAfterGesture);
         Assert.Same(input, Keyboard.FocusedElement);
         Assert.True(host.Editor.IsCustomColorFlyoutOpenForTest);
     });
@@ -82,6 +82,7 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         input.Text = Hex;
         mouse.Click(apply);
         Assert.Equal(1, clicks);
+        Assert.False(mouse.NativeCaptureAfterGesture);
         AssertApplied(host, Hex);
     });
 
@@ -214,8 +215,11 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         Assert.Equal(0, composition.CompleteCalls);
         Assert.Equal(EditorTool.Ellipse, controller.Tool);
         Assert.Same(input, Keyboard.FocusedElement);
+        // The finished jamo reaches the box through WPF's text input, at the caret the click placed.
+        string typed = input.Text.Insert(input.CaretIndex, "ㄱ");
+        Assert.True(Raise(input, composition, TextCompositionManager.TextInputEvent));
+        Assert.Equal(typed, input.Text);
         // That text is not a color: Apply, clicked with the mouse, says so and keeps the flyout open.
-        input.Text = "ㄱ";
         mouse.Click(apply);
         Assert.True(host.Editor.IsCustomColorFlyoutOpenForTest);
         Assert.Equal(UiText.Get("Tools.InvalidColor"), host.Editor.StatusText);
@@ -276,11 +280,15 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
     /// Posts left-button input to one HWND back to back. WPF's mouse provider accepts these only
     /// from the HWND under the cursor or holding capture, so each gesture holds native capture as
     /// a real press would; WPF's own capture replaces it, and a gesture nothing captured gives it
-    /// back. The thread's left-button state follows each press and release, as for real input.
+    /// back. The thread's key state is that of a plain left click: the left button follows each
+    /// press and release, as for real input, and the other buttons and the modifier keys are up.
     /// </summary>
     private sealed class QueuedMouse : IDisposable
     {
         private const int MouseMove = 0x0200, LeftDown = 0x0201, LeftUp = 0x0202, LeftButtonFlag = 0x0001;
+        // Right, middle and X buttons; Shift, Ctrl, Alt (either side) and the Windows keys.
+        private static readonly byte[] OtherButtonsAndModifiers =
+            [0x02, 0x04, 0x05, 0x06, 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5];
         private readonly HwndSource _source;
         private readonly HwndSourceHook _hook;
         private readonly TextBox? _observed;
@@ -299,6 +307,12 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
 
         /// <summary>Whether the observed box's text view had a valid layout when the last release arrived.</summary>
         public bool? ViewValidAtRelease { get; private set; }
+
+        /// <summary>
+        /// Whether the HWND still held native capture once the last gesture was processed, read
+        /// before this helper gives back the capture it took for a gesture nothing captured.
+        /// </summary>
+        public bool NativeCaptureAfterGesture { get; private set; }
 
         /// <summary>Clicks <paramref name="element"/> at <paramref name="at"/> (its own coordinates), or its center.</summary>
         public void Click(FrameworkElement element, Point? at = null) => Post(element, (LeftDown, at), (LeftUp, at));
@@ -339,7 +353,8 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
             Drain();
             Assert.Equal(0, _pending);
             Assert.Equal(0, _unaccepted);
-            if (Mouse.Captured is null && GetCapture() == Handle) _ = ReleaseCapture();
+            NativeCaptureAfterGesture = GetCapture() == Handle;
+            if (Mouse.Captured is null && NativeCaptureAfterGesture) _ = ReleaseCapture();
         }
 
         private nint Position(FrameworkElement element, Point? at)
@@ -367,6 +382,7 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
             var keys = new byte[256];
             Assert.True(GetKeyboardState(keys));
             keys[0x01] = pressed ? (byte)0x80 : (byte)0;
+            foreach (byte key in OtherButtonsAndModifiers) keys[key] = 0;
             Assert.True(SetKeyboardState(keys));
         }
     }

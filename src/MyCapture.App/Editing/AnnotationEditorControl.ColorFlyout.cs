@@ -50,8 +50,10 @@ internal sealed partial class AnnotationEditorControl
         if (e.ChangedButton == MouseButton.Left && _customColorInput.IsMouseCaptured) _customColorInput.UpdateLayout();
     }
 
-    // Runs after WPF's own handler. If the view still could not lay out, end the finished
-    // selection gesture as WPF does, so the box's capture never outlives it.
+    // Runs after WPF's own handler. If the view still could not lay out, release the capture WPF
+    // would have released here, so the box's capture never outlives the gesture. WPF's other
+    // release work needs that layout (a caret placement deferred from a press on the selection,
+    // the cursor update) and does not run in that case.
     private void OnCustomColorInputMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left || e.RightButton != MouseButtonState.Released
