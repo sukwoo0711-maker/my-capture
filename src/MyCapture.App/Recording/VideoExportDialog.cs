@@ -445,7 +445,7 @@ internal sealed class VideoExportDialog : Window
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
         if (!_working)
         {
-            KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Hint"));
+            ShowStatus(UiText.Get("MediaExport_Hint"));
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
         }
@@ -488,6 +488,18 @@ internal sealed class VideoExportDialog : Window
     internal bool IsProgressVisible => _progressRow.Visibility == Visibility.Visible;
 
     internal string StatusText => KoreanWordWrap.Strip(_status.Text);
+
+    /// <summary>
+    /// Shows <paramref name="text"/> on the status line. A failure reads in State.Danger, as the
+    /// editor's and the library's failure lines do; it used to look like the neutral hint. Every
+    /// other line keeps the dialog's text color.
+    /// </summary>
+    private void ShowStatus(string text, bool failed = false)
+    {
+        KoreanWordWrap.Show(_status, text);
+        if (failed) _status.SetResourceReference(TextBlock.ForegroundProperty, "State.Danger");
+        else _status.ClearValue(TextBlock.ForegroundProperty);
+    }
 
     internal string? SavedPath => _savedPath;
 
@@ -979,19 +991,19 @@ internal sealed class VideoExportDialog : Window
             temporary = null;
             if (_closed) return;
             _savedPath = full;
-            KoreanWordWrap.Show(_status, gif
+            ShowStatus(gif
                 ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
                 : UiText.Format("MediaExport_Saved", Path.GetFileName(full)));
             _openFolder.Visibility = Visibility.Visible;
         }
         catch (OperationCanceledException)
         {
-            if (!_closed) KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Cancelled"));
+            if (!_closed) ShowStatus(UiText.Get("MediaExport_Cancelled"));
         }
         catch (Exception error)
         {
             _logs.CreateLogger("VideoExport").LogWarning(error, "Video export failed");
-            if (!_closed) KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)));
+            if (!_closed) ShowStatus(UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)), failed: true);
         }
         finally
         {
@@ -1022,7 +1034,7 @@ internal sealed class VideoExportDialog : Window
         int total = Math.Max(1, progress.TotalFrames);
         int completed = Math.Clamp(progress.CompletedFrames, 0, total);
         _progressRow.Report(progress, stopwatch.Elapsed);
-        KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total));
+        ShowStatus(UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total));
     }
 
     internal string RemainingText => _progressRow.RemainingText;
@@ -1036,7 +1048,7 @@ internal sealed class VideoExportDialog : Window
         }
         catch (Exception error)
         {
-            KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)));
+            ShowStatus(UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)), failed: true);
         }
     }
 
@@ -1053,7 +1065,7 @@ internal sealed class VideoExportDialog : Window
         if (working)
         {
             _progressRow.Start(UiText.Get("MediaExport_Exporting"));
-            KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Exporting"));
+            ShowStatus(UiText.Get("MediaExport_Exporting"));
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
         }

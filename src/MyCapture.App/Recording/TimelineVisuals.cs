@@ -50,7 +50,9 @@ internal static class TimelineVisuals
 
     internal sealed class Marker
     {
-        private static readonly Typeface Typeface = new("Segoe UI");
+        // The hover time and snap captions sit beside chips drawn in the UI font; a fixed
+        // Segoe UI drew their digits in another face and their Korean in Malgun Gothic.
+        internal static readonly Typeface Typeface = new(ThemeFonts.Ui, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
         private Brush? _line;
         private Pen? _pen;
         private Brush? _foreground;

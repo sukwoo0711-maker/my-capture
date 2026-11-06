@@ -858,13 +858,20 @@ internal sealed partial class VideoEditorWindow : Window
     private async void ShowMediaDetails() => await MediaDetailsWindow.ShowAsync(this,
         [new(_recording.OutputPath, _recording.Width, _recording.Height, _durationMs > 0 ? _durationMs : _recording.DurationMs)]);
 
+    /// <summary>
+    /// The left inset of every text line in the details panel: the 3 DIP margin that
+    /// <see cref="CommandButtonPresentation.Apply"/> gives the buttons in the same column.
+    /// </summary>
+    internal const double DetailsTextInset = 3;
+
     private Border BuildDetailsPanel()
     {
         var content = new StackPanel();
         var heading = new TextBlock
         {
+            Name = "VideoDetailsHeading",
             Text = UiText.Get("VideoEditorUx_Details"), FontSize = TypeScale.Body,
-            FontWeight = FontWeights.SemiBold, Margin = new Thickness(3, 0, 0, 8),
+            FontWeight = FontWeights.SemiBold, Margin = new Thickness(DetailsTextInset, 0, 0, 8),
         };
         heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         content.Children.Add(heading);
@@ -916,7 +923,7 @@ internal sealed partial class VideoEditorWindow : Window
         frames.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
         precise.Children.Add(frames);
         _positionFrameLabel.FontSize = TypeScale.Caption;
-        _positionFrameLabel.Margin = new Thickness(3, 4, 0, 8);
+        _positionFrameLabel.Margin = new Thickness(DetailsTextInset, 4, 0, 8);
         _positionFrameLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         precise.Children.Add(_positionFrameLabel);
         return precise;
@@ -971,11 +978,13 @@ internal sealed partial class VideoEditorWindow : Window
         _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _removedLengthLabel = new TextBlock { FontSize = TypeScale.Caption };
         _removedLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        // Text in the details panel starts on the heading's 3 DIP inset, where the command
+        // buttons' chromes start, so the column reads as one left edge.
         var summary = new StackPanel
         {
             Name = "VideoTrimSummary",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
+            Margin = new Thickness(DetailsTextInset, 0, 8, 0),
             MinWidth = 120,
         };
         summary.Children.Add(_keptLengthLabel);
@@ -985,7 +994,7 @@ internal sealed partial class VideoEditorWindow : Window
         TextBox Input(string name)
         {
             var inputRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-            inputRow.Children.Add(new TextBlock { Text = name, FontSize = TypeScale.Caption, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
+            inputRow.Children.Add(new TextBlock { Text = name, FontSize = TypeScale.Caption, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(DetailsTextInset, 0, 4, 0) });
             var input = new TextBox
             {
                 Width = 120, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(8, 4, 8, 4),
@@ -1095,12 +1104,15 @@ internal sealed partial class VideoEditorWindow : Window
         // narrow enough to sit beside it; edit and delete moved under the list.
         var label = new TextBlock
         {
+            Name = "VideoLayersHeading",
             Text = UiText.Get("Video.Layers"),
             FontWeight = FontWeights.SemiBold,
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var layerHeader = new Grid();
+        // The heading starts at the panel's text edge. The inset sits on its row, not on the
+        // heading, so the heading's measured width stays the width it is arranged in.
+        var layerHeader = new Grid { Margin = new Thickness(DetailsTextInset, 0, 0, 0) };
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1213,6 +1225,9 @@ internal sealed partial class VideoEditorWindow : Window
         row.Children.Add(_detailToggle);
         controls.Children.Add(row);
         ShortcutPresentation.Attach(_saveProgress.CancelButton, ShortcutScope.Video, "Cancel");
+        // Attach gives a command the command bar's 3 DIP margin, which left the button 4 DIP
+        // after the remaining time. It keeps the progress row's own 12 DIP gap, as in the export dialog.
+        _saveProgress.CancelButton.Margin = new Thickness(12, 0, 0, 0);
         _saveProgress.CancelButton.Click += (_, _) => _operationCts?.Cancel();
         Grid.SetRow(_saveProgress, 1);
         controls.Children.Add(_saveProgress);
