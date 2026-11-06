@@ -39,7 +39,7 @@ public sealed record OcrExtraction(OcrTable Table, OcrCode Code,
 /// <summary>Reconstructs in reading axes; returned geometry always uses original image pixels.</summary>
 public static class OcrExtractionAnalyzer
 {
-    public static OcrExtraction Analyze(OcrResult result, OcrRect? selection = null)
+    public static OcrExtraction Analyze(OcrResult result, OcrRect? selection = null, bool preferNeuralTable = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (!result.HasText)
@@ -79,8 +79,48 @@ public static class OcrExtractionAnalyzer
                 referenceRows = fullCodeRows;
         }
         double origin = referenceRows.Count == 0 ? 0 : referenceRows.Min(row => row.Bounds.X);
-        return ToOriginal(new(table, OcrCodeReconstructor.Build(codeRows, origin, referenceRows),
+        OcrTable returnedTable = preferNeuralTable ? NeuralTable(result, table, selection, orientation) : table;
+        return ToOriginal(new(returnedTable, OcrCodeReconstructor.Build(codeRows, origin, referenceRows),
             OcrTextReconstructor.Build(rows), true), orientation);
+    }
+
+    private static OcrTable NeuralTable(OcrResult result, OcrTable mergedTable, OcrRect? selection,
+        OcrReadingOrientation orientation)
+    {
+        if (result.NeuralLines.Count == 0 || !mergedTable.HasStructure
+            || !mergedTable.Columns.Any(column => column.IsNumeric))
+            return mergedTable;
+
+        var allWords = result.NeuralLines.SelectMany(line => line.Words.Count > 0
+                ? line.Words
+                : string.IsNullOrWhiteSpace(line.Text) ? [] : new[] { new OcrWord(line.Text, line.Bounds) })
+            .Where(word => !string.IsNullOrWhiteSpace(word.Text) && OcrGeometry.IsValid(word.Bounds))
+            .Select(word => word with { Text = word.Text.Trim() }).ToArray();
+        OcrWord[] words = selection is null ? allWords : allWords
+            .Where(word => OcrGeometry.IsValid(selection.Value)
+                && OcrGeometry.Contains(selection.Value, word.Bounds.X + word.Bounds.Width / 2,
+                    word.Bounds.Y + word.Bounds.Height / 2)).ToArray();
+        OcrTable neuralTable = OcrTableReconstructor.Build(OcrLayoutRow.Build(ReadingWords(words, orientation)));
+        if (!neuralTable.HasStructure || !neuralTable.Columns.Any(column => column.IsNumeric))
+            return mergedTable;
+
+        if (neuralTable.Rows.Count != mergedTable.Rows.Count
+            || neuralTable.Rows.Where((row, index) => row.Cells.Count != mergedTable.Rows[index].Cells.Count).Any())
+            return neuralTable;
+
+        var rows = new List<OcrTableRow>();
+        for (int row = 0; row < neuralTable.Rows.Count; row++)
+        {
+            OcrTableCell[] cells = neuralTable.Rows[row].Cells.ToArray();
+            for (int column = 0; column < cells.Length; column++)
+            {
+                OcrTableCell mergedCell = mergedTable.Rows[row].Cells[column];
+                if (string.IsNullOrWhiteSpace(cells[column].Text) && !string.IsNullOrWhiteSpace(mergedCell.Text))
+                    cells[column] = cells[column] with { Text = mergedCell.Text, Bounds = mergedCell.Bounds };
+            }
+            rows.Add(new OcrTableRow(cells));
+        }
+        return neuralTable with { Rows = rows };
     }
 
     private static IEnumerable<OcrWord> ReadingWords(IEnumerable<OcrWord> words,
