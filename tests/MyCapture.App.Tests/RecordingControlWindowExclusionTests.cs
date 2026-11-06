@@ -305,7 +305,9 @@ public sealed class RecordingControlWindowExclusionTests
         {
             window.Show();
             window.UpdateLayout();
-            Assert.True(window.IsCaptureExcluded);
+            // A forced layered palette cannot be excluded where the OS cannot exclude layered
+            // windows (Windows 10); the small region leaves it outside, so recording still starts.
+            Assert.Equal(NativeExclusion.ExpectsSuccess(supported), window.IsCaptureExcluded);
 
             // Nothing is recorded yet, so a tooltip that cannot be excluded may still show...
             (ToolTip ready, IntPtr readyPopup) = OpenToolTip(window.PrimaryButtonForTest, tips);
