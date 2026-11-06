@@ -2110,6 +2110,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             "Icon.Pin", () => Geometry.Parse("M10,17.5 L10,12.25 M6.25,12.25 L13.75,12.25 L12.5,8.5 L13,3.75 L7,3.75 L7.5,8.5 Z"),
             PinAndClose);
         AutomationProperties.SetAutomationId(_pinButton, "EditorFlowPin");
+        // An output like save to file beside it, so it takes the same bordered surface.
+        _pinButton.SetResourceReference(StyleProperty, "Button.Secondary");
         CommandButton(_pinButton, borderless: false);
         CommandButtonPresentation.CollapseOrder(_pinButton, 7);
         RefreshPinShortcut();
@@ -2243,8 +2245,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// The disabled look comes from the shared button styles: each button level keeps its shape
     /// and only dims. <paramref name="borderless"/> marks an editing command (undo, crop, rotate,
     /// redact, copy text, cancel), drawn as a borderless tool button with its icon and name. Only
-    /// the output commands (save, copy) keep the bordered surface and Done the fill, so the bar
-    /// reads as tools, outputs and one finishing action.
+    /// the output commands (save to file, pin) keep the bordered secondary surface and Done (copy)
+    /// the fill, so the bar reads as tools, outputs and one finishing action.
     /// </remarks>
     private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
