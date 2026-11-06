@@ -69,16 +69,13 @@ public sealed class QuickAccessMotionTests
         {
             card.Show();
             ControlStateMotionTests.Drain(card);
+            // The layered path, whatever the operating system reports: a card that is not kept out of
+            // captures is always layered. The opaque path is the theory below.
+            Assert.True(card.AllowsTransparency);
             Assert.Contains("enabled=True", card.TimeoutStateForTest, StringComparison.Ordinal);
             Assert.True(card.CanActivateByHotkey);
 
-            switch (path)
-            {
-                case "Close": card.ShortcutActions["Close"](); break;
-                case "Edit": card.ShortcutActions["Edit"](); break;
-                case "Timeout": card.Advance(QuickAccessWindow.Lifetime, interacting: false); break;
-                default: Click(card, path); break;
-            }
+            CloseBy(card, path);
 
             // The command and the countdown are done at once; only the pixels may still be leaving.
             Assert.Equal(path == "Edit" ? 1 : 0, edited);
@@ -173,6 +170,47 @@ public sealed class QuickAccessMotionTests
             Assert.Contains("enabled=False", card.TimeoutStateForTest, StringComparison.Ordinal);
         }
         finally { card.CloseNow(); }
+    });
+
+    [Theory]
+    [InlineData("Close")]
+    [InlineData("Dialog.Close")]
+    [InlineData("Edit")]
+    [InlineData("QuickAccess.Library")]
+    [InlineData("Timeout")]
+    public void EveryCloseOfAnOpaqueCardEndsItAtOnceEvenWithMotion(string path) => Run(motion: true, router =>
+    {
+        // Where a layered window cannot be kept out of captures, the capture-excluded card is opaque.
+        // It has no transparent surface to fade down, so every close ends it in the same call.
+        using var mode = new ExclusionMode(false);
+        int closed = 0, edited = 0, library = 0;
+        QuickAccessWindow card = new(Image(), () => Task.FromResult(true), () => edited++, () => Task.CompletedTask,
+            () => Task.FromResult(true), () => library++, () => Task.FromResult("unused.png"),
+            targetMonitor: Offscreen(), keyboardRouter: router);
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            card.Show();
+            ControlStateMotionTests.Drain(card);
+            Assert.False(card.AllowsTransparency);
+            Assert.Contains("enabled=True", card.TimeoutStateForTest, StringComparison.Ordinal);
+            Assert.True(card.CanActivateByHotkey);
+
+            CloseBy(card, path);
+
+            Assert.Equal(path == "Edit" ? 1 : 0, edited);
+            Assert.Equal(path == "QuickAccess.Library" ? 1 : 0, library);
+            Assert.Equal(1, closed);
+            Assert.False(card.IsVisible);
+            Assert.False(FluidMotion.IsExiting(card));
+            Assert.Contains("enabled=False", card.TimeoutStateForTest, StringComparison.Ordinal);
+            Assert.False(card.CanActivateByHotkey);
+            Assert.False(router.IsRegisteredFor(card));
+            // A newer card or a capture finds nothing left to close.
+            card.CloseNow();
+            Assert.Equal(1, closed);
+        }
+        finally { if (closed == 0) card.Close(); }
     });
 
     [Fact]
@@ -300,6 +338,17 @@ public sealed class QuickAccessMotionTests
         }
         finally { card.CloseNow(); }
     });
+
+    private static void CloseBy(QuickAccessWindow card, string path)
+    {
+        switch (path)
+        {
+            case "Close": card.ShortcutActions["Close"](); break;
+            case "Edit": card.ShortcutActions["Edit"](); break;
+            case "Timeout": card.Advance(QuickAccessWindow.Lifetime, interacting: false); break;
+            default: Click(card, path); break;
+        }
+    }
 
     private static void Click(QuickAccessWindow card, string automationId)
     {
