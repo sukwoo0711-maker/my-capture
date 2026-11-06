@@ -487,7 +487,7 @@ public sealed partial class CaptureFlowPolishTests
                     try
                     {
                         card.IsKept = true;
-                        card.OfferRatingInvitation(() => Task.CompletedTask, () => { });
+                        card.OfferRatingInvitation(() => Task.CompletedTask, () => { }, () => { });
                         ShowShadowFixture(card);
                         string what = $"{theme}, rating invitation, {Percent(scale)}%";
                         Assert.True(card.RatingInvitationForTest.Row.IsVisible, $"{what}: rating invitation was not visible when shown.");
