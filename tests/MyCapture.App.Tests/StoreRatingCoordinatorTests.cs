@@ -798,6 +798,71 @@ public sealed class StoreRatingCoordinatorTests
     }
 
     [Fact]
+    public void StoreRating_AShownCardShowingStandsOnceItsCaptureIsDeliveredOrItsCardCloses()
+    {
+        // Delivered while its card is open: nothing the card does afterwards gives the showing back.
+        var open = new Harness();
+        open.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = open.Create();
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.RecordCapture(succeeded: true);
+        coordinator.NoteCardCaptureDelivered(offer);
+        int saves = open.SaveCalls;
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(saves, open.SaveCalls);
+        Assert.Equal(1, open.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(open.Clock.Now, open.Settings.StoreRating.InvitationShownUtc);
+
+        // Closed with its capture already recorded: the showing stands, as for a card left unanswered.
+        var closed = new Harness();
+        closed.Settings.StoreRating.SuccessfulCaptureCount = 2;
+        coordinator = closed.Create();
+        offer = coordinator.TryOfferOnCard(practice: false);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.NoteCardClosed(offer);
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(1, closed.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(closed.Clock.Now, closed.Settings.StoreRating.InvitationShownUtc);
+
+        // A card that never showed was never seen: it still gives its showing back, whatever came first.
+        var unshown = new Harness();
+        unshown.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        coordinator = unshown.Create();
+        offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardCaptureDelivered(offer);
+        coordinator.NoteCardClosed(offer);
+        Assert.True(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(0, unshown.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(unshown.Settings.StoreRating.InvitationShownUtc);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoreRating_ACardClosedBeforeItsCaptureReportsIsSettledByThatCapture(bool delivered)
+    {
+        var harness = new Harness();
+        harness.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = harness.Create();
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.NoteCardClosed(offer);
+
+        // Only the capture's own outcome decides: a failed save or copy gives the showing back.
+        coordinator.RecordCapture(delivered);
+        if (delivered) coordinator.NoteCardCaptureDelivered(offer);
+        Assert.Equal(!delivered, coordinator.WithdrawCardOffer(offer));
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(delivered ? 1 : 0, harness.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(delivered, harness.Settings.StoreRating.InvitationShownUtc is not null);
+    }
+
+    [Fact]
     public void StoreRating_ANewerLibraryShowingRetiresTheOldCardWithdrawal()
     {
         var harness = new Harness();

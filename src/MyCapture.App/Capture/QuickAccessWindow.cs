@@ -368,7 +368,7 @@ internal sealed partial class QuickAccessWindow : Window
         else if (captureActions is null && copiedToClipboard == false)
         {
             // Retried with C once the capture is saved.
-            ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired);
+            ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired, captureResult: true);
         }
         else
         {
@@ -867,7 +867,7 @@ internal sealed partial class QuickAccessWindow : Window
         _copyPending = false;
         // A success also refills the countdown to at least the hold after a result (ShowStatus).
         if (copied) ShowActionResult("Copy", UiText.Get("QuickAccess.Copied"), FeedbackKind.Confirmation);
-        else ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired);
+        else ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired, captureResult: true);
     }
 
     /// <summary>
@@ -886,7 +886,7 @@ internal sealed partial class QuickAccessWindow : Window
         AutomationProperties.SetName(_detail, detail);
         _detail.Visibility = string.IsNullOrWhiteSpace(detail) ? Visibility.Collapsed : Visibility.Visible;
         ShowActionResult(CaptureFailureAction, title, FeedbackKind.ActionRequired,
-            spoken: string.IsNullOrWhiteSpace(detail) ? title : title + " " + detail);
+            spoken: string.IsNullOrWhiteSpace(detail) ? title : title + " " + detail, captureResult: true);
     }
 
     private void KeepAtLeastTheHoldAfterResult()
@@ -1021,12 +1021,15 @@ internal sealed partial class QuickAccessWindow : Window
         ShowActionResult(action, message, kind, button);
     }
 
-    private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null, string? spoken = null)
+    /// <param name="captureResult">The result of the capture's own save or copy, not of an action on the card.</param>
+    private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null, string? spoken = null,
+        bool captureResult = false)
     {
         bool failed = FeedbackTiming.StaysUntilDismissed(kind);
         // An error never shows next to the rating invitation: any failure the card holds, the capture's
-        // own or an action's, takes the invitation off this card (QuickAccessWindow.StoreRating.cs).
-        if (failed) HideRatingInvitationForFailure();
+        // own or an action's, takes the invitation off this card. Only the capture's own failure gives
+        // its showing back (QuickAccessWindow.StoreRating.cs).
+        if (failed) HideRatingInvitationForFailure(captureFailed: captureResult);
         bool resolved = false;
         if (failed || kind == FeedbackKind.Confirmation)
             resolved = _failures.RemoveAll(failure => failure.Action == action) > 0;

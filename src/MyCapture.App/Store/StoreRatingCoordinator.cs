@@ -10,7 +10,8 @@ namespace MyCapture.App.Store;
 /// to the library or settings window, or on a capture card from its first appearance, in one place at a
 /// time and at most <see cref="StoreRatingPolicy.MaxInvitations"/> times, at least 24 hours apart.
 /// Cards may predict their pending capture's success and persist only after showing. An untouched
-/// card offer hidden by an error gives its showing back through a deferred write.
+/// card offer gives its showing back through a deferred write only when its card never showed or its
+/// capture's own save or copy failed; once that capture is delivered or the card closes, it stands.
 /// </summary>
 internal sealed class StoreRatingCoordinator
 {
@@ -114,7 +115,9 @@ internal sealed class StoreRatingCoordinator
     /// <summary>
     /// Counts a card's showing in memory before construction. A pending capture is evaluated with one
     /// predicted success. Practice, first run, busy UI and an invitation elsewhere exclude the offer.
-    /// The returned token identifies this showing until it is answered, withdrawn or superseded.
+    /// The returned token identifies this showing until it is answered, withdrawn or superseded, its
+    /// pending capture is delivered (<see cref="NoteCardCaptureDelivered"/>), or its card closes with no
+    /// capture outcome still to come (<see cref="NoteCardClosed"/>).
     /// </summary>
     internal CardOffer? TryOfferOnCard(bool practice, bool pendingCapture = false)
     {
@@ -122,7 +125,7 @@ internal sealed class StoreRatingCoordinator
         AppSettings settings = _settings();
         if (!CanOffer(settings, pendingCapture)) return null;
         StoreRatingState state = settings.StoreRating;
-        _cardOffer = new CardOffer(state.InvitationShownCount, state.InvitationShownUtc);
+        _cardOffer = new CardOffer(state.InvitationShownCount, state.InvitationShownUtc) { AwaitsCapture = pendingCapture };
         StoreRatingPolicy.MarkInvitationShown(state, _clock.GetUtcNow());
         IsPending = false;
         _settleTimer?.Stop();
@@ -138,12 +141,31 @@ internal sealed class StoreRatingCoordinator
     }
 
     /// <summary>A Review or Close press keeps this showing, even when the review request is refused.</summary>
-    internal void NoteCardOfferAnswered(CardOffer offer)
+    internal void NoteCardOfferAnswered(CardOffer offer) => Retire(offer);
+
+    /// <summary>
+    /// The card's pending capture was saved and copied. Once the card has shown, its showing stands: a
+    /// failure of the card's own actions afterwards never gives it back.
+    /// </summary>
+    internal void NoteCardCaptureDelivered(CardOffer offer)
     {
-        if (ReferenceEquals(_cardOffer, offer)) _cardOffer = null;
+        offer.AwaitsCapture = false;
+        if (offer.WriteQueued) Retire(offer);
     }
 
-    /// <summary>Restores only this untouched showing, once, and defers saving the restored live state.</summary>
+    /// <summary>
+    /// The card closed. A showing it made stands, except while its capture's own save or copy may still fail:
+    /// that outcome resolves it (<see cref="NoteCardCaptureDelivered"/> or <see cref="WithdrawCardOffer"/>).
+    /// </summary>
+    internal void NoteCardClosed(CardOffer offer)
+    {
+        if (offer.WriteQueued && !offer.AwaitsCapture) Retire(offer);
+    }
+
+    /// <summary>
+    /// Restores only this untouched showing, once, and defers saving the restored live state: for a card that
+    /// never showed, or whose capture's own save or copy failed before the showing was answered or settled.
+    /// </summary>
     internal bool WithdrawCardOffer(CardOffer offer)
     {
         if (!ReferenceEquals(_cardOffer, offer)) return false;
@@ -155,12 +177,21 @@ internal sealed class StoreRatingCoordinator
         return true;
     }
 
+    /// <summary>This showing can no longer be given back.</summary>
+    private void Retire(CardOffer offer)
+    {
+        if (ReferenceEquals(_cardOffer, offer)) _cardOffer = null;
+    }
+
     /// <summary>Identity and rollback snapshot for one card's showing.</summary>
     internal sealed class CardOffer(int count, DateTimeOffset? shownUtc)
     {
         internal int PreviousCount { get; } = count;
         internal DateTimeOffset? PreviousShownUtc { get; } = shownUtc;
         internal bool WriteQueued { get; set; }
+
+        /// <summary>Offered predicting its capture's success, whose save and copy have not reported yet.</summary>
+        internal bool AwaitsCapture { get; set; }
     }
 
     /// <summary>

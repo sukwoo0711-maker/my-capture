@@ -43,15 +43,19 @@ public partial class App
             _settingsApply.PrintScreenCaptureKeyEnabled = PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled;
     }
 
-    /// <summary>The capture card carrying the rating invitation, from its first appearance until it is answered or closes.</summary>
+    /// <summary>
+    /// The capture card carrying the rating invitation, from its first appearance until it is answered,
+    /// withdrawn or closes.
+    /// </summary>
     private QuickAccessWindow? _storeRatingCard;
 
     /// <summary>
-    /// The rating invitation is on screen: on the capture card, or on a library or settings window that is
-    /// showing. One left in a hidden window was seen and left unanswered; the next showing replaces it.
+    /// The rating invitation is on screen: on the capture card, unless a failure there has hidden its row, or
+    /// on a library or settings window that is showing. One left in a hidden window was seen and left
+    /// unanswered; the next showing replaces it.
     /// </summary>
     private bool IsStoreInvitationVisible() =>
-        _storeRatingCard is { IsOpen: true }
+        _storeRatingCard is { IsOpen: true, ShowsRatingInvitation: true }
         || _engagementNotices.Any(pair => pair.Key.IsVisible && pair.Value.IsShown && pair.Value.Kind == EngagementNoticeKind.Rating);
 
     /// <summary>
@@ -71,12 +75,18 @@ public partial class App
     /// <summary>
     /// The card offered the invitation shows it from its first appearance (<see cref="QuickAccessWindow.OfferRatingInvitation"/>).
     /// Review opens the Store dialog over the card; Close ends the invitation; a card that closes with neither
-    /// pressed leaves it unanswered, eligible once more after 24 hours. Failures withdraw an untouched offer.
+    /// pressed leaves it unanswered, eligible once more after 24 hours. Only the capture's own save or copy
+    /// failure withdraws an untouched offer; a failed action of the card only hides its row.
     /// </summary>
     private void AttachStoreRatingInvitation(QuickAccessWindow card, StoreRatingCoordinator.CardOffer offer)
     {
         _storeRatingCard = card;
-        card.Closed += (_, _) => { if (ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null; };
+        card.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null;
+            // Seen and closed: the showing stands, unless its capture's own save or copy is still to fail.
+            _storeRating?.NoteCardClosed(offer);
+        };
         card.OfferRatingInvitation(
             review: () =>
             {
@@ -101,14 +111,19 @@ public partial class App
             card.WithdrawRatingInvitation();
     }
 
-    /// <summary>Resolves this capture's prediction once its actual save and copy outcome is recorded.</summary>
+    /// <summary>
+    /// Resolves this capture's prediction once its actual save and copy outcome is recorded: a failure gives
+    /// the showing back; a delivered capture makes it stand, whatever its card's actions do afterwards.
+    /// </summary>
     private void ResolveStoreRatingCapture(QuickAccessFirst? first, bool delivered)
     {
         if (first is null) return;
         first.RatingOutcomeRecorded = true;
         StoreRatingCoordinator.CardOffer? offer = first.PendingRatingOffer;
         first.PendingRatingOffer = null;
-        if (!delivered && offer is not null) WithdrawStoreRatingCardOffer(offer, first.Card);
+        if (offer is null) return;
+        if (delivered) _storeRating?.NoteCardCaptureDelivered(offer);
+        else WithdrawStoreRatingCardOffer(offer, first.Card);
     }
 
     /// <summary>Records a success or an error toward the Store rating invitation; null records nothing.</summary>
