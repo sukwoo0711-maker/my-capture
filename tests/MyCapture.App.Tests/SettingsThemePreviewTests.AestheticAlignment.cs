@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,12 +18,13 @@ namespace MyCapture.App.Tests;
 /// Settings and first-use surfaces line up what sits together (2026-11-06 aesthetic review): the
 /// capture guide colour swatch takes the combo box's corner radius and the 8 spacing step beside
 /// it; the font label sits on the font list's line, not between the list and its reset button; the
-/// finish step's shortcut link sits on the start-at-sign-in label's line; and the settings guide's
-/// before/after panels take the card radius.
+/// finish step's shortcut link sits on the start-at-sign-in label's line; the settings guide's
+/// before/after panels take the card radius; and every guide button centres on the row it explains.
 /// </summary>
 /// <remarks>
 /// With <c>MYCAPTURE_AES_SO_FIX_EVIDENCE</c> set to a folder, each check first writes the area it
-/// measures as PNG at 96 and 144 dpi, prefixed by <c>MYCAPTURE_AES_SO_FIX_PHASE</c>.
+/// measures as PNG at 96 and 144 dpi (and the guide rows' offsets as TSV), prefixed by
+/// <c>MYCAPTURE_AES_SO_FIX_PHASE</c>.
 /// </remarks>
 public sealed partial class SettingsThemePreviewTests
 {
@@ -41,6 +43,17 @@ public sealed partial class SettingsThemePreviewTests
     [Fact]
     public Task AestheticAlignment_SettingsGuidePanelsTakeTheCardRadius() =>
         RunIsolated(nameof(AestheticAlignment_SettingsGuidePanelsTakeTheCardRadius), VerifyGuidePanelRadius);
+
+    [Fact]
+    public Task AestheticAlignment_GuideButtonsSitOnTheirRowLine() =>
+        RunIsolated(nameof(AestheticAlignment_GuideButtonsSitOnTheirRowLine), () =>
+        {
+            // Both languages are measured before failing, so one run names every row that is off.
+            var misaligned = new List<string>();
+            InSettingsWindows((window, tabs, locale) => misaligned.AddRange(MisalignedGuideRows(window, tabs, locale)));
+            if (misaligned.Count > 0)
+                Assert.Fail($"Guide buttons off their row's line (DIP below): {string.Join("; ", misaligned)}");
+        });
 
     private static void InSettingsWindows(Action<SettingsWindow, TabControl, string> verify)
     {
@@ -200,6 +213,75 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
+    // A guide or compare button at the end of a row centres on the checkbox, label, list or field
+    // it explains, not on that row's spacing below. Every tab is measured with its folds open.
+    private static List<string> MisalignedGuideRows(SettingsWindow window, TabControl tabs, string locale)
+    {
+        var guideStyle = (Style)window.FindResource("Settings.GuideButton");
+        var table = new List<string> { "tab\tguide\tpartner\ttext\tline\tbutton\toffset" };
+        var misaligned = new List<string>();
+        var recordingTags = new List<string>();
+        foreach (TabItem tab in tabs.Items.OfType<TabItem>())
+        {
+            tabs.SelectedItem = tab;
+            Drain(window);
+            foreach (Expander fold in Descendants(window).OfType<Expander>()) fold.IsExpanded = true;
+            Drain(window);
+            Button[] buttons = Descendants(window).OfType<Button>()
+                .Where(button => button.IsVisible && IsBasedOn(button.Style, guideStyle)).ToArray();
+            if (buttons.Length == 0) continue;
+            buttons[0].BringIntoView();
+            Drain(window);
+            Rect viewport = tab.Content is ScrollViewer scroll ? BoundsIn(scroll, window) : new Rect(window.RenderSize);
+            Rect evidence = Rect.Empty;
+            foreach (Button button in buttons)
+            {
+                var row = Assert.IsType<Grid>(button.Parent);
+                FrameworkElement partner = row.Children.OfType<FrameworkElement>().Single(child =>
+                    !ReferenceEquals(child, button) && Grid.GetColumn(child) == 0 && Grid.GetRow(child) == Grid.GetRow(button));
+                Rect buttonBounds = BoundsIn(button, window);
+                double line = LineCentre(partner, window), centre = VerticalCentre(buttonBounds), offset = centre - line;
+                string text = RowText(partner);
+                table.Add($"{tab.Name}\t{button.Tag}\t{partner.GetType().Name}\t{text}\t{line:0.##}\t{centre:0.##}\t{offset:0.##}");
+                if (Math.Abs(offset) > 0.501) misaligned.Add($"{locale} {tab.Name} {button.Tag} '{text}' {offset:0.##}");
+                if (tab.Name == "RecordingTab" && button.Tag is string tag) recordingTags.Add(tag);
+                Rect area = Rect.Union(buttonBounds, BoundsIn(partner, window));
+                if (viewport.Contains(area)) evidence.Union(area);
+            }
+            if (!evidence.IsEmpty) SaveAlignmentEvidence(window, $"guide-rows-{tab.Name}-{locale}", evidence);
+        }
+        SaveAlignmentTable($"guide-rows-{locale}", table);
+        // The rows the 11-06 review found: both pointer checkboxes and the recording size label.
+        Assert.Equal(new[] { "G05", "G05", "G04" }, recordingTags.Where(tag => tag is "G05" or "G04").ToArray());
+        return misaligned;
+    }
+
+    // The middle of the line a row button belongs to: a checkbox or list by its box, a label or a
+    // field by its text. A label stretched over a taller row draws its text at the row's top.
+    private static double LineCentre(FrameworkElement partner, Window window)
+    {
+        if (partner is SettingsField field) partner = Assert.IsType<TextBlock>(field.Template.FindName("FieldLabel", field));
+        Rect bounds = BoundsIn(partner, window);
+        return partner is TextBlock text
+            ? bounds.Top + (text.DesiredSize.Height - text.Margin.Top - text.Margin.Bottom) / 2
+            : VerticalCentre(bounds);
+    }
+
+    private static string RowText(FrameworkElement partner) => KoreanWordWrap.Strip(partner switch
+    {
+        SettingsField field => field.Header as string ?? string.Empty,
+        TextBlock text => text.Text,
+        CheckBox box => box.Content as string ?? string.Empty,
+        _ => AutomationProperties.GetName(partner),
+    });
+
+    private static bool IsBasedOn(Style? style, Style basis)
+    {
+        for (; style is not null; style = style.BasedOn)
+            if (ReferenceEquals(style, basis)) return true;
+        return false;
+    }
+
     private static double VerticalCentre(Rect bounds) => bounds.Top + bounds.Height / 2;
 
     /// <summary>
@@ -235,12 +317,22 @@ public sealed partial class SettingsThemePreviewTests
         return top + (first + last) / 2d;
     }
 
-    private static void SaveAlignmentEvidence(Window window, string name, Rect area)
+    private static void SaveAlignmentTable(string name, IEnumerable<string> lines)
+    {
+        if (EvidencePath($"{name}.tsv") is { } path) File.WriteAllLines(path, lines);
+    }
+
+    private static string? EvidencePath(string name)
     {
         string? requested = Environment.GetEnvironmentVariable("MYCAPTURE_AES_SO_FIX_EVIDENCE");
-        if (string.IsNullOrWhiteSpace(requested)) return;
+        if (string.IsNullOrWhiteSpace(requested)) return null;
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_AES_SO_FIX_PHASE") is { Length: > 0 } label ? label : "after";
-        string directory = DiagnosticOutputPaths.Create(requested);
+        return DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(requested), $"{phase}-{name}");
+    }
+
+    private static void SaveAlignmentEvidence(Window window, string name, Rect area)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_AES_SO_FIX_EVIDENCE"))) return;
         area.Inflate(16, 16);
         area.Intersect(new Rect(0, 0, window.ActualWidth, window.ActualHeight));
         foreach (int dpi in new[] { 96, 144 })
@@ -253,7 +345,7 @@ public sealed partial class SettingsThemePreviewTests
                 Math.Min(full.PixelHeight - top, (int)Math.Ceiling(area.Height * scale))));
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(crop));
-            using FileStream stream = File.Create(DiagnosticOutputPaths.Child(directory, $"{phase}-{name}-{dpi}dpi.png"));
+            using FileStream stream = File.Create(EvidencePath($"{name}-{dpi}dpi.png")!);
             encoder.Save(stream);
         }
     }
