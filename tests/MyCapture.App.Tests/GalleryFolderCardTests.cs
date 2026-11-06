@@ -105,12 +105,14 @@ public sealed class GalleryFolderCardTests
             Assert.Equal([alpha.Id, beta.Id], group.Folders.Select(card => card.FolderId));
             // Only the folder's own capture; the one in Alpha / Nested is behind Alpha's card.
             Assert.Equal([direct.Id], group.Items.Select(tile => tile.Id));
-            Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
-            Assert.Equal(group.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[1]).Folders);
-            Assert.All(vm.Rows.Skip(2), row => Assert.IsType<GalleryTileRow>(row));
+            // The location header already names the folder, so the group's heading does not repeat it as a row.
+            Assert.Equal("Root", group.Heading);
+            Assert.False(group.ShowsHeading);
+            Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
+            Assert.Equal(group.Folders, Assert.IsType<GalleryFolderRow>(vm.Rows[0]).Folders);
+            Assert.All(vm.Rows.Skip(1), row => Assert.IsType<GalleryTileRow>(row));
             // An opened folder uses the compact cards for both subfolders and captures.
-            Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
-            Assert.False(vm.Rows[0].IsCompact);
+            Assert.All(vm.Rows, row => Assert.True(row.IsCompact));
         }
         GalleryFolderCardViewModel alphaCard = vm.Groups[0].Folders[0];
         GalleryFolderCardViewModel betaCard = vm.Groups[0].Folders[1];
@@ -151,6 +153,59 @@ public sealed class GalleryFolderCardTests
             row => Assert.Equal(tiles[..2], Assert.IsType<GalleryTileRow>(row).Tiles),
             row => Assert.Equal([tiles[2]], Assert.IsType<GalleryTileRow>(row).Tiles));
         Assert.Empty(new GalleryGroupViewModel("Legacy", tiles).Folders);
+
+        // A group whose heading would repeat the location header starts with its folder cards.
+        IReadOnlyList<GalleryRow> untitled = GalleryRowBuilder.Build(
+            [new GalleryGroupViewModel("Root", tiles, cards) { ShowsHeading = false }], columns: 2);
+        Assert.Equal(rows.Skip(1).Select(row => row.GetType()), untitled.Select(row => row.GetType()));
+        Assert.Equal(cards[..2], Assert.IsType<GalleryFolderRow>(untitled[0]).Folders);
+    }
+
+    [Fact]
+    public async Task OnlyAFolderViewLeavesOutTheHeadingItsLocationHeaderShows()
+    {
+        var f = new Fixture();
+        var root = await f.Queue.CreateFolderAsync("Root", createdAt: Now.AddDays(-1));
+        var nested = await f.Queue.CreateFolderAsync("Nested", root.Id, Now);
+        var inRoot = f.Add(Now.AddHours(-3), "capture in root");
+        var inNested = f.Add(Now.AddHours(-2), "capture in nested");
+        f.Add(Now.AddHours(-1), "capture today");
+        f.Add(Now.AddDays(-1).AddHours(-1), "capture yesterday");
+        await f.Queue.MoveCapturesAsync([inRoot.Id], root.Id);
+        await f.Queue.MoveCapturesAsync([inNested.Id], nested.Id);
+        var vm = f.ViewModel();
+        vm.SetColumnCountForWidth(4 * GalleryRowBuilder.MinCompactTileTrackWidth);
+
+        // A nested folder: the location header reads All > Root > Nested, the group heading "Root / Nested".
+        vm.NavigateTo(CaptureFolderScope.ForFolder(nested.Id));
+        Assert.True(vm.ShowLocationHeader);
+        Assert.Equal(["Root", "Nested"], vm.Breadcrumb.Skip(1).Select(step => step.Name));
+        GalleryGroupViewModel group = Assert.Single(vm.Groups);
+        Assert.Equal("Root / Nested", group.Heading);
+        Assert.False(group.ShowsHeading);
+        Assert.Equal([inNested.Id], Assert.IsType<GalleryTileRow>(Assert.Single(vm.Rows)).Tiles.Select(tile => tile.Id));
+
+        // A search inside a folder stays in that location, so its results start without the heading too.
+        vm.NavigateTo(CaptureFolderScope.ForFolder(root.Id));
+        vm.SearchQuery = "capture";
+        Assert.True(vm.ShowLocationHeader);
+        Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
+        Assert.Equal([inNested.Id, inRoot.Id], vm.Groups.SelectMany(result => result.Items).Select(tile => tile.Id));
+
+        // Views whose headings say something the location header does not keep them: All by day and by name.
+        vm.SearchQuery = string.Empty;
+        vm.NavigateTo(CaptureFolderScope.All);
+        Assert.False(vm.ShowLocationHeader);
+        Assert.Equal([GalleryDateGrouping.Resolve(Now, Now).Heading, GalleryDateGrouping.Resolve(Now.AddDays(-1), Now).Heading],
+            vm.Rows.OfType<GalleryHeaderRow>().Select(row => row.Heading));
+        vm.SortIndex = (int)GallerySortOrder.Name;
+        Assert.Equal(UiText.Get("Folder410.TreeAll"), Assert.IsType<GalleryHeaderRow>(vm.Rows[0]).Heading);
+
+        // A date keeps its heading; only a folder's location is left out.
+        vm.SortIndex = (int)GallerySortOrder.Newest;
+        vm.NavigateTo(CaptureFolderScope.ForDate(DateOnly.FromDateTime(Now.DateTime)));
+        Assert.True(vm.ShowLocationHeader);
+        Assert.Equal("2026-10-11", Assert.IsType<GalleryHeaderRow>(vm.Rows[0]).Heading);
     }
 
     [Fact]

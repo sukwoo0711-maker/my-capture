@@ -382,7 +382,9 @@
                         </Grid>
                     </Border>
                     <!-- Row 1: the title and, at its right end, when the capture was taken. Row 2: where it came
-                         from, what is known about it, and the card's three commands. -->
+                         from, what is known about it, and the card's three commands. Row 2's buttons sit 4 DIP
+                         further out than row 1's text, since their glyphs are inset in their 24- and 28-DIP
+                         targets; the targets keep their size and the title its width. -->
                     <Grid x:Name="TileInformation" Grid.Row="1" Margin="8,8,6,8">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
@@ -415,7 +417,7 @@
                         <Button x:Name="SourceBadge" Grid.Row="1" Style="{StaticResource Gallery.SourceBadge}"
                                 gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
                                 AutomationProperties.AutomationId="LibrarySourceBadge"
-                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="-4,0,4,0"
                                 Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                         <Grid x:Name="TileMetadata" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" ClipToBounds="True">
                             <Grid.ColumnDefinitions>
@@ -444,7 +446,8 @@
                                        ToolTip="{Binding MetadataCaption}" ToolTipOpening="OnMediaDetailsToolTipOpening"
                                        Visibility="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" />
                         </Grid>
-                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Shifted, not narrowed: the column keeps its width, so the title keeps its room. -->
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,-4,0">
                             <Button x:Name="PinButton" Style="{StaticResource Card.Action}" Click="OnFloatClick"
                                     ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}"
                                     Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
@@ -559,26 +562,28 @@
                                 <ControlTemplate TargetType="ListBoxItem">
                                     <!-- The transparent outline takes the pointer; hover and selection fade in
                                          over it. Selection sits above hover, so a hovered selected card keeps
-                                         its neutral selected edge. -->
+                                         its neutral selected edge. The rings run 8 DIP outside the card (the
+                                         presenter's margin), so their radius is the card's 12 plus 8, and their
+                                         corners follow the card's; the focus ring, 3 DIP in, takes 17. -->
                                     <Grid>
                                         <Border x:Name="Outline"
                                                 Background="Transparent"
                                                 BorderBrush="Transparent"
                                                 BorderThickness="2"
-                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                                CornerRadius="20" />
                                         <Border x:Name="HoverLayer"
                                                 Style="{StaticResource LibraryUx.HoverWash}"
                                                 BorderThickness="2"
-                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                                CornerRadius="20" />
                                         <Border x:Name="SelectedLayer"
                                                 Style="{StaticResource StateLayer.Selected}"
                                                 Background="Transparent" BorderBrush="{DynamicResource Accent.Default}"
                                                 BorderThickness="2"
-                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                                CornerRadius="20" />
                                         <ContentPresenter Margin="8" />
                                         <Border x:Name="FocusRing" Margin="3" BorderThickness="{DynamicResource Focus.RingThickness}" Opacity="0"
                                                 BorderBrush="{DynamicResource Text.Primary}" IsHitTestVisible="False"
-                                                CornerRadius="{StaticResource Radius.Lg}" />
+                                                CornerRadius="17" />
                                     </Grid>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -982,8 +987,10 @@
                                 <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                         CornerRadius="{DynamicResource Radius.Md}" />
                                 <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
-                                <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
-                                <!-- Inside the 2-DIP outline: at 1 DIP the pill sat on the outline's inner half. -->
+                                <!-- A selected folder shows the wash and the pill only, as File Explorer's navigation
+                                     pane does: no outline, and the folder keeps its glyph. -->
+                                <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                                <!-- 3 DIP in, where a selected date row's pill sits inside that row's 2-DIP outline. -->
                                 <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="3,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
                                         Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
@@ -1044,16 +1051,10 @@
                 </Grid.ColumnDefinitions>
                 <themes:SymbolIcon x:Name="FolderGlyph" StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
-                <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}"
-                          Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}" Width="18" MinHeight="18"
-                          IsHitTestVisible="False" Focusable="False" IsTabStop="False" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip="{Binding Caption}" Margin="8,0,8,0"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
             </Grid>
-            <HierarchicalDataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter TargetName="FolderGlyph" Property="Visibility" Value="Hidden" /></DataTrigger>
-            </HierarchicalDataTemplate.Triggers>
         </HierarchicalDataTemplate>
 
         <DataTemplate x:Key="LibraryUx.DateItemTemplate" DataType="{x:Type gallery:GalleryFolderNode}">
@@ -1087,13 +1088,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <!-- The same layers as a folder row. -->
+                        <!-- The layers of a folder row; a selected date also keeps a 2-DIP outline and a check box. -->
                         <Grid MinHeight="34" Background="Transparent">
                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                     CornerRadius="{DynamicResource Radius.Md}" />
                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
-                            <!-- Inside the 2-DIP outline, as on a folder row. -->
+                            <!-- Inside the 2-DIP outline: at 1 DIP the pill sat on the outline's inner half. -->
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="3,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
@@ -1866,8 +1867,23 @@
                     <DockPanel>
                         <Button DockPanel.Dock="Bottom" Content="{loc:Text Library.Tags.More}" Style="{StaticResource LibraryUx.CommandButton}" HorizontalAlignment="Left"
                                 Click="OnMoreTagsClick" Visibility="{Binding HasMoreTags, Converter={StaticResource BoolToVisibility}}" />
+                        <!-- No tag on any capture yet: one quiet line, as the saved searches section has. -->
+                        <TextBlock x:Name="TagEmptyHint" DockPanel.Dock="Top" Text="{loc:Text Library.Tags.EmptyHint}"
+                                   Margin="12,2,10,4" TextWrapping="Wrap" FontSize="{StaticResource FontSize.Caption}"
+                                   Foreground="{DynamicResource Text.Secondary}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasItems, ElementName=TagList}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <ScrollViewer MaxHeight="304" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl ItemsSource="{Binding VisibleTags}">
+                            <ItemsControl x:Name="TagList" ItemsSource="{Binding VisibleTags}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <RadioButton Style="{StaticResource LibraryUx.NavItem}"
@@ -2018,7 +2034,17 @@
                     <StackPanel x:Name="SortCommands" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="SortBox" Width="112" Margin="8,0,4,0" SelectedIndex="{Binding SortIndex, Mode=TwoWay}"
                               AutomationProperties.Name="{loc:Text Folder410.Sort}">
-                        <ComboBoxItem Content="{loc:Text Folder410.Newest}" /><ComboBoxItem Content="{loc:Text Folder410.Oldest}" /><ComboBoxItem Content="{loc:Text Folder410.ByName}" />
+                        <!-- The box is as wide as its longest choice, except when even the compact bar does not
+                             fit (FitContentToolbar); only then does the shown choice end in an ellipsis. The
+                             choices carry the template, because the box shows a ComboBoxItem's own template. -->
+                        <ComboBox.Resources>
+                            <DataTemplate x:Key="SortChoice">
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.Resources>
+                        <ComboBoxItem Content="{loc:Text Folder410.Newest}" ContentTemplate="{StaticResource SortChoice}" />
+                        <ComboBoxItem Content="{loc:Text Folder410.Oldest}" ContentTemplate="{StaticResource SortChoice}" />
+                        <ComboBoxItem Content="{loc:Text Folder410.ByName}" ContentTemplate="{StaticResource SortChoice}" />
                     </ComboBox>
                     <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}"
                             ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
@@ -2117,7 +2143,7 @@
                          SizeChanged="OnRowsListSizeChanged" />
 
                 <Border Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Style="{StaticResource Card}" Padding="42,30"
+                        Style="{StaticResource Card}" Padding="40,32"
                         Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel MaxWidth="380">
                         <TextBlock Text="{Binding EmptyStateTitle}"
@@ -2129,10 +2155,13 @@
                                    Margin="0,8,0,0"
                                    TextAlignment="Center"
                                    AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
-                        <!-- Outlined: the command bar's capture is this screen's filled button. -->
-                        <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Secondary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Content="{loc:Text Library.Search.ClearConditions}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
-                                Style="{StaticResource Button.Secondary}"
+                        <!-- Outlined: the command bar's capture is this screen's filled button. Each button is as
+                             wide as its text and centred under the title and the hint. -->
+                        <Button x:Name="EmptyStateCaptureButton" Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Secondary}"
+                                HorizontalAlignment="Center" Click="OnCaptureRegionClick" Margin="0,16,0,0"
+                                Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
+                        <Button x:Name="EmptyStateClearButton" Content="{loc:Text Library.Search.ClearConditions}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
+                                Style="{StaticResource Button.Secondary}" HorizontalAlignment="Center"
                                 Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
                 </Border>
