@@ -116,10 +116,10 @@ public sealed class SettingsStore
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
         LastLoadWarnings = warnings;
 
-        // The Store rating wait starts at the first load that knows about it. The stamp stays
-        // in memory and reaches disk with the next ordinary save (a counted capture, applied
-        // settings or the welcome card). Loading never writes just to record it, so a linked
-        // or corrupt settings file is left exactly as it was.
+        // The Store rating first-seen time is stamped at the first load that knows about it (the
+        // invitation no longer waits on it). The stamp stays in memory and reaches disk with the
+        // next ordinary save (a counted capture, applied settings or the welcome card). Loading
+        // never writes just to record it, so a linked or corrupt settings file is left exactly as it was.
         StoreRatingPolicy.EnsureFirstSeen(settings.StoreRating, Clock.GetUtcNow());
 
         // A token written by 2.4.0 sits in plaintext on disk. Re-save it once so the

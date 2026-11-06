@@ -69,7 +69,14 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
         _review.Click += (_, _) =>
         {
             if (Kind == EngagementNoticeKind.UpdateAvailable) UpdateChosen?.Invoke();
-            else { ReviewChosen?.Invoke(); Dismiss(); }
+            else
+            {
+                // Review answers the invitation through the attempt it records. One the shell refused
+                // (something else on screen, or the attempt could not be saved) stays unanswered, as on
+                // the library's status bar, instead of counting as Close.
+                ReviewChosen?.Invoke();
+                Hide();
+            }
         };
         var close = new Button { Content = UiText.Get("Dialog.Close") };
         close.SetResourceReference(StyleProperty, "Button.Secondary");

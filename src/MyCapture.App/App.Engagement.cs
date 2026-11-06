@@ -28,6 +28,8 @@ public partial class App
         notice.UpdateChosen = () => _ = InstallKnownUpdateAsync(window);
         notice.ClosedByUser = kind =>
         {
+            // Close ends the invitation; one that is only left unanswered is offered once more.
+            if (kind == EngagementNoticeKind.Rating) _storeRating?.DismissInvitation();
             if (kind == EngagementNoticeKind.UpdateAvailable) _updates?.DismissAvailable();
             if (kind == EngagementNoticeKind.UpdateCompleted && _settings is not null)
             {
@@ -58,13 +60,14 @@ public partial class App
         _storeRating?.NotifyUserReturned();
     }
 
-    private void ShowStoreInvitation()
+    /// <summary>Shows the invitation in the active window; false when it is not on screen (an update notice came first).</summary>
+    private bool ShowStoreInvitation()
     {
-        if (ActiveEngagementWindow() is { } window && !ShowPendingEngagement(window))
-        {
-            HideOtherEngagementNotices(window);
-            _engagementNotices[window].ShowInvitation();
-        }
+        if (ActiveEngagementWindow() is not { } window || ShowPendingEngagement(window)) return false;
+        HideOtherEngagementNotices(window);
+        IEngagementNotice notice = _engagementNotices[window];
+        notice.ShowInvitation();
+        return notice.IsShown && notice.Kind == EngagementNoticeKind.Rating;
     }
 
     private void InitializeStoreUpdateObservation()

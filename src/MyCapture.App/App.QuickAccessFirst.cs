@@ -75,7 +75,7 @@ public partial class App
         var region = new RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
             e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
         var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
-            { PreserveEditor = preserveEditor };
+            { PreserveEditor = preserveEditor, Practice = e.PracticeTarget is not null };
         _quickAccessFirst = first;
         ScheduleQuickAccessFirstCard(first, copy);
         ReceiptTimeline.Mark?.Invoke("card-first-scheduled");
@@ -121,6 +121,8 @@ public partial class App
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, first.Image) ? lifted : null;
         QuickAccessWindow? card = null;
+        // Decided before the card is built, so an invitation is on the card from its first appearance.
+        bool invitation = OfferStoreRatingOnCard(first.Practice);
         try
         {
             // Made waiting for the copy even when it has finished; its result reaches the card as it
@@ -128,6 +130,7 @@ public partial class App
             // through captures in a row (resident probe capture-30: 583 against 421 MB after 30).
             card = QuickAccessWindow.ForPendingCapture(first.Image, copiedToClipboard: null, first.Region, first.Monitor,
                 _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"), _receiptKeyboard);
+            if (invitation) AttachStoreRatingInvitation(card);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             QuickAccessWindow shown = card;
             shown.Closed += (_, _) =>
@@ -161,6 +164,8 @@ public partial class App
         catch (Exception ex)
         {
             flight?.Finish();
+            // An invitation on a card that never showed is not counted.
+            if (invitation && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer();
             // The card then shows the usual way once the capture is saved and copied.
             first.Phase = QuickAccessFirstPhase.NotShown;
             first.Card = null;
@@ -319,6 +324,9 @@ public partial class App
         internal QuickAccessFirstPhase Phase { get; set; }
 
         internal bool PreserveEditor { get; init; }
+
+        /// <summary>A capture the practice window asked for: its card never carries the rating invitation.</summary>
+        internal bool Practice { get; init; }
 
         internal (string Title, string Message)? DeferredSaveFailure { get; set; }
 

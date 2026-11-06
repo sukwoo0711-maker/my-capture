@@ -445,6 +445,7 @@ public partial class App
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log?.LogWarning(ex, "Could not pin the capture from its first-use tip");
+            _storeRating?.RecordCapture(succeeded: false);
             _shellPresenter?.ShowNotification(UiText.Get("QuickAccess.Pin"), UiText.Get("Onboard_PinFailed"), TrayBalloonKind.Error, answersCommand: true);
         }
     }

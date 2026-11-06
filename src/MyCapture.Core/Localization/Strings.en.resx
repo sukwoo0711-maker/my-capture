@@ -3760,6 +3760,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Check that the Microsoft Store app is installed.</value></data>
   <data name="StoreRating_InviteMessage" xml:space="preserve"><value>Would you like to rate MyCapture in Microsoft Store?</value></data>
   <data name="StoreRating_InviteAction" xml:space="preserve"><value>Rate</value></data>
+  <data name="StoreRating_InviteCloseName" xml:space="preserve"><value>Close rating invitation</value></data>
   <data name="PrtScGuide_SettingsPath" xml:space="preserve"><value>Windows Settings &gt; Accessibility &gt; Keyboard</value></data>
   <data name="PrtScGuide_SettingsPath_Windows10" xml:space="preserve"><value>Windows Settings &gt; Ease of Access &gt; Keyboard</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen key conflict</value></data>
