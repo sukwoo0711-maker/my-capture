@@ -2306,8 +2306,10 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
-        var reduceExport = new MenuItem { Header = UiText.Get("ExportReduction_Title") };
-        AutomationName(reduceExport, UiText.Get("ExportReduction_Title"));
+        // The command opens a dialog, so its name ends with an ellipsis as in the library; the
+        // dialog's own title (ExportReduction_Title) has none.
+        var reduceExport = new MenuItem { Header = UiText.Get("Library.ExportImage") };
+        AutomationName(reduceExport, UiText.Get("Library.ExportImage"));
         reduceExport.Click += (_, _) => Commit(EditorCommitAction.SaveAs, reduceExport: true);
         menu.Items.Add(reduceExport);
 
