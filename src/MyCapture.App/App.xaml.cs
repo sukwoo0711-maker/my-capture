@@ -101,6 +101,8 @@ public partial class App : Application
         // Before any window: a tooltip's default show duration would otherwise stop every
         // DispatcherTimer while it is open, self-tests included.
         MyCapture.App.Threading.ToolTipTimerGuard.Install();
+        // Before any window: keep text-box capture from outliving a left-button gesture.
+        TextBoxCaptureGuard.Install();
 
         // Windows 10 22H2 is the supported x64 baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
