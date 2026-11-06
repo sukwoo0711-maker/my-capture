@@ -2826,6 +2826,9 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        // Media Foundation stays started from its first use to here (#243). After the services that
+        // record and export: one still finishing keeps its lease, and its release shuts MF down.
+        MyCapture.Platform.Recording.MediaFoundationPlatform.Shutdown();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
         _launchFallbackLog?.Dispose();
