@@ -325,13 +325,18 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         view.ReadCursor = () => pointer;
         view.ReadClock = () => now;
         view.SimulatedPointerInside = true;
+        // Both under a quarter of the screen, so the highlight glides from one to the other.
+        var notes = Notes with { ScreenBounds = new RectD(120, 90, 440, 420) };
+        var browser = Browser with { ScreenBounds = new RectD(760, 200, 400, 400) };
+        view.WindowCandidates = [browser, notes, Taskbar, Shell];
+        view.InitializePointer();
         try
         {
             view.ShowKeyPanel = true;
             Render(view);
             view.NotifyFirstFramePresented();
             Rect right = view.KeyPanelBoundsForTest!.Value;
-            Assert.True(right.Left > Notes.ScreenBounds.Right);
+            Assert.True(right.Left > notes.ScreenBounds.Right);
             pointer = new PointD(1100, 300);
             view.UpdatePointer(false, false);
             Render(view);
@@ -343,7 +348,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             now += TimeSpan.FromSeconds(1);
             Render(view);
             Rect left = view.KeyPanelBoundsForTest!.Value;
-            Assert.True(left.Right < Browser.ScreenBounds.Left);
+            Assert.True(left.Right < browser.ScreenBounds.Left);
             pointer = new PointD(1000, 120);
             view.UpdatePointer(false, false);
             Render(view);
