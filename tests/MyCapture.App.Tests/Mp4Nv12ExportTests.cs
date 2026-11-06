@@ -765,8 +765,17 @@ public sealed class Mp4Nv12ExportTests
         if (diagnostics?.GetValueOrDefault("transforms") is not List<object> transforms || transforms.Count == 0)
             return "not reported";
         return string.Join(" + ", transforms.OfType<Dictionary<string, object?>>().Select(entry =>
-            (entry.GetValueOrDefault("friendlyName") as string ?? "unnamed transform")
-            + (entry.GetValueOrDefault("hardwareUrlPresent") is true ? " (hardware)" : " (no hardware URL)")));
+            Name(entry) + (entry.GetValueOrDefault("hardwareUrlPresent") is true ? " (hardware)" : " (no hardware URL)")));
+
+        static string Name(Dictionary<string, object?> entry)
+        {
+            if (entry.GetValueOrDefault("friendlyName") is string name)
+                return name;
+            // Some encoders answer no friendly name (0xC00D36E6, as on the Windows 10 PC in #236); the class ID still names them.
+            if ((entry.GetValueOrDefault("classId") ?? entry.GetValueOrDefault("persistClassId")) is Guid classId)
+                return $"class {classId:D}";
+            return "unnamed transform";
+        }
     }
 
     private static double PsnrAgainstComposedSource(RecordingResult recording, string output, IReadOnlyList<TimedTextOverlay> overlays)
