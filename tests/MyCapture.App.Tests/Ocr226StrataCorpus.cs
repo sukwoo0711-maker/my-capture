@@ -202,12 +202,14 @@ internal static class Ocr226StrataCorpus
             {
                 int month = 1 + (int)(Next(ref state) % 12), day = 1 + (int)(Next(ref state) % 28);
                 int hour = (int)(Next(ref state) % 24), minute = (int)(Next(ref state) % 60), second = (int)(Next(ref state) % 60);
+                // Invariant formatting keeps the truth text and pixels the same on every locale.
+                CultureInfo invariant = CultureInfo.InvariantCulture;
                 string[] lines =
                 [
                     $"합계 {Amount(ref state)}원",
-                    $"2026-{month:00}-{day:00} {hour:00}:{minute:00}:{second:00}",
-                    $"부가세 {Amount(ref state)}원, 할인 {(Next(ref state) % 1000) / 10.0:0.0}%",
-                    $"버전 {1 + Next(ref state) % 9}.{Next(ref state) % 20}.{Next(ref state) % 10}, 용량 {(Next(ref state) % 100000) / 100.0:#,0.00} MB",
+                    string.Create(invariant, $"2026-{month:00}-{day:00} {hour:00}:{minute:00}:{second:00}"),
+                    string.Create(invariant, $"부가세 {Amount(ref state)}원, 할인 {(Next(ref state) % 1000) / 10.0:0.0}%"),
+                    string.Create(invariant, $"버전 {1 + Next(ref state) % 9}.{Next(ref state) % 20}.{Next(ref state) % 10}, 용량 {(Next(ref state) % 100000) / 100.0:#,0.00} MB"),
                 ];
                 return lines.Select(line => new[] { line }).ToArray();
             }

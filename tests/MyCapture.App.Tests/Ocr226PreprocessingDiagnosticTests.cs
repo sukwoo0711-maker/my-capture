@@ -86,7 +86,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
                 BitmapSource prepared = Prepare(image, scale, "nn");
                 RecognizedText? raw = recognizer.RecognizeAsync(prepared, "ko-KR", CancellationToken.None).GetAwaiter().GetResult();
                 Assert.NotNull(raw);
-                OcrResult result = Assemble([raw], scale, TimeSpan.Zero);
+                OcrResult result = Assemble([raw], scale, TimeSpan.Zero, image.PixelWidth, image.PixelHeight);
                 OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
                 string csv = OcrTableExport.Csv(extraction.Table);
                 rows.Add(new { variant = variant.Name, scale, interpolation = "nn", op = "none", text = result.Text, csv, metric = Score(sample, result),
@@ -154,7 +154,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
                 if (pad > 0)
                     raw = raw with { Lines = raw.Lines.Select(line => line with { Words = line.Words.Select(word => word with
                         { Bounds = word.Bounds with { X = word.Bounds.X - pad, Y = word.Bounds.Y - pad } }).ToArray() }).ToArray() };
-                OcrResult result = Assemble([raw], scale, TimeSpan.Zero);
+                OcrResult result = Assemble([raw], scale, TimeSpan.Zero, image.PixelWidth, image.PixelHeight);
                 OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
                 string csv = OcrTableExport.Csv(extraction.Table);
                 rows.Add(new
@@ -327,7 +327,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
                 RecognizedText? raw = recognizer.RecognizeAsync(prepared, "ko-KR", CancellationToken.None).GetAwaiter().GetResult();
                 double recognizeMs = Stopwatch.GetElapsedTime(recognizeStarted).TotalMilliseconds;
                 Assert.NotNull(raw);
-                OcrResult result = Assemble([raw], scale, TimeSpan.FromMilliseconds(prepareMs + recognizeMs));
+                OcrResult result = Assemble([raw], scale, TimeSpan.FromMilliseconds(prepareMs + recognizeMs), image.PixelWidth, image.PixelHeight);
                 OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
                 string csv = OcrTableExport.Csv(extraction.Table);
                 string name = $"{scale.ToString("0.00", CultureInfo.InvariantCulture)}-{interpolation}";
@@ -403,7 +403,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
                     if (raw is not null) texts.Add(raw);
                 }
                 double wallMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-                OcrResult result = Assemble(texts, scale, TimeSpan.FromMilliseconds(wallMs));
+                OcrResult result = Assemble(texts, scale, TimeSpan.FromMilliseconds(wallMs), source.PixelWidth, source.PixelHeight);
                 rows.Add(new SweepRow(sample.Id, sample.Category, sample.Split, sample.FontPixels, sample.Width, sample.Height,
                     config, scale, wallMs, result.Text, Score(sample, result), estimated, truthLine));
             }
@@ -415,7 +415,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
             (double scale, string interpolation, string op) = Resolve(config, fixture, recognizer.MaxImageDimension);
             BitmapSource prepared = PostProcess(Prepare(fixture, scale, interpolation), op);
             RecognizedText? raw = recognizer.RecognizeAsync(prepared, "ko", CancellationToken.None).GetAwaiter().GetResult();
-            OcrResult result = Assemble(raw is null ? [] : [raw], scale, TimeSpan.Zero);
+            OcrResult result = Assemble(raw is null ? [] : [raw], scale, TimeSpan.Zero, fixture.PixelWidth, fixture.PixelHeight);
             OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
             string csv = OcrTableExport.Csv(extraction.Table);
             bool service = extraction.Table.Columns.Count == 3 && extraction.Table.Rows.Count == 4 && extraction.Table.HasHeader
@@ -460,7 +460,9 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
             // r<target>: t with thin vertical runs (grid lines, box sides) left out of the estimate.
             double target = double.Parse(policy[1..], CultureInfo.InvariantCulture);
             double? line = EstimateLineHeight(source, ignoreThinVerticalRuns: policy[0] == 'r');
-            double ceiling = policy[0] == 'T' ? OcrPlanner.MaxUpscale : adaptive;
+            // An image above the dimension limit has an adaptive scale below one; ResolveScale
+            // then applies the same downscale, so the requested factor never drops under one.
+            double ceiling = Math.Max(1.0, policy[0] == 'T' ? OcrPlanner.MaxUpscale : adaptive);
             scale = line is { } value
                 ? OcrPlanner.ResolveScale(source.PixelWidth, source.PixelHeight, Math.Clamp(target / value, 1.0, ceiling), maxDimension)
                 : adaptive;
@@ -598,7 +600,17 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
         }
         int median = 0;
         for (int sum = 0; median < 255 && (sum += histogram[median]) < gray.Length / 2; median++) { }
-        bool darkInk = median >= 128;
+        // Ink is the side of the dominant background level where the clearly different pixels
+        // lie on average, so dark text on a mid-grey background still counts as dark ink.
+        int background = Array.IndexOf(histogram, histogram.Max());
+        long farSum = 0, farCount = 0;
+        for (int level = 0; level < histogram.Length; level++)
+        {
+            if (Math.Abs(level - background) <= 48) continue;
+            farSum += (long)level * histogram[level];
+            farCount += histogram[level];
+        }
+        bool darkInk = farCount == 0 ? median >= 128 : farSum < (long)background * farCount;
         switch (op)
         {
             case "gray": break;
@@ -675,13 +687,12 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
         return target;
     }
 
-    /// <summary>Separable Keys cubic (a = -0.5) on opaque BGRA pixels, edge-clamped.</summary>
+    /// <summary>Separable Keys cubic (a = -0.5) on pixels composited over white, edge-clamped.</summary>
     internal static BitmapSource Bicubic(BitmapSource bitmap, double factor)
     {
-        BitmapSource bgra = bitmap.Format == PixelFormats.Bgra32 ? bitmap : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
-        int sw = bgra.PixelWidth, sh = bgra.PixelHeight;
-        byte[] source = new byte[checked(sw * sh * 4)];
-        bgra.CopyPixels(source, sw * 4, 0);
+        // Composite first, as every pixel operation here does: RenderTargetBitmap leaves alpha 254
+        // on glyph edges, and dropping alpha after un-premultiplying would change those colours.
+        byte[] source = Pixels(Opaque(bitmap), out int sw, out int sh);
         int dw = (int)Math.Round(sw * factor), dh = (int)Math.Round(sh * factor);
         (int[] xIndex, double[] xWeight) = Taps(sw, dw);
         (int[] yIndex, double[] yWeight) = Taps(sh, dh);
@@ -741,11 +752,11 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
     }
 
     /// <summary>The service's line building, language merge and block text for an unrotated reading.</summary>
-    internal static OcrResult Assemble(IReadOnlyList<RecognizedText> passes, double scale, TimeSpan elapsed)
+    internal static OcrResult Assemble(IReadOnlyList<RecognizedText> passes, double scale, TimeSpan elapsed, int sourceWidth, int sourceHeight)
     {
         var results = passes.Select(raw =>
         {
-            IReadOnlyList<OcrLine> lines = OcrPlanner.MergeLines([], BuildLines(raw, scale));
+            IReadOnlyList<OcrLine> lines = OcrPlanner.MergeLines([], BuildLines(raw, scale, sourceWidth, sourceHeight));
             return (raw.LanguageTag, Lines: lines, Score: OcrPlanner.ScoreLines(lines));
         }).ToArray();
         if (results.Length == 0) return OcrResult.NoText(string.Empty, elapsed);
@@ -758,7 +769,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
             : OcrResult.Success(block, dominant.LanguageTag, merged, elapsed);
     }
 
-    private static List<OcrLine> BuildLines(RecognizedText recognized, double scale)
+    private static List<OcrLine> BuildLines(RecognizedText recognized, double scale, int sourceWidth, int sourceHeight)
     {
         var lines = new List<OcrLine>(recognized.Lines.Count);
         foreach (RecognizedLine line in recognized.Lines)
@@ -770,7 +781,8 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
             {
                 string text = OcrPlanner.NormalizeWord(word.Text);
                 if (text.Length == 0) continue;
-                OcrRect box = word.Bounds.Unscale(scale);
+                // Same mapping as the service: back to source pixels, clamped to the source image.
+                OcrRect box = word.Bounds.Unscale(scale).MapFromClockwiseRotation(0, sourceWidth, sourceHeight);
                 words.Add(new OcrWord(text, box));
                 texts.Add(text);
                 bounds = OcrRect.Union(bounds, box);
@@ -824,7 +836,7 @@ public sealed class Ocr226PreprocessingDiagnosticTests(ITestOutputHelper output)
                 foreach (GlyphRun run in GlyphRuns(child)) yield return run;
     }
 
-    private static CorpusSample FixtureSample(OcrResult truth, BitmapSource image) => new("fixture-table", "ko", "fixture", ["ko-KR"], 22,
+    internal static CorpusSample FixtureSample(OcrResult truth, BitmapSource image) => new("fixture-table", "ko", "fixture", ["ko-KR"], 22,
         image.PixelWidth, image.PixelHeight, string.Join('\n', truth.Lines.Select(line => line.Text)),
         truth.Lines.Select(line => new Data.TruthLine(line.Text, new Data.Box(line.Bounds.X, line.Bounds.Y, line.Bounds.Width, line.Bounds.Height),
             line.Words.Select(word => word.Text).ToArray())).ToArray(), "");

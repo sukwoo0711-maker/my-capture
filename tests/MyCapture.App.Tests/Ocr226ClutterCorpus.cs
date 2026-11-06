@@ -133,7 +133,7 @@ internal static class Ocr226ClutterCorpus
                 {
                     string name;
                     do name = Pick(names, ref state); while (!used.Add(name));
-                    values[row] = [name, $"{(Next(ref state) % 9000 + 100) / 100.0:0.0} MB"];
+                    values[row] = [name, string.Create(CultureInfo.InvariantCulture, $"{(Next(ref state) % 9000 + 100) / 100.0:0.0} MB")];
                 }
                 double icon = Math.Round(size * 1.1), pitch = Math.Round(size * 2.2);
                 double textLeft = pad + icon + Math.Round(size * 0.8);
@@ -159,8 +159,8 @@ internal static class Ocr226ClutterCorpus
                 string[] buttons = toolbars[Next(ref state) % (uint)toolbars.Length];
                 string[] status =
                 [
-                    $"선택 영역 {1000 + Next(ref state) % 2000:#,0} x {500 + Next(ref state) % 900}",
-                    $"남은 공간 {(Next(ref state) % 9000 + 100) / 10.0:0.0} GB, 확대 {100 + Next(ref state) % 4 * 25}%",
+                    string.Create(CultureInfo.InvariantCulture, $"선택 영역 {1000 + Next(ref state) % 2000:#,0} x {500 + Next(ref state) % 900}"),
+                    string.Create(CultureInfo.InvariantCulture, $"남은 공간 {(Next(ref state) % 9000 + 100) / 10.0:0.0} GB, 확대 {100 + Next(ref state) % 4 * 25}%"),
                 ];
                 double buttonPad = Math.Round(size * 0.6), buttonHeight = Math.Round(size * 2.0), gap = Math.Round(size * 0.6);
                 double x = pad;
