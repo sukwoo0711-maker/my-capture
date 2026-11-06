@@ -360,7 +360,14 @@ public sealed class EditorAestheticEvidenceTests
                     Assert.NotNull(host.Surface.MosaicGestureRegion);
                 }
                 break;
-            case "S11": Draw(EditorTool.Blur, new PointD(110, 145), new PointD(530, 245)); Assert.Contains(controller.Document.Items, i => i is BlurAnnotation); Select(editor, EditorTool.Blur); break;
+            case "S11":
+                Draw(EditorTool.Blur, new PointD(110, 145), new PointD(530, 245)); Assert.Contains(controller.Document.Items, i => i is BlurAnnotation); Select(editor, EditorTool.Blur);
+                // The live blur is computed off the UI thread and the canvas shows its opaque cover
+                // until the frame lands; render the finished blur, as a user sees it a moment later.
+                AnnotationBlurCache blurCache = Field<AnnotationBlurCache>(editor, "_blurCache");
+                Settle(host.Window);
+                Wait(host.Window, () => blurCache.Pending.IsCompleted && BlurFramesReady(blurCache), "Live blur");
+                host.Surface.InvalidateVisual(); Settle(host.Window); break;
             case "S12":
                 Task stamp = editor.PlaceStampAsync(); Wait(host.Window, () => stamp.IsCompleted, "Isolated stamp load"); stamp.GetAwaiter().GetResult();
                 Assert.Single(editor.PlacedStampIds); Assert.Contains(controller.Document.Items, i => i is ImageAnnotation); break;
@@ -591,6 +598,12 @@ public sealed class EditorAestheticEvidenceTests
         DateTime deadline = DateTime.UtcNow.AddSeconds(30);
         while (!completed() && DateTime.UtcNow < deadline) { Settle(window); Thread.Sleep(5); }
         Assert.True(completed(), operation + " timed out.");
+    }
+    private static bool BlurFramesReady(AnnotationBlurCache cache)
+    {
+        var entries = (System.Collections.IEnumerable)typeof(AnnotationBlurCache).GetField("_entries", Members)!.GetValue(cache)!;
+        object[] all = entries.Cast<object>().ToArray();
+        return all.Length > 0 && all.All(entry => entry.GetType().GetProperty("Frame", Members)!.GetValue(entry) is not null);
     }
     private static void Select(AnnotationEditorControl editor, EditorTool tool) => Invoke(editor, "SelectTool", tool);
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Members)!.GetValue(target)!;
