@@ -967,8 +967,11 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal Task Select(CaptureSelectionCompletedEventArgs selection) =>
             (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
 
-        internal Task SelectSeparate() =>
-            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [Selection])!;
+        internal Task SelectSeparate() => SelectSeparate(Selection);
+
+        /// <summary>The editor-preserving path: a capture taken while another editor stays open.</summary>
+        internal Task SelectSeparate(CaptureSelectionCompletedEventArgs selection) =>
+            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [selection])!;
 
         /// <summary>The same capture, taken for a step of the practice window.</summary>
         internal CaptureSelectionCompletedEventArgs PracticeSelection() =>

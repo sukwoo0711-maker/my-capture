@@ -672,6 +672,48 @@ public sealed class QuickAccessRatingInvitationTests
     });
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PreservedWindowPracticeFallbackCardLeavesInvitationForNextCapture(bool copySlowerThanSave) => RunWithShell(() =>
+    {
+        // The editor-preserving path shows its card after the save when no card showed first: none was
+        // scheduled, or its turn had not come when the capture was saved (a copy slower than the save).
+        var shell = new Shell(copyWait: copySlowerThanSave ? TimeSpan.FromMinutes(1) : null) { ShowsCardAfterSave = !copySlowerThanSave };
+        shell.StoreRating.RecordCapture(true);
+        shell.StoreRating.RecordCapture(true);
+        return shell;
+    }, shell =>
+    {
+        QuickAccessWindow Deliver(CaptureSelectionCompletedEventArgs selection)
+        {
+            var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            shell.CopyResult = copy.Task;
+            Task handler = shell.SelectSeparate(selection);
+            if (copySlowerThanSave)
+            {
+                object first = Assert.IsAssignableFrom<object>(shell.CardFirstState);
+                PropertyInfo phase = first.GetType().GetProperty("Phase", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                shell.PumpUntil(() => phase.GetValue(first)!.ToString() == "Cancelled");
+            }
+            copy.SetResult(true);
+            shell.Wait(handler);
+            shell.RunIdleTurns();
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            Assert.False(card.HasCaptureFailed, "Capture failed before rating assertions. " + card.DetailForTest.Text);
+            return card;
+        }
+
+        QuickAccessWindow practice = Deliver(shell.PracticeSelection());
+        Assert.Equal(Visibility.Collapsed, practice.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(shell.IsRatingInvitationVisible);
+        shell.Dismiss();
+        Assert.Equal(Visibility.Visible, Deliver(shell.Selection).RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+    });
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
