@@ -658,7 +658,8 @@
                                     <ComboBoxItem Tag="theme" Content="{loc:Text Capture410.GuideColorTheme}" />
                                     <ComboBoxItem Tag="custom" Content="{loc:Text Capture410.GuideColorCustom}" />
                                 </ComboBox>
-                                <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="10,0,0,0" CornerRadius="4"
+                                <!-- The combo box's corner radius and the 8 spacing step beside it. -->
+                                <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="8,0,0,0" CornerRadius="{DynamicResource Radius.Sm}"
                                         Background="{DynamicResource CaptureGuide.SelectionBorder}" BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
                                         AutomationProperties.Name="{loc:Text Capture410.GuideColorSwatch}" />
                             </StackPanel>
@@ -892,27 +893,38 @@
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Settings_FontName}" Note="{loc:Text Settings_FontScope}">
-                            <StackPanel>
-                            <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
-                                      SelectedValuePath="Value"
-                                      IsTextSearchEnabled="True" TextSearch.TextPath="Label"
-                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                      ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
-                                      AutomationProperties.Name="{loc:Text Settings_FontName}"
-                                      IsVisibleChanged="OnFontFamilyBoxShown" DropDownOpened="OnFontFamilyBoxLoaded"
-                                      SelectionChanged="OnFontFamilyChanged">
-                                <ComboBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <VirtualizingStackPanel />
-                                    </ItemsPanelTemplate>
-                                </ComboBox.ItemsPanel>
-                            </ComboBox>
-                            <Button x:Name="DefaultFontButton" Content="{loc:Text Settings_DefaultFont}"
-                                    Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnDefaultFontClick"
-                                    AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
-                            </StackPanel>
-                        </settings:SettingsField>
+                        <!-- The label names the font list, so the list alone takes the field's line;
+                             the reset button stands under it in the input column and the note under
+                             both. With the button inside the field the label centred between the two,
+                             18 below the list's line. -->
+                        <StackPanel Margin="0,0,0,12">
+                            <settings:SettingsField Header="{loc:Text Settings_FontName}" Margin="0">
+                                <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
+                                          SelectedValuePath="Value"
+                                          IsTextSearchEnabled="True" TextSearch.TextPath="Label"
+                                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                          ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
+                                          AutomationProperties.Name="{loc:Text Settings_FontName}"
+                                          IsVisibleChanged="OnFontFamilyBoxShown" DropDownOpened="OnFontFamilyBoxLoaded"
+                                          SelectionChanged="OnFontFamilyChanged">
+                                    <ComboBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ComboBox.ItemsPanel>
+                                </ComboBox>
+                            </settings:SettingsField>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="SettingsFieldLabel" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="DefaultFontButton" Grid.Column="1" Content="{loc:Text Settings_DefaultFont}"
+                                        HorizontalAlignment="Left" Click="OnDefaultFontClick"
+                                        AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0" Text="{loc:Text Settings_FontScope}" />
+                        </StackPanel>
 
                         <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsRange_FontSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
