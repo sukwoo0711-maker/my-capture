@@ -1664,10 +1664,19 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             // Only a label pulled in from the right edge can still meet its neighbour.
             if (left < labelRight + RulerLabelGap) continue;
             labelRight = bounds.Right;
-            if (_trimModeEnabled && (bounds.IntersectsWith(chips.In) || bounds.IntersectsWith(chips.Out))) continue;
+            if (_trimModeEnabled && (CrowdsChip(bounds, chips.In) || CrowdsChip(bounds, chips.Out))) continue;
             dc.DrawText(label, bounds.TopLeft);
         }
     }
+
+    /// <summary>
+    /// Whether a ruler label lies under a start/end chip or closer to it than
+    /// <see cref="RulerLabelGap"/>. The chips read as labels of the lane, so they keep the gap
+    /// the labels keep between themselves; a label 1 to 2 DIP beside a chip read as one with it.
+    /// </summary>
+    private static bool CrowdsChip(Rect label, Rect chip) =>
+        !chip.IsEmpty && label.Top <= chip.Bottom && label.Bottom >= chip.Top
+        && label.Left < chip.Right + RulerLabelGap && label.Right > chip.Left - RulerLabelGap;
 
     private (double Width, double DurationMs, double MajorMs, double PixelsPerDip, int Stride) _rulerStride;
 

@@ -185,8 +185,11 @@ public sealed partial class SettingsThemePreviewTests
 
     private static void VerifyGifPreviewLayoutEvidence(VideoExportDialog dialog, AppTheme theme, string language)
     {
-        double defaultWidth = dialog.Width, defaultHeight = dialog.Height;
-        Assert.InRange(defaultHeight, dialog.MinHeight, 860);
+        // The window opens at its form's height; the variants below size it by hand, as dragging
+        // its edge does, and the restored default is that opening height.
+        double defaultWidth = dialog.Width, defaultHeight = dialog.ActualHeight;
+        Assert.InRange(defaultHeight, dialog.MinHeight, dialog.MaxHeight);
+        dialog.SizeToContent = SizeToContent.Manual;
         string[] fontKeys = ["FontSize.Body", "FontSize.Control", "FontSize.Caption", "CommandButton.FontSize"];
         double[] fontSizes = fontKeys.Select(key => (double)dialog.FindResource(key)).ToArray();
         ComboBox[] options =

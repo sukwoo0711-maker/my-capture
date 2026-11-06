@@ -1468,7 +1468,7 @@ internal sealed class RecordingControlWindow : Window
         int h = (int)Math.Round(_screenRegion.Height);
         return string.Create(
             CultureInfo.CurrentCulture,
-            $"{w}×{h} · {_settings.TargetFps}fps");
+            $"{w} × {h} · {_settings.TargetFps}fps");
     }
 
     /// <summary>

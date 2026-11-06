@@ -74,7 +74,7 @@ public sealed class VisualSystemControlTests
             Assert.NotEqual(ColorOf(resources, "Accent.Default"), ColorOf(sheet.Danger.Background));
             foreach ((Control control, string part) in new[]
             {
-                ((Control)sheet.Toggle, "CheckedLayer"), (sheet.Rail, "CheckedLayer"),
+                ((Control)sheet.Rail, "CheckedLayer"),
                 (sheet.SelectedTab, "SelectedLayer"), (sheet.ListItem, "SelectedLayer"),
             })
             {
@@ -85,6 +85,18 @@ public sealed class VisualSystemControlTests
                 Assert.Equal(1d, selected.Opacity);
             }
         }
+
+        // An on toggle is the selection ink fill with selection-ink content, with no edge. The
+        // 2-DIP primary-text edge read as the focus ring (2026-11-06 aesthetic review), and the
+        // owner chose the ink fill over the neutral selected fill (2026-11-07, V8).
+        Border toggleOn = Part<Border>(sheet.Toggle, "CheckedLayer");
+        Assert.Null(toggleOn.Child);
+        Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(toggleOn.Background));
+        Assert.Equal(new Thickness(0), toggleOn.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(sheet.Toggle.Foreground));
+        Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(sheet.Toggle.Foreground)), ToThemeColor(ColorOf(toggleOn.Background))) >= 4.5,
+            $"{theme}/{scale}: on-toggle text must read on its fill");
+        Assert.Equal(1d, toggleOn.Opacity);
 
         // A focus transition may change ink and opacity, never the command's layout box.
         Size focusedSize = sheet.Focused.RenderSize;
@@ -190,6 +202,44 @@ public sealed class VisualSystemControlTests
         TextBlock Caption, Button Primary, Button Secondary, Button Tool, Button Danger, Button Focused,
         ToggleButton Toggle, ToggleButton Rail, TabItem SelectedTab, ListBoxItem ListItem,
         TextBox Input, ComboBox Combo, Border Card);
+
+    // An on toggle fills with the selection ink pair in every palette; in a Windows contrast theme
+    // that pair is Highlight under HighlightText, the pairing Windows guarantees for selection.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OnToggleFillsWithTheSelectionInkPair(bool systemContrast) => Run(() =>
+    {
+        Func<SystemColorRole, Color>? previous = ThemeService.SystemColorsOverrideForTest;
+        ThemeService.SystemColorsOverrideForTest = role => SystemHighContrastThemeTests.NightSky[role];
+        try
+        {
+            ResourceDictionary resources = LoadResources();
+            ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: systemContrast, accent: AppAccent.Red);
+            var toggle = new ToggleButton { Content = "자세히", IsChecked = true, Style = (Style)resources[typeof(ToggleButton)] };
+            var root = new Border { Width = 200, Height = 80, Resources = resources, Child = toggle };
+            Layout(root);
+            Border layer = Part<Border>(toggle, "CheckedLayer");
+            Assert.Equal(1d, layer.Opacity);
+            Assert.Equal(new Thickness(0), layer.BorderThickness);
+            Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(layer.Background));
+            Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(toggle.Foreground));
+            if (systemContrast)
+            {
+                Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.Highlight], ColorOf(layer.Background));
+                Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.HighlightText], ColorOf(toggle.Foreground));
+            }
+            Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(toggle.Foreground)),
+                ToThemeColor(ColorOf(layer.Background))) >= 4.5, "on-toggle text must stay readable on its fill");
+
+            toggle.IsChecked = false;
+            Layout(root);
+            Assert.Equal(ColorOf(resources, "Text.Secondary"), ColorOf(toggle.Foreground));
+        }
+        finally { ThemeService.SystemColorsOverrideForTest = previous; }
+    });
+
+    private static ThemeColor ToThemeColor(Color color) => ThemeColor.Argb(color.A, color.R, color.G, color.B);
 
     private static Sheet CreateSheet(ResourceDictionary resources, double scale)
     {

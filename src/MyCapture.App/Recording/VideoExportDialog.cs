@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -16,6 +17,7 @@ using Microsoft.Win32;
 using MyCapture.App.Themes;
 using MyCapture.App.Threading;
 using MyCapture.Core.Recording;
+using MyCapture.Platform.Display;
 using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Recording;
@@ -31,6 +33,12 @@ internal sealed class VideoExportDialog : Window
 
     /// <summary>Target bitrate reductions behind 원본 화질 · 작게 · 더 작게.</summary>
     internal static readonly int[] SizePresets = [0, 40, 70];
+
+    /// <summary>The MP4 frame's stage. Its height is fixed, so the frame arriving never resizes the window.</summary>
+    internal const double SourcePreviewHeight = 150;
+
+    /// <summary>Kept free between the window and the work area's edge.</summary>
+    internal const double WorkAreaMargin = 24;
 
     /// <summary>Folder of the last export in this session; the next save dialog opens there.</summary>
     private static string? s_lastFolder;
@@ -50,7 +58,10 @@ internal sealed class VideoExportDialog : Window
     private readonly ComboBox _speed = OptionList();
     private readonly ComboBox _shareTarget = OptionList(compactSelection: true);
     private readonly TextBlock _estimate = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
-    private readonly Image _preview = new() { Height = 150, Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly Image _preview = new() { Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
+    // The MP4 frame's card, shaped like the GIF sample's (GifPreviewPanel).
+    private readonly Border _previewCard = new() { Margin = new Thickness(0, 12, 0, 4), Padding = new Thickness(12) };
+    private readonly TextBlock _previewMessage = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16) };
     private readonly GifPreviewPanel _samplePanel;
     private readonly StackPanel _samplePositionRow = new() { Margin = new Thickness(0, 4, 0, 0) };
     private readonly TextBlock _samplePositionLabel = new() { Margin = new Thickness(0, 8, 0, 4) };
@@ -101,10 +112,12 @@ internal sealed class VideoExportDialog : Window
         Width = 640;
         MinWidth = 460;
         MinHeight = 400;
-        MaxHeight = Math.Max(400, SystemParameters.WorkArea.Height - 24);
-        // Tall enough for every row plus the progress row that appears while exporting, so the
-        // form never scrolls; the GIF form also carries the animated sample.
-        Height = Math.Min(MaxHeight, gif ? 860 : 610);
+        // The window takes its form's height, up to the work area less a margin; a taller form
+        // scrolls. A fixed 610 or 860 left an empty band above the status line. Rows that arrive
+        // later (the MP4 frame, the GIF advice) hold their place from the start, so the window does
+        // not grow under the pointer once it is open; switching the format or exporting refits it.
+        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WorkAreaMargin);
+        SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
@@ -202,7 +215,7 @@ internal sealed class VideoExportDialog : Window
         AutomationProperties.SetLiveSetting(_estimate, AutomationLiveSetting.Polite);
         _settings.Children.Add(_estimate);
         AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
-        _settings.Children.Add(_preview);
+        _settings.Children.Add(BuildSourcePreviewCard());
 
         Grid.SetRow(_progressRow, 1);
         root.Children.Add(_progressRow);
@@ -281,7 +294,72 @@ internal sealed class VideoExportDialog : Window
             if (IsGif) { if (_sample is null) RequestSample(immediately: true); }
             else RequestSourcePreview();
         };
+        SourceInitialized += (_, _) => FitMaximumToMonitor();
+        SizeChanged += (_, e) => { if (e.HeightChanged) KeepInsideWorkArea(); };
         Changed();
+    }
+
+    /// <summary>
+    /// Caps the height at the work area of the monitor the dialog opens on: its owner's, which can
+    /// be smaller than the primary one that <see cref="SystemParameters.WorkArea"/> describes.
+    /// </summary>
+    private void FitMaximumToMonitor()
+    {
+        IntPtr handle = Owner is { } owner ? new WindowInteropHelper(owner).Handle : IntPtr.Zero;
+        if (handle == IntPtr.Zero) handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+        MonitorInfo monitor = MonitorEnumerator.GetFromWindow(handle);
+        double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
+        MaxHeight = Math.Max(MinHeight, monitor.WorkArea.Height / scale - WorkAreaMargin);
+    }
+
+    /// <summary>
+    /// A window that grows (to GIF, or by the progress row) keeps its top edge, as WPF sizes it,
+    /// unless its bottom would pass the work area's; then it moves up as far as it must.
+    /// </summary>
+    private void KeepInsideWorkArea()
+    {
+        if (WindowState != WindowState.Normal) return;
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+        MonitorInfo monitor = MonitorEnumerator.GetFromWindow(handle);
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        double top = TopWithinWorkArea(Top, ActualHeight, monitor.WorkArea.Top / scale, monitor.WorkArea.Bottom / scale);
+        if (Math.Abs(top - Top) > 0.5) Top = top;
+    }
+
+    /// <summary>
+    /// The top edge that keeps a window of <paramref name="height"/> above the work area's bottom
+    /// and below its top. A window placed outside the work area keeps its place.
+    /// </summary>
+    internal static double TopWithinWorkArea(double top, double height, double workTop, double workBottom)
+    {
+        if (!double.IsFinite(top) || top < workTop - 0.5 || top >= workBottom) return top;
+        if (top + height <= workBottom + 0.5) return top;
+        return Math.Max(workTop, workBottom - height);
+    }
+
+    /// <summary>
+    /// The MP4 frame in the GIF sample's card: Card.Sunken, the same heading, and a stage of fixed
+    /// height that says the frame is being made until it arrives.
+    /// </summary>
+    private Border BuildSourcePreviewCard()
+    {
+        _previewCard.SetResourceReference(StyleProperty, "Card.Sunken");
+        AutomationProperties.SetName(_previewCard, UiText.Get("GifPreview_Heading"));
+        var heading = new TextBlock { Text = UiText.Get("GifPreview_Heading"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        _previewMessage.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        AutomationProperties.SetLiveSetting(_previewMessage, AutomationLiveSetting.Polite);
+        KoreanWordWrap.Show(_previewMessage, UiText.Get("GifPreview_Preparing"));
+        var stage = new Grid { Height = SourcePreviewHeight, ClipToBounds = true };
+        stage.Children.Add(_preview);
+        stage.Children.Add(_previewMessage);
+        var body = new StackPanel();
+        body.Children.Add(heading);
+        body.Children.Add(stage);
+        _previewCard.Child = body;
+        return _previewCard;
     }
 
     /// <summary>Replaces the Save As dialog in tests; returns the destination path or null to cancel.</summary>
@@ -454,7 +532,7 @@ internal sealed class VideoExportDialog : Window
         _result?.Dispose(); _result = null;
         UpdateSamplePositionLabel();
         DiscardSample();
-        _preview.Visibility = !gif && _preview.Source is not null ? Visibility.Visible : Visibility.Collapsed;
+        _previewCard.Visibility = gif ? Visibility.Collapsed : Visibility.Visible;
         if (IsLoaded && !_working && !_closeRequested)
         {
             if (gif) RequestSample(immediately: false);
@@ -696,15 +774,19 @@ internal sealed class VideoExportDialog : Window
                 }, "MyCapture export preview"));
             if (_closed || _closeRequested || cancellation.IsCancellationRequested) return;
             _preview.Source = frame;
-            _preview.Visibility = IsGif ? Visibility.Collapsed : Visibility.Visible;
+            _preview.Visibility = Visibility.Visible;
+            _previewMessage.Visibility = Visibility.Collapsed;
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception error)
         {
-            // The preview is a courtesy; the export itself reports its own failures.
+            // The preview is a courtesy; the export itself reports its own failures. The card
+            // says so, as the GIF sample's does, instead of staying empty.
             _logs.CreateLogger("VideoExport").LogWarning(error, "Export preview frame failed");
+            if (!_closed && !_closeRequested && !cancellation.IsCancellationRequested && _preview.Source is null)
+                KoreanWordWrap.Show(_previewMessage, UiText.Format("GifPreview_Failed", error.Message));
         }
         finally
         {
@@ -760,9 +842,11 @@ internal sealed class VideoExportDialog : Window
                 : UiText.Format("GifExport_FrameRateCappedSpeed", effective));
         _frameRateCap.Visibility = KoreanWordWrap.Strip(_frameRateCap.Text).Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        // The advice row keeps its place while the sample is measured, so the line arriving does
+        // not push the footer down under the pointer.
         if (_measurements.Count == 0)
         {
-            _adviceRow.Visibility = Visibility.Collapsed;
+            _adviceRow.Visibility = Visibility.Hidden;
             MarkRecommended(null);
             return;
         }
@@ -825,7 +909,8 @@ internal sealed class VideoExportDialog : Window
         _applyAdviceText.Text = action;
         AutomationProperties.SetName(_applyAdvice, action);
         _applyAdvice.ToolTip = action;
-        _applyAdvice.Visibility = recommendation.Kind == GifRecommendationKind.CurrentFits ? Visibility.Collapsed : Visibility.Visible;
+        // Hidden, not collapsed: the row keeps the button's height whichever advice it shows.
+        _applyAdvice.Visibility = recommendation.Kind == GifRecommendationKind.CurrentFits ? Visibility.Hidden : Visibility.Visible;
         MarkRecommended(recommendation.Kind == GifRecommendationKind.UseMp4 ? null : recommendation.Quality);
     }
 

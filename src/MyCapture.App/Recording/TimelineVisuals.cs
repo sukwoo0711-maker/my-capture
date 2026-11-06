@@ -48,6 +48,14 @@ internal static class TimelineVisuals
         _ => "VideoEditorUx_SnapLayer",
     });
 
+    /// <summary>
+    /// The surface edge on each side of a playhead or pointer line. Over a layer bar the
+    /// line alone kept 1 to 2.4:1 (a Windows contrast theme draws the playhead in the bar's
+    /// own colour); against its halo it keeps the contrast it has on the timeline surface,
+    /// where the halo itself does not show.
+    /// </summary>
+    internal const double HaloWidth = 1;
+
     internal sealed class Marker
     {
         // The hover time and snap captions sit beside chips drawn in the UI font; a fixed
@@ -55,6 +63,8 @@ internal static class TimelineVisuals
         internal static readonly Typeface Typeface = new(ThemeFonts.Ui, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
         private Brush? _line;
         private Pen? _pen;
+        private Brush? _halo;
+        private Pen? _haloPen;
         private Brush? _foreground;
         private CultureInfo? _culture;
         private string? _label;
@@ -63,13 +73,24 @@ internal static class TimelineVisuals
         private double _maxWidth;
 
         internal void Draw(FrameworkElement owner, DrawingContext dc, double x, double height,
-            double left, double right, Brush line, Brush background, Brush foreground, string? label, double labelTop = 1)
+            double left, double right, Brush line, Brush background, Brush foreground, string? label, double labelTop = 1,
+            Brush? halo = null)
         {
             if (!ReferenceEquals(_line, line))
             {
                 _line = line;
                 _pen = new Pen(line.IsFrozen ? line : line.CloneCurrentValue(), 1);
                 _pen.Freeze();
+            }
+            if (halo is not null)
+            {
+                if (!ReferenceEquals(_halo, halo))
+                {
+                    _halo = halo;
+                    _haloPen = new Pen(halo.IsFrozen ? halo : halo.CloneCurrentValue(), _pen!.Thickness + (2 * HaloWidth));
+                    _haloPen.Freeze();
+                }
+                dc.DrawLine(_haloPen, new Point(x, 0), new Point(x, height));
             }
             dc.DrawLine(_pen, new Point(x, 0), new Point(x, height));
             if (label is null || right <= left + 12) return;

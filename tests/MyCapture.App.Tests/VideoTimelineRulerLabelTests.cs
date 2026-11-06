@@ -16,10 +16,15 @@ public sealed class VideoTimelineRulerLabelTests
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    /// <summary>
+    /// The start/end chips keep the gap labels keep between themselves: a label under a chip
+    /// or closer to it than 6 DIP is omitted, every other label stays, and so does every tick.
+    /// A label 1 to 2 DIP beside a chip read as part of it (2026-11-06 aesthetic review).
+    /// </summary>
     [Theory]
     [InlineData(360)]
     [InlineData(1200)]
-    public void RulerOmitsOnlyLabelsOverBothChipsAndRetainsEveryTick(double width) => WithTimeline(width, timeline =>
+    public void RulerOmitsOnlyLabelsOverOrBesideBothChipsAndRetainsEveryTick(double width) => WithTimeline(width, timeline =>
     {
         TimelineRenderSurface overview = Surface(timeline);
         timeline.SetTrimMode(false);
@@ -37,20 +42,35 @@ public sealed class VideoTimelineRulerLabelTests
         Assert.Contains(withoutChips, label => label.Value.IntersectsWith(start));
         Assert.Contains(withoutChips, label => label.Value.IntersectsWith(end));
         Assert.NotEmpty(withChips);
-        foreach ((string text, Rect bounds) in withoutChips)
-        {
-            if (bounds.IntersectsWith(start) || bounds.IntersectsWith(end)) Assert.DoesNotContain(text, withChips.Keys);
-            else Assert.Contains(text, withChips.Keys);
-        }
-        Assert.All(withChips.Values, bounds =>
-        {
-            Assert.False(bounds.IntersectsWith(start));
-            Assert.False(bounds.IntersectsWith(end));
-        });
+        AssertChipGapRule(withoutChips, withChips, start, end, $"{width} DIP");
         Assert.Equal(staticBefore, overview.StaticDrawCount);
         GeometryDrawing[] afterTicks = Drawings(StaticDrawing(overview)).OfType<GeometryDrawing>()
             .Where(drawing => drawing.Geometry is LineGeometry).ToArray();
         Assert.Equal(ticks.Select(tick => tick.Bounds), afterTicks.Select(tick => tick.Bounds));
+    });
+
+    /// <summary>
+    /// Moving the start chip across the labels in small steps: wherever its edge stops, a
+    /// label it does not cover but comes within 6 DIP of disappears and comes back once the
+    /// chip moves on. The sweep must meet such a beside-only case, or it proves nothing.
+    /// </summary>
+    [Fact]
+    public void LabelsKeepTheLabelGapBesideAMovingStartChip() => WithTimeline(1200, timeline =>
+    {
+        TimelineRenderSurface overview = Surface(timeline);
+        timeline.SetTrimMode(false);
+        timeline.FlushRenderForTest();
+        Dictionary<string, Rect> all = Labels(overview);
+        timeline.SetTrimMode(true);
+        int besideOnly = 0;
+        for (double inMs = 500; inMs <= 4500; inMs += 20)
+        {
+            timeline.SetTrimRange(inMs, 10000);
+            timeline.FlushRenderForTest();
+            (Rect start, Rect end) = ChipBounds(timeline, overview.ActualWidth);
+            besideOnly += AssertChipGapRule(all, Labels(overview), start, end, $"start {inMs} ms");
+        }
+        Assert.True(besideOnly > 0, "No step put the start chip within 6 DIP of a label it does not cover.");
     });
 
     [Theory]
@@ -301,6 +321,38 @@ public sealed class VideoTimelineRulerLabelTests
 
     private static TimelineRenderSurface DetailSurface(TwoLineTimeline timeline) =>
         (TimelineRenderSurface)typeof(TwoLineTimeline).GetField("_detail", Private)!.GetValue(timeline)!;
+
+    private const double LabelGap = 6;
+
+    /// <summary>
+    /// A label is drawn exactly when it keeps 6 DIP from both chips. Labels within 0.05 DIP
+    /// of that boundary are left out of the check: the glyph run's advance width and the
+    /// renderer's FormattedText width may differ in their last digits. Returns how many
+    /// labels were omitted only for the gap, beside a chip they do not touch.
+    /// </summary>
+    private static int AssertChipGapRule(Dictionary<string, Rect> all, Dictionary<string, Rect> shown,
+        Rect start, Rect end, string scene)
+    {
+        int besideOnly = 0;
+        foreach ((string text, Rect bounds) in all)
+        {
+            double gap = Math.Min(ChipGap(bounds, start), ChipGap(bounds, end));
+            if (Math.Abs(gap - LabelGap) < 0.05) continue;
+            bool kept = gap >= LabelGap;
+            Assert.True(kept == shown.ContainsKey(text),
+                $"{scene}: {text} is {gap:0.##} DIP from a chip and should {(kept ? "stay" : "be omitted")}");
+            if (gap > 0 && !kept) besideOnly++;
+        }
+        Assert.All(shown, label => Assert.True(Math.Min(ChipGap(label.Value, start), ChipGap(label.Value, end)) > LabelGap - 0.05,
+            $"{scene}: {label.Key} is drawn closer than 6 DIP to a chip"));
+        return besideOnly;
+    }
+
+    /// <summary>The horizontal gap between a label and a chip; zero or less when they touch or overlap.</summary>
+    private static double ChipGap(Rect label, Rect chip) =>
+        label.Left >= chip.Right ? label.Left - chip.Right
+        : chip.Left >= label.Right ? chip.Left - label.Right
+        : -Math.Min(label.Right, chip.Right) + Math.Max(label.Left, chip.Left);
 
     private static (Rect Start, Rect End) ChipBounds(TwoLineTimeline timeline, double width)
     {

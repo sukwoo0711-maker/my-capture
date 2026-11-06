@@ -53,8 +53,13 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.False(header.IsChecked);
                     expander.IsExpanded = true;
                     Assert.True(header.IsChecked);
+                    // Open, the header is an on toggle: its text sits on the toggle's selection fill,
+                    // not on the window, so the fill is the backdrop that text must read on.
+                    var headerFill = Assert.IsType<Border>(header.Template.FindName("CheckedLayer", header));
+                    Assert.Equal(1d, headerFill.Opacity);
                     foreach (TextBlock text in Descendants(panel).OfType<TextBlock>().Where(text => text.IsVisible && text.Text.Length > 0))
-                        CheckBenchmarkContrast(text.Foreground, window.Background, $"{theme}: {text.Text}", failures);
+                        CheckBenchmarkContrast(text.Foreground, text.IsDescendantOf(header) ? headerFill.Background : window.Background,
+                            $"{theme}: {text.Text}", failures);
                     foreach (Control control in Descendants(panel).OfType<Control>().Where(control => control is ComboBox or CheckBox or Slider))
                         Assert.NotNull(control.Style);
                 }
