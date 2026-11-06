@@ -114,7 +114,7 @@ public sealed class ErrorReportTests
         var errors = new RecentErrorLog(() => FixedTime);
         for (int i = 0; i < 8; i++) errors.Record(i, new ArgumentException());
         errors.Record(9, error);
-        ErrorReport report = ErrorReport.ForException(error, errors, null, FixedTime.AddSeconds(1));
+        ErrorReport report = ErrorReport.ForException(error, errors.Snapshot(), [], FixedTime.AddSeconds(1));
         Assert.Equal(Enumerable.Range(3, 5), report.RecentErrors.Select(record => record.EventId));
         Assert.Equal("MyCapture.App.App", report.Primary.Category);
         Assert.Empty(report.RecentLogLines);
@@ -135,6 +135,23 @@ public sealed class ErrorReportTests
         Assert.Equal(SupportReport.Body("diagnostics", " text "), new SupportSubmission("diagnostics", " text ", "", null).Body);
         Assert.Equal(SupportReport.Body("", ""), new SupportSubmission("", "", "", null).Body);
         Assert.Equal("edited", new SupportSubmission("", "", " edited ", report).Body);
+    }
+
+    [Fact]
+    public void ErrorReportBodyPutsTheSummaryBeforeTheMessageSoTrimmingKeepsIt()
+    {
+        var report = new ErrorReport(ErrorReportKind.Unhandled, Record(CaptureFailure()), [], [], null);
+        string summary = report.FormatSummary();
+        string gap = Environment.NewLine + Environment.NewLine;
+        var submission = new SupportSubmission("diagnostics", " steps ", summary, report);
+        Assert.Equal("diagnostics" + gap + summary + gap + "steps", submission.Body);
+        // A length limit cuts from the end: the long message gives way, the error summary stays whole.
+        var longSubmission = submission with { Message = string.Concat(Enumerable.Repeat("한글😀", 4000)) };
+        string url = SupportReport.IssueUrl(longSubmission, out bool trimmed);
+        Assert.True(trimmed);
+        string decoded = Uri.UnescapeDataString(url[(url.IndexOf("&body=", StringComparison.Ordinal) + 6)..]);
+        Assert.StartsWith("diagnostics" + gap + summary + gap + "한글", decoded, StringComparison.Ordinal);
+        Assert.StartsWith(decoded, longSubmission.Body, StringComparison.Ordinal);
     }
 
     [Fact]

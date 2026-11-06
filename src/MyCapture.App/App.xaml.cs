@@ -195,6 +195,7 @@ public partial class App : Application
                     ObserveLaunchWindow(window);
                     ObserveIdleMemoryWindow(window);
                     ObserveEditorPrewarmWindow(window);
+                    OfferDeferredUnexpectedExitNotice(window);
                 }
             }));
 
@@ -230,7 +231,7 @@ public partial class App : Application
         else
         {
             _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
-            _ = OfferUnexpectedExitAfterLaunchAsync();
+            _ = OfferUnexpectedExitAfterLaunchAsync(quietLaunch);
         }
     }
 
@@ -2764,7 +2765,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _ = CloseUnexpectedExitNoticeAsync();
+        MarkUnexpectedExitNoticeForFinalExit();
         _memoryReclamationStopped = true;
         CancelIdleMemoryReclamation();
         _launchStatus?.Complete();

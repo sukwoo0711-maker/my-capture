@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -11,7 +13,9 @@ using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Platform;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Themes;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -145,9 +149,16 @@ public sealed class SupportErrorReportTests
         Isolated(nameof(GitHubUsesEditedSummaryAndReportsRuneSafeTrimming), () =>
         {
             Application app = CreateApplication();
+            SynchronizationContext? previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            string root = OwnedTestDirectory.Create("mc-support-plain-bundle-");
+            RollingFileLog? previousLog = ErrorReporting.FileLog;
+            UnexpectedExitLog? previousExits = ErrorReporting.Exits;
             try
             {
                 using var language = UiText.UseLanguage("ko-KR");
+                ErrorReporting.FileLog = null;
+                ErrorReporting.Exits = null;
                 var actions = new FakeActions();
                 var window = new SupportWindow(actions, _ => Snapshot(), Report());
                 try
@@ -169,22 +180,133 @@ public sealed class SupportErrorReportTests
                     string decoded = Uri.UnescapeDataString(encoded);
                     Assert.DoesNotContain('\uFFFD', decoded);
                     Assert.Equal(encoded, Uri.EscapeDataString(decoded));
+                    // The long message gives way at the end; the edited summary before it stays.
+                    Assert.Contains("Edited error summary", decoded, StringComparison.Ordinal);
                 }
                 finally { window.Close(); }
-                var normal = new SupportWindow(actions, _ => Snapshot());
+                var bundle = new DefaultBundleActions(Path.Combine(root, "support.zip"));
+                var normal = new SupportWindow(bundle, _ => Snapshot());
                 try
                 {
                     Assert.Null(normal.ErrorSummaryBox);
                     Assert.Equal(SupportReport.Body(normal.DiagnosticsBox.Text, normal.MessageBox.Text), normal.Submission().Body);
                     Assert.Equal(Visibility.Visible, normal.StoreReviewButton.Visibility);
-                    // Settings keeps the bundle beside its support button; plain support adds no second one.
-                    Assert.Equal(Visibility.Collapsed, normal.BundleButton.Visibility);
-                    Assert.True(normal.SaveBundleAsync().IsCompletedSuccessfully);
-                    Assert.Equal(0, actions.ChooseCalls);
+                    // The shortened-page notice names the bundle, so plain support offers it as well.
+                    Assert.Equal(Visibility.Visible, normal.BundleButton.Visibility);
+                    normal.MessageBox.Text = "Reproduction steps " + string.Concat(Enumerable.Repeat("\uAC00\uD83D\uDE00 &+#?", 4000));
+                    normal.OpenGitHub();
+                    Assert.Single(bundle.Opened);
+                    Assert.Equal(UiText.Get("Support_GitHubOpenedTrimmed"), normal.StatusText);
+                    Complete(normal.SaveBundleAsync());
+                    Assert.Equal(UiText.Get("Support_BundleSaved"), normal.StatusText);
+                    Assert.Equal(bundle.Destination, bundle.Shown);
+                    // The bundle keeps the typed text whole, past the page's length limit.
+                    using ZipArchive zip = ZipFile.OpenRead(bundle.Destination);
+                    ZipArchiveEntry entry = Assert.Single(zip.Entries);
+                    Assert.Equal(DiagnosticBundle.SummaryEntry, entry.FullName);
+                    using var reader = new StreamReader(entry.Open());
+                    string saved = reader.ReadToEnd();
+                    Assert.Equal(normal.Submission().Body, saved);
+                    Assert.Contains(normal.MessageBox.Text.Trim(), saved, StringComparison.Ordinal);
                 }
                 finally { normal.Close(); }
             }
+            finally
+            {
+                ErrorReporting.FileLog = previousLog;
+                ErrorReporting.Exits = previousExits;
+                SynchronizationContext.SetSynchronizationContext(previous);
+                app.Shutdown();
+                OwnedTestDirectory.Delete(root);
+            }
+        });
+
+    [Fact]
+    public Task HeightLimitsFollowAMoveToAMonitorOfAnotherHeightAtTheSameDpi() =>
+        Isolated(nameof(HeightLimitsFollowAMoveToAMonitorOfAnotherHeightAtTheSameDpi), () =>
+        {
+            Application app = CreateApplication();
+            try
+            {
+                MonitorInfo monitor = Display(1040);
+                var window = new SupportWindow(new FakeActions(), _ => Snapshot(), Report()) { ReadMonitor = _ => monitor };
+                bool conflicted = false;
+                EventHandler check = (_, _) => conflicted |= window.MinHeight > window.MaxHeight;
+                var minimum = DependencyPropertyDescriptor.FromProperty(FrameworkElement.MinHeightProperty, typeof(SupportWindow));
+                var maximum = DependencyPropertyDescriptor.FromProperty(FrameworkElement.MaxHeightProperty, typeof(SupportWindow));
+                minimum.AddValueChanged(window, check);
+                maximum.AddValueChanged(window, check);
+                try
+                {
+                    Show(window);
+                    Assert.Equal((540d, 1000d), (window.MinHeight, window.MaxHeight));
+                    // Each monitor has 96 DPI, so no DPI change comes: only the move tells the window.
+                    foreach ((double workArea, double low, double high) in new[] { (700d, 540d, 660d), (500d, 460d, 460d), (1040d, 540d, 1000d) })
+                    {
+                        monitor = Display(workArea);
+                        window.Left -= 100;
+                        Ocr410Fixture.Pump();
+                        Assert.Equal((low, high), (window.MinHeight, window.MaxHeight));
+                        Assert.InRange(window.ActualHeight, low, high);
+                    }
+                    Assert.False(conflicted, "The minimum height passed the maximum on the way.");
+                }
+                finally
+                {
+                    minimum.RemoveValueChanged(window, check);
+                    maximum.RemoveValueChanged(window, check);
+                    window.Close();
+                }
+            }
             finally { app.Shutdown(); }
+
+            static MonitorInfo Display(double workAreaHeight) => new(@"\\.\DISPLAY9",
+                new RectD(-20000, -20000, 1920, workAreaHeight + 40), new RectD(-20000, -20000, 1920, workAreaHeight), 96, false);
+        });
+
+    [Fact]
+    public Task UnhandledDialogOpensTheErrorReportWindowThroughTheDefaultPath() =>
+        Isolated(nameof(UnhandledDialogOpensTheErrorReportWindowThroughTheDefaultPath), () =>
+        {
+            Application app = CreateApplication();
+            Action<string> previousUri = SupportDiagnostics.OpenUri;
+            Action<SupportWindow> previousShow = SupportWindow.ShowWindow;
+            var opened = new List<string>();
+            var shown = new List<SupportWindow>();
+            ThemedDialog? dialog = null;
+            try
+            {
+                using var language = UiText.UseLanguage("ko-KR");
+                SupportDiagnostics.OpenUri = opened.Add;
+                // ErrorReporting.Open keeps its default. Only where the window appears changes: off screen, inactive.
+                SupportWindow.ShowWindow = window => { shown.Add(window); Show(window); };
+                dialog = ThemedDialog.CreateUnhandled(ThrownException());
+                Show(dialog);
+                Button report = ((StackPanel)((ScrollViewer)dialog.Content).Content).Children.OfType<WrapPanel>().Single()
+                    .Children.OfType<Button>().First();
+                Assert.Equal(UiText.Get("Support_ReportError"), SurfaceShortcutHintTests.PrimaryCaption(report));
+                report.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.False(dialog.IsVisible);
+
+                PumpUntil(() => shown.Count > 0);
+                SupportWindow support = Assert.Single(shown);
+                Assert.True(support.IsVisible);
+                Assert.Equal(AppIdentity.FormatWindowTitle(UiText.Get("Support_ReportError")), support.Title);
+                TextBox summary = Assert.IsType<TextBox>(support.ErrorSummaryBox);
+                Assert.Contains("System.InvalidOperationException", summary.Text, StringComparison.Ordinal);
+                Assert.Contains(UiText.Get("Support_ErrorTime") + ":", summary.Text, StringComparison.Ordinal);
+                Assert.Equal(Visibility.Visible, support.BundleButton.Visibility);
+                Assert.Equal(Visibility.Collapsed, support.StoreReviewButton.Visibility);
+                Assert.Empty(opened);
+            }
+            finally
+            {
+                foreach (SupportWindow window in shown) window.Close();
+                dialog?.Close();
+                SupportDiagnostics.OpenUri = previousUri;
+                SupportWindow.ShowWindow = previousShow;
+                app.Shutdown();
+            }
         });
 
     [Fact]
@@ -281,7 +403,7 @@ public sealed class SupportErrorReportTests
 
     private static SupportDiagnosticSnapshot Snapshot() => new("4.4.0.0", "4.4.0+abc123", true, "10.0.26100", 1,
         UiText.Culture.Name, ThemeService.Current.ToString());
-    private static ErrorReport Report() => ErrorReport.ForException(ThrownException(), new RecentErrorLog(), null,
+    private static ErrorReport Report() => ErrorReport.ForException(ThrownException(), [], [],
         new DateTimeOffset(2026, 11, 6, 17, 25, 0, TimeSpan.Zero));
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -299,6 +421,16 @@ public sealed class SupportErrorReportTests
         window.ShowActivated = false; window.ShowInTaskbar = false;
         window.Show();
         window.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+    }
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        var elapsed = Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), "The support window did not open.");
+            Ocr410Fixture.Pump();
+        }
     }
 
     private static void Complete(Task task)
@@ -335,6 +467,18 @@ public sealed class SupportErrorReportTests
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using FileStream output = File.Create(path);
         encoder.Save(output);
+    }
+
+    /// <summary>Stands in for the save dialog and Explorer only; the bundle itself comes from the default writer.</summary>
+    private sealed class DefaultBundleActions(string destination) : ISupportActions
+    {
+        internal readonly List<string> Opened = [];
+        internal string Destination { get; } = destination;
+        internal string? Shown;
+        public void CopyText(string text) { }
+        public bool TryOpenUri(string uri) { Opened.Add(uri); return true; }
+        public string? ChooseBundlePath(Window owner) => Destination;
+        public bool TryShowInFolder(string path) { Shown = path; return true; }
     }
 
     private sealed class FakeActions : ISupportActions

@@ -66,6 +66,7 @@ internal sealed class SupportWindow : Window
     private readonly TextBlock _status;
     private readonly TextBlock _accounts;
     private readonly ErrorReport? _report;
+    private double? _workAreaHeight;
     internal TextBox DiagnosticsBox { get; }
     internal TextBox MessageBox { get; }
     internal TextBox? ErrorSummaryBox { get; }
@@ -119,9 +120,8 @@ internal sealed class SupportWindow : Window
         var actionsRow = new WrapPanel();
         actionsRow.Children.Add(ActionButton("Support_Copy", CopyDiagnostics));
         actionsRow.Children.Add(ActionButton("Support_GitHub", OpenGitHub));
+        // Both modes offer the bundle: it keeps the typed text in full when the GitHub page has to shorten it.
         BundleButton = ActionButton("About_DiagnosticsBundle", () => _ = SaveBundleAsync());
-        // Settings already offers the bundle beside its support button; only an error report adds it here.
-        BundleButton.Visibility = report is null ? Visibility.Collapsed : Visibility.Visible;
         actionsRow.Children.Add(BundleButton);
         StoreReviewButton = ActionButton("Support_StoreReview", OpenStoreReview);
         actionsRow.Children.Add(StoreReviewButton);
@@ -135,8 +135,13 @@ internal sealed class SupportWindow : Window
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
         RefreshDiagnostics();
         SourceInitialized += (_, _) => RefreshHeightLimits();
+        // A monitor with the same DPI but another height raises no DPI change, only a move.
+        LocationChanged += (_, _) => RefreshHeightLimits();
         Loaded += (_, _) => RefreshDiagnostics(); // The HWND now identifies the current monitor's DPI.
     }
+
+    /// <summary>Reads the monitor a window is on. Tests give monitors of their own.</summary>
+    internal Func<nint, MonitorInfo> ReadMonitor { get; set; } = MonitorEnumerator.GetFromWindow;
 
     internal void RefreshDiagnostics()
     {
@@ -162,17 +167,20 @@ internal sealed class SupportWindow : Window
 
     private void ApplyHeightLimits(double workAreaHeightDip)
     {
+        // A move within one monitor keeps its work area, so most moves end here.
+        if (_workAreaHeight is { } applied && applied.Equals(workAreaHeightDip)) return;
+        _workAreaHeight = workAreaHeightDip;
         (double minimum, double maximum) = HeightLimits(workAreaHeightDip);
-        // Lower the minimum first so moving to a shorter monitor never leaves conflicting bounds.
-        MinHeight = minimum;
-        MaxHeight = maximum;
+        // Set first the bound that moves away from the other, so the pair never conflicts on the way.
+        if (minimum <= MaxHeight) { MinHeight = minimum; MaxHeight = maximum; }
+        else { MaxHeight = maximum; MinHeight = minimum; }
     }
 
     private void RefreshHeightLimits()
     {
         nint handle = new WindowInteropHelper(this).Handle;
         if (handle == 0) { ApplyHeightLimits(SystemParameters.WorkArea.Height); return; }
-        var monitor = MonitorEnumerator.GetFromWindow(handle);
+        MonitorInfo monitor = ReadMonitor(handle);
         double scale = double.IsFinite(monitor.ScaleFactor) && monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
         ApplyHeightLimits(monitor.WorkArea.Height / scale);
     }
@@ -261,6 +269,9 @@ internal sealed class SupportWindow : Window
         _status.Visibility = Visibility.Visible;
     }
 
-    internal static void ShowSupport() => new SupportWindow().Show();
-    internal static void ShowErrorReport(ErrorReport report) => new SupportWindow(report: report).Show();
+    /// <summary>Puts a new support window on screen. Tests show it off screen without activating it.</summary>
+    internal static Action<SupportWindow> ShowWindow { get; set; } = static window => window.Show();
+
+    internal static void ShowSupport() => ShowWindow(new SupportWindow());
+    internal static void ShowErrorReport(ErrorReport report) => ShowWindow(new SupportWindow(report: report));
 }
