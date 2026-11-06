@@ -200,6 +200,8 @@ public partial class App : Application
         {
             _services = BuildServiceProvider();
             _fileLog = _services.GetRequiredService<RollingFileLog>();
+            ErrorReporting.FileLog = _fileLog;
+            ErrorReporting.Exits = new UnexpectedExitLog(UnexpectedExitLog.FolderFor(_services.GetRequiredService<AppPaths>()));
             _launchTiming.Attach(_fileLog.Append);
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
@@ -223,7 +225,11 @@ public partial class App : Application
         }
 
         if (s_residentProbe is { } probe) _ = RunResidentProbeAsync(probe);
-        else _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+        else
+        {
+            _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+            _ = OfferUnexpectedExitAfterLaunchAsync();
+        }
     }
 
     /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
@@ -2744,6 +2750,7 @@ public partial class App : Application
         _log?.LogCritical(e.ExceptionObject as Exception,
             "Unhandled exception off the dispatcher thread (terminating: {IsTerminating})", e.IsTerminating);
         _fileLog?.Flush(TimeSpan.FromSeconds(2));
+        if (e.IsTerminating) RecordUnexpectedExit(e.ExceptionObject as Exception);
     }
 
     /// <summary>A faulted task nobody awaited. Recorded only; the runtime's own handling is unchanged.</summary>
@@ -2752,6 +2759,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _ = CloseUnexpectedExitNoticeAsync();
         _memoryReclamationStopped = true;
         CancelIdleMemoryReclamation();
         _launchStatus?.Complete();

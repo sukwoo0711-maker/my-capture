@@ -117,11 +117,15 @@ internal sealed class ThemedDialog : Window
     private Button MakeCommandButton(DialogCommand command)
     {
         Button button = CreateActionButton(command.Label, primary: false);
+        bool completed = false;
         button.Click += (_, _) =>
         {
+            if (completed) return;
             string? failure = command.Run();
             if (command.Closes && failure is null)
             {
+                completed = true;
+                button.IsEnabled = false;
                 Result = MessageBoxResult.OK;
                 Close();
                 return;
@@ -296,10 +300,23 @@ internal sealed class ThemedDialog : Window
         new(UiText.Get("Onboard_StartFailureBody"), UiText.Get("Onboard_StartFailureTitle"), MessageBoxButton.OK,
             MessageBoxResult.OK, error.ToString(), commands: [ReportProblemCommand()]);
 
-    /// <summary>The unexpected-error dialog, with [Report a problem] beside Close.</summary>
+    /// <summary>The unexpected-error dialog, with a local report preview beside Close.</summary>
     internal static ThemedDialog CreateUnhandled(Exception error) =>
         new(UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK, MessageBoxResult.OK,
-            error.ToString(), commands: [ReportProblemCommand()]);
+            error.ToString(), commands: [new(UiText.Get("Support_ReportError"), () =>
+            {
+                ErrorReporting.Open(ErrorReporting.ForException(error));
+                return null;
+            }, Closes: true)]);
+
+    /// <summary>A next-launch notice; records are only previewed when its report command is chosen.</summary>
+    internal static ThemedDialog CreateUnexpectedExitNotice(Action report) =>
+        new(UiText.Get("Support_ExitNoticeBody"), UiText.Get("Support_ExitNoticeTitle"),
+            MessageBoxButton.OK, MessageBoxResult.OK, commands: [new(UiText.Get("Support_ReportError"), () =>
+            {
+                report();
+                return null;
+            }, Closes: true)]);
 
     internal static void ShowUnhandled(Exception error, Action<Exception>? showThemed = null,
         Action<string, string>? showFallback = null)

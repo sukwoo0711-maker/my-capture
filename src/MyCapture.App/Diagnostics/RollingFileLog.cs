@@ -26,6 +26,8 @@ internal sealed class RollingFileLog : IDisposable
     private readonly ConcurrentQueue<string> _pending = new();
     private readonly object _ioGate = new();
     private readonly Func<DateTimeOffset> _clock;
+    private readonly RecentLineSlot[] _recentLines;
+    private long _recentCount;
     private FileStream? _stream;
     private DateTimeOffset _retryAt;
     private int _pendingCount;
@@ -43,6 +45,7 @@ internal sealed class RollingFileLog : IDisposable
         MaximumFileBytes = maximumFileBytes;
         MaximumFiles = maximumFiles;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _recentLines = new RecentLineSlot[16];
     }
 
     internal string Folder { get; }
@@ -62,6 +65,19 @@ internal sealed class RollingFileLog : IDisposable
     internal void Append(string line)
     {
         if (Volatile.Read(ref _disposed)) return;
+        long position = Interlocked.Increment(ref _recentCount) - 1;
+        ref RecentLineSlot slot = ref _recentLines[(int)((ulong)position % (uint)_recentLines.Length)];
+        // A stalled writer must neither block Append nor overwrite a newer wrapped slot.
+        // Snapshot contention may omit a line; the disk queue below always retains its own copy.
+        if (Interlocked.CompareExchange(ref slot.Writing, 1, 0) == 0)
+        {
+            if (position >= Volatile.Read(ref slot.Position))
+            {
+                Volatile.Write(ref slot.Position, position);
+                Volatile.Write(ref slot.Line, line);
+            }
+            Volatile.Write(ref slot.Writing, 0);
+        }
         if (Interlocked.Increment(ref _pendingCount) > MaximumPendingLines)
         {
             Interlocked.Decrement(ref _pendingCount);
@@ -71,6 +87,31 @@ internal sealed class RollingFileLog : IDisposable
         _pending.Enqueue(line);
         if (Interlocked.Exchange(ref _drainScheduled, 1) == 0)
             ThreadPool.UnsafeQueueUserWorkItem(static log => log.Drain(), this, preferLocal: false);
+    }
+
+    /// <summary>A memory-only snapshot, oldest first; best effort during concurrent appends.</summary>
+    internal string[] RecentLines(int count)
+    {
+        if (count <= 0) return [];
+        long end = Volatile.Read(ref _recentCount);
+        int available = (int)Math.Min(end, _recentLines.Length);
+        var lines = new List<string>(Math.Min(count, available));
+        for (long position = end - available; position < end; position++)
+        {
+            ref RecentLineSlot slot = ref _recentLines[(int)((ulong)position % (uint)_recentLines.Length)];
+            if (Volatile.Read(ref slot.Writing) != 0 || Volatile.Read(ref slot.Position) != position) continue;
+            string? line = Volatile.Read(ref slot.Line);
+            if (Volatile.Read(ref slot.Writing) == 0 && Volatile.Read(ref slot.Position) == position
+                && line is not null && SafeLogLine.IsWellFormed(line)) lines.Add(line);
+        }
+        return lines.TakeLast(count).ToArray();
+    }
+
+    private struct RecentLineSlot
+    {
+        internal string? Line;
+        internal long Position;
+        internal int Writing;
     }
 
     /// <summary>Writes every queued line now, on the calling thread. Gives up after <paramref name="timeout"/>.</summary>

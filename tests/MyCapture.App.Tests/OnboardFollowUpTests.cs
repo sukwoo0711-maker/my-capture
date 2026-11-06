@@ -173,7 +173,7 @@ public sealed class AppFailureGuidanceTests
         string unhandled = ThemedDialog.UnhandledMessage(new InvalidOperationException("The tray icon has not been initialized."));
         Assert.StartsWith(UiText.Get("Dialog.Unexpected"), unhandled, StringComparison.Ordinal);
         Assert.Contains("다시 실행하십시오", unhandled, StringComparison.Ordinal);
-        Assert.Contains("자세히", unhandled, StringComparison.Ordinal);
+        Assert.Contains(UiText.Get("Support_ReportError"), unhandled, StringComparison.Ordinal);
         Assert.DoesNotContain("tray icon", unhandled, StringComparison.Ordinal);
         Assert.Equal(UiText.Get("Dialog.Storage") + "\n\n" + UiText.Get("Onboard_ErrorNextStep"),
             ThemedDialog.UnhandledMessage(new IOException("private-path")));

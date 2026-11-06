@@ -4164,6 +4164,28 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Support_Unpackaged" xml:space="preserve"><value>일반 설치</value></data>
   <data name="Support_DisplayScale" xml:space="preserve"><value>화면 배율: {0:0.##}%</value></data>
   <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture 문의</value></data>
+  <data name="Support_ReportError" xml:space="preserve"><value>오류 보고</value></data>
+  <data name="Support_ErrorSummary" xml:space="preserve"><value>오류 요약</value></data>
+  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>보낼 내용을 확인하고 필요한 부분을 고칠 수 있습니다.</value></data>
+  <data name="Support_ErrorIssueTitle" xml:space="preserve"><value>MyCapture 오류 보고: {0}</value></data>
+  <data name="Support_ErrorKind" xml:space="preserve"><value>오류 종류</value></data>
+  <data name="Support_ErrorTime" xml:space="preserve"><value>발생 시각</value></data>
+  <data name="Support_RecordedVersion" xml:space="preserve"><value>종료 당시 버전</value></data>
+  <data name="Support_ErrorOperation" xml:space="preserve"><value>작업</value></data>
+  <data name="Support_ErrorException" xml:space="preserve"><value>예외</value></data>
+  <data name="Support_ErrorCause" xml:space="preserve"><value>원인</value></data>
+  <data name="Support_ErrorLocation" xml:space="preserve"><value>발생 위치</value></data>
+  <data name="Support_StackSignature" xml:space="preserve"><value>호출 경로 식별값</value></data>
+  <data name="Support_RecentErrors" xml:space="preserve"><value>최근 오류</value></data>
+  <data name="Support_RecentLog" xml:space="preserve"><value>최근 로그</value></data>
+  <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>처리되지 않은 오류</value></data>
+  <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>예기치 않은 종료</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>신고 페이지를 열었습니다. 길이 제한으로 일부 내용이 줄었습니다. 전체 내용은 복사하거나 진단 묶음으로 저장할 수 있습니다.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>진단 묶음을 저장하고 폴더를 열었습니다.</value></data>
+  <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>진단 묶음을 저장했지만 폴더를 열지 못했습니다.</value></data>
+  <data name="Support_BundleFailed" xml:space="preserve"><value>진단 묶음을 저장하지 못했습니다. 다른 위치를 선택한 뒤 다시 시도하십시오.</value></data>
+  <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>지난번에 MyCapture가 예기치 않게 종료되었습니다</value></data>
+  <data name="Support_ExitNoticeBody" xml:space="preserve"><value>오류 보고를 누르면 보낼 내용을 먼저 확인하고 고칠 수 있습니다. 기록에는 캡처 내용, 파일 경로, 창 제목, 입력한 글이 들어 있지 않으며, 직접 보내기 전에는 아무것도 전송하지 않습니다.</value></data>
   <data name="About_ReportProblemHelp" xml:space="preserve"><value>진단 정보를 확인하고 문의 내용을 작성합니다.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>진단 정보를 복사했습니다. 신고 페이지에 붙여 넣으십시오.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>진단 정보를 복사하지 못했습니다. 신고 페이지에 문제 상황을 직접 적어 주십시오.</value></data>
@@ -4715,7 +4737,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 오류 보고를 눌러 보낼 내용을 확인한 뒤 보내십시오.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#}MB</value></data>

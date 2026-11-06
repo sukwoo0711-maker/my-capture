@@ -45,15 +45,25 @@ internal static class SupportReport
         $"{diagnostics}{Environment.NewLine}{Environment.NewLine}{message.Trim()}";
 
     internal static string IssueUrl(string diagnostics, string message)
+        => IssueUrl(new SupportSubmission(diagnostics, message, string.Empty, null), out _);
+
+    internal static string IssueUrl(SupportSubmission submission, out bool trimmed)
     {
-        string title = UiText.Get("Support_IssueTitle");
+        string title = submission.Report is { } report
+            ? UiText.Format("Support_ErrorIssueTitle", SafeLogLine.Token(report.Primary.ExceptionType))
+            : UiText.Get("Support_IssueTitle");
         string prefix = SupportDiagnostics.IssueUri + "?title=" + Uri.EscapeDataString(title) + "&body=";
         // Encode one Unicode scalar at a time: never cut UTF-16 pairs or percent escapes.
         var encoded = new StringBuilder();
-        foreach (Rune rune in Body(diagnostics, message).EnumerateRunes())
+        trimmed = false;
+        foreach (Rune rune in submission.Body.EnumerateRunes())
         {
             string piece = Uri.EscapeDataString(rune.ToString());
-            if (prefix.Length + encoded.Length + piece.Length > MaximumIssueUrlLength) break;
+            if (prefix.Length + encoded.Length + piece.Length > MaximumIssueUrlLength)
+            {
+                trimmed = true;
+                break;
+            }
             encoded.Append(piece);
         }
         return prefix + encoded;

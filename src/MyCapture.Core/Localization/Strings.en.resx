@@ -4164,6 +4164,28 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Support_Unpackaged" xml:space="preserve"><value>Unpackaged</value></data>
   <data name="Support_DisplayScale" xml:space="preserve"><value>Display scale: {0:0.##}%</value></data>
   <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture support</value></data>
+  <data name="Support_ReportError" xml:space="preserve"><value>Report error</value></data>
+  <data name="Support_ErrorSummary" xml:space="preserve"><value>Error summary</value></data>
+  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>Review the summary and edit it before sending.</value></data>
+  <data name="Support_ErrorIssueTitle" xml:space="preserve"><value>MyCapture error report: {0}</value></data>
+  <data name="Support_ErrorKind" xml:space="preserve"><value>Error kind</value></data>
+  <data name="Support_ErrorTime" xml:space="preserve"><value>Time</value></data>
+  <data name="Support_RecordedVersion" xml:space="preserve"><value>Recorded version</value></data>
+  <data name="Support_ErrorOperation" xml:space="preserve"><value>Operation</value></data>
+  <data name="Support_ErrorException" xml:space="preserve"><value>Exception</value></data>
+  <data name="Support_ErrorCause" xml:space="preserve"><value>Cause</value></data>
+  <data name="Support_ErrorLocation" xml:space="preserve"><value>Location</value></data>
+  <data name="Support_StackSignature" xml:space="preserve"><value>Stack signature</value></data>
+  <data name="Support_RecentErrors" xml:space="preserve"><value>Recent errors</value></data>
+  <data name="Support_RecentLog" xml:space="preserve"><value>Recent log lines</value></data>
+  <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>Unhandled error</value></data>
+  <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>Unexpected exit</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>The report page is open. Some content was shortened to fit its length limit. Copy the full text or save a diagnostics bundle to keep everything.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>The diagnostics bundle was saved and its folder is open.</value></data>
+  <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>The diagnostics bundle was saved, but its folder could not be opened.</value></data>
+  <data name="Support_BundleFailed" xml:space="preserve"><value>The diagnostics bundle could not be saved. Choose another location and try again.</value></data>
+  <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>MyCapture closed unexpectedly last time</value></data>
+  <data name="Support_ExitNoticeBody" xml:space="preserve"><value>Select Report error to review and edit the report first. Records contain no captures, file paths, window titles, or entered text. Nothing is sent until you choose to send it.</value></data>
   <data name="About_ReportProblemHelp" xml:space="preserve"><value>Review diagnostics and write a message.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>Diagnostics copied. Paste them into the report page.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Describe the problem on the report page.</value></data>
@@ -4715,7 +4737,7 @@ Turn off: {0}</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details, select Report a problem, and attach it.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, select Report error, review what will be sent, and send it.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details, select Report a problem, and attach it.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#} MB</value></data>
