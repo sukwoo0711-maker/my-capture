@@ -1,7 +1,11 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
@@ -70,6 +74,9 @@ public sealed partial class SettingsThemePreviewTests
             if (index < 11) filed.Add(record.Id);
         }
         f.Queue.MoveCapturesAsync(filed, f.Design.Id).GetAwaiter().GetResult();
+        // The step a failure, or a timeout of the isolated process, is reported against.
+        string stage = "minimum window";
+        var elapsed = Stopwatch.StartNew();
         try
         {
             window.Width = window.MinWidth;
@@ -82,8 +89,10 @@ public sealed partial class SettingsThemePreviewTests
             vm.Refresh();
             PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, "library columns: folder cards");
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
+            RecordIsolatedProgress($"library columns shown; {LibraryLayoutState(window, vm)}");
 
             // The minimum window with the details pane open fits two full cards that share its width.
+            stage = "minimum root";
             Assert.True(vm.ColumnCount == 2,
                 $"Minimum root needs two columns; actual {vm.ColumnCount}, window {window.ActualWidth}, client {((FrameworkElement)window.Content).ActualWidth}, rows {rowsList.ActualWidth}, scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth}");
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root");
@@ -107,6 +116,7 @@ public sealed partial class SettingsThemePreviewTests
                 if (!detailsOpen)
                 {
                     // Hiding the pane from the keyboard leaves focus on the rail's button.
+                    stage = "hiding details at the minimum width";
                     window.Width = window.MinWidth;
                     vm.NavigateTo(CaptureFolderScope.All);
                     // Keyboard focus needs the window to be foreground, which a test desktop may refuse.
@@ -128,25 +138,41 @@ public sealed partial class SettingsThemePreviewTests
 
                 foreach ((string name, Action show) in views)
                 {
+                    stage = $"{name} at the minimum width, {pane}";
                     window.Width = window.MinWidth;
                     show();
                     SettleGalleryLayout(window);
                     Assert.Equal(name == "folder", vm.IsCompactLayout);
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at the minimum width, {pane}");
+                    AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
                     if (detailsOpen && name is "folder" or "search")
                         SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
                     var columnsSeen = new HashSet<int>();
                     double windowChrome = window.ActualWidth - client.ActualWidth;
                     double originalClientWidth = client.Width;
+                    var sweep = Stopwatch.StartNew();
+                    int windowWidths = 0, virtualWidths = 0;
+                    // Where the sweep spends its time: changing the width, settling layout, checking the cards.
+                    long resizing = 0, settling = 0, checking = 0, mark = 0;
+                    long Lap()
+                    {
+                        long now = sweep.ElapsedMilliseconds, lap = now - mark;
+                        mark = now;
+                        return lap;
+                    }
+                    (long Milliseconds, double Width) slowest = (0, 0);
                     try
                     {
                         bool virtualLayout = false;
                         foreach (double width in LibrarySweepWidths(window, scroll, vm).ToArray())
                         {
+                            long stepStarted = mark = sweep.ElapsedMilliseconds;
+                            stage = $"{name} at {width:0.#} DIP, {pane}";
                             if (!virtualLayout)
                             {
                                 window.Width = width;
+                                resizing += Lap();
                                 SettleGalleryLayout(window);
+                                settling += Lap();
                                 virtualLayout = Math.Abs(window.ActualWidth - width) > 0.5;
                             }
                             string layout = "window";
@@ -157,12 +183,19 @@ public sealed partial class SettingsThemePreviewTests
                                 // at the remaining logical widths without changing the desktop.
                                 double expectedClientWidth = width - windowChrome;
                                 client.Width = expectedClientWidth;
+                                resizing += Lap();
                                 SettleGalleryLayout(window);
+                                settling += Lap();
                                 Assert.InRange(client.ActualWidth, expectedClientWidth - 0.5, expectedClientWidth + 0.5);
                                 layout = "virtual client";
                             }
-                            AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP ({layout}), {pane}");
+                            stage = $"{name} at {width:0.#} DIP ({layout}), {pane}";
+                            AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
+                            checking += Lap();
                             columnsSeen.Add(vm.ColumnCount);
+                            if (virtualLayout) virtualWidths++; else windowWidths++;
+                            long step = sweep.ElapsedMilliseconds - stepStarted;
+                            if (step > slowest.Milliseconds) slowest = (step, width);
                         }
                     }
                     finally
@@ -170,13 +203,19 @@ public sealed partial class SettingsThemePreviewTests
                         client.Width = originalClientWidth;
                         SettleGalleryLayout(window);
                     }
+                    // A timeout of the isolated process then names the last finished sweep and its cost.
+                    RecordIsolatedProgress($"library columns {name}, {pane}: {windowWidths} window and {virtualWidths} virtual client widths "
+                        + $"in {sweep.ElapsedMilliseconds} ms (resize {resizing}, settle {settling}, check {checking}), "
+                        + $"slowest {slowest.Milliseconds} ms at {slowest.Width:0.#} DIP, columns {string.Join(", ", columnsSeen.Order())}");
                     // Keep all column-boundary coverage even on desktops narrower than the sweep.
+                    stage = $"{name}, {pane}: column coverage";
                     Assert.True(columnsSeen.Count >= 3, $"{name}, {pane}: only {string.Join(", ", columnsSeen)} columns were reached");
                     vm.SearchQuery = string.Empty;
                 }
             }
 
             // The rail brings the pane back, with focus on its hide button, and the columns follow.
+            stage = "details shown again at the minimum width";
             window.Width = window.MinWidth;
             vm.NavigateTo(CaptureFolderScope.All);
             bool keyboardBack = showDetails.Focus() && showDetails.IsKeyboardFocused;
@@ -201,14 +240,19 @@ public sealed partial class SettingsThemePreviewTests
                 window.SetDetailsPaneOpen(open);
                 foreach (double width in new[] { window.MinWidth, 1200, 1600 })
                 {
+                    stage = $"evidence {width:0} DIP, details {(open ? "shown" : "hidden")}";
                     window.Width = width;
                     SettleGalleryLayout(window);
                     if (Math.Abs(window.ActualWidth - width) > 0.5) continue;
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"evidence {width:0} DIP, details {(open ? "shown" : "hidden")}");
+                    AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
                     SaveLibraryUxEvidence(window, AppTheme.Glass, $"layout-{width:0}-{(open ? "details" : "no-details")}-glass-ko-KR.png");
                 }
             }
             window.SetDetailsPaneOpen(true);
+        }
+        catch (Exception error) when (CaptureLibraryLayout(error, window, vm, out string layout))
+        {
+            throw LibraryStepFailure(stage, elapsed, layout, error);
         }
         finally
         {
@@ -383,5 +427,209 @@ public sealed partial class SettingsThemePreviewTests
             $"{label}: {vm.ColumnCount} columns leave room for another card in {usable:0.#} DIP");
         GalleryTileRow? fullest = vm.Rows.OfType<GalleryTileRow>().MaxBy(row => row.Tiles.Count);
         if (fullest is not null) Assert.True(fullest.Tiles.Count <= vm.ColumnCount, $"{label}: a row holds more cards than columns");
+    }
+
+    /// <summary>A library assertion failure whose message already carries the layout facts.</summary>
+    private sealed class LibraryLayoutFailure(string message, Exception? inner = null)
+        : Xunit.Sdk.XunitException(message, inner);
+
+    /// <summary>
+    /// Exception filter for the library layout tests. It runs before any inner <c>finally</c>
+    /// restores a width, so the layout it keeps is the one the assertion saw; the caller rethrows
+    /// the failure with it. A failure that already carries the layout passes through unchanged.
+    /// </summary>
+    private static bool CaptureLibraryLayout(Exception error, GalleryWindow window, GalleryViewModel vm, out string layout)
+    {
+        layout = error is LibraryLayoutFailure ? string.Empty : LibraryLayoutState(window, vm);
+        return error is not LibraryLayoutFailure;
+    }
+
+    /// <summary>
+    /// A failed library step with the layout it left. xUnit prints an assertion without its inner
+    /// exception, so the original failure, with its message and stack, is part of this message.
+    /// </summary>
+    private static LibraryLayoutFailure LibraryStepFailure(string stage, Stopwatch elapsed, string layout, Exception error) =>
+        new($"{stage}, {elapsed.ElapsedMilliseconds} ms into the test. Layout at the failure: {layout}"
+            + $"{Environment.NewLine}Original failure: {error}", error);
+
+    /// <summary>
+    /// Requires a resize to move the column count the expected way. On a failure the message keeps
+    /// the layout as the assertion saw it, then lets the dispatcher settle layout a few more times and
+    /// keeps that layout too, so a resize the dispatcher had not processed yet is told apart from a
+    /// width that never allowed another count. The assertion fails in both cases.
+    /// </summary>
+    private static void AssertColumnCountMoved(GalleryWindow window, GalleryViewModel vm, int before, bool fewer,
+        string stage, WindowTrackSizeScope? tracking = null)
+    {
+        int after = vm.ColumnCount;
+        if (fewer ? after < before : after > before) return;
+        string asserted = LibraryLayoutState(window, vm, before, tracking);
+        var settling = Stopwatch.StartNew();
+        int passes = 0;
+        while (passes < 5 && vm.ColumnCount == after)
+        {
+            SettleGalleryLayout(window);
+            passes++;
+        }
+        string later = vm.ColumnCount == after
+            ? $"still {after} after {passes} more settle passes ({settling.ElapsedMilliseconds} ms)"
+            : $"{vm.ColumnCount} after {passes} more settle passes ({settling.ElapsedMilliseconds} ms)";
+        throw new LibraryLayoutFailure($"{stage}: the column count must {(fewer ? "fall below" : "rise above")} {before} "
+            + $"but is {after}; {later}.{Environment.NewLine}As asserted: {asserted}{Environment.NewLine}"
+            + $"After settling: {LibraryLayoutState(window, vm, before, tracking)}");
+    }
+
+    /// <summary>
+    /// The facts a library resize failure needs, read without changing layout or focus: the desktop,
+    /// work area and DPI the window was given; its requested, actual, minimum and maximum sizes; the
+    /// library's scrolling width; the column count before and now against the count that width allows;
+    /// whether layout, the dispatcher and the product's focus restoration had settled; and where focus is.
+    /// </summary>
+    private static string LibraryLayoutState(GalleryWindow window, GalleryViewModel vm, int? columnsBefore = null,
+        WindowTrackSizeScope? tracking = null)
+    {
+        var facts = new List<string>();
+        void Add(string name, Func<string> read)
+        {
+            // An unreadable fact is reported as such; it never replaces the failure it explains.
+            try { facts.Add($"{name} {read()}"); }
+            catch (Exception error) { facts.Add($"{name} <{error.GetType().Name}: {error.Message}>"); }
+        }
+
+        nint hwnd = new WindowInteropHelper(window).Handle;
+        var rows = window.FindName("RowsList") as ListBox;
+        ScrollViewer? scroll = rows is null ? null : Descendants(rows).OfType<ScrollViewer>().FirstOrDefault();
+        Add("desktop", () => $"small {Environment.GetEnvironmentVariable(WindowTrackSizeScope.SmallDesktopEnvironmentVariable) ?? "unset"}, "
+            + $"work area {LibraryRect(SystemParameters.WorkArea)}, virtual screen {SystemParameters.VirtualScreenWidth:0.#}x"
+            + $"{SystemParameters.VirtualScreenHeight:0.#}, max track {SystemParameters.MaximumWindowTrackWidth:0.#}x"
+            + $"{SystemParameters.MaximumWindowTrackHeight:0.#} DIP");
+        Add("monitor", () => LibraryMonitor(hwnd));
+        Add("dpi", () => $"{VisualTreeHelper.GetDpi(window).PixelsPerInchX:0.#} layout"
+            + (hwnd == 0 ? ", no window handle" : $", {LibraryUser32.GetDpiForWindow(hwnd)} native, {LibraryDpiAwareness(hwnd)}"));
+        Add("window", () => $"requested {window.Width:0.#}x{window.Height:0.#}, actual {window.ActualWidth:0.#}x{window.ActualHeight:0.#}, "
+            + $"min {window.MinWidth:0.#}x{window.MinHeight:0.#} DIP, max width {LibraryLimit(window.MaxWidth)}, "
+            + $"max height {LibraryLimit(window.MaxHeight)}, {window.WindowState}, "
+            + (hwnd != 0 && LibraryUser32.GetWindowRect(hwnd, out LibraryNativeRect frame)
+                ? $"native {frame.Right - frame.Left}x{frame.Bottom - frame.Top} px at {frame.Left},{frame.Top}"
+                : "no native frame"));
+        if (tracking is not null) Add("track size scope", () => $"{tracking.MessageCount} WM_GETMINMAXINFO");
+        Add("client", () => window.Content is FrameworkElement client
+            ? $"{client.ActualWidth:0.#} (width {client.Width:0.#})" : "none");
+        Add("details", () => $"{(window.IsDetailsPaneOpen ? "open" : "hidden")} "
+            + $"{((FrameworkElement)window.FindName("GalleryDetailsPanel")).ActualWidth:0.#}");
+        Add("rows list", () => rows is null ? "none" : $"{rows.ActualWidth:0.#}");
+        Add("scroll", () => scroll is null ? "none"
+            : $"{scroll.ActualWidth:0.#}, viewport {scroll.ViewportWidth:0.#}x{scroll.ViewportHeight:0.#}, "
+            + $"extent {scroll.ExtentWidth:0.#}x{scroll.ExtentHeight:0.#}, offset {scroll.VerticalOffset:0.#} of "
+            + $"{scroll.ScrollableHeight:0.#}, bar {scroll.ComputedVerticalScrollBarVisibility}");
+        Add("columns", () =>
+        {
+            string allowed = scroll is null ? "no scroll viewer" : LibraryAllowedColumns(scroll, vm);
+            int widest = vm.Rows.OfType<GalleryTileRow>().Select(row => row.Tiles.Count).DefaultIfEmpty().Max();
+            return (columnsBefore is { } before ? $"{before} before, " : string.Empty)
+                + $"{vm.ColumnCount} now; {allowed}; widest row {widest}";
+        });
+        Add("layout", () => $"window {LibraryLayoutValidity(window)}, rows {(rows is null ? "-" : LibraryLayoutValidity(rows))}, "
+            + $"scroll {(scroll is null ? "-" : LibraryLayoutValidity(scroll))}");
+        Add("dispatcher", () => $"{(window.Dispatcher.CheckAccess() ? "owner thread" : "other thread")}, "
+            + $"{(window.Dispatcher.HasShutdownStarted ? "shutting down" : "running")}, "
+            + $"focus restore {(window.GridResizeFocusRestorePendingForTest ? "pending" : "idle")}");
+        Add("focus", () => $"{LibraryFocusedElement(Keyboard.FocusedElement)}, window {(window.IsActive ? "active" : "inactive")}, "
+            + $"foreground {(hwnd != 0 && LibraryUser32.GetForegroundWindow() == hwnd ? "this window" : "another window")}, "
+            + $"grid {(rows?.IsKeyboardFocusWithin == true ? "has focus" : "has no focus")}");
+        return string.Join("; ", facts);
+    }
+
+    /// <summary>The column count the test's own rule allows for the loaded width (see <see cref="AssertCardsInsideLibrary"/>).</summary>
+    private static string LibraryAllowedColumns(ScrollViewer scroll, GalleryViewModel vm)
+    {
+        double usable = LibraryUsableWidth(scroll);
+        int allowed = GalleryRowBuilder.ColumnCountForWidth(usable, vm.IsCompactLayout, vm.MinimumTrackWidth);
+        return $"{usable:0.#} DIP usable allows {allowed} at a {vm.MinimumTrackWidth:0.#}-DIP "
+            + $"{(vm.IsCompactLayout ? "compact" : "full")} track";
+    }
+
+    private static string LibraryLayoutValidity(UIElement element) =>
+        element.IsMeasureValid && element.IsArrangeValid ? "valid"
+            : $"pending (measure {(element.IsMeasureValid ? "valid" : "invalid")}, arrange {(element.IsArrangeValid ? "valid" : "invalid")})";
+
+    private static string LibraryFocusedElement(IInputElement? element) => element switch
+    {
+        null => "focus on nothing",
+        FrameworkElement framework => $"focus on {framework.GetType().Name}"
+            + (string.IsNullOrEmpty(framework.Name) ? string.Empty : $" {framework.Name}")
+            + (framework.DataContext is null ? string.Empty : $" ({framework.DataContext.GetType().Name})"),
+        _ => $"focus on {element.GetType().Name}",
+    };
+
+    private static string LibraryMonitor(nint hwnd)
+    {
+        if (hwnd == 0) return "no window handle";
+        var info = new LibraryMonitorInfo { Size = Marshal.SizeOf<LibraryMonitorInfo>() };
+        nint monitor = LibraryUser32.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        return monitor != 0 && LibraryUser32.GetMonitorInfo(monitor, ref info)
+            ? $"{LibraryRect(info.Monitor)}, work {LibraryRect(info.Work)} px{((info.Flags & 1) != 0 ? ", primary" : string.Empty)}"
+            : "unavailable";
+    }
+
+    private static string LibraryDpiAwareness(nint hwnd) =>
+        LibraryUser32.GetAwarenessFromDpiAwarenessContext(LibraryUser32.GetWindowDpiAwarenessContext(hwnd)) switch
+        {
+            0 => "DPI unaware",
+            1 => "system DPI aware",
+            2 => "per-monitor DPI aware",
+            int other => $"DPI awareness {other}",
+        };
+
+    // The isolated child's output is read back through a console code page that loses the infinity sign.
+    private static string LibraryLimit(double length) => double.IsPositiveInfinity(length) ? "none" : $"{length:0.#}";
+
+    private static string LibraryRect(Rect rect) => $"{rect.Left:0.#},{rect.Top:0.#} {rect.Width:0.#}x{rect.Height:0.#}";
+
+    private static string LibraryRect(LibraryNativeRect rect) =>
+        $"{rect.Left},{rect.Top} {rect.Right - rect.Left}x{rect.Bottom - rect.Top}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LibraryNativeRect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LibraryMonitorInfo
+    {
+        public int Size;
+        public LibraryNativeRect Monitor, Work;
+        public uint Flags;
+    }
+
+    /// <summary>
+    /// The user32 calls the library layout facts read. Nested so that an import of the same name in
+    /// another part of this partial class cannot collide with them.
+    /// </summary>
+    private static class LibraryUser32
+    {
+        [DllImport("user32.dll")]
+        internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
+
+        [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetMonitorInfo(nint monitor, ref LibraryMonitorInfo info);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetWindowRect(nint hwnd, out LibraryNativeRect rect);
+
+        [DllImport("user32.dll")]
+        internal static extern uint GetDpiForWindow(nint hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern nint GetWindowDpiAwarenessContext(nint hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern int GetAwarenessFromDpiAwarenessContext(nint context);
+
+        [DllImport("user32.dll")]
+        internal static extern nint GetForegroundWindow();
     }
 }
