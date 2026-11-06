@@ -887,7 +887,9 @@ public sealed class OcrResultMergerTests
 
         OcrResult merged = Merge(Result(row), Result(cells));
 
-        Assert.Equal(3, merged.Lines.Count);
+        // Both quantity readings stay visible. The PP-OCR label repeats the Windows label at
+        // the same place, so the merge keeps it once (#226 same-place repetitions).
+        Assert.Equal(2, merged.Lines.Count);
         Assert.Contains(merged.Lines, line => line.Text == row.Text);
         Assert.Contains(merged.Lines, line => line.Text == cellValue);
     }
