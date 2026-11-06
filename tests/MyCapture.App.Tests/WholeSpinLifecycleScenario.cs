@@ -55,6 +55,7 @@ internal sealed class WholeSpinLifecycleScenario : IDisposable
         Assert.Equal(configEntries.Length, configEntries.Select(entry => entry.Key).Distinct(StringComparer.Ordinal).Count());
         RequestedConfigEntries = configEntries.ToArray();
         _engine = new NeuralOcrEngine(verifiedOwnedStore, NullLogger<NeuralOcrEngine>.Instance,
+            runtime: null, engineIdleRelease: null,
             disableWholeSessionSpinning: noSpin,
             wholeSessionInitializing: (options, detector, classifier, recognizer, dictionary) =>
             {
@@ -84,7 +85,10 @@ internal sealed class WholeSpinLifecycleScenario : IDisposable
                 Interlocked.Increment(ref frame.RawCalls);
                 frame.Raw = Evidence.Raw(raw);
             },
-            wholeProgressObserved: _progress);
+            wholeProgressObserved: _progress, wholeStageObserved: null,
+            // This contract predates #223, which made the bounded spin the product default. Apart from
+            // no-spin the product adds no spin entries here, so only the candidate callback adds them.
+            runtimeWholeSessionSpinning: !noSpin);
         _engine.EngineReleased += () =>
         {
             long now = Stopwatch.GetTimestamp();

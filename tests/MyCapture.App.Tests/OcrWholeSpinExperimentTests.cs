@@ -24,6 +24,7 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
     private const string Prefix = "MYCAPTURE_OCR_WHOLE_SPIN_";
     private const string BoundedSpinCandidate = "spin-1000-backoff8";
     private const string BackoffFourSpinCandidate = "spin-1000-backoff4";
+    private const string RuntimeSpinCandidate = "runtime-spin";
     private const string StageObservationVersion = "small-stages-v1";
     private const string WorkerObservationVersion = "small-neural-worker-v2";
     private const string RapidObservationVersion = "small-rapid-public-v3";
@@ -35,7 +36,7 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
         string mode = Required(RunVariable), arm = Required(Prefix + "ARM");
         Assert.Contains(mode, new[] { "smoke", "perf" });
         string comparisonCandidate = Environment.GetEnvironmentVariable(Prefix + "CANDIDATE") ?? "no-spin";
-        Assert.Contains(comparisonCandidate, new[] { "no-spin", BoundedSpinCandidate, BackoffFourSpinCandidate });
+        Assert.Contains(comparisonCandidate, new[] { "no-spin", BoundedSpinCandidate, BackoffFourSpinCandidate, RuntimeSpinCandidate });
         Assert.Contains(arm, new[] { "default", comparisonCandidate });
         string? category = Environment.GetEnvironmentVariable(Prefix + "CATEGORY");
         string? block = Environment.GetEnvironmentVariable(Prefix + "BLOCK");
@@ -105,7 +106,7 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
         {
             // ORT 1.30 can override zero thread counts from these environment variables.
             // The fixed window experiment requires unchanged automatic thread selection.
-            if (comparisonCandidate is BoundedSpinCandidate or BackoffFourSpinCandidate)
+            if (comparisonCandidate is BoundedSpinCandidate or BackoffFourSpinCandidate or RuntimeSpinCandidate)
                 Assert.All(threadEnvironment.Values, value => Assert.Null(value));
             sources = Evidence.Sources(); binaries = Evidence.Binaries(); originalModels = Evidence.Catalog(models);
             Assert.Equal(Evidence.CorpusSha256, Data.FileHash(DiagnosticOutputPaths.Child(corpus, "corpus.json")));
@@ -165,7 +166,8 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
                 // The receiver only stores numbers. Do not assert, throw, allocate or log here.
                 wholeStageObserved: observeWorkerStages
                     ? (stage, timestamp) => active!.Stages!.RecordWorkerStage(stage, timestamp)
-                    : null);
+                    : null,
+                runtimeWholeSessionSpinning: arm == RuntimeSpinCandidate);
             NeuralOcrEngine engine = neural;
             engine.EngineReleased += () => released.TrySetResult(Stopwatch.GetTimestamp());
             engine.ModelVerificationTask.GetAwaiter().GetResult();
@@ -244,8 +246,9 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
                 sources, binaries, loadedNative, windowsAvailable, windowsLanguages, identity, referenceBefore, referenceReportBefore,
                 processId = Environment.ProcessId, logicalProcessors = Environment.ProcessorCount,
                 requestedConfigEntries, appliedCallbackEntries, threadEnvironment,
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(arm == "no-spin", arm == RuntimeSpinCandidate),
                 configReceiptMeaning = "Applied callback entries completed AddSessionConfigEntry; this is not a native effective-default getter.",
-                baselineSpinning = "Unset; runtime build defaults are not assumed to equal 1.",
+                baselineSpinning = "Product default since #223: 1 ms spin with backoff 4 on intra and inter op; runtime-spin restores ONNX Runtime's unset spin. Native effective values are not read back.",
             });
             int count = mode == "perf" ? 50 : 5;
             calls = Enumerable.Range(0, count).Select(index => new Call(inputs[index % 5].Sample.Id, index / 5, observeStages)).ToList();
@@ -340,6 +343,7 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
                 stageClock,
                 mode, arm, category, block, comparisonCandidate, started, finished = DateTimeOffset.UtcNow, warmups,
                 requestedConfigEntries, appliedCallbackEntries, threadEnvironment,
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(arm == "no-spin", arm == RuntimeSpinCandidate),
                 completed = calls.Count(call => call.Result is not null), expectedCalls = mode == "perf" ? 50 : 5,
                 naturalRelease, configuredIdleSeconds = NeuralOcrEngine.EngineIdleRelease.TotalSeconds,
                 lastNeuralCompletedTimestamp = calls.LastOrDefault()?.NeuralFinishedTimestamp, releaseTimestamp,
@@ -373,6 +377,7 @@ public sealed class OcrWholeSpinExperimentTests(ITestOutputHelper output)
             ["session.intra_op.spin_duration_us"] = "1000", ["session.inter_op.spin_duration_us"] = "1000",
             ["session.intra_op.spin_backoff_max"] = "4", ["session.inter_op.spin_backoff_max"] = "4",
         },
+        RuntimeSpinCandidate => new(StringComparer.Ordinal),
         "default" => new(StringComparer.Ordinal),
         _ => throw new InvalidOperationException("Unknown whole-session candidate."),
     };

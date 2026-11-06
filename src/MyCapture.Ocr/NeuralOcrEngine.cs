@@ -37,7 +37,7 @@ internal sealed class NeuralOcrEngine : IDisposable
     private readonly ILogger _log;
     private readonly OnnxRuntimeInitialization _runtime;
     private readonly TimeSpan _engineIdleRelease;
-    private readonly bool _disableWholeSessionSpinning;
+    private readonly IReadOnlyList<KeyValuePair<string, string>> _wholeSessionConfigEntries;
     private readonly Action<SessionOptions, string, string, string, string>? _wholeSessionInitializing;
     private readonly Action<RapidOcrNet.OcrResult>? _wholeResultObserved;
     private readonly IProgress<(int Completed, int Total)>? _wholeProgressObserved;
@@ -66,6 +66,7 @@ internal sealed class NeuralOcrEngine : IDisposable
     }
 
     // Preserve the original constructor signature; only a diagnostic caller selects this overload.
+    // runtimeWholeSessionSpinning restores ONNX Runtime's own spin for a comparison run.
     internal NeuralOcrEngine(
         OcrModelStore store,
         ILogger<NeuralOcrEngine> log,
@@ -75,13 +76,14 @@ internal sealed class NeuralOcrEngine : IDisposable
         Action<SessionOptions, string, string, string, string>? wholeSessionInitializing,
         Action<RapidOcrNet.OcrResult>? wholeResultObserved,
         IProgress<(int Completed, int Total)>? wholeProgressObserved,
-        Action<WholeObservationStage, long>? wholeStageObserved)
+        Action<WholeObservationStage, long>? wholeStageObserved,
+        bool runtimeWholeSessionSpinning = false)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
         _engineIdleRelease = engineIdleRelease ?? EngineIdleRelease;
-        _disableWholeSessionSpinning = disableWholeSessionSpinning;
+        _wholeSessionConfigEntries = WholeSessionConfigEntries(disableWholeSessionSpinning, runtimeWholeSessionSpinning);
         _wholeSessionInitializing = wholeSessionInitializing;
         _wholeResultObserved = wholeResultObserved;
         _wholeProgressObserved = wholeProgressObserved;
@@ -192,6 +194,39 @@ internal sealed class NeuralOcrEngine : IDisposable
         RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
     };
 
+    private static readonly KeyValuePair<string, string>[] ShortWholeSessionSpin =
+    [
+        KeyValuePair.Create("session.intra_op.spin_duration_us", "1000"),
+        KeyValuePair.Create("session.inter_op.spin_duration_us", "1000"),
+        KeyValuePair.Create("session.intra_op.spin_backoff_max", "4"),
+        KeyValuePair.Create("session.inter_op.spin_backoff_max", "4"),
+    ];
+
+    private static readonly KeyValuePair<string, string>[] NoWholeSessionSpin =
+    [
+        KeyValuePair.Create("session.intra_op.allow_spinning", "0"),
+        KeyValuePair.Create("session.inter_op.allow_spinning", "0"),
+    ];
+
+    /// <summary>
+    /// With the duration unset, the ONNX Runtime package lets an idle pool thread spin through 2^20
+    /// turns, each checking for work and pausing once, before it blocks. The whole-image sessions bound
+    /// that spin to about 1 ms, with up to four pauses per turn. On the Windows 10 reference PC that
+    /// returned the same results over 1,000 readings and used 21.5 % less processor time (#223).
+    /// No spin and the runtime's own spin stay for comparison runs.
+    /// </summary>
+    internal static IReadOnlyList<KeyValuePair<string, string>> WholeSessionConfigEntries(bool disableSpinning, bool runtimeSpinning)
+    {
+        if (disableSpinning && runtimeSpinning)
+        {
+            throw new ArgumentException("Choose no spin or the runtime's own spin, not both.", nameof(runtimeSpinning));
+        }
+
+        if (disableSpinning) return NoWholeSessionSpin;
+        if (runtimeSpinning) return Array.Empty<KeyValuePair<string, string>>();
+        return ShortWholeSessionSpin;
+    }
+
     internal bool TryInitialize()
     {
         if (!AppArchitecture.SupportsNeuralOcr) return false;
@@ -243,10 +278,9 @@ internal sealed class NeuralOcrEngine : IDisposable
             // and packs a reading's tensors into one block; with the pixels no longer passed through
             // a PNG (ForSkia), a size read before takes about 2 % longer than in 5.0.0, a new one 12 %.
             options.EnableCpuMemArena = false;
-            if (_disableWholeSessionSpinning)
+            foreach ((string key, string value) in _wholeSessionConfigEntries)
             {
-                options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
-                options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
+                options.AddSessionConfigEntry(key, value);
             }
             _wholeSessionInitializing?.Invoke(options, det, cls, rec, keys);
             engine.InitModels(det, cls, rec, keys, options);
