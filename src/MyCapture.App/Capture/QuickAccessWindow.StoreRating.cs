@@ -82,9 +82,9 @@ internal sealed partial class QuickAccessWindow
 
     /// <summary>
     /// Review: the card becomes the Store dialog's active owner, then the row leaves, keeping its space. It
-    /// also leaves when Review is refused (an error since it showed, the invitation answered elsewhere, an
-    /// attempt that could not be saved), so no button stays that does nothing. While the dialog it owns is
-    /// open, the card does not close itself.
+    /// also leaves when Review is refused (the app exiting or installing an update, the invitation answered
+    /// elsewhere, an attempt that could not be saved), so no button stays that does nothing. An error never
+    /// refuses it. While the dialog it owns is open, the card does not close itself.
     /// </summary>
     private async Task ReviewRatingAsync()
     {

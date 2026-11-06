@@ -907,7 +907,7 @@ public sealed class StoreRatingCoordinatorTests
     });
 
     [Fact]
-    public void StoreRating_ReviewOnACardIsRefusedWhileBusyOrAfterAnError() => StaTestHost.Run(() =>
+    public void StoreRating_ReviewOnACardIsRefusedOnlyWhileBusyOrWhenItsAttemptCannotBeSaved() => StaTestHost.Run(() =>
     {
         var harness = new Harness();
         StoreRatingCoordinator coordinator = harness.Create();
@@ -918,18 +918,59 @@ public sealed class StoreRatingCoordinatorTests
         harness.CardBusy = true;
         Assert.Null(coordinator.AcceptInvitationOnCard(card));
         harness.CardBusy = false;
-        coordinator.RecordCapture(succeeded: false);
-        Assert.Null(coordinator.AcceptInvitationOnCard(card));
         harness.FailSave = true;
-        coordinator.RecordCapture(succeeded: true);
         Assert.Null(coordinator.AcceptInvitationOnCard(card));
         Assert.Equal(0, harness.Requests);
 
         // An attempt that could not be saved is not one: Review can be pressed again.
         Assert.Null(harness.Settings.StoreRating.RequestAttemptedUtc);
         harness.FailSave = false;
+
+        // An error recorded since the card showed refuses the library's Review, never the card's.
+        coordinator.RecordCapture(succeeded: false);
+        Assert.False(coordinator.AcceptInvitation());
         Assert.NotNull(coordinator.AcceptInvitationOnCard(card));
         Assert.Equal(1, harness.Requests);
+        Assert.Same(card, Assert.Single(harness.Owners));
+        Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoreRating_ReviewOnAPredictedCardAfterAnErrorOpensTheStoreBeforeItsCaptureReports(bool captureSucceeds) => StaTestHost.Run(() =>
+    {
+        var harness = new Harness();
+        StoreRatingCoordinator coordinator = harness.Create();
+        var card = new Window();
+        // The previous use failed: only the success this card predicts for its capture makes it eligible.
+        Succeed(coordinator, 2);
+        coordinator.RecordCapture(succeeded: false);
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        Assert.True(harness.Settings.StoreRating.LastCaptureFailed);
+
+        // Review before the capture's save and copy report: the Store opens and the answer is recorded.
+        coordinator.NoteCardOfferAnswered(offer);
+        Task? request = coordinator.AcceptInvitationOnCard(card);
+        Assert.NotNull(request);
+        Assert.Equal(1, harness.Requests);
+        Assert.Same(card, Assert.Single(harness.Owners));
+        Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
+        Assert.Equal("save count=2 attempted=True", harness.Events[harness.Events.IndexOf("request") - 1]);
+
+        // Whatever the capture then reports, the answer stands, the showing stays, and nothing asks again.
+        coordinator.RecordCapture(captureSucceeds);
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
+        harness.Clock.Now = harness.Clock.Now.AddDays(2);
+        Succeed(coordinator, 2);
+        Assert.Null(coordinator.TryOfferOnCard(practice: false));
+        Assert.False(coordinator.NotifyUserReturned());
+        Assert.Null(coordinator.AcceptInvitationOnCard(card));
+        Assert.Equal(1, harness.Requests);
+        Assert.Equal(0, harness.Invites);
     });
 
     [Fact]

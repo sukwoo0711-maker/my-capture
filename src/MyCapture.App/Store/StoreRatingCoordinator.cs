@@ -163,18 +163,24 @@ internal sealed class StoreRatingCoordinator
         internal bool WriteQueued { get; set; }
     }
 
-    /// <summary>Only the invitation's explicit Review button in a library or settings window may call this.</summary>
-    internal bool AcceptInvitation() => Accept(owner: null, userActive: _isUserActive(), busy: _isBusy());
+    /// <summary>
+    /// Only the invitation's explicit Review button in a library or settings window may call this. An error
+    /// recorded since the invitation showed refuses it.
+    /// </summary>
+    internal bool AcceptInvitation() => Accept(owner: null, userActive: _isUserActive(), busy: _isBusy(), refuseAfterError: true);
 
     /// <summary>
     /// Only the Review button on a capture card's invitation may call this. The Store dialog opens over
     /// <paramref name="card"/>, which the user has just clicked, so no library or settings window has to
-    /// be active. Returns the request, or null when it is refused and nothing opens.
+    /// be active, and the attempt is recorded so the invitation never returns. No error refuses it: a card
+    /// may have predicted the success of its capture while the live state still holds the previous use's
+    /// error, and its save and copy may not have reported yet. Returns the request, or null when it is
+    /// refused (exit, an update being installed, or an attempt that could not be saved) and nothing opens.
     /// </summary>
     internal Task? AcceptInvitationOnCard(Window card)
     {
         ArgumentNullException.ThrowIfNull(card);
-        return Accept(card, userActive: true, busy: _isCardBusy()) ? LastRequest : null;
+        return Accept(card, userActive: true, busy: _isCardBusy(), refuseAfterError: false) ? LastRequest : null;
     }
 
     /// <summary>The invitation's Close button, in any window or on a card: it is not offered again.</summary>
@@ -201,12 +207,12 @@ internal sealed class StoreRatingCoordinator
         Persist(settings);
     }
 
-    private bool Accept(Window? owner, bool userActive, bool busy)
+    private bool Accept(Window? owner, bool userActive, bool busy, bool refuseAfterError)
     {
         AppSettings settings = _settings();
         StoreRatingState state = settings.StoreRating;
         if (!_isPackaged || !userActive || busy || state.InvitationShownUtc is null
-            || StoreRatingPolicy.IsAnswered(state) || state.LastCaptureFailed) return false;
+            || StoreRatingPolicy.IsAnswered(state) || (refuseAfterError && state.LastCaptureFailed)) return false;
         StoreRatingPolicy.MarkAttempted(state, _clock.GetUtcNow());
         if (!Persist(settings))
         {

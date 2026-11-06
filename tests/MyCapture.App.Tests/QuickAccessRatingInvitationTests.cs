@@ -391,6 +391,41 @@ public sealed class QuickAccessRatingInvitationTests
         Assert.False(card.WithdrawRatingInvitation());
     });
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReviewOnAPredictedCardAfterAnErrorOpensTheStoreBeforeTheCaptureReports(bool captureSucceeds) => RunWithShell(false, shell =>
+    {
+        // The previous capture failed: only this capture's predicted success puts the invitation on its card.
+        shell.StoreRating.RecordCapture(false);
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+
+        // Review before the save and copy report: the Store dialog opens over the card and the answer is saved.
+        Click(card.RatingInvitationForTest.Review);
+        Assert.Same(card, Assert.Single(shell.RatingOwners));
+        Assert.NotNull(shell.Settings.StoreRating.RequestAttemptedUtc);
+        Assert.Contains(shell.Settings.StoreRating.RequestAttemptedUtc, shell.SavedRatings);
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.False(shell.IsRatingInvitationVisible);
+
+        copy.SetResult(captureSucceeds);
+        shell.Wait(handler);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.False(card.WithdrawRatingInvitation());
+
+        // Answered: no later card carries the invitation.
+        shell.Dismiss();
+        shell.CopyResult = null;
+        Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
+        Assert.Single(shell.RatingOwners);
+    });
+
     [Fact]
     public void AFailedPredictedCaptureWithdrawsAfterItsCardWasClosed() => RunWithShell(false, shell =>
     {
