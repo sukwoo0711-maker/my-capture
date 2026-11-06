@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -29,13 +31,18 @@ namespace MyCapture.App.Tests;
 /// #221 opt-in probe. Opens the library preview of large PNG captures through the real toolbar
 /// button and records, per sample, the click handler's own time, the longest UI-thread stall until
 /// the preview's first render, and the time to that render. It uses only members that exist both
-/// before and after the background decode, so the same file measures both revisions.
+/// before and after the background decode, so the same file measures both revisions. The library
+/// sits in the primary monitor's work area, so the preview opens there wherever the pointer is.
 /// </summary>
 public sealed class GalleryPreviewResponsivenessProbeTests
 {
     internal const string OutputVariable = "MYCAPTURE_PREVIEW_PERF";
     private const string LabelVariable = "MYCAPTURE_PREVIEW_PERF_LABEL";
-    private const int Warmups = 3, Measured = 10;
+    // Comma-separated WIDTHxHEIGHT; the isolated child has 150 s, so a run can measure one size.
+    private const string SizesVariable = "MYCAPTURE_PREVIEW_PERF_SIZES";
+    private const int Warmups = 3, Measured = 20, StallSamples = 5;
+    // A sample whose preview did not open inside the primary work area is skipped; this many tries at most.
+    private const int MaxSamples = Warmups + 2 * Measured;
     private static readonly (int Width, int Height)[] Sizes = [(1920, 1080), (3840, 2160), (1920, 12000)];
 
     [GalleryPreviewPerfFact]
@@ -52,43 +59,64 @@ public sealed class GalleryPreviewResponsivenessProbeTests
             application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
             application.Resources["PinLabel"] = new PinLabelConverter();
             application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
-            var rows = new List<string> { "label,width,height,file_bytes,sample,phase,handler_ms,open_ms,longest_stall_ms" };
+            var rows = new List<string>
+            {
+                "label,width,height,file_bytes,sample,phase,handler_ms,open_ms,longest_stall_ms,preview_on_primary,cursor_x,cursor_y",
+            };
             var summary = new List<object>();
+            Rect32 primaryWork = PrimaryWorkArea();
+            (int X, int Y) cursorAtStart = Cursor();
+            (int Width, int Height)[] sizes = Environment.GetEnvironmentVariable(SizesVariable) is { Length: > 0 } list
+                ? [.. list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(ParseSize)]
+                : Sizes;
             try
             {
-                using var fixture = new ProbeFixture(Sizes);
+                using var fixture = new ProbeFixture(sizes);
                 GalleryWindow window = fixture.Window;
                 window.Show();
                 window.UpdateLayout();
                 var previewButton = (Button)window.FindName("PreviewSelectedButton");
                 var clock = Stopwatch.StartNew();
-                using var watch = new UiStallWatch(window.Dispatcher);
                 foreach ((CaptureRecord record, long fileBytes) in fixture.Images)
                 {
                     var handler = new List<double>();
                     var open = new List<double>();
                     var stall = new List<double>();
-                    for (int sample = 0; sample < Warmups + Measured; sample++)
+                    var stallOpen = new List<double>();
+                    int skipped = 0;
+                    // Opening times come from samples without the stall watch: its beat, posted about every
+                    // millisecond, is a posted message, and WPF holds Input-priority work such as
+                    // ContentRendered while one is queued.
+                    for (int sample = 0; sample < MaxSamples && handler.Count < Measured; sample++)
                     {
-                        Settle(window);
-                        fixture.Model.Select(record.Id);
-                        Settle(window);
-                        (double handled, double opened, double longest) = Open(window, previewButton, record.Id, watch, clock);
-                        bool measured = sample >= Warmups;
-                        rows.Add(string.Join(',', label, record.Width, record.Height, fileBytes, sample,
-                            measured ? "measured" : "warmup", Ms(handled), Ms(opened), Ms(longest)));
-                        if (!measured) continue;
-                        handler.Add(handled); open.Add(opened); stall.Add(longest);
+                        (string phase, double handled, double opened, _) =
+                            Sample(window, fixture, previewButton, record, fileBytes, sample, watch: null, clock, primaryWork, label, rows);
+                        if (phase == "skipped") skipped++;
+                        if (phase != "measured") continue;
+                        handler.Add(handled); open.Add(opened);
+                    }
+                    using (var watch = new UiStallWatch(window.Dispatcher))
+                    {
+                        for (int sample = 0; sample < StallSamples; sample++)
+                        {
+                            (string phase, _, double opened, double longest) =
+                                Sample(window, fixture, previewButton, record, fileBytes, sample, watch, clock, primaryWork, label, rows);
+                            if (phase != "stall") continue;
+                            stall.Add(longest); stallOpen.Add(opened);
+                        }
                     }
                     summary.Add(new
                     {
-                        width = record.Width, height = record.Height, file_bytes = fileBytes, n = Measured,
-                        handler_ms = Stats(handler), open_ms = Stats(open), longest_stall_ms = Stats(stall),
+                        width = record.Width, height = record.Height, file_bytes = fileBytes, n = handler.Count,
+                        skipped_off_primary = skipped,
+                        handler_ms = Stats(handler), open_ms = Stats(open),
+                        longest_stall_ms = Stats(stall), open_ms_with_stall_watch = Stats(stallOpen),
                     });
                 }
                 Settle(window);
             }
             finally { application.Shutdown(); }
+            (int X, int Y) cursorAtEnd = Cursor();
 
             string assembly = typeof(GalleryWindow).Assembly.Location;
             File.WriteAllLines(DiagnosticOutputPaths.Child(output, $"preview-{label}-samples.csv"), rows, Encoding.UTF8);
@@ -100,18 +128,46 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                 os = Environment.OSVersion.VersionString,
                 runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 warmups = Warmups,
+                primary_work_area_px = new { left = primaryWork.Left, top = primaryWork.Top, right = primaryWork.Right, bottom = primaryWork.Bottom },
+                cursor_px = new { start = new { x = cursorAtStart.X, y = cursorAtStart.Y }, end = new { x = cursorAtEnd.X, y = cursorAtEnd.Y } },
                 sizes = summary,
                 notes = new[]
                 {
                     "Each sample clicks PreviewSelectedButton on the UI thread and waits in a dispatcher frame until the preview's ContentRendered (PracticeSignals.PictureOpened).",
-                    "handler_ms: the click handler's own time. longest_stall_ms: the longest wait of a Send-priority beat posted about every 1 ms from another thread, or the handler time if longer.",
-                    "The PNG files are synthetic screenshot-like images; the OS file cache is warm after the first sample. n=10 per size: report p50 and max, not p95.",
+                    "handler_ms and open_ms: the click handler's own time and the time to ContentRendered, from samples with no stall watch (phase measured).",
+                    "longest_stall_ms: the longest wait of a Send-priority beat posted about every 1 ms from another thread, or the handler time if longer, from separate samples (phase stall). The beat is a posted message, which holds Input-priority work such as ContentRendered, so open_ms_with_stall_watch is not an opening time.",
+                    "The library window sits inside the primary monitor's work area (SystemParameters.WorkArea), so the preview, centred on it, opens there whatever monitor the pointer is on. A sample whose preview window rectangle (GetWindowRect) is not inside the primary monitor's work area is recorded as skipped and left out. cursor_x/cursor_y: the pointer read with GetCursorPos; the probe never moves it.",
+                    "The PNG files are synthetic screenshot-like images; the OS file cache is warm after the first sample. n=20 measured per size and run; p50 and p90 interpolate linearly between ranks.",
                 },
             }, new JsonSerializerOptions { WriteIndented = true }));
         }, typeof(GalleryPreviewResponsivenessProbeTests));
 
-    private static (double Handled, double Opened, double Longest) Open(GalleryWindow window, Button button, Guid id,
-        UiStallWatch watch, Stopwatch clock)
+    private static (int Width, int Height) ParseSize(string size)
+    {
+        string[] parts = size.Split('x');
+        return parts.Length == 2 && int.TryParse(parts[0], CultureInfo.InvariantCulture, out int width)
+            && int.TryParse(parts[1], CultureInfo.InvariantCulture, out int height) && width > 0 && height > 0
+            ? (width, height) : throw new FormatException($"{SizesVariable} takes WIDTHxHEIGHT values, not '{size}'.");
+    }
+
+    // One preview opening from a settled library; its row says how the sample counts.
+    private static (string Phase, double Handled, double Opened, double Longest) Sample(GalleryWindow window, ProbeFixture fixture,
+        Button button, CaptureRecord record, long fileBytes, int sample, UiStallWatch? watch, Stopwatch clock, Rect32 primaryWork,
+        string label, List<string> rows)
+    {
+        Settle(window);
+        fixture.Model.Select(record.Id);
+        Settle(window);
+        (int cursorX, int cursorY) = Cursor();
+        (double handled, double opened, double longest, bool onPrimary) = Open(window, button, record.Id, watch, clock, primaryWork);
+        string phase = !onPrimary ? "skipped" : watch is not null ? "stall" : sample < Warmups ? "warmup" : "measured";
+        rows.Add(string.Join(',', label, record.Width, record.Height, fileBytes, sample, phase,
+            Ms(handled), Ms(opened), Ms(longest), onPrimary ? 1 : 0, cursorX, cursorY));
+        return (phase, handled, opened, longest);
+    }
+
+    private static (double Handled, double Opened, double Longest, bool OnPrimary) Open(GalleryWindow window, Button button, Guid id,
+        UiStallWatch? watch, Stopwatch clock, Rect32 primaryWork)
     {
         var frame = new DispatcherFrame();
         double openedAt = double.NaN;
@@ -126,14 +182,18 @@ public sealed class GalleryPreviewResponsivenessProbeTests
         PracticeSignals.PictureOpened += Opened;
         try
         {
-            watch.Reset();
+            watch?.Reset();
             double start = clock.Elapsed.TotalMilliseconds;
             button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             double handled = clock.Elapsed.TotalMilliseconds;
             timeout.Start();
             if (double.IsNaN(openedAt)) Dispatcher.PushFrame(frame);
             if (double.IsNaN(openedAt)) throw new TimeoutException("The preview did not render.");
-            return (handled - start, openedAt - start, Math.Max(watch.MaxLatencyMs, handled - start));
+            bool onPrimary = window.OwnedWindows.Cast<Window>().SingleOrDefault() is { } preview
+                && GetWindowRect(new WindowInteropHelper(preview).Handle, out Rect32 bounds)
+                && bounds.Left >= primaryWork.Left && bounds.Top >= primaryWork.Top
+                && bounds.Right <= primaryWork.Right && bounds.Bottom <= primaryWork.Bottom;
+            return (handled - start, openedAt - start, Math.Max(watch?.MaxLatencyMs ?? 0, handled - start), onPrimary);
         }
         finally
         {
@@ -141,6 +201,55 @@ public sealed class GalleryPreviewResponsivenessProbeTests
             PracticeSignals.PictureOpened -= Opened;
         }
     }
+
+    private static Rect32 PrimaryWorkArea()
+    {
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromPoint(new Point32(0, 0), MonitorDefaultToPrimary), ref info))
+            throw new InvalidOperationException("The primary monitor's work area could not be read.");
+        return info.Work;
+    }
+
+    private static (int X, int Y) Cursor() => GetCursorPos(out Point32 point) ? (point.X, point.Y) : (int.MinValue, int.MinValue);
+
+    private const uint MonitorDefaultToPrimary = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point32(int x, int y)
+    {
+        public int X = x;
+        public int Y = y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect32
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public Rect32 Monitor;
+        public Rect32 Work;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out Point32 point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out Rect32 rect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(Point32 point, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     private static void Settle(GalleryWindow window)
     {
@@ -160,10 +269,24 @@ public sealed class GalleryPreviewResponsivenessProbeTests
 
     private static object Stats(List<double> values)
     {
+        if (values.Count == 0) return new { n = 0 };
         double[] sorted = [.. values.Order()];
-        double p50 = sorted.Length % 2 == 1 ? sorted[sorted.Length / 2]
-            : (sorted[sorted.Length / 2 - 1] + sorted[sorted.Length / 2]) / 2;
-        return new { p50 = Math.Round(p50, 3), min = Math.Round(sorted[0], 3), max = Math.Round(sorted[^1], 3), samples = values.Select(v => Math.Round(v, 3)).ToArray() };
+        return new
+        {
+            n = sorted.Length,
+            p50 = Math.Round(Percentile(sorted, 0.5), 3), p90 = Math.Round(Percentile(sorted, 0.9), 3),
+            min = Math.Round(sorted[0], 3), max = Math.Round(sorted[^1], 3),
+            samples = values.Select(v => Math.Round(v, 3)).ToArray(),
+        };
+    }
+
+    // Linear interpolation between the closest ranks (numpy's default, Excel's PERCENTILE.INC).
+    private static double Percentile(double[] sorted, double fraction)
+    {
+        double position = fraction * (sorted.Length - 1);
+        int lower = (int)Math.Floor(position);
+        int upper = Math.Min(lower + 1, sorted.Length - 1);
+        return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
     }
 
     /// <summary>Posts a Send-priority beat about every millisecond and keeps the longest wait since the last reset.</summary>
@@ -262,13 +385,18 @@ public sealed class GalleryPreviewResponsivenessProbeTests
             _presenter = new OcrResultPresenter(ocr, Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
             var indexing = new OcrIndexingService(controller, ocr, queue.GetDirectory, () => settings.Ocr,
                 NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
+            Rect work = SystemParameters.WorkArea;
             Window = new GalleryWindow(Model, controller,
                 new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
                 new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,
                 NullLoggerFactory.Instance, _presenter, () => settings.Ocr, indexing, new NoPrivacy(), NullLogger.Instance)
             {
+                // Inside the primary monitor's work area, so the preview, centred on this window, opens on that
+                // monitor whatever monitor the pointer is on.
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000,
+                ShowActivated = false, ShowInTaskbar = false,
+                Left = work.Left + 24, Top = work.Top + 24,
+                Width = Math.Min(1280, work.Width - 48), Height = Math.Min(860, work.Height - 48),
             };
         }
 
