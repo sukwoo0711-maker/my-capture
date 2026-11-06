@@ -4169,7 +4169,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture 문의</value></data>
   <data name="Support_ReportError" xml:space="preserve"><value>오류 보고</value></data>
   <data name="Support_ErrorSummary" xml:space="preserve"><value>오류 요약</value></data>
-  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>보낼 내용을 확인하고 필요한 부분을 고칠 수 있습니다.</value></data>
+  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>보내기 전에 요약을 확인하고 고칠 수 있습니다.</value></data>
   <data name="Support_ErrorIssueTitle" xml:space="preserve"><value>MyCapture 오류 보고: {0}</value></data>
   <data name="Support_ErrorKind" xml:space="preserve"><value>오류 종류</value></data>
   <data name="Support_ErrorTime" xml:space="preserve"><value>발생 시각</value></data>
@@ -4183,8 +4183,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Support_RecentLog" xml:space="preserve"><value>최근 로그</value></data>
   <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>처리되지 않은 오류</value></data>
   <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>예기치 않은 종료</value></data>
-  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>신고 페이지를 열었습니다. 길이 제한으로 일부 내용이 줄었습니다. 전체 내용은 복사하거나 진단 묶음으로 저장할 수 있습니다.</value></data>
-  <data name="Support_BundleSaved" xml:space="preserve"><value>진단 묶음을 저장하고 폴더를 열었습니다.</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>GitHub 이슈 작성 페이지를 열었습니다. 길이 제한으로 일부 내용이 줄었습니다. 전체 내용은 복사하거나 진단 묶음으로 저장할 수 있습니다.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료, 폴더 열림</value></data>
   <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>진단 묶음을 저장했지만 폴더를 열지 못했습니다.</value></data>
   <data name="Support_BundleFailed" xml:space="preserve"><value>진단 묶음을 저장하지 못했습니다. 다른 위치를 선택한 뒤 다시 시도하십시오.</value></data>
   <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>지난번에 MyCapture가 예기치 않게 종료되었습니다</value></data>

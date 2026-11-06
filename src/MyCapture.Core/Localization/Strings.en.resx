@@ -4183,8 +4183,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Support_RecentLog" xml:space="preserve"><value>Recent log lines</value></data>
   <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>Unhandled error</value></data>
   <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>Unexpected exit</value></data>
-  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>The report page is open. Some content was shortened to fit its length limit. Copy the full text or save a diagnostics bundle to keep everything.</value></data>
-  <data name="Support_BundleSaved" xml:space="preserve"><value>The diagnostics bundle was saved and its folder is open.</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>The GitHub issue page is open. Some content was shortened to fit its length limit. Copy the full text or save a diagnostics bundle to keep everything.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>Diagnostics bundle saved, folder opened</value></data>
   <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>The diagnostics bundle was saved, but its folder could not be opened.</value></data>
   <data name="Support_BundleFailed" xml:space="preserve"><value>The diagnostics bundle could not be saved. Choose another location and try again.</value></data>
   <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>MyCapture closed unexpectedly last time</value></data>
