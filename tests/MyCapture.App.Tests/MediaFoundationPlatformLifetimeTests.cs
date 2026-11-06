@@ -145,27 +145,39 @@ public sealed class MediaFoundationPlatformLifetimeTests
         long uses = 0;
         bool stop = false;
         using var go = new ManualResetEventSlim();
-        Task[] workers = Enumerable.Range(0, 6).Select(_ => Task.Factory.StartNew(() =>
+        var workers = new List<Task>(6);
+        long atExit = 0;
+        try
         {
-            go.Wait();
-            while (!Volatile.Read(ref stop))
+            for (int worker = 0; worker < 6; worker++)
             {
-                using MediaFoundationLifetime.Lease outer = lifetime.Acquire();
-                using MediaFoundationLifetime.Lease inner = lifetime.Acquire();
-                Interlocked.Increment(ref uses);
+                workers.Add(Task.Factory.StartNew(() =>
+                {
+                    go.Wait();
+                    while (!Volatile.Read(ref stop))
+                    {
+                        using MediaFoundationLifetime.Lease outer = lifetime.Acquire();
+                        using MediaFoundationLifetime.Lease inner = lifetime.Acquire();
+                        Interlocked.Increment(ref uses);
+                    }
+                }, TaskCreationOptions.LongRunning));
             }
-        }, TaskCreationOptions.LongRunning)).ToArray();
 
-        go.Set();
-        SpinWait.SpinUntil(() => Interlocked.Read(ref uses) >= 20_000, TimeSpan.FromSeconds(30));
-        // While the app runs, concurrent recordings and edits never restart the platform.
-        Assert.Equal((1, 0), (native.Startups, native.Shutdowns));
+            go.Set();
+            SpinWait.SpinUntil(() => Interlocked.Read(ref uses) >= 20_000, TimeSpan.FromSeconds(30));
+            // While the app runs, concurrent recordings and edits never restart the platform.
+            Assert.Equal((1, 0), (native.Startups, native.Shutdowns));
 
-        lifetime.Shutdown();
-        long atExit = Interlocked.Read(ref uses);
-        SpinWait.SpinUntil(() => Interlocked.Read(ref uses) >= atExit + 20_000, TimeSpan.FromSeconds(30));
-        Volatile.Write(ref stop, true);
-        await Task.WhenAll(workers);
+            lifetime.Shutdown();
+            atExit = Interlocked.Read(ref uses);
+            SpinWait.SpinUntil(() => Interlocked.Read(ref uses) >= atExit + 20_000, TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            Volatile.Write(ref stop, true);
+            go.Set();
+            await Task.WhenAll(workers);
+        }
 
         Assert.True(Interlocked.Read(ref uses) >= atExit + 20_000, "The workers stopped making progress.");
         Assert.Equal(0, lifetime.ActiveLeases);
@@ -181,7 +193,7 @@ public sealed class MediaFoundationPlatformLifetimeTests
         var call = new Regex(@"\bMF(Startup|Shutdown)\s*\(", RegexOptions.CultureInvariant);
         string[] callers = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
             .Where(file => !Path.GetRelativePath(root, file).Split(Path.DirectorySeparatorChar).Any(part => part is "bin" or "obj"))
-            .Where(file => call.IsMatch(File.ReadAllText(file)))
+            .Where(file => call.IsMatch(WithoutComments(File.ReadAllText(file))))
             .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
             .ToArray();
         Assert.Equal(new[] { "src/MyCapture.Platform/Recording/MediaFoundationPlatform.cs" }, callers);
@@ -190,15 +202,37 @@ public sealed class MediaFoundationPlatformLifetimeTests
     [Fact]
     public void AppExit_ShutsMediaFoundationDownAfterTheServicesThatRecordAndExport()
     {
-        string source = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "MyCapture.App", "App.xaml.cs"));
-        int exit = source.IndexOf("protected override void OnExit(ExitEventArgs e)", StringComparison.Ordinal);
+        string source = WithoutComments(File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "MyCapture.App", "App.xaml.cs")));
+        Match declaration = Regex.Match(source,
+            @"\bprotected\s+override\s+void\s+OnExit\s*\(\s*ExitEventArgs\s+e\s*\)\s*\{",
+            RegexOptions.CultureInvariant);
+        int exit = declaration.Success ? declaration.Index : -1;
         Assert.True(exit >= 0, "App.OnExit was not found.");
-        int services = source.IndexOf("_services?.Dispose();", exit, StringComparison.Ordinal);
-        int shutdown = source.IndexOf("MediaFoundationPlatform.Shutdown();", exit, StringComparison.Ordinal);
-        int end = source.IndexOf("base.OnExit(e);", exit, StringComparison.Ordinal);
+        Match servicesCall = new Regex(@"\b_services\s*\?\s*\.\s*Dispose\s*\(\s*\)\s*;", RegexOptions.CultureInvariant).Match(source, exit);
+        Match shutdownCall = new Regex(@"\bMediaFoundationPlatform\s*\.\s*Shutdown\s*\(\s*\)\s*;", RegexOptions.CultureInvariant).Match(source, exit);
+        Match baseCall = new Regex(@"\bbase\s*\.\s*OnExit\s*\(\s*e\s*\)\s*;", RegexOptions.CultureInvariant).Match(source, exit);
+        int services = servicesCall.Success ? servicesCall.Index : -1;
+        int shutdown = shutdownCall.Success ? shutdownCall.Index : -1;
+        int end = baseCall.Success ? baseCall.Index : -1;
         Assert.True(services > exit && shutdown > services && end > shutdown,
             $"OnExit must call MediaFoundationPlatform.Shutdown() after _services?.Dispose() (exit {exit}, services {services}, shutdown {shutdown}, end {end}).");
     }
+
+    private static string WithoutComments(string source) => Regex.Replace(source,
+        """
+        (?<literal>
+            (?<quotes>"{3,})[\s\S]*?\k<quotes>
+            | @ " (?: "" | [^"] )* "
+            | " (?: \\[\s\S] | [^"\\] )* "
+            | ' (?: \\[\s\S] | [^'\\] )* '
+        )
+        | //[^\r\n]*
+        | /\*[\s\S]*?\*/
+        """,
+        match => match.Groups["literal"].Success
+            ? match.Value
+            : Regex.Replace(match.Value, @"[^\r\n]", " "),
+        RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace);
 
     /// <summary>
     /// The component check from #243 in a fresh process: encode and read back the same 640x360,
@@ -342,47 +376,80 @@ public sealed class MediaFoundationPlatformLifetimeTests
         // 2. Recording while a reader decodes and probes another clip: both hold a lease at once.
         int leasesWhileRecording = -1, leasesWhileBoth = -1, leasesWhileProbing = -1;
         string overlapPath = Path.Combine(work, "overlap.mp4");
-        using (var recorderOpen = new ManualResetEventSlim())
-        using (var editDone = new ManualResetEventSlim())
+        var recorderOpen = new ManualResetEventSlim();
+        var editDone = new ManualResetEventSlim();
+        Exception? recordFailure = null;
+        var recorder = new Thread(() =>
         {
-            Exception? recordFailure = null;
-            var recorder = new Thread(() =>
+            try
             {
-                try
-                {
-                    Encode(overlapPath, new byte[Width * 4 * Height], FramesPerClip, complete: true,
-                        midway: () =>
-                        {
-                            recorderOpen.Set();
-                            if (!editDone.Wait(TimeSpan.FromSeconds(60))) throw new TimeoutException("The edit did not finish.");
-                        });
-                }
-                catch (Exception ex)
-                {
-                    recordFailure = ex;
-                    recorderOpen.Set();
-                }
-            })
+                Encode(overlapPath, new byte[Width * 4 * Height], FramesPerClip, complete: true,
+                    midway: () =>
+                    {
+                        recorderOpen.Set();
+                        if (!editDone.Wait(TimeSpan.FromSeconds(60))) throw new TimeoutException("The edit did not finish.");
+                    });
+            }
+            catch (Exception ex)
             {
-                IsBackground = true,
-                Name = "MF lifetime recorder",
-            };
+                recordFailure = ex;
+                recorderOpen.Set();
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "MF lifetime recorder",
+        };
+        bool recorderStarted = false, recorderOpened = false, recorderFinished = false;
+        try
+        {
             recorder.Start();
-            Expect(recorderOpen.Wait(TimeSpan.FromSeconds(60)), "The recorder did not start.");
-            leasesWhileRecording = life.ActiveLeases;
-            using (var reader = new MediaFoundationVideoFrameReader(Path.Combine(work, "clip-00.mp4")))
+            recorderStarted = true;
+            recorderOpened = recorderOpen.Wait(TimeSpan.FromSeconds(60));
+            Expect(recorderOpened, "The recorder did not start.");
+            if (recorderOpened)
             {
+                leasesWhileRecording = life.ActiveLeases;
+                using var reader = new MediaFoundationVideoFrameReader(Path.Combine(work, "clip-00.mp4"));
                 leasesWhileBoth = life.ActiveLeases;
                 for (int frame = 0; frame < FramesPerClip; frame++) _ = reader.ReadFrameAt((frame * 1000.0 / Fps) + 1.0);
                 VideoSourceInfo info = MediaFoundationVideoFrameReader.ReadSourceInfo(Path.Combine(work, "clip-01.mp4"));
                 Expect(info.StudioRange, "ReadSourceInfo during a recording no longer reports studio range.");
                 leasesWhileProbing = life.ActiveLeases;
             }
-
-            editDone.Set();
-            Expect(recorder.Join(TimeSpan.FromSeconds(60)), "The recorder did not finish.");
-            Expect(recordFailure is null, $"Recording during the edit failed: {recordFailure}");
         }
+        finally
+        {
+            editDone.Set();
+            if (recorderStarted)
+            {
+                recorderFinished = recorder.Join(TimeSpan.FromSeconds(60));
+                Expect(recorderFinished, "The recorder did not finish.");
+            }
+
+            if (!recorderStarted || recorderFinished)
+            {
+                editDone.Dispose();
+                recorderOpen.Dispose();
+            }
+            else
+            {
+                // A timed-out native encode may still return. Keep its events alive until its
+                // thread has exited; the parent process's existing deadline bounds a stuck child.
+                _ = Task.Run(() =>
+                {
+                    recorder.Join();
+                    editDone.Dispose();
+                    recorderOpen.Dispose();
+                });
+            }
+        }
+
+        // Later checks require a finished recording and no outstanding recorder lease.
+        if (!recorderFinished) return new Dictionary<string, object?> { ["failures"] = failures };
+        Expect(recordFailure is null, $"Recording during the edit failed: {recordFailure}");
+        if (!recorderOpened || recordFailure is not null)
+            return new Dictionary<string, object?> { ["failures"] = failures };
 
         ClipCheck overlap = ReadBack(overlapPath);
         Expect(leasesWhileRecording == 1 && leasesWhileBoth == 2 && leasesWhileProbing == 2,
