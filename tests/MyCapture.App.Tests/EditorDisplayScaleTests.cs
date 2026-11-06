@@ -439,10 +439,11 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             if (width <= 480)
             {
                 Assert.Equal(980, window.Width);
-                // Narrow windows reserve more than one row of property controls.
+                // The default window keeps every property set on one row, so it no longer reserves a second
+                // row (an empty 84 DIP band) while nothing is selected.
                 var inspector = (FrameworkElement)typeof(AnnotationEditorControl)
                     .GetField("_inspectorPanel", PrivateInstance)!.GetValue(window.Editor)!;
-                Assert.True(inspector.ActualHeight > 60, $"Property bar height: {inspector.ActualHeight}");
+                Assert.InRange(inspector.ActualHeight, 0.001, 48.001);
             }
         });
     });
