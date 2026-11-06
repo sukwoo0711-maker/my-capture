@@ -163,8 +163,9 @@ public sealed class CaptureWindowExclusionTests
             _ = new WindowInteropHelper(window).EnsureHandle();
             NativeExclusion.AssertWindow(window, supported);
             Border surface = Assert.IsType<Border>(window.Content);
-            Assert.Equal(new Thickness(supported ? 8 : 0), surface.Margin);
-            Assert.Equal(new CornerRadius(supported ? 12 : 0), surface.CornerRadius);
+            // The shadow band and the corners of a notification card.
+            Assert.Equal(new Thickness(supported ? ThemedShellPresenter.ShadowMargin : 0), surface.Margin);
+            Assert.Equal(supported ? ThemedShellPresenter.CardCorner : new CornerRadius(0), surface.CornerRadius);
             Assert.Equal(328, window.Width - surface.Margin.Left - surface.Margin.Right);
             if (!supported) Assert.Null(surface.Effect);
         }

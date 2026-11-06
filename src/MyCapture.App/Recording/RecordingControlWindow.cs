@@ -48,6 +48,13 @@ internal sealed class RecordingControlWindow : Window
     private const double BorderThicknessPx = 6.0;
     private const double StripHeight = 56.0;
 
+    /// <summary>
+    /// The clear band a layered window keeps around the palette for the palette's Shadow.Floating,
+    /// the band the countdown keeps for the same shadow (<see cref="CountdownWindow.ShadowBand"/>).
+    /// Without it the window ended at the palette's edges and cut the shadow off along them.
+    /// </summary>
+    internal const double ShadowBand = 32;
+
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
     // Preparation and finalisation keep room for their status. The running session uses a
@@ -796,7 +803,8 @@ internal sealed class RecordingControlWindow : Window
                 scale,
                 BorderThicknessPx,
                 StripHeight,
-                CurrentStripWidth);
+                CurrentStripWidth,
+                AllowsTransparency ? ShadowBand : 0);
             // An excluded frame may sit inside the capture so full-screen edges remain visible.
             // Without exclusion keep every border pixel outside the source rectangle.
             RectD frameBox = IsRecording && _captureExclusionApplied ? _screenRegion : layout.FrameBounds;
@@ -1787,7 +1795,8 @@ internal static class RecordingControlLayoutPlanner
         double dpiScale,
         double borderDip,
         double stripHeightDip,
-        double minimumStripWidthDip)
+        double minimumStripWidthDip,
+        double shadowBandDip = 0)
     {
         RectD region = screenRegion.Normalized().ToPixelBounds();
         RectD desktop = paletteWorkArea.Normalized().ToPixelBounds();
@@ -1816,7 +1825,10 @@ internal static class RecordingControlLayoutPlanner
                     Math.Max(desktop.Top, desktop.Bottom - stripHeightPx));
 
         var palette = new RectD(stripLeft, stripTop, stripWidthPx, stripHeightPx);
-        RectD window = Union(frame, palette);
+        // The window also holds the band the palette's shadow draws into, as far as the work area
+        // reaches. Past it the band would lie over the taskbar, whose clicks its shadow pixels take.
+        RectD shadow = Overlap(palette.Inflate(Math.Max(0, shadowBandDip) * scale), desktop) ?? palette;
+        RectD window = Union(frame, Union(palette, shadow));
         return new RecordingControlLayout(
             window,
             frame,
@@ -1850,6 +1862,13 @@ internal static class RecordingControlLayoutPlanner
         Math.Min(left.Top, right.Top),
         Math.Max(left.Right, right.Right) - Math.Min(left.Left, right.Left),
         Math.Max(left.Bottom, right.Bottom) - Math.Min(left.Top, right.Top));
+
+    private static RectD? Overlap(RectD left, RectD right)
+    {
+        double x = Math.Max(left.Left, right.Left), y = Math.Max(left.Top, right.Top);
+        double r = Math.Min(left.Right, right.Right), b = Math.Min(left.Bottom, right.Bottom);
+        return r > x && b > y ? new RectD(x, y, r - x, b - y) : null;
+    }
 
     private static bool RectanglesOverlap(RectD left, RectD right) =>
         left.Left < right.Right

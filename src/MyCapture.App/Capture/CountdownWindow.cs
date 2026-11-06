@@ -47,7 +47,8 @@ internal sealed class CountdownWindow : Window
     private const double RingDiameter = 78;
     private const double RingThickness = 2.5;
 
-    // A beat longer than the fade: the digit is the only thing moving on this surface.
+    // A beat longer than the fade: the digit is the only thing moving on this surface. Recorded as
+    // an intended exception to the Motion tokens (Tokens.xaml, design-system MASTER.md).
     private static readonly Duration LandingDuration = new(TimeSpan.FromMilliseconds(200));
 
     /// <summary>

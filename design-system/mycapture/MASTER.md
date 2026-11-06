@@ -121,7 +121,9 @@ surrounding space and a keyboard alternative), rail buttons 44, icon glyphs 16. 
 overlay, so focus never shifts layout. Buttons, icon buttons, tabs, timeline handles and cards expose
 default, hover, pressed, focused, selected and disabled states through shared resources.
 Motion is 83/167/250 ms, animates opacity and transforms only (never capture geometry or timeline
-dimensions), stays interruptible and respects reduced animation.
+dimensions), stays interruptible and respects reduced animation. An intended exception: the delayed-capture
+countdown's digit lands over 200 ms (`CountdownWindow.LandingDuration`), a beat longer than the 167 ms fade
+it lands with, because it is the only thing moving on that surface.
 Text meets WCAG AA (4.5:1); focus and non-text indicators meet 3:1. Every icon-only control has an
 accessible name and a tooltip. Colour is never the only signal: keep labels, shapes or hatching.
 

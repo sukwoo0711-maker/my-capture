@@ -5,7 +5,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
@@ -15,11 +17,14 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
+using MyCapture.App.Editing;
+using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
@@ -82,7 +87,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
         combined.Motion = ScanMotion();
         File.WriteAllText(DiagnosticOutputPaths.Child(root, "metrics.json"), JsonSerializer.Serialize(combined, JsonOptions));
         File.WriteAllText(DiagnosticOutputPaths.Child(root, "metrics.md"), Markdown(combined));
-        Assert.All(new[] { "selector", "card", "notify", "tray", "countdown", "scroll", "recording" },
+        Assert.All(new[] { "selector", "card", "notify", "tray", "library-menu", "editor-menu", "countdown", "scroll", "recording" },
             surface => Assert.Contains(combined.Renders, row => row.Surface == surface));
         Assert.Equal(combined.Renders.Count, combined.Renders.Select(row => row.File).Distinct().Count());
     }
@@ -96,6 +101,10 @@ public sealed class CaptureFlowAestheticEvidenceTests
         foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
             app.Resources.MergedDictionaries.Add(new ResourceDictionary
             { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+        // GalleryWindow's XAML uses the same application converters as its isolated library host.
+        app.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+        app.Resources["PinLabel"] = new PinLabelConverter();
+        app.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         AppTheme previousTheme = ThemeService.Current;
         bool applied = ThemeService.IsAppliedForTest is not null;
@@ -108,9 +117,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
         using var presenter = new ThemedShellPresenter(() => false, keyboardRouter: keyboard);
         try
         {
-            AppTheme[] themes = percent == 100
-                ? [AppTheme.Daylight, AppTheme.Midnight, AppTheme.HighContrast]
-                : [AppTheme.Daylight, AppTheme.Midnight];
+            AppTheme[] themes = [AppTheme.Daylight, AppTheme.Midnight, AppTheme.HighContrast];
             foreach (AppTheme theme in themes)
             foreach (string language in new[] { "ko-KR", "en" })
             {
@@ -118,11 +125,23 @@ public sealed class CaptureFlowAestheticEvidenceTests
                 ThemeService.Apply(theme);
                 session.Theme = theme;
                 session.Language = language[..2];
-                Selectors(session);
-                Cards(session, keyboard);
-                Notifications(session, presenter);
-                if (theme == AppTheme.HighContrast) continue;
+                // Preserve the existing matrix for other surfaces; every menu gets all three DPIs.
+                if (percent == 100 || theme != AppTheme.HighContrast)
+                {
+                    Selectors(session);
+                    Cards(session, keyboard);
+                    Notifications(session, presenter);
+                }
                 Trays(session, presenter);
+                LibraryMenu(session);
+                EditorMenu(session);
+                if (percent == 100)
+                {
+                    Trays(session, presenter, systemHighContrast: true);
+                    LibraryMenu(session, systemHighContrast: true);
+                    EditorMenu(session, systemHighContrast: true);
+                }
+                if (theme == AppTheme.HighContrast) continue;
                 Countdowns(session);
                 Scrolling(session);
                 Recordings(session);
@@ -210,7 +229,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
     {
         // Reuse the synthetic card sample; this helper never accesses capture or user storage.
         var sample = (BitmapSource)typeof(SettingsThemePreviewTests).GetMethod("FeedbackSample", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, null)!;
-        foreach (string state in new[] { "normal", "saving", "saved", "copy-failed", "text-copy-failed", "unkept", "first-use-tip", "keyboard-focus", "narrow", "long-detail" })
+        foreach (string state in new[] { "normal", "saving", "saved", "copy-failed", "text-copy-failed", "unkept", "first-use-tip", "rating-invite", "keyboard-focus", "narrow", "long-detail" })
         {
             double workWidth = state == "narrow" ? 260 : 1280;
             var bounds = new RectD(-12000, -12000, workWidth, 720);
@@ -227,7 +246,17 @@ public sealed class CaptureFlowAestheticEvidenceTests
             string renderedState = state;
             try
             {
+                if (state == "rating-invite")
+                {
+                    MethodInfo offer = typeof(QuickAccessWindow).GetMethod("OfferRatingInvitation", PrivateInstance)
+                        ?? throw new InvalidOperationException($"{e.Tag}: the capture card has no rating invitation factory.");
+                    offer.Invoke(card, [new Func<Task?>(() => Task.CompletedTask), new Action(() => { })]);
+                }
                 ShowOffscreen(card);
+                if (state == "rating-invite")
+                    Assert.True(Walk(card).Select(item => item.Node).OfType<TextBlock>()
+                        .Any(text => AutomationProperties.GetAutomationId(text) == "QuickAccess.RatingMessage" && text.IsVisible),
+                        $"{e.Tag}/rating-invite: the invitation is not visible.");
                 if (state is "saving" or "saved")
                 {
                     card.ShortcutActions["Save"]();
@@ -301,7 +330,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
         finally { window.Close(); }
     }
 
-    private static void Trays(Evidence e, ThemedShellPresenter presenter)
+    private static void Trays(Evidence e, ThemedShellPresenter presenter, bool systemHighContrast = false)
     {
         Action noOp = () => { };
         var commands = new TrayMenuCommands(noOp, noOp, noOp, noOp, noOp, noOp, noOp, noOp,
@@ -316,21 +345,109 @@ public sealed class CaptureFlowAestheticEvidenceTests
         {
             var entries = TrayMenuLayout.Build(commands, NewInstallDefaults.Create().Hotkeys, state);
             ContextMenu menu = presenter.CreateMenu(entries);
-            RenderMenu(name, menu);
+            RenderMenu(e, "tray", MenuState(name, systemHighContrast), menu, systemHighContrast);
+            MenuItem branchRow = menu.Items.OfType<MenuItem>().First(row => row.HasItems);
+            branchRow.ApplyTemplate();
+            Popup popup = Assert.IsType<Popup>(branchRow.Template.FindName("PART_Popup", branchRow));
+            FrameworkElement child = Assert.IsAssignableFrom<FrameworkElement>(popup.Child);
+            // This is the template's actual submenu tree, not a ContextMenu made from its entries.
+            // Leave the native popup closed: Windows would clamp an offscreen popup onto a monitor.
+            Assert.False(popup.IsOpen);
+            Layout(child, e.Scale, new Size(440, double.PositiveInfinity));
+            Assert.True(Walk(child).Any(item => item.Node is MenuItem),
+                $"{e.Tag}/{name}-submenu: the actual submenu child generated no rows.");
+            e.Save("tray", MenuState(name + "-submenu", systemHighContrast), child,
+                RenderDesired(child, e.Scale), topLevel: true);
             int branch = 0;
             foreach (var entry in entries.Where(entry => entry.Children is { Count: > 0 }))
-                RenderMenu($"{name}-branch{++branch}", presenter.CreateMenu(entry.Children!));
+                RenderMenu(e, "tray", MenuState($"{name}-branch{++branch}", systemHighContrast),
+                    presenter.CreateMenu(entry.Children!), systemHighContrast);
         }
-        e.Report.Notes.Add("Tray menus/submenus are laid out offscreen using the existing SettingsGuideTrayEvidenceTests harness. Native Popup placement clamps to a real monitor: live popup highlight/keyboard focus skipped to keep every surface offscreen. Menu alpha ring measures the menu visual bounds, not the native popup HWND.");
+        e.Report.Notes.Add("Menus render at DesiredSize, including their margin and shadow band, as held by the popup window. The -submenu image uses the first branch row's actual PART_Popup.Child; -branchN images remain separate ContextMenus for comparison. Native popups stay closed so Windows cannot move them onto a shared monitor; popup placement is covered by the regression test.");
+    }
 
-        void RenderMenu(string state, ContextMenu menu)
+    private static string MenuState(string state, bool systemHighContrast) =>
+        state + (systemHighContrast ? "-syshc" : string.Empty);
+
+    private static ResourceDictionary MenuResources(Evidence e, bool systemHighContrast)
+    {
+        ResourceDictionary resources = SystemHighContrastThemeTests.LoadTheme();
+        ThemeService.ApplyResources(e.Theme, resources, systemHighContrast: systemHighContrast);
+        return resources;
+    }
+
+    private static void RenderMenu(Evidence e, string surface, string state, ContextMenu menu, bool systemHighContrast)
+    {
+        menu.Resources = MenuResources(e, systemHighContrast);
+        menu.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
+        ThemeFonts.ApplyText(menu);
+        Layout(menu, e.Scale, new Size(440, double.PositiveInfinity));
+        e.Save(surface, state, menu, RenderDesired(menu, e.Scale), topLevel: true);
+    }
+
+    private static void LibraryMenu(Evidence e, bool systemHighContrast = false)
+    {
+        MethodInfo create = typeof(SettingsThemePreviewTests).GetMethod("CreateLibraryUxFixture", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"{e.Tag}: the isolated library fixture is unavailable.");
+        object fixture = create.Invoke(null, ["mc-capture-flow-menu-", null])!;
+        var window = (GalleryWindow)fixture.GetType().GetProperty("Window")!.GetValue(fixture)!;
+        var viewModel = (GalleryViewModel)fixture.GetType().GetProperty("ViewModel")!.GetValue(fixture)!;
+        var records = (IReadOnlyList<CaptureRecord>)fixture.GetType().GetProperty("Records")!.GetValue(fixture)!;
+        try
         {
-            ResourceDictionary resources = SystemHighContrastThemeTests.LoadTheme();
-            ThemeService.ApplyResources(e.Theme, resources, systemHighContrast: false);
-            menu.Resources = resources;
-            Layout(menu, e.Scale, new Size(440, double.PositiveInfinity));
-            e.Save("tray", state, menu, Render(menu, e.Scale), topLevel: true);
+            ShowOffscreen(window);
+            viewModel.Refresh();
+            viewModel.Select(records[0].Id);
+            GalleryItemViewModel tile = viewModel.FindTile(records[0].Id)
+                ?? throw new InvalidOperationException($"{e.Tag}: the isolated library has no first tile.");
+            ContextMenu menu = window.TileMenu;
+            menu.DataContext = tile;
+            window.PrepareTileMenu(menu, tile);
+            RenderMenu(e, "library-menu", MenuState("image", systemHighContrast), menu, systemHighContrast);
         }
+        finally { window.CloseForExit(); Pump(); }
+        e.Report.Notes.Add("Library menu is GalleryWindow.TileMenu (Gallery.TileContextMenu plus the app's information row), prepared for the first synthetic tile by PrepareTileMenu. CreateLibraryUxFixture uses its own temporary AppPaths; its files are retained, with no recycle-bin or user-profile cleanup.");
+    }
+
+    private static void EditorMenu(Evidence e, bool systemHighContrast = false)
+    {
+        // The same safety prerequisites as EditorAestheticEvidenceTests, before its real Host is built.
+        Assert.Null(AnnotationEditorPreferences.Read);
+        Assert.Null(AnnotationEditorPreferences.Write);
+        Assert.Null(AnnotationEditorPreferences.ReadShowSourceWindowTitle);
+        Assert.Null(AnnotationEditorPreferences.ReadPinHotkey);
+        Func<string?>? previousStamp = AnnotationEditorPreferences.StampFolder;
+        Func<bool>? previousHints = ShortcutPresentation.ReadEnabled;
+        DpiScale? previousSizing = AnnotationEditorWindow.SizingDpiOverrideForTest;
+        SynchronizationContext? previousContext = SynchronizationContext.Current;
+        try
+        {
+            AnnotationEditorPreferences.StampFolder = () => e.IsolatedStampFolder;
+            ShortcutPresentation.ReadEnabled = () => false;
+            AnnotationEditorWindow.SizingDpiOverrideForTest = new DpiScale(e.Scale, e.Scale);
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            const BindingFlags members = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            Type comboType = typeof(EditorAestheticEvidenceTests).GetNestedType("Combo", BindingFlags.NonPublic)!;
+            Type hostType = typeof(EditorAestheticEvidenceTests).GetNestedType("Host", BindingFlags.NonPublic)!;
+            object combo = Activator.CreateInstance(comboType, members, null,
+                [e.Scale, e.Theme, e.Language == "ko" ? "ko-KR" : "en"], CultureInfo.InvariantCulture)!;
+            var sample = (BitmapSource)typeof(SettingsThemePreviewTests).GetMethod("FeedbackSample", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, null)!;
+            using var host = (IDisposable)Activator.CreateInstance(hostType, members, null,
+                [sample, combo, MenuResources(e, systemHighContrast), false, false], CultureInfo.InvariantCulture)!;
+            var editor = (FrameworkElement)hostType.GetProperty("Editor", members)!.GetValue(host)!;
+            Button save = Walk(editor).Select(item => item.Node).OfType<Button>()
+                .Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowSaveToFile");
+            Assert.True(save.ContextMenu is not null, $"{e.Tag}/editor-menu: the real editor save button has no menu.");
+            RenderMenu(e, "editor-menu", MenuState("save", systemHighContrast), save.ContextMenu!, systemHighContrast);
+        }
+        finally
+        {
+            AnnotationEditorPreferences.StampFolder = previousStamp;
+            ShortcutPresentation.ReadEnabled = previousHints;
+            AnnotationEditorWindow.SizingDpiOverrideForTest = previousSizing;
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+        e.Report.Notes.Add("Editor menu is the EditorFlowSaveToFile button's ContextMenu from EditorAestheticEvidenceTests.Host (scene S19). The host uses a synthetic image, disables its activation handler, isolates stamp storage, and runs without profile read/write delegates; no save command is invoked.");
     }
 
     private static void Countdowns(Evidence e)
@@ -438,6 +555,16 @@ public sealed class CaptureFlowAestheticEvidenceTests
         return bitmap;
     }
 
+    private static RenderTargetBitmap RenderDesired(FrameworkElement element, double scale)
+    {
+        Assert.True(element.DesiredSize.Width > 0 && element.DesiredSize.Height > 0,
+            $"At {scale * 100:0}% the {element.GetType().Name} has no desired popup size.");
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.DesiredSize.Width * scale),
+            (int)Math.Ceiling(element.DesiredSize.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        bitmap.Render(element);
+        return bitmap;
+    }
+
     private sealed class EvidenceHotkeyRegistrar : IHotkeyRegistrar
     {
         public bool TryRegister(int id, Hotkey hotkey, out int errorCode, out string errorMessage)
@@ -453,6 +580,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
         internal string Language { get; set; } = "ko";
         internal string Tag => $"{Theme.ToString().ToLowerInvariant()}-{Language}-{scale * 100:0}";
         private string Folder(string surface) => DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(root, surface));
+        internal string IsolatedStampFolder => Folder("isolated-stamp");
 
         internal void Window(string surface, string state, Window window)
         {

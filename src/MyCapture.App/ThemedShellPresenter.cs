@@ -194,8 +194,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     internal Window CreateCaptureReceipt(string message, Action openLibrary, string? tip = null, Action? pin = null, string? actionTooltip = null)
     {
+        // The title and the tip start at the hint's left edge, as the text of every other card does.
         var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
-            Height = double.NaN, Padding = new Thickness(12), ToolTip = actionTooltip ?? UiText.Get("QuickAccess.Library") };
+            Height = double.NaN, Padding = new Thickness(12), HorizontalContentAlignment = HorizontalAlignment.Left,
+            ToolTip = actionTooltip ?? UiText.Get("QuickAccess.Library") };
         AutomationProperties.SetName(action, message);
         AutomationProperties.SetAutomationId(action, "MyCapture.Receipt.Open");
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
@@ -205,7 +207,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         content.Children.Add(action);
         if (tip is not null && pin is not null)
         {
-            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = TypeScale.Caption };
+            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = TypeScale.Caption,
+                HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(12, 4, 12, 4) };
             tipButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
             AutomationProperties.SetName(tipButton, tip);
             AutomationProperties.SetAutomationId(tipButton, "MyCapture.Receipt.Pin");

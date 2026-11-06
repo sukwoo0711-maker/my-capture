@@ -274,7 +274,10 @@
 
     <!-- ============================================================= -->
     <!-- Motion: shared Windows-aligned cadence. Render transforms and opacity only;
-         precision capture geometry and semantic state changes never wait on motion. -->
+         precision capture geometry and semantic state changes never wait on motion.
+         Intended exception: the delayed-capture countdown's digit lands over 200 ms
+         (CountdownWindow.LandingDuration), a beat longer than the Motion.Normal fade it lands
+         with, because it is the only thing moving on that surface. -->
     <!-- ============================================================= -->
     <Duration x:Key="Motion.Fast">0:0:0.083</Duration>
     <Duration x:Key="Motion.Normal">0:0:0.167</Duration>

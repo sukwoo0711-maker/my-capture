@@ -1003,8 +1003,15 @@
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
         <Setter Property="UseLayoutRounding" Value="True" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
-        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
+        <!-- The 1-DIP subtle edge of the notification and capture cards: without it a menu over a
+             white page had no visible boundary. -->
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <!-- The clear band the popup window keeps for the menu's Shadow.Card, as a notification card
+             has (ThemedShellPresenter.ShadowMargin); without it the shadow was cut off at the popup's
+             edge. A popup aligns the menu itself, not its margin, with the anchor, so the menu still
+             opens where it did; only its window is larger. -->
+        <Setter Property="Margin" Value="12" />
         <Setter Property="Padding" Value="5" />
         <Setter Property="HasDropShadow" Value="False" />
         <Setter Property="OverridesDefaultStyle" Value="True" />

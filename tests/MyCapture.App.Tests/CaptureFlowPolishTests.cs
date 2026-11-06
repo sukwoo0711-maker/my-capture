@@ -26,7 +26,7 @@ namespace MyCapture.App.Tests;
 /// ring, and an action notification whose Close wrapped under the card after a scale change.
 /// </summary>
 /// <remarks>Set <c>MYCAPTURE_AES_CAPTURE_FLOW_FIX</c> to an absolute folder to keep the rendered frames.</remarks>
-public sealed class CaptureFlowPolishTests
+public sealed partial class CaptureFlowPolishTests
 {
     private const string EvidenceGate = "MYCAPTURE_AES_CAPTURE_FLOW_FIX";
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -251,7 +251,7 @@ public sealed class CaptureFlowPolishTests
                 row.SetValue(focusWithin, true);
             }
             LayOut(menu);
-            RenderTargetBitmap image = Render(menu, 1);
+            RenderTargetBitmap image = Render(menu, 1, desiredSize: true);
             Save(image, "tray-rows-highlighted-focused.png");
             foreach (MenuItem row in new[] { plain, branch })
                 foreach (string part in new[] { "HoverLayer", "FocusRing" })
@@ -393,13 +393,16 @@ public sealed class CaptureFlowPolishTests
     private static Color PixelIn(Pixels pixels, Visual root, FrameworkElement row, double x)
     {
         Point at = row.TransformToAncestor(root).Transform(new Point(x, row.ActualHeight / 2));
+        if (root is FrameworkElement element)
+            at.Offset(element.Margin.Left, element.Margin.Top);
         return pixels.At((int)at.X, (int)at.Y);
     }
 
-    private static RenderTargetBitmap Render(FrameworkElement element, double scale)
+    private static RenderTargetBitmap Render(FrameworkElement element, double scale, bool desiredSize = false)
     {
-        var image = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth * scale),
-            (int)Math.Ceiling(element.ActualHeight * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        Size size = desiredSize ? element.DesiredSize : element.RenderSize;
+        var image = new RenderTargetBitmap((int)Math.Ceiling(size.Width * scale),
+            (int)Math.Ceiling(size.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
         image.Render(element);
         return image;
     }
