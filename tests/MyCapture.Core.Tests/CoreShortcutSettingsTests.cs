@@ -57,6 +57,40 @@ public sealed class CoreShortcutSettingsTests
         Assert.Equal(uploadGitHubImage, settings.UploadGitHubImage);
     }
 
+    [Fact]
+    public void LegacySettings_DefaultBothFlagsToFalse()
+    {
+        var settings = new AppSettings();
+
+        Assert.False(settings.Hotkeys.ForceCoreShortcuts);
+        Assert.False(settings.Hotkeys.CoreShortcutsAsked);
+    }
+
+    [Fact]
+    public void NewInstall_AssignsAcceptedCoreShortcutsAndClearsConflicts()
+    {
+        var settings = new AppSettings();
+        PropertyInfo[] chords = typeof(HotkeySettings).GetProperties()
+            .Where(property => property.PropertyType == typeof(Hotkey)).ToArray();
+        for (int index = 0; index < chords.Length; index++)
+            chords[index].SetValue(settings.Hotkeys, CoreShortcuts.Chords[index % CoreShortcuts.Chords.Count]);
+
+        NewInstallDefaults.Apply(settings);
+
+        var accepted = new HotkeySettings();
+        CoreShortcuts.Accept(accepted);
+        Assert.Equal(accepted.Capture, settings.Hotkeys.Capture);
+        Assert.Equal(accepted.RecordRegion, settings.Hotkeys.RecordRegion);
+        Assert.Equal(accepted.OpenLibrary, settings.Hotkeys.OpenLibrary);
+        Assert.Equal(accepted.PasteToScreen, settings.Hotkeys.PasteToScreen);
+        Assert.Equal(accepted.ForceCoreShortcuts, settings.Hotkeys.ForceCoreShortcuts);
+        Assert.Equal(accepted.CoreShortcutsAsked, settings.Hotkeys.CoreShortcutsAsked);
+        string[] coreCommands = [nameof(HotkeySettings.Capture), nameof(HotkeySettings.RecordRegion),
+            nameof(HotkeySettings.OpenLibrary), nameof(HotkeySettings.PasteToScreen)];
+        Assert.All(chords.Where(property => !coreCommands.Contains(property.Name)),
+            property => Assert.False(CoreShortcuts.IsCoreChord((Hotkey)property.GetValue(settings.Hotkeys)!)));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -64,6 +98,7 @@ public sealed class CoreShortcutSettingsTests
     {
         HotkeySettings settings = NewInstallDefaults.Create().Hotkeys;
         settings.ForceCoreShortcuts = force;
+        settings.CoreShortcutsAsked = false;
         settings.CaptureText = CoreShortcuts.PasteToScreen;
         var before = typeof(HotkeySettings).GetProperties()
             .Where(property => property.Name != nameof(HotkeySettings.CoreShortcutsAsked))
@@ -116,6 +151,8 @@ public sealed class CoreShortcutSettingsTests
     public void Draft_PreservesTheAnswerAndTracksForceEditsWithoutAssigningKeys()
     {
         AppSettings source = NewInstallDefaults.Create();
+        source.Hotkeys.ForceCoreShortcuts = false;
+        source.Hotkeys.OpenLibrary = Hotkey.None;
         source.Hotkeys.CoreShortcutsAsked = true;
         var draft = new SettingsDraft(source);
         var notifications = new List<string?>();
@@ -156,10 +193,12 @@ public sealed class CoreShortcutSettingsTests
 
         draft.ResetToDefaults();
 
-        Assert.False(draft.ForceCoreShortcuts);
+        Assert.True(draft.ForceCoreShortcuts);
         Assert.Equal(asked, draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
         Assert.Equal(asked, draft.ToHotkeySettings().CoreShortcutsAsked);
-        Assert.Equal(Hotkey.None, draft.ToHotkeySettings().OpenLibrary);
+        Assert.Equal(CoreShortcuts.OpenLibrary, draft.ToHotkeySettings().OpenLibrary);
+        Assert.Equal(CoreShortcuts.Capture, draft.ToHotkeySettings().Capture);
+        Assert.Equal(CoreShortcuts.RecordRegion, draft.ToHotkeySettings().RecordRegion);
         Assert.Equal(NewInstallDefaults.Create().Hotkeys.PasteToScreen, draft.ToHotkeySettings().PasteToScreen);
     }
 

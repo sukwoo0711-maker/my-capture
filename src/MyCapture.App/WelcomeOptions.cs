@@ -7,6 +7,7 @@ internal sealed class WelcomeOptions
 {
     internal bool Replay { get; init; }
     internal bool ShowCoreShortcutsConsent { get; init; }
+    internal bool CoreShortcutsNotice { get; init; }
     internal bool FeaturePractice { get; init; }
     internal bool? StartAtSignIn { get; init; }
     internal bool? UseAccurateOcr { get; init; }

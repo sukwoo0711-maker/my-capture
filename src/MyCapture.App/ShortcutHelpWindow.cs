@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -179,15 +178,25 @@ internal sealed class ShortcutHelpWindow : Window
         var grid = new Grid { MinHeight = 36 };
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
         // Semibold like a tab row, whose text takes the selected tab's weight.
-        FrameworkElement title = TitleLine(label, tutorialId);
-        TextElement.SetFontWeight(title, FontWeights.SemiBold);
-        text.Children.Add(title);
+        var title = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold }, label);
         var tag = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) }, category);
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(title);
         text.Children.Add(tag);
-        grid.Children.Add(text);
+        // The tutorial button stands beside both lines: on the name's own line its 36-high target
+        // pushed the category 9 lower than in the rows without one.
+        var line = new DockPanel { HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        if (tutorialId is not null)
+        {
+            Button tutorial = TutorialButton(tutorialId);
+            DockPanel.SetDock(tutorial, Dock.Right);
+            line.Children.Add(tutorial);
+        }
+        line.Children.Add(text);
+        grid.Children.Add(line);
         FrameworkElement keycaps = Keycaps(chord);
         Grid.SetColumn(keycaps, 1);
         grid.Children.Add(keycaps);

@@ -18,7 +18,7 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false])!;
         try
         {
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.B2);
@@ -41,7 +41,7 @@ public sealed class PracticeShellTests
     });
 
     [Fact]
-    public void ExitingUnansweredConsentDoesNotCreateASettingsFileOrConsumeFirstInstall() => StaTestHost.Run(() =>
+    public void ExitingUnacknowledgedNoticeDoesNotCreateASettingsFileOrConsumeFirstInstall() => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("practice-unanswered-");
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -65,7 +65,8 @@ public sealed class PracticeShellTests
             guide.Close();
             Assert.False(File.Exists(paths.SettingsFile));
             Assert.True(store.Load().General.IsFirstRun);
-            Assert.False(settings.Hotkeys.CoreShortcutsAsked);
+            Assert.True(settings.Hotkeys.CoreShortcutsAsked);
+            Assert.True(settings.Hotkeys.ForceCoreShortcuts);
             Assert.Equal(0, settings.General.PracticeRevisionOffered);
         }
         finally
@@ -96,7 +97,7 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var feature = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true])!;
+        var feature = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false])!;
         WelcomeWindow? replay = null;
         try
         {
