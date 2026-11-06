@@ -39,7 +39,7 @@ public sealed class OcrNeuralTableTests
         Assert.Equal("1", table.Rows[2].Cells[1].Text);
         Assert.Equal(neural[1].Words[1].Bounds, table.Rows[1].Cells[1].Bounds);
         Assert.Equal(neural[2].Words[1].Bounds, table.Rows[2].Cells[1].Bounds);
-        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(neural)).Table, table);
+        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(HorizontalInsetLines(neural))).Table, table);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class OcrNeuralTableTests
 
         Assert.Equal(3, table.Rows.Count);
         Assert.Equal("", table.Rows[2].Cells[1].Text);
-        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(neural)).Table, table);
+        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(HorizontalInsetLines(neural))).Table, table);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class OcrNeuralTableTests
 
         Assert.Equal(2, table.Columns.Count);
         Assert.Equal(4, table.Rows.Count);
-        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(neural)).Table, table);
+        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(HorizontalInsetLines(neural))).Table, table);
     }
 
     [Fact]
@@ -287,6 +287,199 @@ public sealed class OcrNeuralTableTests
         AssertNonTableEqual(OcrExtractionAnalyzer.Analyze(rotated),
             OcrExtractionAnalyzer.Analyze(rotated, preferNeuralTable: true));
     }
+
+    [Fact]
+    public void PaddedGridSeparatesQuantitiesAndAmountsOnlyForPreferredNeuralTable()
+    {
+        OcrLine[] neural = GridLines();
+        OcrResult merged = Result(TableLines(padded: false, garbledHeader: true));
+        OcrResult result = merged.WithNeuralLines(neural);
+        OcrTable padded = OcrExtractionAnalyzer.Analyze(Result(neural)).Table;
+        OcrTable table = OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true).Table;
+
+        Assert.Equal(new OcrRect(91, 31, 18, 17), neural[4].Bounds);
+        Assert.Equal(new OcrRect(115, 30, 40, 18), neural[5].Bounds);
+        Assert.Equal(6, neural[5].Bounds.X - neural[4].Bounds.Right);
+        Assert.Equal(20, neural.Select(line => line.Bounds.Height).Order().ElementAt(neural.Length / 2));
+        Assert.Contains(padded.Rows[1].Cells, cell => cell.Text == "19 464,061");
+        Assert.Equal(3, table.Columns.Count);
+        Assert.Equal(4, table.Rows.Count);
+        Assert.True(table.HasHeader);
+        Assert.Equal(new[] { "항목", "수량", "금액" }, table.Rows[0].Cells.Select(cell => cell.Text));
+        string[][] values = [["19", "464,061"], ["12", "128,400"], ["21", "204,000"]];
+        for (int row = 0; row < values.Length; row++)
+        {
+            Assert.Equal(values[row][0], table.Rows[row + 1].Cells[1].Text);
+            Assert.Equal(values[row][1], table.Rows[row + 1].Cells[2].Text);
+        }
+        double quantityPadding = (17 - 17 / 1.8) / 2;
+        double amountPadding = (18 - 18 / 1.8) / 2;
+        Assert.Equal(new OcrRect(91 + quantityPadding, 31, (109 - quantityPadding) - (91 + quantityPadding), 17),
+            table.Rows[1].Cells[1].Bounds);
+        Assert.Equal(new OcrRect(115 + amountPadding, 30, (155 - amountPadding) - (115 + amountPadding), 18),
+            table.Rows[1].Cells[2].Bounds);
+        AssertExtractionEqual(OcrExtractionAnalyzer.Analyze(merged), OcrExtractionAnalyzer.Analyze(result));
+        AssertExtractionEqual(OcrExtractionAnalyzer.Analyze(merged),
+            OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: false));
+    }
+
+    [Fact]
+    public void WidelySpacedRowsKeepDetectorHeightsWhileColumnsLosePadding()
+    {
+        string[][] cells = [["항목", "수량", "금액"], ["키보드", "2", "128,400"],
+            ["USB 케이블", "12", "9,900"], ["모니터", "1", "1,204,000"]];
+        double[] tops = [0, 38.8, 87.6, 126.4]; // Detector-box gaps: 10, 20, 10; glyph height: 16.
+        OcrLine[] neural = cells.SelectMany((row, index) => row.Select((text, column) =>
+            Line([new(text, new OcrRect(8 + column * 200, tops[index], column == 1 ? 30 : 80, 28.8))]))).ToArray();
+        OcrResult result = Result(neural).WithNeuralLines(neural);
+        OcrTable table = OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true).Table;
+
+        Assert.Equal(4, table.Rows.Count);
+        Assert.Equal(3, table.Columns.Count);
+        Assert.True(table.HasHeader);
+        Assert.Equal(ExpectedTsv, OcrTableExport.Tsv(table));
+        // Insetting height turns the middle gap into 32.8, greater than 16 * 1.8.
+        Assert.Equal(2, OcrExtractionAnalyzer.Analyze(Result(AllSidesInsetLines(neural))).Table.Rows.Count);
+    }
+
+    [Fact]
+    public void InsettingLinePaddingKeepsMultiWordCellTogether()
+    {
+        OcrLine[] neural = GridLines();
+        OcrResult result = Result(TableLines(padded: false)).WithNeuralLines(neural);
+        OcrTable table = OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true).Table;
+        double padding = (20 - 20 / 1.8) / 2;
+
+        Assert.Equal(4, neural[3].Words[1].Bounds.X - neural[3].Words[0].Bounds.Right);
+        Assert.Equal(3, table.Columns.Count);
+        Assert.Equal("프린터 토너", table.Rows[1].Cells[0].Text);
+        Assert.Equal(new OcrRect(8 + padding, 30, (66 - padding) - (8 + padding), 20),
+            table.Rows[1].Cells[0].Bounds);
+    }
+
+    [Fact]
+    public void RotatedGridInsetsInReadingAxesAndReturnsSourceBounds()
+    {
+        OcrResult upright = Result(TableLines(padded: false)).WithNeuralLines(GridLines());
+        var orientation = new OcrReadingOrientation(90, 600, 500);
+        OcrResult rotated = OcrResult.Success(upright.Text, "ko", ToOriginal(upright.Lines, orientation),
+                TimeSpan.Zero, orientation).WithNeuralLines(ToOriginal(upright.NeuralLines, orientation));
+        OcrTable expected = OcrExtractionAnalyzer.Analyze(upright, preferNeuralTable: true).Table;
+        OcrTable actual = OcrExtractionAnalyzer.Analyze(rotated, preferNeuralTable: true).Table;
+
+        Assert.Equal(OcrTableExport.Tsv(expected), OcrTableExport.Tsv(actual));
+        Assert.Equal(expected.Rows.Count, actual.Rows.Count);
+        Assert.Equal(expected.Columns.Count, actual.Columns.Count);
+        Assert.Equal(expected.Columns.ToArray(), actual.Columns.ToArray());
+        Assert.Equal(expected.HasHeader, actual.HasHeader);
+        for (int row = 0; row < expected.Rows.Count; row++)
+        for (int column = 0; column < expected.Columns.Count; column++)
+        {
+            Assert.Equal(orientation.ToOriginal(expected.Rows[row].Cells[column].Bounds), actual.Rows[row].Cells[column].Bounds);
+            Assert.Equal(orientation.ToOriginal(expected.Rows[row].Cells[column].Region), actual.Rows[row].Cells[column].Region);
+        }
+    }
+
+    [Fact]
+    public void SelectionUsesOriginalWordCentreBeforeLineInsetMovesIt()
+    {
+        OcrLine[] neural = GridLines();
+        OcrResult result = Result(HorizontalInsetLines(neural)).WithNeuralLines(neural);
+        var selection = new OcrRect(25, 0, 150, 120);
+        OcrWord original = neural[3].Words[0];
+        OcrWord inset = HorizontalInsetLines(neural)[3].Words[0];
+
+        Assert.True(original.Bounds.X + original.Bounds.Width / 2 < selection.X);
+        Assert.True(inset.Bounds.X + inset.Bounds.Width / 2 > selection.X);
+        OcrTable table = OcrExtractionAnalyzer.Analyze(result, selection, preferNeuralTable: true).Table;
+        Assert.Equal(4, table.Rows.Count);
+        Assert.Equal(3, table.Columns.Count);
+        Assert.Equal("토너", table.Rows[1].Cells[0].Text);
+        Assert.DoesNotContain("프린터", OcrTableExport.Tsv(table));
+    }
+
+    [Fact]
+    public void EmptyHorizontalIntersectionsKeepOnePixelAtClampedCentre()
+    {
+        OcrLine[] neural = GridLines();
+        OcrResult merged = Result(HorizontalInsetLines(neural));
+        neural[3] = neural[3] with { Words = [new("프린터 토너", new OcrRect(8, 30, 1, 20))] };
+        neural[4] = Line([new("19", new OcrRect(99, 31, 2, 17))]);
+        OcrTable table = OcrExtractionAnalyzer.Analyze(merged.WithNeuralLines(neural), preferNeuralTable: true).Table;
+        double padding = (20 - 20 / 1.8) / 2;
+
+        Assert.Equal("프린터 토너", table.Rows[1].Cells[0].Text);
+        Assert.Equal(new OcrRect(8 + padding - .5, 30, 1, 20), table.Rows[1].Cells[0].Bounds);
+        Assert.Equal("19", table.Rows[1].Cells[1].Text);
+        Assert.Equal(new OcrRect(99.5, 31, 1, 17), table.Rows[1].Cells[1].Bounds);
+    }
+
+    [Fact]
+    public void InvalidLineBoundsKeepValidWordGeometry()
+    {
+        OcrLine[] neural = TableLines(padded: true).Select(line => line with { Bounds = default }).ToArray();
+        OcrResult result = Result(TableLines(padded: false)).WithNeuralLines(neural);
+
+        AssertTableEqual(OcrExtractionAnalyzer.Analyze(Result(neural)).Table,
+            OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true).Table);
+    }
+
+    private static OcrLine[] GridLines() =>
+    [
+        // Recorded clutter192/grid-ko-09-light-tight quantity/amount geometry in the first body row.
+        Line([new("항목", new OcrRect(8, 0, 40, 20))]),
+        Line([new("수량", new OcrRect(89, 0, 20, 20))]),
+        Line([new("금액", new OcrRect(115, 0, 40, 20))]),
+        Line([new("프린터", new OcrRect(8, 30, 32, 20)), new("토너", new OcrRect(44, 30, 22, 20))]),
+        Line([new("19", new OcrRect(91, 31, 18, 17))]),
+        Line([new("464,061", new OcrRect(115, 30, 40, 18))]),
+        Line([new("키보드", new OcrRect(8, 60, 58, 20))]),
+        Line([new("12", new OcrRect(89, 60, 20, 20))]),
+        Line([new("128,400", new OcrRect(115, 60, 40, 20))]),
+        Line([new("모니터", new OcrRect(8, 90, 58, 20))]),
+        Line([new("21", new OcrRect(89, 90, 20, 20))]),
+        Line([new("204,000", new OcrRect(115, 90, 40, 20))]),
+    ];
+
+    // Independent geometry oracle. Plain analysis is an exact table oracle for the existing
+    // TableLines fixtures only: their column gaps exceed 100 px, far above both gap thresholds.
+    private static OcrLine[] HorizontalInsetLines(IReadOnlyList<OcrLine> lines) => lines.Select(line =>
+    {
+        double padding = (line.Bounds.Height - line.Bounds.Height / 1.8) / 2;
+        double centre = line.Bounds.X + line.Bounds.Width / 2;
+        double insetLeft = Math.Min(line.Bounds.X + padding, centre);
+        double insetRight = Math.Max(line.Bounds.Right - padding, centre);
+        return line with
+        {
+            Bounds = new OcrRect(insetLeft, line.Bounds.Y, insetRight - insetLeft, line.Bounds.Height),
+            Words = line.Words.Select(word =>
+            {
+                double left = Math.Max(word.Bounds.X, insetLeft);
+                double right = Math.Min(word.Bounds.Right, insetRight);
+                if (right <= left)
+                {
+                    double clampedCentre = Math.Clamp(word.Bounds.X + word.Bounds.Width / 2, insetLeft, insetRight);
+                    left = clampedCentre - .5;
+                    right = clampedCentre + .5;
+                }
+                return word with { Bounds = new OcrRect(left, word.Bounds.Y, right - left, word.Bounds.Height) };
+            }).ToArray(),
+        };
+    }).ToArray();
+
+    private static OcrLine[] AllSidesInsetLines(IReadOnlyList<OcrLine> lines) =>
+        HorizontalInsetLines(lines).Select((line, index) =>
+        {
+            double padding = (lines[index].Bounds.Height - lines[index].Bounds.Height / 1.8) / 2;
+            return line with
+            {
+                Bounds = line.Bounds with { Y = line.Bounds.Y + padding, Height = line.Bounds.Height - 2 * padding },
+                Words = line.Words.Select(word => word with
+                {
+                    Bounds = word.Bounds with { Y = word.Bounds.Y + padding, Height = word.Bounds.Height - 2 * padding },
+                }).ToArray(),
+            };
+        }).ToArray();
 
     private static OcrResult FillResult() => Result(TableLines(padded: false, garbledHeader: true))
         .WithNeuralLines(TableLines(padded: true, lastQuantity: ""));

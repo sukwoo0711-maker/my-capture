@@ -91,16 +91,50 @@ public static class OcrExtractionAnalyzer
             || !mergedTable.Columns.Any(column => column.IsNumeric))
             return mergedTable;
 
-        var allWords = result.NeuralLines.SelectMany(line => line.Words.Count > 0
+        // Across 104 synthetic tables, median detector/glyph line height was 1.81
+        // for Korean tables and 1.85 for grid tables; padding grows every side equally.
+        // Keep detector heights for rows: inset heights split widely spaced rows into tables.
+        const double NeuralLineHeightRatio = 1.8;
+        var readingWords = new List<OcrWord>();
+        foreach (OcrLine line in result.NeuralLines)
+        {
+            var allWords = (line.Words.Count > 0
                 ? line.Words
                 : string.IsNullOrWhiteSpace(line.Text) ? [] : new[] { new OcrWord(line.Text, line.Bounds) })
-            .Where(word => !string.IsNullOrWhiteSpace(word.Text) && OcrGeometry.IsValid(word.Bounds))
-            .Select(word => word with { Text = word.Text.Trim() }).ToArray();
-        OcrWord[] words = selection is null ? allWords : allWords
-            .Where(word => OcrGeometry.IsValid(selection.Value)
-                && OcrGeometry.Contains(selection.Value, word.Bounds.X + word.Bounds.Width / 2,
-                    word.Bounds.Y + word.Bounds.Height / 2)).ToArray();
-        OcrTable neuralTable = OcrTableReconstructor.Build(OcrLayoutRow.Build(ReadingWords(words, orientation)));
+                .Where(word => !string.IsNullOrWhiteSpace(word.Text) && OcrGeometry.IsValid(word.Bounds))
+                .Select(word => word with { Text = word.Text.Trim() }).ToArray();
+            OcrWord[] words = selection is null ? allWords : allWords
+                .Where(word => OcrGeometry.IsValid(selection.Value)
+                    && OcrGeometry.Contains(selection.Value, word.Bounds.X + word.Bounds.Width / 2,
+                        word.Bounds.Y + word.Bounds.Height / 2)).ToArray();
+            if (!OcrGeometry.IsValid(line.Bounds))
+            {
+                readingWords.AddRange(ReadingWords(words, orientation));
+                continue;
+            }
+
+            OcrRect box = orientation.ToReading(line.Bounds);
+            double padding = (box.Height - box.Height / NeuralLineHeightRatio) / 2;
+            double centre = box.X + box.Width / 2;
+            double insetLeft = Math.Min(box.X + padding, centre);
+            double insetRight = Math.Max(box.Right - padding, centre);
+            foreach (OcrWord word in ReadingWords(words, orientation))
+            {
+                double left = Math.Max(word.Bounds.X, insetLeft);
+                double right = Math.Min(word.Bounds.Right, insetRight);
+                if (right <= left)
+                {
+                    double clampedCentre = Math.Clamp(word.Bounds.X + word.Bounds.Width / 2, insetLeft, insetRight);
+                    left = clampedCentre - .5;
+                    right = clampedCentre + .5;
+                }
+                readingWords.Add(word with
+                {
+                    Bounds = new OcrRect(left, word.Bounds.Y, right - left, word.Bounds.Height),
+                });
+            }
+        }
+        OcrTable neuralTable = OcrTableReconstructor.Build(OcrLayoutRow.Build(readingWords), 1 / NeuralLineHeightRatio);
         if (!neuralTable.HasStructure || !neuralTable.Columns.Any(column => column.IsNumeric))
             return mergedTable;
 
