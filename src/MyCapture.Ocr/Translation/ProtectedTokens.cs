@@ -56,7 +56,7 @@ internal static partial class ProtectedTokens
     [GeneratedRegex(@"'[A-Za-z_][A-Za-z0-9_.\-]*'", RegexOptions.CultureInvariant)]
     private static partial Regex QuotedPattern();
 
-    [GeneratedRegex(L + @"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\(\)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(L + @"(?<!(?:^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*\.)[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\(\)", RegexOptions.CultureInvariant)]
     private static partial Regex CallPattern();
 
     [GeneratedRegex(L + @"[A-Za-z][A-Za-z0-9_]*\[\d+(?::\d+)?\]", RegexOptions.CultureInvariant)]
@@ -83,7 +83,7 @@ internal static partial class ProtectedTokens
     [GeneratedRegex(L + @"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+" + R, RegexOptions.CultureInvariant)]
     private static partial Regex SnakePattern();
 
-    [GeneratedRegex(L + @"(?=[A-Za-z0-9]*[a-z])(?:[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z]{2,}[A-Za-z0-9]*)" + R, RegexOptions.CultureInvariant)]
+    [GeneratedRegex(L + @"(?=[A-Za-z0-9]*[a-z])(?:[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z]{2}[A-Za-z0-9]*)" + R, RegexOptions.CultureInvariant)]
     private static partial Regex CamelPattern();
 
     [GeneratedRegex(L + @"[A-Z][A-Z0-9]+" + R, RegexOptions.CultureInvariant)]
@@ -403,9 +403,14 @@ internal static partial class ProtectedTokens
     internal static bool HasTranslatableWords(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var rest = new StringBuilder(text);
-        foreach (ProtectedSpan span in Find(text).OrderByDescending(span => span.Start))
-            rest.Remove(span.Start, span.Length);
+        var rest = new StringBuilder(text.Length);
+        int end = 0;
+        foreach (ProtectedSpan span in Find(text))
+        {
+            rest.Append(text, end, span.Start - end);
+            end = span.Start + span.Length;
+        }
+        rest.Append(text, end, text.Length - end);
         return EnglishWord().IsMatch(rest.ToString());
     }
 

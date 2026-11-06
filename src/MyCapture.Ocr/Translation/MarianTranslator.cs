@@ -135,13 +135,16 @@ internal sealed class MarianTranslator : ISentenceTranslator
         return [.. Generate(sources, sentenceDone, cancellationToken).Select(Decode)];
     }
 
-    private int[] EncodeSource(string text)
+    private int[] EncodeSource(string text) => EncodeSource(_source, text);
+
+    internal static int[] EncodeSource(SentencePieceModel source, string text)
     {
-        int[] pieces = _source.EncodeToIds(text);
-        int length = Math.Min(pieces.Length, MaxSourceTokens - 1);
-        var ids = new int[length + 1];
-        pieces.AsSpan(0, length).CopyTo(ids);
-        ids[length] = _source.EndOfSentenceId;
+        int[] pieces = source.EncodeToIds(text);
+        if (pieces.Length + 1 > MaxSourceTokens)
+            throw new ArgumentException("The source exceeds the model's token limit.", nameof(text));
+        var ids = new int[pieces.Length + 1];
+        pieces.CopyTo(ids, 0);
+        ids[pieces.Length] = source.EndOfSentenceId;
         return ids;
     }
 
