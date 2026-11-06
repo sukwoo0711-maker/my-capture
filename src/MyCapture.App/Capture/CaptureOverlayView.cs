@@ -301,6 +301,15 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal const double StartGuideMoveDismissDip = 96;
 
     /// <summary>
+    /// How long the window highlight glides to a new window: shorter than the fast motion token, so
+    /// the highlight lands before the pointer reaches the next window.
+    /// </summary>
+    internal static readonly TimeSpan HoverGlideLength = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Frame pixels the farthest edge must move before the window highlight glides.</summary>
+    internal const double HoverGlideMinimumShift = 8;
+
+    /// <summary>
     /// Highlights the frontmost top-level window under the pointer and lets a click select it.
     /// Off by default so recording selection and diagnostics keep the plain region selector.
     /// </summary>
@@ -1337,15 +1346,17 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// Where the reveal clip, the band and the tab show the highlighted <paramref name="target"/>.
-    /// A new target glides there from the rectangle on screen over the fast motion token, so the
-    /// highlight follows the pointer from window to window instead of jumping; a new target during
-    /// a glide starts from where the highlight is at that moment.
+    /// A new target glides there from the rectangle on screen over <see cref="HoverGlideLength"/>,
+    /// so the highlight follows the pointer from window to window instead of jumping; a new target
+    /// during a glide snaps, so a pointer sweeping across windows never trails the highlight.
     /// </summary>
     /// <remarks>
     /// Only the picture moves. The hover a click captures and the tab's words change at once. The
-    /// first highlight, one that follows no highlight, and every highlight with Windows animation
-    /// effects off snap. A glide asks for the next composition frame until it lands; each of those
-    /// frames moves the reveal clip and redraws the selection layer, never the frozen desktop.
+    /// first highlight, one that follows no highlight, every highlight with Windows animation
+    /// effects off, a move of a few pixels and a move to or from a window larger than a quarter of
+    /// the screen snap: a large window's glide redraws most of the screen on every frame. A glide
+    /// asks for the next composition frame until it lands; each of those frames moves the reveal
+    /// clip and redraws the selection layer, never the frozen desktop.
     /// </remarks>
     private RectD? GlideHover(RectD? target)
     {
@@ -1359,14 +1370,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         TimeSpan now = ReadClock();
         if (_glideTarget != to)
         {
-            RectD? from = _gliding ? GlideAt(now) : _shownHover;
+            RectD? from = _gliding ? null : _shownHover;
             _glideTarget = to;
-            _gliding = from is { } start && start != to && FluidMotion.AnimationsEnabled;
+            _gliding = from is { } start && GlidesBetween(start, to);
             if (_gliding)
             {
                 _glideFrom = from!.Value;
                 _glideStart = now;
-                _glideLength = FluidMotion.FastDuration.TimeSpan;
+                _glideLength = HoverGlideLength;
                 _glideEasing = FluidMotion.StandardEasing;
             }
         }
@@ -1382,6 +1393,18 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         if (now - _glideStart >= _glideLength) _gliding = false;
         else QueueFeedback();
         return shown;
+    }
+
+    /// <summary>Whether the highlight glides from <paramref name="from"/> to <paramref name="to"/> instead of snapping.</summary>
+    private bool GlidesBetween(RectD from, RectD to)
+    {
+        if (!FluidMotion.AnimationsEnabled) return false;
+        double shift = Math.Max(
+            Math.Max(Math.Abs(to.Left - from.Left), Math.Abs(to.Top - from.Top)),
+            Math.Max(Math.Abs(to.Right - from.Right), Math.Abs(to.Bottom - from.Bottom)));
+        if (shift < HoverGlideMinimumShift) return false;
+        double quarter = (double)PixelWidth * PixelHeight / 4;
+        return from.Width * from.Height <= quarter && to.Width * to.Height <= quarter;
     }
 
     /// <summary>The glide's rectangle at <paramref name="now"/>, on whole frame pixels.</summary>
