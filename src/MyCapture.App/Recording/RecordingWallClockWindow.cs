@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
@@ -15,7 +16,8 @@ namespace MyCapture.App.Recording;
 /// <summary>
 /// A frameless, always-on-top clock window that displays the local date/time with millisecond precision
 /// inside the recording region. It is intentionally included in the screen capture (no display affinity
-/// exclusion is applied) and clamped strictly to the recording physical bounds.
+/// exclusion is applied to the clock itself, only to its tooltip) and clamped strictly to the recording
+/// physical bounds.
 /// </summary>
 internal sealed class RecordingWallClockWindow : Window
 {
@@ -152,6 +154,10 @@ internal sealed class RecordingWallClockWindow : Window
             UiText.Get("Text_35151C153089"));
 
         Content = _container;
+
+        // The tooltip is a popup window of its own, which a recording would capture with the
+        // clock: keep it out (excluded, or hidden before it is drawn where it cannot be excluded).
+        CaptureWindowExclusion.ExcludeToolTips(this, () => true);
 
         RepositionAndPlace();
 
