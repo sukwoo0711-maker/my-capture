@@ -967,8 +967,11 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal Task Select(CaptureSelectionCompletedEventArgs selection) =>
             (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
 
-        internal Task SelectSeparate() =>
-            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [Selection])!;
+        internal Task SelectSeparate() => SelectSeparate(Selection);
+
+        /// <summary>The editor-preserving path: a capture taken while another editor stays open.</summary>
+        internal Task SelectSeparate(CaptureSelectionCompletedEventArgs selection) =>
+            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [selection])!;
 
         /// <summary>The same capture, taken for a step of the practice window.</summary>
         internal CaptureSelectionCompletedEventArgs PracticeSelection() =>
@@ -979,6 +982,10 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 
         /// <summary>The App's DismissQuickAccessForCapture, as each capture command runs it first.</summary>
         internal void Dismiss() => typeof(App).GetMethod("DismissQuickAccessForCapture", Flags)!.Invoke(_app, null);
+
+        /// <summary>What exit runs before it waits for pending settings saves (OnExit and the exit preparation).</summary>
+        internal void QueueSettingsSavesForExit() =>
+            typeof(App).GetMethod("QueuePendingSettingsSavesForExit", Flags)!.Invoke(_app, null);
 
         /// <summary>The region capture command (the hotkey's handler).</summary>
         internal void RequestRegionCapture() => typeof(App).GetMethod("HandleCaptureRequested", Flags)!.Invoke(_app, null);

@@ -83,8 +83,9 @@ public static class StoreRatingPolicy
     public static readonly TimeSpan SecondInvitationDelay = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// A stamp further ahead than this is treated as a clock that was later corrected, and the
-    /// first-seen time restarts instead of staying at that future date.
+    /// A stamp further ahead than this is treated as a clock that was later corrected: the first-seen
+    /// time restarts instead of staying at that future date, and a showing's time holds back no second
+    /// showing.
     /// </summary>
     private static readonly TimeSpan FutureTolerance = TimeSpan.FromDays(1);
 
@@ -138,7 +139,9 @@ public static class StoreRatingPolicy
     /// <summary>
     /// True only for a packaged (Store) install whose invitation is unanswered and was shown fewer
     /// than <see cref="MaxInvitations"/> times, whose last use succeeded, with enough successful uses.
-    /// A counted showing with a timestamp must be at least <see cref="SecondInvitationDelay"/> old.
+    /// A counted showing with a timestamp must be at least <see cref="SecondInvitationDelay"/> old; as
+    /// with the first-seen time, one further ahead than <see cref="FutureTolerance"/> came from a clock
+    /// that was later corrected and holds nothing back, so it never defers the second showing for good.
     /// </summary>
     public static bool ShouldRequest(StoreRatingState state, bool isPackaged, DateTimeOffset now)
     {
@@ -147,7 +150,7 @@ public static class StoreRatingPolicy
             && !IsAnswered(state)
             && Math.Max(state.InvitationShownCount, 0) < MaxInvitations
             && (state.InvitationShownCount < 1 || state.InvitationShownUtc is not { } shown
-                || now - shown >= SecondInvitationDelay)
+                || shown - now > FutureTolerance || now - shown >= SecondInvitationDelay)
             && !state.LastCaptureFailed
             && state.SuccessfulCaptureCount >= RequiredSuccessfulCaptures;
     }

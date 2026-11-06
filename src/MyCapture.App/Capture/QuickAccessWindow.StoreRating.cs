@@ -25,6 +25,7 @@ internal sealed partial class QuickAccessWindow
     private bool _ratingUnavailable;
     private bool _ratingAnswered;
     private bool _ratingWithdrawn;
+    private bool _ratingCaptureFailed;
 
     private Grid BuildRatingInvitation()
     {
@@ -63,7 +64,8 @@ internal sealed partial class QuickAccessWindow
     /// Puts the invitation on the card. Only before the card is first shown: an invitation never appears
     /// on a card already on screen. <paramref name="review"/> is Review: the Store dialog's request over
     /// this card, or null when it was refused. <paramref name="close"/> ends the invitation.
-    /// <paramref name="withdraw"/> restores a showing hidden by a failure before either button was pressed.
+    /// <paramref name="withdraw"/> gives the showing back when the capture's own save or copy fails before
+    /// either button was pressed; a failed action of the card only hides the row.
     /// </summary>
     internal void OfferRatingInvitation(Func<Task?> review, Action close, Action withdraw)
     {
@@ -77,14 +79,17 @@ internal sealed partial class QuickAccessWindow
         _closeRating = close;
         _withdrawRating = withdraw;
         _ratingInvitation.Visibility = _ratingUnavailable ? Visibility.Hidden : Visibility.Visible;
-        if (_ratingUnavailable) HideRatingInvitationForFailure();
+        if (_ratingUnavailable) HideRatingInvitationForFailure(_ratingCaptureFailed);
     }
+
+    /// <summary>The invitation is on this card's screen now: offered, and neither answered, withdrawn nor hidden by a failure.</summary>
+    internal bool ShowsRatingInvitation => _ratingOffered && _ratingInvitation.Visibility == Visibility.Visible;
 
     /// <summary>
     /// Review: the card becomes the Store dialog's active owner, then the row leaves, keeping its space. It
-    /// also leaves when Review is refused (an error since it showed, the invitation answered elsewhere, an
-    /// attempt that could not be saved), so no button stays that does nothing. While the dialog it owns is
-    /// open, the card does not close itself.
+    /// also leaves when Review is refused (the app exiting or installing an update, the invitation answered
+    /// elsewhere, an attempt that could not be saved), so no button stays that does nothing. An error never
+    /// refuses it. While the dialog it owns is open, the card does not close itself.
     /// </summary>
     private async Task ReviewRatingAsync()
     {
@@ -137,11 +142,21 @@ internal sealed partial class QuickAccessWindow
         _closeRating!();
     }
 
-    /// <summary>A failure the card holds (ShowActionResult): the invitation leaves this card for good, keeping its space.</summary>
-    private void HideRatingInvitationForFailure()
+    /// <summary>
+    /// A failure the card holds (ShowActionResult): the invitation leaves this card for good, keeping its
+    /// space. Only the capture's own save or copy failure (<paramref name="captureFailed"/>) gives the
+    /// showing back, and only on a card still open; an action's failure (a copy again, text, a pin, a save)
+    /// hides the row and leaves the showing counted, as the user has seen it.
+    /// </summary>
+    private void HideRatingInvitationForFailure(bool captureFailed)
     {
         _ratingUnavailable = true;
-        if (WithdrawRatingInvitation()) _withdrawRating!();
+        _ratingCaptureFailed |= captureFailed;
+        if (captureFailed)
+        {
+            if (!_closed && WithdrawRatingInvitation()) _withdrawRating!();
+        }
+        else if (_ratingOffered) _ratingInvitation.Visibility = Visibility.Hidden;
     }
 
     /// <summary>Withdraws an unanswered row once, keeping its space and leaving bookkeeping to the caller.</summary>

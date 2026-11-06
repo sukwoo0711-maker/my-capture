@@ -36,6 +36,8 @@ public sealed class StoreRatingCoordinatorTests
         public readonly List<string> Warnings = [];
         public readonly List<int> SavedShowingCounts = [];
         public Action<Action> DeferWrite = write => write();
+        /// <summary>The background saver the deferred writes use; null leaves them on the synchronous save.</summary>
+        public Action<AppSettings>? SaveInBackground;
         public int SaveCalls;
         public bool Busy;
         public bool CardBusy;
@@ -67,7 +69,8 @@ public sealed class StoreRatingCoordinatorTests
                 return ShowSucceeds;
             },
             () => InvitationVisible,
-            () => CardBusy);
+            () => CardBusy,
+            SaveInBackground);
 
         public int Requests => Events.Count(e => e == "request");
 
@@ -618,13 +621,33 @@ public sealed class StoreRatingCoordinatorTests
         Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
         Assert.Equal(firstShown, harness.Settings.StoreRating.InvitationShownUtc);
 
-        // A refused offer leaves nothing to give back.
+        // A refused offer returns no token, so it has nothing to give back, and it counts and saves nothing.
         harness.CardBusy = true;
-        Assert.Null(coordinator.TryOfferOnCard(practice: false));
         events = harness.Events.Count;
-        Assert.False(coordinator.WithdrawCardOffer(second));
+        Assert.Null(coordinator.TryOfferOnCard(practice: false));
+        Assert.Null(coordinator.TryOfferOnCard(practice: false, pendingCapture: true));
         Assert.Equal(events, harness.Events.Count);
         Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(firstShown, harness.Settings.StoreRating.InvitationShownUtc);
+
+        // Nor does it touch an outstanding offer's withdrawal: refused only because the screen is busy,
+        // 24 hours after that offer's showing, it leaves that offer to give back exactly its own showing.
+        var other = new Harness();
+        StoreRatingCoordinator refusing = other.Create();
+        Succeed(refusing, 2);
+        StoreRatingCoordinator.CardOffer? outstanding = refusing.TryOfferOnCard(practice: false);
+        Assert.NotNull(outstanding);
+        other.Clock.Now = other.Clock.Now.Add(StoreRatingPolicy.SecondInvitationDelay);
+        Assert.True(StoreRatingPolicy.ShouldRequest(other.Settings.StoreRating, isPackaged: true, other.Clock.Now));
+        other.CardBusy = true;
+        events = other.Events.Count;
+        Assert.Null(refusing.TryOfferOnCard(practice: false));
+        Assert.Equal(events, other.Events.Count);
+        Assert.Equal(1, other.Settings.StoreRating.InvitationShownCount);
+        Assert.True(refusing.WithdrawCardOffer(outstanding));
+        Assert.Equal(0, other.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(other.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(refusing.WithdrawCardOffer(outstanding));
     }
 
     [Fact]
@@ -709,6 +732,62 @@ public sealed class StoreRatingCoordinatorTests
     }
 
     [Fact]
+    public void StoreRating_DeferredWritesUseTheBackgroundSaverAndExitQueuesTheWaitingOnesOnce()
+    {
+        var writes = new Queue<Action>();
+        var background = new List<(int Count, int Successes)>();
+        var harness = new Harness
+        {
+            DeferWrite = writes.Enqueue,
+            SaveInBackground = settings => background.Add((settings.StoreRating.InvitationShownCount, settings.StoreRating.SuccessfulCaptureCount)),
+        };
+        harness.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = harness.Create();
+
+        // A counted success and a card's showing wait for the idle UI; nothing is saved on the spot.
+        coordinator.RecordCapture(succeeded: true);
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        Assert.Equal(2, writes.Count);
+        Assert.Empty(background);
+        Assert.Equal(0, harness.SaveCalls);
+
+        // Exit comes first: one background save of the live state covers both, and those writes add nothing.
+        coordinator.FlushDeferredWrites();
+        Assert.Equal([(1, 2)], background);
+        coordinator.FlushDeferredWrites();
+        while (writes.TryDequeue(out Action? write)) write();
+        Assert.Equal([(1, 2)], background);
+
+        // A write queued afterwards saves once more, in the background as well.
+        Assert.True(coordinator.WithdrawCardOffer(offer));
+        writes.Dequeue()();
+        Assert.Equal([(1, 2), (0, 2)], background);
+        coordinator.FlushDeferredWrites();
+        Assert.Equal(2, background.Count);
+        Assert.Equal(0, harness.SaveCalls);
+
+        // A choice the user makes, and a window's showing, still save at once on the synchronous path.
+        Assert.True(coordinator.NotifyUserReturned());
+        Assert.Equal(1, harness.SaveCalls);
+        coordinator.DismissInvitation();
+        Assert.Equal(2, harness.SaveCalls);
+        Assert.Equal(2, background.Count);
+        Assert.Empty(writes);
+
+        // Nothing reaches the disk during the first run.
+        var firstRun = new Harness { DeferWrite = writes.Enqueue, SaveInBackground = _ => background.Add((-1, -1)) };
+        firstRun.Settings.General.IsFirstRun = true;
+        StoreRatingCoordinator duringFirstRun = firstRun.Create();
+        duringFirstRun.RecordCapture(succeeded: true);
+        duringFirstRun.FlushDeferredWrites();
+        while (writes.TryDequeue(out Action? write)) write();
+        Assert.Equal(2, background.Count);
+        Assert.Equal(0, firstRun.SaveCalls);
+    }
+
+    [Fact]
     public void StoreRating_APendingCardFailureWithdrawsOnlyTheShowingAndDefersItsSave()
     {
         var writes = new Queue<Action>();
@@ -775,6 +854,71 @@ public sealed class StoreRatingCoordinatorTests
         Assert.True(coordinator.WithdrawCardOffer(offer));
         Assert.Equal(0, harness.Settings.StoreRating.InvitationShownCount);
         Assert.Null(harness.Settings.StoreRating.InvitationShownUtc);
+    }
+
+    [Fact]
+    public void StoreRating_AShownCardShowingStandsOnceItsCaptureIsDeliveredOrItsCardCloses()
+    {
+        // Delivered while its card is open: nothing the card does afterwards gives the showing back.
+        var open = new Harness();
+        open.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = open.Create();
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.RecordCapture(succeeded: true);
+        coordinator.NoteCardCaptureDelivered(offer);
+        int saves = open.SaveCalls;
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(saves, open.SaveCalls);
+        Assert.Equal(1, open.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(open.Clock.Now, open.Settings.StoreRating.InvitationShownUtc);
+
+        // Closed with its capture already recorded: the showing stands, as for a card left unanswered.
+        var closed = new Harness();
+        closed.Settings.StoreRating.SuccessfulCaptureCount = 2;
+        coordinator = closed.Create();
+        offer = coordinator.TryOfferOnCard(practice: false);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.NoteCardClosed(offer);
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(1, closed.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(closed.Clock.Now, closed.Settings.StoreRating.InvitationShownUtc);
+
+        // A card that never showed was never seen: it still gives its showing back, whatever came first.
+        var unshown = new Harness();
+        unshown.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        coordinator = unshown.Create();
+        offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardCaptureDelivered(offer);
+        coordinator.NoteCardClosed(offer);
+        Assert.True(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(0, unshown.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(unshown.Settings.StoreRating.InvitationShownUtc);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoreRating_ACardClosedBeforeItsCaptureReportsIsSettledByThatCapture(bool delivered)
+    {
+        var harness = new Harness();
+        harness.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = harness.Create();
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        coordinator.NoteCardClosed(offer);
+
+        // Only the capture's own outcome decides: a failed save or copy gives the showing back.
+        coordinator.RecordCapture(delivered);
+        if (delivered) coordinator.NoteCardCaptureDelivered(offer);
+        Assert.Equal(!delivered, coordinator.WithdrawCardOffer(offer));
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(delivered ? 1 : 0, harness.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(delivered, harness.Settings.StoreRating.InvitationShownUtc is not null);
     }
 
     [Fact]
@@ -887,7 +1031,7 @@ public sealed class StoreRatingCoordinatorTests
     });
 
     [Fact]
-    public void StoreRating_ReviewOnACardIsRefusedWhileBusyOrAfterAnError() => StaTestHost.Run(() =>
+    public void StoreRating_ReviewOnACardIsRefusedOnlyWhileBusyOrWhenItsAttemptCannotBeSaved() => StaTestHost.Run(() =>
     {
         var harness = new Harness();
         StoreRatingCoordinator coordinator = harness.Create();
@@ -898,18 +1042,59 @@ public sealed class StoreRatingCoordinatorTests
         harness.CardBusy = true;
         Assert.Null(coordinator.AcceptInvitationOnCard(card));
         harness.CardBusy = false;
-        coordinator.RecordCapture(succeeded: false);
-        Assert.Null(coordinator.AcceptInvitationOnCard(card));
         harness.FailSave = true;
-        coordinator.RecordCapture(succeeded: true);
         Assert.Null(coordinator.AcceptInvitationOnCard(card));
         Assert.Equal(0, harness.Requests);
 
         // An attempt that could not be saved is not one: Review can be pressed again.
         Assert.Null(harness.Settings.StoreRating.RequestAttemptedUtc);
         harness.FailSave = false;
+
+        // An error recorded since the card showed refuses the library's Review, never the card's.
+        coordinator.RecordCapture(succeeded: false);
+        Assert.False(coordinator.AcceptInvitation());
         Assert.NotNull(coordinator.AcceptInvitationOnCard(card));
         Assert.Equal(1, harness.Requests);
+        Assert.Same(card, Assert.Single(harness.Owners));
+        Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoreRating_ReviewOnAPredictedCardAfterAnErrorOpensTheStoreBeforeItsCaptureReports(bool captureSucceeds) => StaTestHost.Run(() =>
+    {
+        var harness = new Harness();
+        StoreRatingCoordinator coordinator = harness.Create();
+        var card = new Window();
+        // The previous use failed: only the success this card predicts for its capture makes it eligible.
+        Succeed(coordinator, 2);
+        coordinator.RecordCapture(succeeded: false);
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false, pendingCapture: true);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        Assert.True(harness.Settings.StoreRating.LastCaptureFailed);
+
+        // Review before the capture's save and copy report: the Store opens and the answer is recorded.
+        coordinator.NoteCardOfferAnswered(offer);
+        Task? request = coordinator.AcceptInvitationOnCard(card);
+        Assert.NotNull(request);
+        Assert.Equal(1, harness.Requests);
+        Assert.Same(card, Assert.Single(harness.Owners));
+        Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
+        Assert.Equal("save count=2 attempted=True", harness.Events[harness.Events.IndexOf("request") - 1]);
+
+        // Whatever the capture then reports, the answer stands, the showing stays, and nothing asks again.
+        coordinator.RecordCapture(captureSucceeds);
+        Assert.False(coordinator.WithdrawCardOffer(offer));
+        Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
+        harness.Clock.Now = harness.Clock.Now.AddDays(2);
+        Succeed(coordinator, 2);
+        Assert.Null(coordinator.TryOfferOnCard(practice: false));
+        Assert.False(coordinator.NotifyUserReturned());
+        Assert.Null(coordinator.AcceptInvitationOnCard(card));
+        Assert.Equal(1, harness.Requests);
+        Assert.Equal(0, harness.Invites);
     });
 
     [Fact]

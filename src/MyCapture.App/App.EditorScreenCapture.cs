@@ -53,9 +53,14 @@ public partial class App
                 MonitorInfo monitor = selection.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
                 IDisposable? receiptLease = pendingReceipt;
                 // The selector and its persistence transition finish before the fallback receipt is shown.
+                // A practice capture's card carries no rating invitation, as on the card-first path.
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
                 {
-                    try { ShowQuickAccess(record, selection.SelectedBitmap, region, monitor, copied, preserveEditor: true); }
+                    try
+                    {
+                        ShowQuickAccess(record, selection.SelectedBitmap, region, monitor, copied, preserveEditor: true,
+                            practice: selection.PracticeTarget is not null);
+                    }
                     finally { receiptLease?.Dispose(); }
                 }));
                 pendingReceipt = null;

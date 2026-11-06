@@ -199,17 +199,21 @@ public sealed class QuickAccessRatingInvitationTests
             else if (failure == "capture") card.ShowCaptureFailure("저장 실패", "저장할 수 없습니다.");
             else
             {
-                // An action of the card that fails, as a pin that could not open: held like the capture's own failure.
+                // An action of the card that fails, as a pin that could not open: the row leaves like after
+                // the capture's own failure, but the showing it made stays counted.
                 Task pin = card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Copying", "QuickAccess.Copied");
                 var timeout = System.Diagnostics.Stopwatch.StartNew();
                 while (!pin.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(5)) Pump();
                 Assert.True(pin.IsCompleted);
             }
             Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
-            Assert.Equal(1, withdrawals);
+            Assert.False(card.ShowsRatingInvitation);
+            // Only the capture's own save or copy failure gives the showing back.
+            int given = failure == "action" ? 0 : 1;
+            Assert.Equal(given, withdrawals);
             Task anotherFailure = card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned");
             Assert.True(anotherFailure.IsCompletedSuccessfully);
-            Assert.Equal(1, withdrawals);
+            Assert.Equal(given, withdrawals);
             Click(card.RatingInvitationForTest.Review);
             Click(card.RatingInvitationForTest.Close);
             Assert.Equal(0, callbacks);
@@ -391,6 +395,41 @@ public sealed class QuickAccessRatingInvitationTests
         Assert.False(card.WithdrawRatingInvitation());
     });
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReviewOnAPredictedCardAfterAnErrorOpensTheStoreBeforeTheCaptureReports(bool captureSucceeds) => RunWithShell(false, shell =>
+    {
+        // The previous capture failed: only this capture's predicted success puts the invitation on its card.
+        shell.StoreRating.RecordCapture(false);
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+
+        // Review before the save and copy report: the Store dialog opens over the card and the answer is saved.
+        Click(card.RatingInvitationForTest.Review);
+        Assert.Same(card, Assert.Single(shell.RatingOwners));
+        Assert.NotNull(shell.Settings.StoreRating.RequestAttemptedUtc);
+        Assert.Contains(shell.Settings.StoreRating.RequestAttemptedUtc, shell.SavedRatings);
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.False(shell.IsRatingInvitationVisible);
+
+        copy.SetResult(captureSucceeds);
+        shell.Wait(handler);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.False(card.WithdrawRatingInvitation());
+
+        // Answered: no later card carries the invitation.
+        shell.Dismiss();
+        shell.CopyResult = null;
+        Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
+        Assert.Single(shell.RatingOwners);
+    });
+
     [Fact]
     public void AFailedPredictedCaptureWithdrawsAfterItsCardWasClosed() => RunWithShell(false, shell =>
     {
@@ -554,6 +593,47 @@ public sealed class QuickAccessRatingInvitationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ExitSavesACardShowingStillWaitingForTheIdleWriteOnce(bool afterSave)
+    {
+        var writes = new Queue<Action>();
+        RunWithShell(() => new Shell(ratingDeferWrite: writes.Enqueue) { ShowsCardAfterSave = afterSave }, shell =>
+        {
+            shell.Settings.StoreRating.SuccessfulCaptureCount = 2;
+            QuickAccessWindow card = Capture(shell);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Single(writes);
+            Assert.Empty(shell.SavedRatingShowings);
+
+            // The app exits before the UI is idle again: the showing is saved anyway, and only once.
+            shell.QueueSettingsSavesForExit();
+            Assert.Equal((1, shell.Settings.StoreRating.InvitationShownUtc), Assert.Single(shell.SavedRatingShowings));
+            writes.Dequeue()();
+            Assert.Single(shell.SavedRatingShowings);
+        });
+    }
+
+    [Fact]
+    public void ACopyFailureKnownBeforeTheCardIsBuiltNeverOffers() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        shell.CopyResult = Task.FromResult(false);
+        int saves = shell.SavedRatingShowings.Count;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        // Neither shown nor counted, rather than shown and withdrawn as the card reports the copy.
+        Assert.Equal(Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        shell.Wait(handler);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        Assert.All(shell.SavedRatingShowings.Skip(saves), saved => Assert.Equal(0, saved.Count));
+        Assert.False(shell.IsRatingInvitationVisible);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ACardStillCarriesItsInvitationWhenTheDeferredSettingsSaveFails(bool afterSave)
     {
         var writes = new Queue<Action>();
@@ -580,20 +660,109 @@ public sealed class QuickAccessRatingInvitationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AnActionFailureOnAnInvitationCardRestoresItsShowingAndVisibleState(bool afterSave) => RunWithShell(afterSave, shell =>
+    public void AnActionFailureOnAnInvitationCardHidesItsRowAndKeepsItsShowing(bool afterSave) => RunWithShell(afterSave, shell =>
     {
         QuickAccessWindow card = Capture(shell);
         Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        DateTimeOffset shown = Assert.IsType<DateTimeOffset>(shell.Settings.StoreRating.InvitationShownUtc);
         Assert.True(shell.IsRatingInvitationVisible);
+        int saves = shell.SavedRatingShowings.Count;
         for (int failure = 0; failure < 2; failure++)
         {
             shell.Wait(card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned"));
             Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
-            Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
-            Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            Assert.Equal(shown, shell.Settings.StoreRating.InvitationShownUtc);
             Assert.False(shell.IsRatingInvitationVisible);
         }
-        Assert.True(StoreRatingPolicy.ShouldRequest(shell.Settings.StoreRating, true, DateTimeOffset.UtcNow));
+        // Seen before the failure, the showing stays counted: nothing is given back or saved again.
+        Assert.Equal(saves, shell.SavedRatingShowings.Count);
+        Assert.False(StoreRatingPolicy.ShouldRequest(shell.Settings.StoreRating, true, DateTimeOffset.UtcNow));
+        Click(card.RatingInvitationForTest.Review);
+        Click(card.RatingInvitationForTest.Close);
+        Assert.Empty(shell.RatingOwners);
+        Assert.Null(shell.Settings.StoreRating.InvitationDismissedUtc);
+    });
+
+    [Theory]
+    [InlineData(false, "escape")]
+    [InlineData(false, "replacement")]
+    [InlineData(true, "escape")]
+    [InlineData(true, "replacement")]
+    public void AnActionThatFailsAfterItsCardClosedKeepsTheShowing(bool afterSave, string closedBy) => RunWithShell(afterSave, shell =>
+    {
+        QuickAccessWindow card = Capture(shell);
+        DateTimeOffset shown = Assert.IsType<DateTimeOffset>(shell.Settings.StoreRating.InvitationShownUtc);
+        var pin = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task action = card.RunAsync("Pin", () => pin.Task, "QuickAccess.Pinning", "QuickAccess.Pinned");
+        // Esc, or the next capture's command, closes the card while its action still runs.
+        if (closedBy == "escape") card.ShortcutActions["Close"]();
+        else shell.Dismiss();
+        Assert.False(card.IsOpen);
+        int saves = shell.SavedRatingShowings.Count;
+
+        pin.SetResult(false);
+        shell.Wait(action);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(shown, shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.Equal(saves, shell.SavedRatingShowings.Count);
+        Assert.False(shell.IsRatingInvitationVisible);
+        // The next card does not carry it a third time from the user's point of view.
+        Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+    });
+
+    [Theory]
+    [InlineData("close")]
+    [InlineData("escape")]
+    public void ACaptureSaveFailureAfterItsCardClosedStillGivesTheShowingBack(string closedBy) => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic capture save failure");
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        if (closedBy == "escape") card.ShortcutActions["Close"]();
+        else card.CloseNow();
+        Assert.False(card.IsOpen);
+
+        copy.SetResult(true);
+        shell.Wait(handler);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        Assert.Equal((0, (DateTimeOffset?)null), shell.SavedRatingShowings[^1]);
+        Assert.False(shell.IsRatingInvitationVisible);
+    });
+
+    [Fact]
+    public void ACaptureCopyFailureAfterAnActionFailedStillGivesTheShowingBack() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        // Saved and bound while the copy still runs: an action fails before the capture has reported.
+        shell.PumpUntil(() => card.LibraryButtonForTest.IsEnabled);
+        shell.Wait(card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned"));
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.False(shell.IsRatingInvitationVisible);
+
+        // The capture's own copy then fails: its showing is given back after all.
+        copy.SetResult(false);
+        shell.Wait(handler);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        Assert.False(card.WithdrawRatingInvitation());
     });
 
     [Theory]
@@ -668,6 +837,48 @@ public sealed class QuickAccessRatingInvitationTests
         Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
         shell.Dismiss();
         Assert.Equal(Visibility.Visible, Capture(shell).RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PreservedWindowPracticeFallbackCardLeavesInvitationForNextCapture(bool copySlowerThanSave) => RunWithShell(() =>
+    {
+        // The editor-preserving path shows its card after the save when no card showed first: none was
+        // scheduled, or its turn had not come when the capture was saved (a copy slower than the save).
+        var shell = new Shell(copyWait: copySlowerThanSave ? TimeSpan.FromMinutes(1) : null) { ShowsCardAfterSave = !copySlowerThanSave };
+        shell.StoreRating.RecordCapture(true);
+        shell.StoreRating.RecordCapture(true);
+        return shell;
+    }, shell =>
+    {
+        QuickAccessWindow Deliver(CaptureSelectionCompletedEventArgs selection)
+        {
+            var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            shell.CopyResult = copy.Task;
+            Task handler = shell.SelectSeparate(selection);
+            if (copySlowerThanSave)
+            {
+                object first = Assert.IsAssignableFrom<object>(shell.CardFirstState);
+                PropertyInfo phase = first.GetType().GetProperty("Phase", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                shell.PumpUntil(() => phase.GetValue(first)!.ToString() == "Cancelled");
+            }
+            copy.SetResult(true);
+            shell.Wait(handler);
+            shell.RunIdleTurns();
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            Assert.False(card.HasCaptureFailed, "Capture failed before rating assertions. " + card.DetailForTest.Text);
+            return card;
+        }
+
+        QuickAccessWindow practice = Deliver(shell.PracticeSelection());
+        Assert.Equal(Visibility.Collapsed, practice.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(shell.IsRatingInvitationVisible);
+        shell.Dismiss();
+        Assert.Equal(Visibility.Visible, Deliver(shell.Selection).RatingInvitationForTest.Row.Visibility);
         Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
     });
 

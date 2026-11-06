@@ -877,10 +877,20 @@ public partial class App : Application
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
+    /// <summary>
+    /// Queues every settings save still waiting at exit, so the wait for pending saves that follows covers
+    /// it: the editor preferences' timer and the Store rating's idle writes.
+    /// </summary>
+    private void QueuePendingSettingsSavesForExit()
+    {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        _storeRating?.FlushDeferredWrites();
+    }
+
     /// <summary>Drains preference saves off the dispatcher after exit preparation.</summary>
     private async Task FlushPreferenceSavesForExitAsync()
     {
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !await Task.Run(() => store.WaitForPendingSaves(TimeSpan.FromSeconds(3))))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
@@ -2781,7 +2791,8 @@ public partial class App : Application
         _quickAccess?.Close();
         _flightSpareRelease?.Stop();
         _flightSpare?.Release();
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        // A rating showing or its restoration still waiting for the idle UI is saved too.
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
