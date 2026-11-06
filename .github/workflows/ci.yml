@@ -181,3 +181,49 @@ jobs:
           path: artifacts/ci-x86/results/*.trx
           if-no-files-found: warn
           retention-days: 14
+
+  # A library delete of many captures uses one Shell operation and Undo one Recycle Bin restore.
+  # The canary moves the 124 directories of the 2026-11-06 report both ways through the runner's
+  # real Recycle Bin, brings every one back, and fails when the batch is not faster.
+  recycle-bin-canary:
+    name: Windows Recycle Bin batch canary
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Move and restore 124 directories one at a time and together
+        shell: powershell
+        env:
+          MYCAPTURE_RECYCLE_CANARY: '1'
+          MYCAPTURE_RECYCLE_CANARY_COUNT: '124'
+        run: |
+          dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --artifacts-path artifacts/ci-recycle-canary --filter "FullyQualifiedName=MyCapture.App.Tests.WindowsRecycleBinTests.OwnedDirectories_MoveAndRestoreTogether_FasterThanOneAtATime" --logger "trx;LogFileName=recycle-bin-canary.trx" --results-directory artifacts/ci-recycle-canary/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Require the canary to have run and passed
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$trx = Get-Content -LiteralPath 'artifacts/ci-recycle-canary/results/recycle-bin-canary.trx' -Raw -Encoding UTF8
+          $namespace = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+          $results = @(Select-Xml -Xml $trx -XPath '//t:UnitTestResult' -Namespace $namespace | ForEach-Object { $_.Node })
+          $name = 'MyCapture.App.Tests.WindowsRecycleBinTests.OwnedDirectories_MoveAndRestoreTogether_FasterThanOneAtATime'
+          if ($results.Count -ne 1 -or $results[0].testName -cne $name -or $results[0].outcome -cne 'Passed') {
+              $found = @($results | ForEach-Object { "$($_.testName)=$($_.outcome)" }) -join ', '
+              throw "The Recycle Bin canary must have exactly one Passed result; found: $found"
+          }
+          $report = @(Select-Xml -Xml $trx -XPath '//t:UnitTestResult/t:Output/t:StdOut' -Namespace $namespace | ForEach-Object { $_.Node.InnerText.Trim() })
+          if ($report.Count -ne 1 -or $report[0] -notmatch '^124 directories: ') { throw 'The canary did not report its 124-directory timings.' }
+          Write-Host "Recycle Bin canary passed: $($report[0])"
+      - name: Upload Recycle Bin canary result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ci-recycle-bin-canary-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/ci-recycle-canary/results/*.trx
+          if-no-files-found: warn
+          retention-days: 14
