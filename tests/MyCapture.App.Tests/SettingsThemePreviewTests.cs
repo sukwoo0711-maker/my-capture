@@ -32,7 +32,8 @@ public sealed partial class SettingsThemePreviewTests
     /// When the child counts as hung (150 s by default). A test whose own work is long on a slow
     /// runner passes a longer limit; its assertions keep their own budgets.
     /// </param>
-    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null, TimeSpan? hungAfter = null)
+    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null,
+        IReadOnlyDictionary<string, string>? childEnvironment = null, TimeSpan? hungAfter = null)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
@@ -69,6 +70,9 @@ public sealed partial class SettingsThemePreviewTests
         start.Environment[ChildFlag] = "1";
         start.Environment[ReceiptRoot] = receiptRoot;
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        // Lets a test hand its child the part of its work that child runs.
+        if (childEnvironment is not null)
+            foreach ((string name, string value) in childEnvironment) start.Environment[name] = value;
         using Process child = Process.Start(start) ?? throw new IOException("Could not start the isolated WPF test.");
         Task<string> output = child.StandardOutput.ReadToEndAsync();
         Task<string> error = child.StandardError.ReadToEndAsync();
