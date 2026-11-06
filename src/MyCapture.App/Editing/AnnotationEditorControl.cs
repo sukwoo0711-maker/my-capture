@@ -146,6 +146,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private FrameworkElement _stepSection = null!;
     private Border _stepPreview = null!;
     private Path _stepPreviewNumber = null!;
+    private Path _stepPreviewOutline = null!;
     private readonly HangulShortcutRelay _hangulRelay;
     private DispatcherTimer? _hangulNoticeTimer;
     private long? _hangulNoticeShownAt;
@@ -2568,12 +2569,20 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var panel = PropertyGroup("AnnotationStepProperties");
         panel.Children.Add(PropertyLabel(UiText.Get("EditorUx_StepNumberNext")));
+        // The canvas strokes a badge's outline and fills the number over it, so only the outer
+        // half of the outline shows; the preview layers two paths the same way. The number's
+        // clear stroke gives both paths the same measured size, so centring keeps them aligned.
+        _stepPreviewOutline = new Path
+        {
+            Stroke = StepPreviewOutlineBrush,
+            StrokeLineJoin = PenLineJoin.Round,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         _stepPreviewNumber = new Path
         {
             Fill = Brushes.White,
-            Stroke = StepPreviewOutlineBrush,
-            StrokeThickness = 1,
-            StrokeLineJoin = PenLineJoin.Round,
+            Stroke = Brushes.Transparent,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -2581,9 +2590,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             Width = 32,
             Height = 32,
-            CornerRadius = new CornerRadius(4),
+            // Square, as the canvas paints a step badge's plate.
             BorderThickness = new Thickness(1),
-            Child = _stepPreviewNumber,
+            Child = new Grid { Children = { _stepPreviewOutline, _stepPreviewNumber } },
             SnapsToDevicePixels = true,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
@@ -2603,25 +2612,37 @@ internal sealed partial class AnnotationEditorControl : Grid
         ColorRgba color = _controller.StrokeColor;
         double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         string name = UiText.Format("EditorUx_StepNumberNextName", number);
+        string family = _controller.DefaultFontFamily;
         // The inspector refreshes on every selection and history event while the step tool is
         // active; the badge is rebuilt only when something it draws or announces changes.
-        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name);
+        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name, family);
         if (_stepPreviewShown == shown) return;
         _stepPreviewShown = shown;
         _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-            text.Length > 2 ? TypeScale.Content.StepPreviewDense : TypeScale.Content.StepPreviewNormal, Brushes.White, pixelsPerDip);
-        Geometry digits = formatted.BuildGeometry(new Point(0, 0));
+        // The badge the next click adds, laid out as the canvas lays it out: its font, weight
+        // and outline, fitted to the preview's size by the measure the step tool uses.
+        var badge = new TextAnnotation
+        {
+            IsStepNumber = true, Text = text, Rect = new RectD(0, 0, _stepPreview.Width, _stepPreview.Height),
+            FontFamily = family, Background = color, Foreground = ColorRgba.White, Bold = true, HasOutline = true,
+        };
+        badge.FontSize = MeasureStepNumberFont(badge);
+        Geometry digits = TextAnnotationLayout.Format(badge, pixelsPerDip).BuildGeometry(new Point(0, 0));
         // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
         Rect ink = digits.Bounds;
         if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
         _stepPreviewNumber.Data = digits;
+        _stepPreviewOutline.Data = digits;
+        // The canvas's outline width for this badge (AnnotationRenderer.DrawText).
+        double outline = badge.OutlineStyle == TextOutlineStyle.Consistent
+            ? badge.FontSize / 18 : Math.Max(1, badge.FontSize / 12);
+        _stepPreviewOutline.StrokeThickness = outline;
+        _stepPreviewNumber.StrokeThickness = outline;
         AutomationName(_stepPreview, name);
     }
 
     /// <summary>What the step preview last drew and announced.</summary>
-    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name)? _stepPreviewShown;
+    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name, string Family)? _stepPreviewShown;
 
     /// <summary>The number the step preview shows, for tests.</summary>
     internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);

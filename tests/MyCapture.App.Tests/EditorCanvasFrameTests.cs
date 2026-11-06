@@ -3,13 +3,18 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
+using MyCapture.App.Editing;
+using MyCapture.Core.Annotations;
+using MyCapture.Core.Primitives;
 using Xunit;
 using static MyCapture.App.Tests.EditorKeysTests;
 
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The editor's canvas frame draws the rounded corners it declares.
+/// The editor's canvas frame and step-number preview draw what they declare: rounded frame
+/// corners and the badge the next click adds.
 /// </summary>
 public sealed class EditorCanvasFrameTests
 {
@@ -60,6 +65,48 @@ public sealed class EditorCanvasFrameTests
             // The canvas itself still fills the frame away from the corners.
             Assert.NotEqual(behind, pixels[left + 4, top + 40]);
         }
+    });
+
+    [Fact]
+    public void StepPreviewDrawsTheBadgeTheNextClickAdds() => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(beforeShow: UseShippedTheme);
+        AnnotationEditorControl editor = host.Editor;
+        AnnotationEditorController controller = Controller(editor);
+        Assert.True(Press(editor, Key.N, ime: false));
+        controller.HitTolerance = 1;
+        controller.PointerDown(new PointD(80, 80));
+        controller.PointerUp(new PointD(80, 80));
+        TextAnnotation placed = Assert.Single(controller.Document.Items.OfType<TextAnnotation>(), text => text.IsStepNumber);
+        Assert.Equal("1", placed.Text);
+        Assert.True(controller.TrySetNextStepNumber(1));
+        typeof(AnnotationEditorControl).GetMethod("UpdateStepPreview",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(editor, null);
+        host.Window.UpdateLayout();
+
+        var preview = Field<Border>(editor, "_stepPreview");
+        // The canvas paints a badge's plate square.
+        Assert.Equal(new CornerRadius(0), preview.CornerRadius);
+
+        // Same font, weight and fit as the placed badge: its "1" scaled to the preview's size.
+        Rect canvasInk = TextAnnotationLayout.Format(placed, 1).BuildGeometry(default).Bounds;
+        double scale = preview.Width / placed.Rect.Width;
+        var number = Field<Path>(editor, "_stepPreviewNumber");
+        Rect previewInk = number.Data.Bounds;
+        Assert.InRange(previewInk.Width, canvasInk.Width * scale - 0.25, canvasInk.Width * scale + 0.25);
+        Assert.InRange(previewInk.Height, canvasInk.Height * scale - 0.25, canvasInk.Height * scale + 0.25);
+
+        // The outline sits under the number, as the canvas strokes it before filling the glyphs.
+        var outline = Field<Path>(editor, "_stepPreviewOutline");
+        var layers = Assert.IsType<Grid>(preview.Child);
+        Assert.Equal(new UIElement[] { outline, number }, layers.Children.Cast<UIElement>().ToArray());
+        Assert.Null(outline.Fill);
+        Assert.NotNull(outline.Stroke);
+        Assert.Equal(Colors.Transparent, Assert.IsType<SolidColorBrush>(number.Stroke).Color);
+        Assert.Same(number.Data, outline.Data);
+        // Equal measured sizes: the two layers centre on the same point.
+        Assert.Equal(outline.StrokeThickness, number.StrokeThickness);
+        Assert.Equal(outline.DesiredSize, number.DesiredSize);
     });
 
     private static void UseShippedTheme(Window window)
