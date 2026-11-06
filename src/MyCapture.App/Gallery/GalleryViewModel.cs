@@ -257,9 +257,18 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     /// <summary>True when the queue itself is empty (as opposed to a search with no hits).</summary>
     /// <remarks>Captures still leaving for the Recycle Bin already count as gone.</remarks>
-    public bool QueueIsEmpty => _leaving.Count == 0
-        ? _controller.Count == 0
-        : _controller.Records.All(record => _leaving.Contains(record.Id));
+    public bool QueueIsEmpty => PresentCount == 0;
+
+    /// <summary>
+    /// The library's captures as the view counts them. Captures still leaving for the Recycle Bin
+    /// already count as gone, so every count drops together with their cards instead of when
+    /// their files finish moving.
+    /// </summary>
+    private IEnumerable<CaptureRecord> PresentRecords => _leaving.Count == 0
+        ? _controller.Records
+        : _controller.Records.Where(record => !_leaving.Contains(record.Id));
+
+    private int PresentCount => _leaving.Count == 0 ? _controller.Count : PresentRecords.Count();
 
     /// <summary>Hides these captures from the next refresh on, while their deletion runs.</summary>
     internal void SetLeaving(IEnumerable<Guid> ids) => _leaving.UnionWith(ids);
@@ -276,7 +285,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     /// </summary>
     internal int ReachableCount => VisibleCount + _groups.Sum(group => group.Folders.Sum(card => card.CaptureCount));
 
-    public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, _controller.Count);
+    public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, PresentCount);
     public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery || _folderIsEmpty
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.NoCaptures" : "Library.Empty.NoResults");
 
@@ -313,8 +322,10 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     {
         get
         {
-            string count = UiText.Format("Text_B6D9CAB382C8", _controller.Count);
-            string storage = FormatBytes(_controller.TotalBytes);
+            string count = UiText.Format("Text_B6D9CAB382C8", PresentCount);
+            long leavingBytes = _leaving.Count == 0 ? 0
+                : _controller.Records.Where(record => _leaving.Contains(record.Id)).Sum(record => record.TotalBytes);
+            string storage = FormatBytes(Math.Max(0, _controller.TotalBytes - leavingBytes));
             string pins = _controller.IsOverCapacityDueToPins
                 ? UiText.Get("Text_F1A864DCBEC4")
                 : string.Empty;
@@ -371,7 +382,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
             GalleryFolderCardViewModel[] cards = group.Folders.Count == 0 ? []
                 : group.Folders.Select(folder => GetOrUpdateFolderCard(folder,
-                    folderIndex ??= new FolderCardIndex(_controller.Queue), seenFolders)).ToArray();
+                    folderIndex ??= new FolderCardIndex(_controller.Queue, _leaving), seenFolders)).ToArray();
             if (tiles.Count > 0 || cards.Length > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards));
         }
 

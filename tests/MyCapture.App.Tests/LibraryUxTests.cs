@@ -62,6 +62,54 @@ public sealed class LibraryUxTests
     }
 
     [Fact]
+    public async Task CountsDropWithTheCardsOfADeleteThatIsStillMoving()
+    {
+        var f = new Fixture();
+        CaptureFolder folder = await f.Queue.CreateFolderAsync("Review", createdAt: Now);
+        CaptureRecord image = f.Add(Now.AddMinutes(-1), tags: "work", bytes: 3L * 1024 * 1024);
+        CaptureRecord video = f.Add(Now.AddMinutes(-2), video: true);
+        CaptureRecord kept = f.Add(Now.AddMinutes(-3));
+        CaptureRecord filedLeaving = f.Add(Now.AddMinutes(-4));
+        CaptureRecord filed = f.Add(Now.AddMinutes(-5), tags: "work");
+        f.Queue.TogglePin(kept.Id);
+        await f.Queue.MoveCapturesAsync([filedLeaving.Id, filed.Id], folder.Id);
+        GalleryViewModel vm = f.ViewModel();
+
+        // A delete hides its captures at once, while their files are still moving to the Recycle
+        // Bin and the queue still holds them. Every count drops together with their cards.
+        Guid[] leaving = [image.Id, kept.Id, filedLeaving.Id];
+        vm.SetLeaving(leaving);
+        vm.Refresh();
+
+        Assert.Equal([video.Id], Listed(vm));
+        Assert.Equal((2, 1, 1, 0), (vm.AllItemsCount, vm.ImageCount, vm.VideoCount, vm.KeptCount));
+        GalleryFolderCardViewModel card = vm.FindFolderCard(folder.Id)!;
+        Assert.Equal(1, card.CaptureCount);
+        Assert.Same(vm.FindTile(filed.Id), card.Preview);
+        Assert.Equal(1, Assert.Single(vm.FolderRoots).Count);
+        Assert.Equal(2, Assert.Single(vm.FolderNodes).Count);
+        Assert.Equal(1, Assert.Single(vm.VisibleTags, tag => tag.Name == "work").Count);
+        // The root still reaches every capture that stays, so it reports no partial result.
+        Assert.False(vm.ShowResultCount);
+        using (UiText.UseLanguage("ko-KR"))
+        {
+            Assert.Equal("항목 2개 · 0.0 MB", vm.SummaryText);
+            vm.SearchQuery = "nothing matches this";
+            Assert.Equal("전체 2개 중 0개", vm.ResultCountText);
+        }
+
+        // A capture the delete kept counts again.
+        vm.SearchQuery = string.Empty;
+        vm.ClearLeaving(leaving);
+        vm.Refresh();
+        Assert.Equal((5, 4, 1, 1), (vm.AllItemsCount, vm.ImageCount, vm.VideoCount, vm.KeptCount));
+        card = vm.FindFolderCard(folder.Id)!;
+        Assert.Equal(2, card.CaptureCount);
+        Assert.Same(vm.FindTile(filedLeaving.Id), card.Preview);
+        using (UiText.UseLanguage("ko-KR")) Assert.Equal("항목 5개 · 3.0 MB", vm.SummaryText);
+    }
+
+    [Fact]
     public async Task FolderListShowsRootFoldersByNameAcrossDates()
     {
         var f = new Fixture();
@@ -435,11 +483,11 @@ public sealed class LibraryUxTests
             new GalleryController(Queue, NullLogger<GalleryController>.Instance),
             record => Queue.GetFilePath(record, CaptureFileNames.Thumbnail), 96, clock: () => Now);
 
-        internal CaptureRecord Add(DateTimeOffset created, bool video = false, string title = "")
+        internal CaptureRecord Add(DateTimeOffset created, bool video = false, string title = "", string tags = "", long bytes = 4)
         {
             var record = new CaptureRecord
             {
-                CreatedAt = created, UpdatedAt = created, Width = 2, Height = 2, TotalBytes = 4, Title = title,
+                CreatedAt = created, UpdatedAt = created, Width = 2, Height = 2, TotalBytes = bytes, Title = title, Tags = tags,
                 MediaKind = video ? CaptureMediaKind.Video : CaptureMediaKind.Image,
             };
             Queue.Add(record);

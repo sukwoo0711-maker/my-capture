@@ -131,12 +131,13 @@ public sealed partial class GalleryViewModel
         private readonly Dictionary<Guid, (int Count, CaptureRecord Newest)> _direct = [];
         private readonly Dictionary<Guid, (int Count, CaptureRecord? Newest)> _subtrees = [];
 
-        internal FolderCardIndex(CaptureQueue queue)
+        /// <param name="leaving">Captures moving to the Recycle Bin, which no card counts or previews any more.</param>
+        internal FolderCardIndex(CaptureQueue queue, IReadOnlySet<Guid> leaving)
         {
             _children = queue.Folders.ToLookup(folder => folder.ParentId);
             foreach (CaptureRecord record in queue.Records)
             {
-                if (record.FolderId is not { } id) continue;
+                if (record.FolderId is not { } id || leaving.Contains(record.Id)) continue;
                 _direct[id] = _direct.TryGetValue(id, out var current)
                     ? (current.Count + 1, Newer(record, current.Newest)!) : (1, record);
             }
@@ -222,7 +223,7 @@ public sealed partial class GalleryViewModel
             return node;
         }
         var children = queue.Folders.ToLookup(folder => folder.ParentId);
-        var counts = queue.Records.Where(record => record.FolderId is not null)
+        var counts = PresentRecords.Where(record => record.FolderId is not null)
             .GroupBy(record => record.FolderId!.Value).ToDictionary(group => group.Key, group => group.Count());
         GalleryFolderNode BuildFolder(CaptureFolder folder)
         {
@@ -233,7 +234,7 @@ public sealed partial class GalleryViewModel
             node.Count = counts.GetValueOrDefault(folder.Id) + nested.Sum(child => child.Count);
             return node;
         }
-        var loose = queue.Records.Where(record => record.FolderId is null)
+        var loose = PresentRecords.Where(record => record.FolderId is null)
             .GroupBy(record => DateOnly.FromDateTime(record.CreatedAt.DateTime))
             .ToDictionary(group => group.Key, group => group.Count());
         var roots = children[null].ToLookup(folder => folder.CreatedDate);
