@@ -1,8 +1,10 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
@@ -126,6 +128,40 @@ public sealed class VideoExportDialogTests
             Assert.Equal(1, chooserCalls);
             Assert.True(dialog.CanExport);
             Assert.False(dialog.IsProgressVisible);
+        }
+        finally { dialog.Close(); }
+        return true;
+    });
+
+    /// <summary>
+    /// A failed export reads in State.Danger, as the editor's and the library's failures do; it
+    /// used to look like the neutral hint. Neutral lines set no color and keep the dialog's.
+    /// </summary>
+    [Fact]
+    public async Task Dialog_FailureReadsInTheDangerColorUntilTheNextNeutralLine() => await StaThreadTask.RunAsync(() =>
+    {
+        using var scope = UiText.UseLanguage("ko-KR");
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        var recording = new RecordingResult(Path.Combine(Path.GetTempPath(), "never-read.mp4"), 6_000, 30, 180, 1280, 720);
+        var document = VideoEditDocument.CreateFor(1280, 720, 6_000);
+        var dialog = new VideoExportDialog(recording, document, NullLoggerFactory.Instance, gif: false);
+        try
+        {
+            var danger = new SolidColorBrush(Colors.Red);
+            dialog.Resources["State.Danger"] = danger;
+            var status = (TextBlock)typeof(VideoExportDialog)
+                .GetField("_status", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(dialog)!;
+            Assert.Same(DependencyProperty.UnsetValue, status.ReadLocalValue(TextBlock.ForegroundProperty));
+
+            // Choosing the recording itself fails before anything is read or written.
+            dialog.DestinationChooserForTest = () => recording.OutputPath;
+            dialog.ExportAsync().GetAwaiter().GetResult();
+            Assert.Equal(UiText.Format("MediaExport_Error", UiText.Get("MediaExport_SourceProtected")), dialog.StatusText);
+            Assert.Same(danger, status.Foreground);
+
+            dialog.SizePresetIndex = 1;
+            Assert.Equal(UiText.Get("MediaExport_Hint"), dialog.StatusText);
+            Assert.Same(DependencyProperty.UnsetValue, status.ReadLocalValue(TextBlock.ForegroundProperty));
         }
         finally { dialog.Close(); }
         return true;

@@ -322,6 +322,74 @@ public sealed class VideoEditorUxLayoutTests
         finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
     });
 
+    /// <summary>
+    /// The save progress row's cancel button keeps the row's 12 DIP gap after the remaining
+    /// time, as in the export dialog. Attaching its Esc hint reset it to the command bar's 3 DIP.
+    /// </summary>
+    [Fact]
+    public void SaveProgressCancelKeepsTheProgressRowGap() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-video-ux-progress-gap-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true);
+            MediaExportProgressRow progress = Field<MediaExportProgressRow>(editor, "_saveProgress");
+            Assert.Equal(new MediaExportProgressRow().CancelButton.Margin, progress.CancelButton.Margin);
+            Assert.Equal(12, progress.CancelButton.Margin.Left);
+        }
+        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
+    });
+
+    /// <summary>
+    /// The details panel's text lines start where its buttons' chromes start. The heading and
+    /// the frame position sat 3 DIP in, the start and end labels 2 DIP, and the kept and
+    /// removed lengths and the layers heading at 0, so the column read as three ragged edges.
+    /// </summary>
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void DetailsPanelTextAndButtonsShareOneLeftEdge(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string root = OwnedTestDirectory.Create("mc-video-ux-details-edge-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true, 1400, 820);
+            editor.SetDetailsExpandedForTest(true);
+            editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            var layout = (Grid)editor.Content;
+            ScrollViewer scroll = Assert.Single(Descendants(layout).OfType<ScrollViewer>(), viewer => viewer.Name == "VideoDetailsScroll");
+            var content = (StackPanel)scroll.Content;
+            StackPanel precise = Assert.Single(Descendants(content).OfType<StackPanel>(), panel => panel.Name == "VideoPreciseTransport");
+            StackPanel range = Assert.Single(Descendants(content).OfType<StackPanel>(), panel => panel.Name == "VideoTrimRange");
+            WrapPanel[] rows = precise.Children.OfType<WrapPanel>().ToArray();
+            var edges = new (string Name, FrameworkElement Element)[]
+            {
+                ("heading", Assert.Single(Descendants(content).OfType<TextBlock>(), text => text.Name == "VideoDetailsHeading")),
+                ("navigation", (Button)rows[0].Children[0]),
+                ("frame step", (Button)rows[1].Children[0]),
+                ("frame position", Field<TextBlock>(editor, "_positionFrameLabel")),
+                ("start label", Assert.Single(range.Children.OfType<StackPanel>().SelectMany(row => row.Children.OfType<TextBlock>()), text => text.Text == UiText.Get("Video.TrimIn"))),
+                ("end label", Assert.Single(range.Children.OfType<StackPanel>().SelectMany(row => row.Children.OfType<TextBlock>()), text => text.Text == UiText.Get("Video.TrimOut"))),
+                ("reset", Field<Button>(editor, "_resetTrimButton")),
+                ("kept length", Field<TextBlock>(editor, "_keptLengthLabel")),
+                ("removed length", Field<TextBlock>(editor, "_removedLengthLabel")),
+                ("layers heading", Assert.Single(Descendants(content).OfType<TextBlock>(), text => text.Name == "VideoLayersHeading")),
+                ("edit layer", Field<Button>(editor, "_editTextButton")),
+            };
+            Assert.All(edges, edge =>
+            {
+                Assert.True(edge.Element.IsVisible, $"{edge.Name} is hidden");
+                double left = edge.Element.TranslatePoint(new Point(), content).X;
+                Assert.True(Math.Abs(left - VideoEditorWindow.DetailsTextInset) < 0.01, $"{edge.Name} starts at {left} DIP");
+            });
+        }
+        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
+    });
+
     [Fact]
     public void IdleStatusDoesNotRepeatInstructionsAlreadyAvailableInTooltips() => StaTestHost.Run(() =>
     {

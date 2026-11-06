@@ -1632,22 +1632,135 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         }
     }
 
+    /// <summary>
+    /// Label intervals the overview ruler may use, shortest first. Only the ones that are a
+    /// multiple of the major tick apply; with 4 s, 20 s and 4 min among them, each applicable
+    /// interval is at most 2.5 times the one before, so a strip that is a little too narrow for
+    /// 2 s labels gets 4 s labels instead of 10 s ones.
+    /// </summary>
+    private static readonly double[] RulerLabelIntervalsMs =
+    [
+        500, 1_000, 2_000, 4_000, 5_000, 10_000, 15_000, 20_000, 30_000,
+        60_000, 120_000, 240_000, 300_000, 600_000, 1_200_000, 1_800_000, 3_600_000,
+    ];
+
+    private const double RulerLabelGap = 6;
+
     private void DrawOverviewRulerLabels(DrawingContext dc, double width, ChipLayout chips)
     {
         double majorMs = CoarseIntervalMs;
         int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / (majorMs / 4.0)));
+        // Every labelled tick is a multiple of one interval, so the labels stay evenly spaced
+        // and whole seconds keep their labels; skipping whichever label collided left runs
+        // such as 0:00.5 0:01.5 0:04.5 in a narrow strip.
+        int labelEvery = OverviewRulerLabelStride(width, majorMs, minorCount / 4);
         double labelRight = double.NegativeInfinity;
-        for (int index = 0; index <= minorCount; index += 4)
+        for (int index = 0; index <= minorCount; index += 4 * labelEvery)
         {
             double time = Math.Min(_durationMs, index * majorMs / 4.0);
             FormattedText label = Format(FormatTickLabel(time), TypeScale.Micro, semiBold: false, _textSecondary);
             double left = Math.Clamp(OverviewMsToPx(time, width) + 3, 3, Math.Max(3, width - label.Width - 3));
             var bounds = new Rect(left, 2, label.Width, label.Height);
-            if (left < labelRight + 6) continue;
+            // Only a label pulled in from the right edge can still meet its neighbour.
+            if (left < labelRight + RulerLabelGap) continue;
             labelRight = bounds.Right;
             if (_trimModeEnabled && (bounds.IntersectsWith(chips.In) || bounds.IntersectsWith(chips.Out))) continue;
             dc.DrawText(label, bounds.TopLeft);
         }
+    }
+
+    private (double Width, double DurationMs, double MajorMs, double PixelsPerDip, int Stride) _rulerStride;
+
+    /// <summary>
+    /// Major ticks per overview label: the shortest <see cref="RulerLabelIntervalsMs"/> entry
+    /// that is a multiple of the major tick and keeps every label <see cref="RulerLabelGap"/>
+    /// clear of the next. The trim chips do not take part, so moving them never re-spaces the ruler.
+    /// </summary>
+    internal int OverviewRulerLabelStride(double width, double majorMs, int majorCount)
+    {
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        if (_rulerStride.Stride > 0 && _rulerStride.Width == width && _rulerStride.DurationMs == _durationMs
+            && _rulerStride.MajorMs == majorMs && _rulerStride.PixelsPerDip == pixelsPerDip)
+        {
+            return _rulerStride.Stride;
+        }
+
+        int stride = 1;
+        foreach (double intervalMs in RulerLabelIntervalsMs)
+        {
+            double ratio = intervalMs / majorMs;
+            int candidate = (int)Math.Round(ratio);
+            if (candidate < 1 || Math.Abs(ratio - candidate) > 1e-6) continue;
+            stride = candidate;
+            if (RulerLabelsFit(width, majorMs, majorCount, candidate)) break;
+        }
+
+        _rulerStride = (width, _durationMs, majorMs, pixelsPerDip, stride);
+        return stride;
+    }
+
+    private (double Width, double SpanMs, double MajorMs, double DurationMs, double PixelsPerDip, long Stride) _detailRulerStride;
+
+    /// <summary>
+    /// Major ticks per detail label: the shortest <see cref="RulerLabelIntervalsMs"/> entry that
+    /// is a multiple of the major tick and leaves <see cref="RulerLabelGap"/> beside its widest
+    /// labels at the current zoom.
+    /// </summary>
+    internal long DetailRulerLabelStride(double width, double majorMs)
+    {
+        double spanMs = _viewport.VisibleSpanMs;
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        if (_detailRulerStride.Stride > 0 && _detailRulerStride.Width == width && _detailRulerStride.SpanMs == spanMs
+            && _detailRulerStride.MajorMs == majorMs && _detailRulerStride.DurationMs == _durationMs
+            && _detailRulerStride.PixelsPerDip == pixelsPerDip)
+        {
+            return _detailRulerStride.Stride;
+        }
+
+        long stride = 1;
+        if (spanMs > 0 && width > 0)
+        {
+            foreach (double intervalMs in RulerLabelIntervalsMs)
+            {
+                double ratio = intervalMs / majorMs;
+                long candidate = (long)Math.Round(ratio);
+                if (candidate < 1 || Math.Abs(ratio - candidate) > 1e-6) continue;
+                stride = candidate;
+                // The longest labels are the last two multiples of the interval in the clip.
+                double last = Math.Floor(_durationMs / intervalMs) * intervalMs;
+                double widest = Math.Max(DetailLabelWidth(FormatTickLabel(last)),
+                    DetailLabelWidth(FormatTickLabel(Math.Max(0, last - intervalMs))));
+                if (intervalMs / spanMs * width >= widest + RulerLabelGap) break;
+            }
+        }
+
+        _detailRulerStride = (width, spanMs, majorMs, _durationMs, pixelsPerDip, stride);
+        return stride;
+    }
+
+    /// <summary>A detail label's width with the scrim padding <see cref="DrawText"/> adds.</summary>
+    private double DetailLabelWidth(string label) =>
+        Format(label, TypeScale.Micro, semiBold: true, _textSecondary).Width + 10;
+
+    /// <summary>The bottom of the detail labels' scrims, which start 2 DIP below the top.</summary>
+    private double DetailLabelRowBottom() =>
+        2 + Format("0:00", TypeScale.Micro, semiBold: true, _textSecondary).Height + 2;
+
+    private bool RulerLabelsFit(double width, double majorMs, int majorCount, int stride)
+    {
+        double previousRight = double.NegativeInfinity;
+        for (int major = 0; major <= majorCount; major += stride)
+        {
+            double time = Math.Min(_durationMs, major * majorMs);
+            double labelWidth = Format(FormatTickLabel(time), TypeScale.Micro, semiBold: false, _textSecondary).Width;
+            double left = OverviewMsToPx(time, width) + 3;
+            // The last label is pulled in from the right edge and gives way when it must.
+            if (left + labelWidth > width - 3) break;
+            if (left < previousRight + RulerLabelGap) return false;
+            previousRight = left + labelWidth;
+        }
+
+        return true;
     }
 
     private void DrawZoomLane(DrawingContext dc, double width, double top, double bottom)
@@ -1693,7 +1806,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 dc.DrawRectangle(_surfaceSunken, null, new Rect(size));
                 double frameMs = FrameStepCalculator.FrameDurationMs(_fps);
                 double framePx = _viewport.VisibleSpanMs > 0 ? frameMs / _viewport.VisibleSpanMs * width : 0;
-                if (framePx >= 2.0)
+                bool frameHint = framePx < 2.0;
+                if (!frameHint)
                 {
                     long firstFrame = (long)Math.Ceiling(_viewport.ViewStartMs / frameMs);
                     long lastFrame = (long)Math.Floor(_viewport.ViewEndMs / frameMs);
@@ -1716,20 +1830,44 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                         double x = _viewport.MsToPx(time, width);
                         DrawLine(dc, _minorTickPen, x, height * 0.68, x, height);
                     }
-
-                    DrawText(dc, UiText.Get("Text_D9483E35CD83"), width / 2.0,
-                        height * 0.36, _textSecondary, TypeScale.Caption, semiBold: true, _surfaceScrim, centered: true);
                 }
 
                 double majorMs = CoarseIntervalMs;
                 double firstMajor = Math.Ceiling(_viewport.ViewStartMs / majorMs) * majorMs;
+                // Every major tick keeps its line; labels go on the multiples of one interval
+                // counted from 0:00, so scrolling keeps the same labels. A label on every tick ran
+                // the labels into each other once the view spanned more than a few major ticks.
+                long labelEvery = DetailRulerLabelStride(width, majorMs);
+                // The lines go down before any label: a tick drawn after a chip cut through its
+                // text wherever the unlabelled ticks fall inside a label's width.
                 for (double time = firstMajor; time <= _viewport.ViewEndMs + 0.001; time += majorMs)
                 {
                     double x = _viewport.MsToPx(time, width);
                     DrawLine(dc, _majorTickPen, x, 0, x, height);
-                    DrawText(dc, FormatTickLabel(time),
-                        Math.Clamp(x + 4, 3, Math.Max(3, width - 54)), 2,
+                }
+
+                double labelRight = double.NegativeInfinity;
+                for (double time = firstMajor; time <= _viewport.ViewEndMs + 0.001; time += majorMs)
+                {
+                    if ((long)Math.Round(time / majorMs) % labelEvery != 0) continue;
+                    double x = _viewport.MsToPx(time, width);
+                    string label = FormatTickLabel(time);
+                    double labelWidth = DetailLabelWidth(label);
+                    double labelLeft = Math.Clamp(x + 4, 3, Math.Max(3, width - labelWidth - 3));
+                    // Only a label pulled in from the right edge can still meet its neighbour.
+                    if (labelLeft < labelRight + RulerLabelGap) continue;
+                    labelRight = labelLeft + labelWidth;
+                    DrawText(dc, label, labelLeft, 2,
                         _textSecondary, TypeScale.Micro, semiBold: true, _surfaceScrim, centered: false);
+                }
+
+                if (frameHint)
+                {
+                    // Under the time labels, which hold the top of the strip, and over the tick lines.
+                    double hintTop = Math.Max(height * 0.36, DetailLabelRowBottom() + 1);
+                    DrawText(dc, UiText.Get("Text_D9483E35CD83"), width / 2.0,
+                        hintTop, _textSecondary, TypeScale.Caption, semiBold: true, _surfaceScrim, centered: true,
+                        availableHeight: height - hintTop);
                 }
                 break;
 
@@ -2034,6 +2172,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
             FontSize = TypeScale.Caption,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(2, 0, 0, 5),
+            // A narrow window cut the range readout mid-word. Screen readers still get the
+            // whole text.
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
         caption.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         return caption;
