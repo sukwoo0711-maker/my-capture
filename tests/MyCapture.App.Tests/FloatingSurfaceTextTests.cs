@@ -49,6 +49,34 @@ public sealed class FloatingSurfaceTextTests
         }
     });
 
+    /// <summary>
+    /// The pin's bottom message ("Copied", a failure, translation progress) is interface text: it
+    /// takes the UI font and text settings of the hover bar above it. The pin window itself keeps
+    /// the system font, so its selection views keep the fonts their pictures were drawn with.
+    /// </summary>
+    [Fact]
+    public void PinMessageUsesTheUiFontAndItsTextSettings() => StaTestHost.Run(() =>
+    {
+        var image = System.Windows.Media.Imaging.BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, new byte[8 * 8 * 4], 8 * 4);
+        image.Freeze();
+        var pin = new PinWindow(PinContent.FromImage(image), new MyCapture.Core.Pin.PinViewState(320, 180, 1, 1, .1), -10000, -10000)
+        {
+            ShowActivated = false,
+        };
+        try
+        {
+            FrameworkElement message = pin.FeedbackSurfaceForTest;
+            Assert.Equal("Font.Ui", ResourceKey(message, Control.FontFamilyProperty));
+            Assert.Equal(ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(message));
+            Assert.Equal(ThemeFonts.Rendering, TextOptions.GetTextRenderingMode(message));
+            Assert.Equal(ThemeFonts.Hinting, TextOptions.GetTextHintingMode(message));
+            Assert.Equal(System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag, message.Language.IetfLanguageTag, ignoreCase: true);
+            Assert.False(Typography.GetContextualAlternates(message), "The pin message draws text as typed");
+            Assert.Null(ResourceKey(pin, Control.FontFamilyProperty));
+        }
+        finally { pin.Close(); }
+    });
+
     [Fact]
     public void MenusUseTheUiFontAndItsTextSettings() => StaTestHost.Run(() =>
     {
