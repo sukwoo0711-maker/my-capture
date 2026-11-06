@@ -36,25 +36,28 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
         var comparisons = new List<object>();
         var sameSessionComparisons = new List<object>();
         bool completed = false, inputsUnchanged = false;
-        string? failure = null;
+        string? failure = null, retainedSource = null;
         try
         {
             if (fullRoundtripControl) Assert.True(yOnly);
             Assert.False(MediaFoundationVideoEncoder.ForceSoftwareForTest);
-            string input = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_TUNING_INPUT")
+            string input = DiagnosticOutputPaths.ExistingDirectory(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_TUNING_INPUT")
                 ?? throw new InvalidOperationException("Set MYCAPTURE_ENCODER_TUNING_INPUT to the retained encoder26 fixed-720p directory."));
-            string referencePath = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_UV_REFERENCE")
+            string referencePath = TestDiagnosticArtifacts.ExistingFile(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_UV_REFERENCE")
                 ?? throw new InvalidOperationException("Set MYCAPTURE_ENCODER_UV_REFERENCE to the pinned build34 tuning report.json."));
-            string reportPath = DiagnosticOutputPaths.Child(input, "report.json");
-            string source = DiagnosticOutputPaths.Child(input, "source.mp4");
-            Assert.Equal(BoundaryReportHash, TestDiagnosticArtifacts.HashFile(reportPath));
-            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(source));
-            Assert.Equal(UvReferenceReportHash, TestDiagnosticArtifacts.HashFile(referencePath));
+            string reportPath = DiagnosticOutputPaths.ExistingFile(input, "report.json");
+            string source = DiagnosticOutputPaths.ExistingFile(input, "source.mp4");
+            // Each pinned input is hashed and parsed from one read; a mismatch fails before parsing.
+            byte[] boundaryBytes = TestDiagnosticArtifacts.ReadVerified(reportPath, BoundaryReportHash);
+            byte[] sourceBytes = TestDiagnosticArtifacts.ReadVerified(source, SourceHash);
+            byte[] referenceBytes = TestDiagnosticArtifacts.ReadVerified(referencePath, UvReferenceReportHash);
             inputFiles.Add((reportPath, BoundaryReportHash));
             inputFiles.Add((source, SourceHash));
             inputFiles.Add((referencePath, UvReferenceReportHash));
-            using JsonDocument boundary = JsonDocument.Parse(File.ReadAllBytes(reportPath));
-            using JsonDocument referenceDocument = JsonDocument.Parse(File.ReadAllBytes(referencePath));
+            // Media Foundation reopens its input by path, so it only decodes this verified copy.
+            retainedSource = TestDiagnosticArtifacts.Retain(evidence, "source.mp4", sourceBytes, SourceHash);
+            using JsonDocument boundary = JsonDocument.Parse(boundaryBytes);
+            using JsonDocument referenceDocument = JsonDocument.Parse(referenceBytes);
             JsonElement reference = referenceDocument.RootElement;
             Assert.True(reference.GetProperty("collectionCompleted").GetBoolean());
             Assert.Equal(JsonValueKind.Null, reference.GetProperty("failure").ValueKind);
@@ -79,7 +82,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
             EncoderFrame[] roundtrip = fullRoundtripControl ? new EncoderFrame[Frames] : [];
             var references = new byte[Frames][];
             int luma = checked(Width * Height);
-            using (var reader = new MediaFoundationVideoFrameReader(source))
+            using (var reader = new MediaFoundationVideoFrameReader(retainedSource))
                 for (int index = 0; index < Frames; index++)
                 {
                     JsonElement observation = observations[index];
@@ -124,11 +127,10 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
 
                     byte[] ReadPayload(string prefix, string hashProperty)
                     {
-                        string path = DiagnosticOutputPaths.Child(input, $"{prefix}-{index:D2}.nv12");
+                        string path = DiagnosticOutputPaths.ExistingFile(input, $"{prefix}-{index:D2}.nv12");
                         string expected = observation.GetProperty(hashProperty).GetString()!;
-                        byte[] bytes = File.ReadAllBytes(path);
+                        byte[] bytes = TestDiagnosticArtifacts.ReadVerified(path, expected);
                         Assert.Equal(luma * 3 / 2, bytes.Length);
-                        Assert.Equal(expected, Hash(bytes));
                         inputFiles.Add((path, expected));
                         return bytes;
                     }
@@ -231,6 +233,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
             }
             foreach ((string path, string expected) in inputFiles)
                 Assert.Equal(expected, TestDiagnosticArtifacts.HashFile(path));
+            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(retainedSource));
             for (int index = 0; index < Frames; index++)
                 Assert.Equal(Hash(uvOnly[index].Pixels), TestDiagnosticArtifacts.HashFile(
                     DiagnosticOutputPaths.Child(evidence, $"{plane}-{index:D2}.nv12")));
@@ -251,6 +254,8 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
                     : "Same direct Y and frame metadata; B replaces only interleaved UV with the pinned same-index RGB-roundtrip UV.",
                 boundaryReportSha256 = BoundaryReportHash, referenceReportSha256 = UvReferenceReportHash,
                 inputFiles = inputFiles.Select(row => new { file = Path.GetFileName(row.Path), sha256 = row.Hash }).ToArray(),
+                decodedSource = retainedSource is null ? null : new { file = Path.GetFileName(retainedSource), sha256 = SourceHash,
+                    scope = "Verified copy of the input source.mp4; Media Foundation decodes only this copy." },
                 inputs, runs, outputPlanes,
                 comparisons = fullRoundtripControl ? (object)new { runs = comparisons, sameSession = sameSessionComparisons } : comparisons,
                 qualityVerdict = "Plane-isolation collection only. Original direct >= RGB-roundtrip quality gate remains unchanged; hybrid payload is not a product candidate.",

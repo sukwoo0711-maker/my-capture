@@ -21,19 +21,22 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
         var comparisons = new List<object>();
         var inputFiles = new List<(string Path, string Hash)>();
         bool completed = false;
-        string? failure = null;
+        string? failure = null, retainedSource = null;
         try
         {
             Assert.False(MediaFoundationVideoEncoder.ForceSoftwareForTest);
-            string input = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_TUNING_INPUT")
+            string input = DiagnosticOutputPaths.ExistingDirectory(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_TUNING_INPUT")
                 ?? throw new InvalidOperationException("Set MYCAPTURE_ENCODER_TUNING_INPUT to the retained fixed-720p encoder26 directory."));
-            string reportPath = DiagnosticOutputPaths.Child(input, "report.json");
-            string source = DiagnosticOutputPaths.Child(input, "source.mp4");
-            Assert.Equal(BoundaryReportHash, TestDiagnosticArtifacts.HashFile(reportPath));
-            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(source));
+            string reportPath = DiagnosticOutputPaths.ExistingFile(input, "report.json");
+            string source = DiagnosticOutputPaths.ExistingFile(input, "source.mp4");
+            // Each pinned input is hashed and parsed from one read; a mismatch fails before parsing.
+            byte[] reportBytes = TestDiagnosticArtifacts.ReadVerified(reportPath, BoundaryReportHash);
+            byte[] sourceBytes = TestDiagnosticArtifacts.ReadVerified(source, SourceHash);
             inputFiles.Add((reportPath, BoundaryReportHash));
             inputFiles.Add((source, SourceHash));
-            using JsonDocument report = JsonDocument.Parse(File.ReadAllBytes(reportPath));
+            // Media Foundation reopens its input by path, so it only decodes this verified copy.
+            retainedSource = TestDiagnosticArtifacts.Retain(evidence, "source.mp4", sourceBytes, SourceHash);
+            using JsonDocument report = JsonDocument.Parse(reportBytes);
             JsonElement[] observations = report.RootElement.GetProperty("observations").EnumerateArray()
                 .Where(item => item.GetProperty("kind").GetString() == "input-comparison")
                 .OrderBy(item => item.GetProperty("index").GetInt32()).ToArray();
@@ -44,7 +47,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
             var direct = new EncoderFrame[Frames];
             var roundtrip = new EncoderFrame[Frames];
             var references = new byte[Frames][];
-            using (var reader = new MediaFoundationVideoFrameReader(source))
+            using (var reader = new MediaFoundationVideoFrameReader(retainedSource))
                 for (int index = 0; index < Frames; index++)
                 {
                     JsonElement observation = observations[index];
@@ -60,11 +63,10 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
 
                     EncoderFrame ReadInput(string prefix, string hashProperty)
                     {
-                        string path = DiagnosticOutputPaths.Child(input, $"{prefix}-{index:D2}.nv12");
+                        string path = DiagnosticOutputPaths.ExistingFile(input, $"{prefix}-{index:D2}.nv12");
                         string expected = observation.GetProperty(hashProperty).GetString()!;
-                        byte[] bytes = File.ReadAllBytes(path);
+                        byte[] bytes = TestDiagnosticArtifacts.ReadVerified(path, expected);
                         Assert.Equal(Width * Height * 3 / 2, bytes.Length);
-                        Assert.Equal(expected, Hash(bytes));
                         inputFiles.Add((path, expected));
                         return new(bytes, Width, Height, Width, index * (1000.0 / Fps))
                         { Format = VideoEncoderInputFormat.Nv12 };
@@ -123,6 +125,7 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
                 }
             foreach ((string path, string hash) in inputFiles)
                 Assert.Equal(hash, TestDiagnosticArtifacts.HashFile(path));
+            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(retainedSource));
             completed = true;
         }
         catch (Exception error) { failure = Failure(error); throw; }
@@ -132,6 +135,8 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests
                 failure, environment = EnvironmentEvidence(), requestedRuns = 8, actualRuns = runs.Count,
                 soleRequestedDifference = "ICodecAPI QualityVsSpeed attribute: absent vs 100; ConstantQuality remains null",
                 inputFiles = inputFiles.Select(item => new { file = Path.GetFileName(item.Path), sha256 = item.Hash }).ToArray(),
+                decodedSource = retainedSource is null ? null : new { file = Path.GetFileName(retainedSource), sha256 = SourceHash,
+                    scope = "Verified copy of the input source.mp4; Media Foundation decodes only this copy." },
                 runs, relativePsnrComparisons = comparisons,
                 qualityVerdict = "Collection and parameter isolation only. Read every originalRelativeGateObserved result; the original Mp4Nv12ExportTests gate is unchanged." });
         }
