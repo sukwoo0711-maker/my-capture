@@ -27,6 +27,7 @@ namespace MyCapture.App.Tests;
 /// #221: the library preview decodes its PNG off the UI thread. These tests hold what that move
 /// needs: the file's pixels and size, no late image after the selection, the request, the capture
 /// or the window changed, one full-size decode at a time, and no image or file kept afterwards.
+/// The library's copy decodes off the UI thread too, and a late copy never replaces a newer one.
 /// </summary>
 public sealed class GalleryPreviewLoadTests
 {
@@ -213,6 +214,134 @@ public sealed class GalleryPreviewLoadTests
             finally { application.Shutdown(); }
         }, typeof(GalleryPreviewLoadTests));
 
+    [Fact]
+    public Task CopyDecodesOffTheUiThread_AndALateCopyNeverReplacesANewerOne() =>
+        SettingsThemePreviewTests.RunIsolated(nameof(CopyDecodesOffTheUiThread_AndALateCopyNeverReplacesANewerOne), () =>
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+            application.Resources["PinLabel"] = new PinLabelConverter();
+            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            try
+            {
+                using var fixture = new Fixture();
+                GalleryWindow window = fixture.Window;
+                window.Show();
+                window.UpdateLayout();
+                var decoder = new GatedCopyDecoder(window.DecodeCopyForTest);
+                window.DecodeCopyForTest = decoder.Decode;
+                // The copies go to this list, never to the real clipboard.
+                var copied = new List<BitmapSource>();
+                window.WriteCopyForTest = data => { lock (copied) copied.Add((BitmapSource)data.GetData(DataFormats.Bitmap)); };
+                BitmapSource[] Copied() { lock (copied) return [.. copied]; }
+                int uiThread = Environment.CurrentManagedThreadId;
+                string wide = fixture.RenderedPath(fixture.Wide), tall = fixture.RenderedPath(fixture.Tall);
+                string small = fixture.RenderedPath(fixture.Small), missing = fixture.RenderedPath(fixture.Missing);
+                string cannotCopy = KoreanWordWrap.Strip(UiText.Get("Text_3BF4FEA88C51"));
+
+                // The copy returns to the dispatcher while the pool decodes, and the clipboard gets the file's pixels.
+                Task<bool> first = Copy(window, fixture, fixture.Wide);
+                PumpUntil(window, () => decoder.Count(wide) == 1, "first copy decode");
+                Pump(window);
+                Assert.False(first.IsCompleted);
+                decoder.Release(wide);
+                PumpUntil(window, () => first.IsCompleted, "first copy");
+                Assert.True(first.Result);
+                Assert.NotEqual(uiThread, decoder.Started[0].Thread);
+                AssertCopiedFile(Assert.Single(Copied()), fixture.Wide);
+
+                // A copy whose image arrives after a newer copy was asked for leaves the newer one on the clipboard.
+                Task<bool> late = Copy(window, fixture, fixture.Tall);
+                Task<bool> newer = Copy(window, fixture, fixture.Small);
+                PumpUntil(window, () => decoder.Count(tall) == 1 && decoder.Count(small) == 1, "late and newer copy decodes");
+                decoder.Release(small);
+                PumpUntil(window, () => newer.IsCompleted, "newer copy");
+                Assert.True(newer.Result);
+                decoder.Release(tall);
+                PumpUntil(window, () => late.IsCompleted, "late copy");
+                Assert.False(late.Result);
+                Pump(window);
+                Assert.Equal(2, Copied().Length);
+                AssertCopiedFile(Copied()[1], fixture.Small);
+
+                // A late copy that cannot read its file reports nothing over the newer copy.
+                window.ExpireActionStatus();
+                Task<bool> lateMissing = Copy(window, fixture, fixture.Missing);
+                Task<bool> newest = Copy(window, fixture, fixture.Tall);
+                PumpUntil(window, () => decoder.Count(missing) == 1 && decoder.Count(tall) == 2, "late missing and newest decodes");
+                decoder.Release(tall);
+                PumpUntil(window, () => newest.IsCompleted, "newest copy");
+                Assert.True(newest.Result);
+                decoder.Release(missing);
+                PumpUntil(window, () => lateMissing.IsCompleted, "late missing copy");
+                Assert.False(lateMissing.Result);
+                Pump(window);
+                Assert.Equal(string.Empty, window.ActionStatusText);
+                Assert.Equal(3, Copied().Length);
+                AssertCopiedFile(Copied()[2], fixture.Tall);
+
+                // A file that cannot be read reports it, as before, and copies nothing.
+                Task<bool> unreadable = Copy(window, fixture, fixture.Missing);
+                PumpUntil(window, () => decoder.Count(missing) == 2, "missing copy decode");
+                decoder.Release(missing);
+                PumpUntil(window, () => unreadable.IsCompleted, "missing copy");
+                Assert.False(unreadable.Result);
+                Assert.Equal(cannotCopy, window.ActionStatusText);
+                Assert.Equal(3, Copied().Length);
+
+                // The image is frozen on the pool before it leaves it, whatever the decoder returned.
+                bool? decodedFrozen = null;
+                window.DecodeCopyForTest = _ =>
+                {
+                    BitmapSource image = BitmapSource.Create(fixture.Small.Width, fixture.Small.Height, 96, 96, PixelFormats.Bgra32,
+                        null, Fixture.Pattern(fixture.Small.Width, fixture.Small.Height), fixture.Small.Width * 4);
+                    decodedFrozen = image.IsFrozen;
+                    return image;
+                };
+                Task<bool> unfrozen = Copy(window, fixture, fixture.Small);
+                PumpUntil(window, () => unfrozen.IsCompleted, "unfrozen copy");
+                Assert.False(decodedFrozen);
+                Assert.True(unfrozen.Result);
+                AssertCopiedFile(Copied()[3], fixture.Small);
+
+                // A decoder that throws reports the file and keeps the exception out of the dispatcher.
+                window.ExpireActionStatus();
+                window.DecodeCopyForTest = _ => throw new IOException("The test's decoder failed.");
+                Task<bool> failing = Copy(window, fixture, fixture.Wide);
+                PumpUntil(window, () => failing.IsCompleted, "failing copy");
+                Assert.False(failing.Result);
+                Assert.Equal(cannotCopy, window.ActionStatusText);
+                Assert.Equal(4, Copied().Length);
+            }
+            finally { application.Shutdown(); }
+        }, typeof(GalleryPreviewLoadTests));
+
+    private static Task<bool> Copy(GalleryWindow window, Fixture fixture, CaptureRecord record)
+    {
+        GalleryItemViewModel tile = fixture.Model.FindTile(record.Id)!;
+        MethodInfo copy = typeof(GalleryWindow).GetMethod("CopyRenderedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var timer = Stopwatch.StartNew();
+        // As a click or a key does, the copy starts in a dispatcher operation, so it resumes on this thread.
+        Task<bool> copying = window.Dispatcher.Invoke(() => (Task<bool>)copy.Invoke(window, [tile])!);
+        // The copy only starts its decode; a gated decode would otherwise hang it here.
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"The copy took {timer.ElapsedMilliseconds} ms to return.");
+        return copying;
+    }
+
+    private static void AssertCopiedFile(BitmapSource copied, CaptureRecord record)
+    {
+        Assert.True(copied.IsFrozen);
+        Assert.Equal(record.Width, copied.PixelWidth);
+        Assert.Equal(record.Height, copied.PixelHeight);
+        var pixels = new byte[record.Width * record.Height * 4];
+        new FormatConvertedBitmap(copied, PixelFormats.Bgra32, null, 0).CopyPixels(pixels, record.Width * 4, 0);
+        Assert.Equal(Fixture.Pattern(record.Width, record.Height), pixels);
+    }
+
     private static void PreviewFromMenu(GalleryWindow window, GalleryItemViewModel tile)
     {
         var menuItem = new MenuItem { CommandParameter = tile };
@@ -317,6 +446,36 @@ public sealed class GalleryPreviewLoadTests
                 return image;
             }
             finally { Interlocked.Decrement(ref _running); }
+        }
+    }
+
+    /// <summary>Wraps the window's copy decoder; a decode waits until the test releases its file.</summary>
+    private sealed class GatedCopyDecoder(Func<string, BitmapSource?> decode)
+    {
+        private readonly object _sync = new();
+        private readonly Dictionary<string, SemaphoreSlim> _gates = [];
+        private readonly List<(string Path, int Thread)> _started = [];
+
+        internal IReadOnlyList<(string Path, int Thread)> Started { get { lock (_sync) return [.. _started]; } }
+
+        internal int Count(string path) { lock (_sync) return _started.Count(start => start.Path == path); }
+
+        internal void Release(string path) => Gate(path).Release();
+
+        internal BitmapSource? Decode(string path)
+        {
+            lock (_sync) _started.Add((path, Environment.CurrentManagedThreadId));
+            if (!Gate(path).Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("The test never released the decode.");
+            return decode(path);
+        }
+
+        private SemaphoreSlim Gate(string path)
+        {
+            lock (_sync)
+            {
+                if (!_gates.TryGetValue(path, out SemaphoreSlim? gate)) _gates.Add(path, gate = new SemaphoreSlim(0));
+                return gate;
+            }
         }
     }
 

@@ -948,6 +948,17 @@ internal sealed partial class GalleryWindow : Window
         return Task.CompletedTask;
     }
 
+    // #221: rendered.png decodes on the pool, so copying a large capture no longer holds the library. Copies can
+    // then finish out of order; one whose image arrives after a newer copy was asked for is dropped, so the
+    // newest copy stays on the clipboard and reports its own result, as when the decode ran on this thread.
+    private int _copyRequests;
+
+    /// <summary>Decodes the rendered image a copy puts on the clipboard, on a pool thread; tests replace it.</summary>
+    internal Func<string, BitmapSource?> DecodeCopyForTest { get; set; } = ImageCodec.TryLoad;
+
+    /// <summary>Receives a copy's clipboard data in place of the clipboard; tests set it.</summary>
+    internal Action<IDataObject>? WriteCopyForTest { get; set; }
+
     /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
     private async Task<bool> CopyRenderedAsync(GalleryItemViewModel tile)
     {
@@ -969,8 +980,31 @@ internal sealed partial class GalleryWindow : Window
 
         // Copy the flattened rendered.png so the clipboard carries the annotated result. This
         // does not modify the capture, matching the editor's Ctrl+C intent.
+        int request = ++_copyRequests;
         string renderedPath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
-        BitmapSource? rendered = ImageCodec.TryLoad(renderedPath);
+        Func<string, BitmapSource?> decode = DecodeCopyForTest;
+        BitmapSource? rendered;
+        try
+        {
+            rendered = await Task.Run(() =>
+            {
+                BitmapSource? image = decode(renderedPath);
+                // Only a frozen image may leave the thread that decoded it.
+                if (image is { IsFrozen: false }) image.Freeze();
+                return image;
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not read gallery capture {Id} to copy it", record.Id);
+            rendered = null;
+        }
+
+        if (request != _copyRequests)
+        {
+            return false;
+        }
+
         if (rendered is null)
         {
             ShowStatus(UiText.Get("Text_3BF4FEA88C51"));
@@ -980,7 +1014,7 @@ internal sealed partial class GalleryWindow : Window
         try
         {
             if (!await ClipboardImageService.CopyImageWithProvenanceAsync(rendered, record.SourcePageUrl,
-                    MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)))
+                    MyCapture.Core.Capture.CaptureProvenance.FromRecord(record), WriteCopyForTest))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
                 return false;
