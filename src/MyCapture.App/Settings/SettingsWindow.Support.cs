@@ -63,7 +63,8 @@ internal sealed partial class SettingsWindow
         MyCapture.App.Diagnostics.SupportReport.Format(SupportDiagnosticSnapshot.Capture(this)) + Environment.NewLine + Environment.NewLine
             + SupportDiagnosticsText();
 
-    internal void SaveDiagnosticsBundle(string path) => DiagnosticBundle.Write(path, DiagnosticsBundleSummary(), FileLog);
+    internal void SaveDiagnosticsBundle(string path) =>
+        DiagnosticBundle.Write(path, DiagnosticsBundleSummary(), FileLog, ErrorReporting.Exits);
 
     private void OnSaveDiagnosticsBundle(object sender, RoutedEventArgs e)
     {
