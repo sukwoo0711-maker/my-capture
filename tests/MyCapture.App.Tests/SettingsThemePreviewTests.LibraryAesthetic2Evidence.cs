@@ -18,10 +18,10 @@ namespace MyCapture.App.Tests;
 /// the library window in Glass (Korean and English at 100 and 150 %) and Glass light (both at 100 %). The cards
 /// group shows a card at rest, hovered, selected and focused beside the tags section with no tag, then the sort box
 /// at 150 % text beside the details pane at the minimum width. The places group shows a folder holding two
-/// subfolders and two captures, an empty folder, a search with no result and an empty library. The parts the round
-/// changed go to round2.tsv. It runs with the first round's variables (MYCAPTURE_LIBRARY_AES_EVIDENCE and
-/// MYCAPTURE_LIBRARY_AES_PHASE) and finds the parts by name only, so it also builds and runs against the product
-/// before the round.
+/// subfolders and two captures, an empty folder, a search with no result, an opened date and an empty library.
+/// The parts the round changed go to round2.tsv. It runs with the first round's variables
+/// (MYCAPTURE_LIBRARY_AES_EVIDENCE and MYCAPTURE_LIBRARY_AES_PHASE) and finds the parts by name only, so it also
+/// builds and runs against the product before the round.
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
@@ -160,6 +160,15 @@ public sealed partial class SettingsThemePreviewTests
             SaveAesthetic2State(window, f.ViewModel, directory, stem, "search-empty");
             search.Text = string.Empty;
             PumpLibraryUntil(window, () => !f.ViewModel.HasSearchQuery, "search cleared");
+
+            // An opened date with two folders and three captures of its own: the location header names the day
+            // above them. Last, because the dates section stays open.
+            ((Expander)window.FindName("DateSection")).IsExpanded = true;
+            CaptureFolderScope day = CaptureFolderScope.ForDate(DateOnly.FromDateTime(created.DateTime));
+            f.ViewModel.NavigateTo(day);
+            PumpLibraryUntil(window, () => f.ViewModel.SelectedScope == day && !f.ViewModel.IsEmpty, "date");
+            WaitForAestheticCards(window, 3);
+            SaveAesthetic2State(window, f.ViewModel, directory, stem, "date-view");
         }
         finally { window.CloseForExit(); }
 

@@ -361,8 +361,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         FolderCardIndex? folderIndex = null;
         var badges = new Dictionary<Guid, (string Name, string Path)?>();
         bool hasFolderReason = false;
-        // A folder view's group is headed by the folder's location, which the location header already shows.
-        string? locationHeading = _scope.FolderId is { } openedFolder ? _controller.Queue.GetFolderDisplayPath(openedFolder) : null;
+        // An opened folder's or date's group is headed by the location, which the location header already names.
+        string? locationHeading = LocationHeading();
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -387,7 +387,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
                     folderIndex ??= new FolderCardIndex(_controller.Queue, _leaving), seenFolders)).ToArray();
             if (tiles.Count > 0 || cards.Length > 0)
                 _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards)
-                    { ShowsHeading = locationHeading is null || group.Group.Heading != locationHeading });
+                    { ShowsHeading = !GalleryGroupViewModel.RepeatsLocation(group.Group.Heading, locationHeading) });
         }
 
         foreach (Guid stale in _folderCards.Keys.Where(id => !seenFolders.Contains(id)).ToList())
@@ -622,10 +622,18 @@ public sealed class GalleryGroupViewModel
     public string Heading { get; }
 
     /// <summary>
-    /// False when <see cref="Heading"/> only repeats the opened folder's location, which the location header
-    /// above the list already names; the rows then start with the group's folder cards and captures.
+    /// False when <see cref="Heading"/> only repeats the location header above the list (an opened folder or
+    /// date), which already names it; the rows then start with the group's folder cards and captures.
     /// </summary>
     public bool ShowsHeading { get; init; } = true;
+
+    /// <summary>
+    /// True when <paramref name="heading"/> is the same text as <paramref name="location"/>, what the location
+    /// header names (null while none is shown). A group with any other heading, such as one day's group under a
+    /// wider location, keeps its heading row.
+    /// </summary>
+    internal static bool RepeatsLocation(string heading, string? location) =>
+        location is not null && string.Equals(heading, location, StringComparison.Ordinal);
 
     public IReadOnlyList<GalleryItemViewModel> Items { get; }
 

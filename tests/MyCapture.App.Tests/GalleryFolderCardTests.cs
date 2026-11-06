@@ -162,14 +162,14 @@ public sealed class GalleryFolderCardTests
     }
 
     [Fact]
-    public async Task OnlyAFolderViewLeavesOutTheHeadingItsLocationHeaderShows()
+    public async Task AGroupHeadingThatRepeatsTheLocationHeaderIsLeftOut()
     {
         var f = new Fixture();
         var root = await f.Queue.CreateFolderAsync("Root", createdAt: Now.AddDays(-1));
         var nested = await f.Queue.CreateFolderAsync("Nested", root.Id, Now);
         var inRoot = f.Add(Now.AddHours(-3), "capture in root");
         var inNested = f.Add(Now.AddHours(-2), "capture in nested");
-        f.Add(Now.AddHours(-1), "capture today");
+        var today = f.Add(Now.AddHours(-1), "capture today");
         f.Add(Now.AddDays(-1).AddHours(-1), "capture yesterday");
         await f.Queue.MoveCapturesAsync([inRoot.Id], root.Id);
         await f.Queue.MoveCapturesAsync([inNested.Id], nested.Id);
@@ -192,21 +192,44 @@ public sealed class GalleryFolderCardTests
         Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
         Assert.Equal([inNested.Id, inRoot.Id], vm.Groups.SelectMany(result => result.Items).Select(tile => tile.Id));
 
-        // Views whose headings say something the location header does not keep them: All by day and by name.
+        // A date: the location header reads All > 2026-10-11, and so does the group heading, by day, by name and
+        // in a search; the group still carries it for the rows to leave out.
         vm.SearchQuery = string.Empty;
+        vm.NavigateTo(CaptureFolderScope.ForDate(DateOnly.FromDateTime(Now.DateTime)));
+        Assert.True(vm.ShowLocationHeader);
+        Assert.Equal("2026-10-11", vm.Breadcrumb[^1].Name);
+        group = Assert.Single(vm.Groups);
+        Assert.Equal("2026-10-11", group.Heading);
+        Assert.False(group.ShowsHeading);
+        Assert.Equal([today.Id], Assert.IsType<GalleryTileRow>(Assert.Single(vm.Rows)).Tiles.Select(tile => tile.Id));
+        vm.SortIndex = (int)GallerySortOrder.Name;
+        Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
+        vm.SearchQuery = "capture";
+        Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
+        Assert.Equal([today.Id], vm.Groups.SelectMany(result => result.Items).Select(tile => tile.Id));
+
+        // Views whose headings say something the location header does not keep them: All has no location
+        // header, so its day headings and its by-name heading stay.
+        vm.SearchQuery = string.Empty;
+        vm.SortIndex = (int)GallerySortOrder.Newest;
         vm.NavigateTo(CaptureFolderScope.All);
         Assert.False(vm.ShowLocationHeader);
         Assert.Equal([GalleryDateGrouping.Resolve(Now, Now).Heading, GalleryDateGrouping.Resolve(Now.AddDays(-1), Now).Heading],
             vm.Rows.OfType<GalleryHeaderRow>().Select(row => row.Heading));
         vm.SortIndex = (int)GallerySortOrder.Name;
         Assert.Equal(UiText.Get("Folder410.TreeAll"), Assert.IsType<GalleryHeaderRow>(vm.Rows[0]).Heading);
-
-        // A date keeps its heading; only a folder's location is left out.
-        vm.SortIndex = (int)GallerySortOrder.Newest;
-        vm.NavigateTo(CaptureFolderScope.ForDate(DateOnly.FromDateTime(Now.DateTime)));
-        Assert.True(vm.ShowLocationHeader);
-        Assert.Equal("2026-10-11", Assert.IsType<GalleryHeaderRow>(vm.Rows[0]).Heading);
     }
+
+    [Theory]
+    [InlineData("2026-10-11", "2026-10-11", true)]
+    [InlineData("Root / Nested", "Root / Nested", true)]
+    [InlineData("2026-10-11", "2026-10", false)]
+    [InlineData("Root", "Root / Nested", false)]
+    [InlineData("Today", null, false)]
+    public void OnlyAHeadingWithTheLocationHeadersTextRepeatsIt(string heading, string? location, bool repeats) =>
+        // An opened date or nested folder repeats; a day's group under a wider location, a parent's name and a view
+        // without a location header do not.
+        Assert.Equal(repeats, GalleryGroupViewModel.RepeatsLocation(heading, location));
 
     [Fact]
     public void ArrowKeysMoveBetweenFolderAndTileRowsInTheSameColumn()
