@@ -196,6 +196,38 @@ public sealed class OcrTranslationWindowTests
         finally { window.CloseForExit(); }
     });
 
+    [Fact]
+    public void NumbersStartUnderTheHeadingAndEachTranslationStartsUnderItsOriginal() => Ocr410Fixture.RunSta(() =>
+    {
+        var panel = new OcrTranslationPanel();
+        panel.ShowResults([Translated(1, "Table 31. CTRL1 register bit fields", "표 31. CTRL1 레지스터 비트 필드"),
+            Translated(12, "Counter enable.", "카운터 활성화.")]);
+        panel.Measure(new Size(480, 400));
+        panel.Arrange(new Rect(0, 0, 480, 400));
+        panel.UpdateLayout();
+
+        TextBlock heading = Descendants(panel).OfType<TextBlock>()
+            .Single(block => KoreanWordWrap.Strip(block.Text) == UiText.Format("Translate_Summary", 2));
+        double headingLeft = heading.TranslatePoint(new Point(), panel).X;
+        foreach (string number in new[] { "1", "12" })
+        {
+            Border badge = Descendants(panel).OfType<Border>().Single(border => border.Child is TextBlock label && label.Text == number);
+            Assert.Equal(headingLeft, badge.TranslatePoint(new Point(), panel).X, 3);
+
+            TextBlock source = Descendants(panel).OfType<TextBlock>()
+                .Single(block => AutomationProperties.GetName(block) == UiText.Format("Translate_SourceName", number));
+            TextBox translation = Descendants(panel).OfType<TextBox>()
+                .Single(box => AutomationProperties.GetName(box) == UiText.Format("Translate_TranslationName", number));
+            // The translation's first letter starts where its original's does, and it wraps at the same width.
+            Point first = translation.GetRectFromCharacterIndex(0).TopLeft;
+            Assert.Equal(source.TranslatePoint(new Point(), panel).X, translation.TranslatePoint(first, panel).X, 3);
+            Assert.Equal(source.ActualWidth, translation.ActualWidth - (2 * TextBoxLayout.ContentInsetDip), 3);
+        }
+    });
+
+    private static TranslatedBlock Translated(int number, string source, string translation) =>
+        new(new TranslationBlock(number, source, default), new TranslatedText(source, translation, [], []));
+
     internal static void PumpUntil(Func<bool> condition, int timeoutMilliseconds = 10_000)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();

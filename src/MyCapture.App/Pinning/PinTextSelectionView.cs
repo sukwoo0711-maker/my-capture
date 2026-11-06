@@ -60,6 +60,9 @@ internal sealed class PinTextSelectionView : Grid
                 RowBackground = backgroundBrush,
                 AlternatingRowBackground = backgroundBrush,
                 BorderThickness = new Thickness(0),
+                // The picture's own cell lines; a DataGrid without a style draws black ones.
+                HorizontalGridLinesBrush = ClipboardTextRenderer.TableGridLineBrush,
+                VerticalGridLinesBrush = ClipboardTextRenderer.TableGridLineBrush,
                 AutoGenerateColumns = false,
                 IsReadOnly = true,
                 CanUserAddRows = false,
@@ -119,6 +122,9 @@ internal sealed class PinTextSelectionView : Grid
                     TextWrapping = TextWrapping.NoWrap,
                     TextTrimming = TextTrimming.CharacterEllipsis,
                 };
+                // The notice is interface text over the table, not part of the copied content.
+                _tableLimit.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Ui");
+                ThemeFonts.ApplyText(_tableLimit);
                 _tableLimit.ToolTip = _tableLimit.Text;
                 AutomationProperties.SetHelpText(_tableLimit, _tableLimit.Text);
                 SetRow(_tableLimit, 1);
@@ -172,6 +178,10 @@ internal sealed class PinTextSelectionView : Grid
                 SelectionOpacity = 1,
                 IsUndoEnabled = false,
             };
+            // The picture's lines are exactly LineHeight tall, with the baseline placed in
+            // proportion; a TextBox otherwise stacks a line from the font's own ascent and its
+            // text sat 2 DIP (4 DIP at zoom 2) above the picture's glyphs.
+            TextBlock.SetLineStackingStrategy(TextBox, LineStackingStrategy.BlockLineHeight);
             AutomationProperties.SetName(TextBox, UiText.Get("Pin_SelectText"));
             BindPinContextMenu(TextBox);
             Children.Add(TextBox);
@@ -223,7 +233,10 @@ internal sealed class PinTextSelectionView : Grid
             double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
             double paddingY = _isCode ? ClipboardCodeRenderer.VerticalPaddingDip : 20;
             TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : TypeScale.Content.PlainText) * _zoom;
-            TextBox.Padding = new Thickness(paddingX * _zoom, paddingY * _zoom, paddingX * _zoom, paddingY * _zoom);
+            // The text padding gives back the TextBox's own inset, so the selectable text lands on
+            // the picture's glyphs and a line that fits the picture does not scroll.
+            double horizontal = Math.Max(0, (paddingX * _zoom) - TextBoxLayout.ContentInsetDip);
+            TextBox.Padding = new Thickness(horizontal, paddingY * _zoom, horizontal, paddingY * _zoom);
             TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightDip : 24) * _zoom);
         }
         if (TableGrid is not null)

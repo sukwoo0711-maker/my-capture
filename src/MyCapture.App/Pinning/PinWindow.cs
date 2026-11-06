@@ -218,6 +218,10 @@ internal sealed partial class PinWindow : Window
             Child = new DockPanel { Children = { _feedbackDismiss, _translationStrip, _feedbackText } },
             Visibility = Visibility.Collapsed,
         };
+        // The message is the pin's own interface text, so it takes the UI font and text settings
+        // of the hover bar above it. The pin window itself keeps the system font for its content.
+        _feedback.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
+        ThemeFonts.ApplyText(_feedback);
 
         // Image-first chrome: one continuous one-DIP outline matching the host's window corners
         // rests in a quiet accent tone and turns opaque on hover or while the pin is active
@@ -608,6 +612,9 @@ internal sealed partial class PinWindow : Window
     /// <summary>Test hook: the bottom message, its kind and whether it offers a close button.</summary>
     internal (string Text, FeedbackKind Kind, bool Dismissible) FeedbackForTest =>
         (KoreanWordWrap.Strip(_feedbackText.Text), _feedbackKind, _feedbackDismiss.Visibility == Visibility.Visible);
+
+    /// <summary>Test hook: the bottom message's surface.</summary>
+    internal FrameworkElement FeedbackSurfaceForTest => _feedback;
 
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);

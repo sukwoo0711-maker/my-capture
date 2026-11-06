@@ -54,9 +54,11 @@ internal static class ClipboardTextRenderer
     private static readonly Brush TableBackground = FrozenBrush(0xFF, 0xFF, 0xFF, 0xFF);
     private static readonly Brush AlternateRowBackground = FrozenBrush(0xFF, 0xF8, 0xFA, 0xFC);
     private static readonly Brush TextForeground = FrozenBrush(0xFF, 0x1F, 0x29, 0x37);
-    private static readonly Pen CardBorder = FrozenPen(0xFF, 0xCB, 0xD5, 0xE1);
     private static readonly Pen GridLine = FrozenPen(0xFF, 0xD1, 0xD5, 0xDB);
     private static readonly Pen GridBorder = FrozenPen(0xFF, 0x9C, 0xA3, 0xAF);
+
+    /// <summary>The colour of the lines between a table picture's cells.</summary>
+    internal static Brush TableGridLineBrush => GridLine.Brush;
 
     /// <summary>
     /// Renders <paramref name="sourceText"/> as a frozen bitmap. The input string is never
@@ -120,12 +122,12 @@ internal static class ClipboardTextRenderer
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            double halfPixel = 0.5 / scale;
-            var bounds = new Rect(halfPixel, halfPixel, width - (1 / scale), height - (1 / scale));
-            if (borderless)
-                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
-            else
-                drawing.DrawRoundedRectangle(CardBackground, DevicePixelPen(CardBorder, scale), bounds, 10, 10);
+            // The card fills its whole rectangle, as the table, code, Markdown and translation
+            // pictures do, so the pin's outline is its only edge and follows the window's corners.
+            // A card with its own rounded border left transparent corners: the desktop showed
+            // through them inside a square Windows 10 pin, a second arc appeared inside a Windows 11
+            // pin's outline, and they turned black wherever a copied bitmap's alpha is dropped.
+            drawing.DrawRectangle(borderless ? Brushes.White : CardBackground, null, PixelBounds(width, height, scale));
             if (text is not null)
             {
                 drawing.DrawText(text, new Point(PlainHorizontalPadding, PlainVerticalPadding));
@@ -148,7 +150,7 @@ internal static class ClipboardTextRenderer
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            drawing.DrawRectangle(CardBackground, null, new Rect(0, 0, width, height));
+            drawing.DrawRectangle(CardBackground, null, PixelBounds(width, height, scale));
             var tableBounds = new Rect(
                 TableMargin + 0.5,
                 TableMargin + 0.5,
@@ -454,6 +456,15 @@ internal static class ClipboardTextRenderer
             : cell.ToString(0, length);
         row.Add(wasTruncated ? string.Concat(value, "\u2026") : value);
     }
+
+    /// <summary>
+    /// The DIP rectangle that covers every device pixel <see cref="RenderFrozen"/> gives a picture of
+    /// <paramref name="width"/> by <paramref name="height"/> DIPs. The pixel size rounds up, so a
+    /// background drawn to the DIP size alone left the last column and row half transparent at
+    /// fractional scales.
+    /// </summary>
+    internal static Rect PixelBounds(int width, int height, double scale) =>
+        new(0, 0, Math.Ceiling(width * scale) / scale, Math.Ceiling(height * scale) / scale);
 
     internal static BitmapSource RenderFrozen(DrawingVisual visual, int width, int height, double scale)
     {
