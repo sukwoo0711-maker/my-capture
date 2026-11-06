@@ -248,7 +248,9 @@ internal sealed class WelcomeWindow : Window
         AccurateOcrHelp.FontSize = TypeScale.Caption * _textScale;
         AccurateOcrHelp.Margin = new Thickness(28, 0, 0, 0);
         AccurateOcrHelp.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
+        // Centred in its 32-high line, the link's text sits on the start-at-sign-in label's line;
+        // on the line's baseline it sat 6 below it.
+        ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings"))) { BaselineAlignment = BaselineAlignment.Center };
         ShortcutsLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetName(ShortcutsLink, UiText.Get("Help.Settings"));
         ShortcutsLink.Click += (_, _) => CloseWith(WelcomeOutcome.OpenSettings);
