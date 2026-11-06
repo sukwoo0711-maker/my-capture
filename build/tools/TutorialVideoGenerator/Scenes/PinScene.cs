@@ -1070,7 +1070,8 @@ internal sealed class PinScene : TutorialScene
         internal void Draw(DrawingContext dc)
         {
             Menu.UpdateLayout();
-            dc.DrawImage(Snapshot(Menu), Bounds);
+            OffscreenWindow.PopupSnapshot snapshot = OffscreenWindow.SnapshotPopup(Menu);
+            dc.DrawImage(snapshot.Bitmap, snapshot.BoundsAt(Bounds.Location));
         }
     }
 }

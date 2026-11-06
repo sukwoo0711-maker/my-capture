@@ -324,22 +324,29 @@ internal sealed class CaptureScene : TutorialScene
         if (_trayMenus is { } cached) return cached;
         var presenter = new ThemedShellPresenter(() => false);
         List<ThemedShellPresenter.MenuEntry> entries = TrayMenuEntries();
-        BitmapSource root = MenuBitmap(presenter.CreateMenu(entries));
-        BitmapSource sub = MenuBitmap(presenter.CreateMenu(entries.First(e => e.Children is not null).Children!));
-        double rw = root.PixelWidth / Stage.Scale, rh = root.PixelHeight / Stage.Scale;
-        var rootBounds = new Rect(TrayIcon.X - rw + 30, TaskbarBounds.Y - rh - 4, rw, rh);
-        double sw = sub.PixelWidth / Stage.Scale, sh = sub.PixelHeight / Stage.Scale;
+        OffscreenWindow.PopupSnapshot root = MenuBitmap(presenter.CreateMenu(entries));
+        OffscreenWindow.PopupSnapshot sub = MenuBitmap(presenter.CreateMenu(entries.First(e => e.Children is not null).Children!));
+        // Placement is based on the menu body, as it was before the popup acquired a margin.
+        double rw = Math.Max(1, (int)Math.Round(root.BodySize.Width * Stage.Scale)) / Stage.Scale;
+        double rh = Math.Max(1, (int)Math.Round(root.BodySize.Height * Stage.Scale)) / Stage.Scale;
+        var rootOrigin = new Point(TrayIcon.X - rw + 30, TaskbarBounds.Y - rh - 4);
+        var rootBounds = new Rect(rootOrigin.X - root.Margin.Left, rootOrigin.Y - root.Margin.Top,
+            root.Bitmap.PixelWidth / Stage.Scale, root.Bitmap.PixelHeight / Stage.Scale);
+        double sw = Math.Max(1, (int)Math.Round(sub.BodySize.Width * Stage.Scale)) / Stage.Scale;
+        double sh = Math.Max(1, (int)Math.Round(sub.BodySize.Height * Stage.Scale)) / Stage.Scale;
         int moreIndex = entries.FindIndex(e => e.Children is not null);
-        double itemY = ItemCenter(rootBounds, root, moreIndex).Y;
-        var subBounds = new Rect(rootBounds.X - sw + 4, Math.Min(itemY - 20, TaskbarBounds.Y - sh - 4), sw, sh);
-        _trayMenus = (root, rootBounds, sub, subBounds);
+        double itemY = ItemCenter(rootBounds, root.Bitmap, moreIndex).Y;
+        var subOrigin = new Point(rootOrigin.X - sw + 4, Math.Min(itemY - 20, TaskbarBounds.Y - sh - 4));
+        var subBounds = new Rect(subOrigin.X - sub.Margin.Left, subOrigin.Y - sub.Margin.Top,
+            sub.Bitmap.PixelWidth / Stage.Scale, sub.Bitmap.PixelHeight / Stage.Scale);
+        _trayMenus = (root.Bitmap, rootBounds, sub.Bitmap, subBounds);
         return _trayMenus.Value;
     }
 
-    private readonly Dictionary<BitmapSource, IReadOnlyList<Rect>> _menuItems = [];
+    private readonly Dictionary<BitmapSource, (IReadOnlyList<Rect> Items, Thickness Margin)> _menuItems = [];
 
     /// <summary>Renders a real ContextMenu without opening it (a popup would be kept on a real screen).</summary>
-    private BitmapSource MenuBitmap(ContextMenu menu)
+    private OffscreenWindow.PopupSnapshot MenuBitmap(ContextMenu menu)
     {
         // A ContextMenu cannot have a parent; measured on its own it still takes the app's styles.
         menu.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -363,16 +370,18 @@ internal sealed class CaptureScene : TutorialScene
             }
             else items.Add(Rect.Empty);
 
-        BitmapSource bitmap = OffscreenWindow.SnapshotElement(menu, menu.ActualWidth, menu.ActualHeight);
-        _menuItems[bitmap] = items;
-        return bitmap;
+        OffscreenWindow.PopupSnapshot snapshot = OffscreenWindow.SnapshotPopup(menu, opaque: true);
+        _menuItems[snapshot.Bitmap] = (items, snapshot.Margin);
+        return snapshot;
     }
 
     private PointD ItemCenter(Rect bounds, BitmapSource menu, int index)
     {
-        IReadOnlyList<Rect> items = _menuItems[menu];
-        Rect item = index >= 0 && index < items.Count && !items[index].IsEmpty ? items[index] : new Rect(0, 0, bounds.Width, 30);
-        return new PointD(bounds.X + item.X + Math.Min(item.Width / 2, 70), bounds.Y + item.Y + item.Height / 2);
+        (IReadOnlyList<Rect> items, Thickness margin) = _menuItems[menu];
+        Rect item = index >= 0 && index < items.Count && !items[index].IsEmpty ? items[index]
+            : new Rect(0, 0, bounds.Width - margin.Left - margin.Right, 30);
+        return new PointD(bounds.X + margin.Left + item.X + Math.Min(item.Width / 2, 70),
+            bounds.Y + margin.Top + item.Y + item.Height / 2);
     }
 
     private BitmapSource Countdown(int seconds)

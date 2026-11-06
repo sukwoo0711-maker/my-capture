@@ -147,8 +147,10 @@ public sealed class EditorAestheticEvidenceTests
                         menu.Arrange(new Rect(menu.DesiredSize));
                         menu.UpdateLayout();
                         separateRoot = menu;
-                        bitmap = Render(menu, menu.ActualWidth, menu.ActualHeight, combo.Scale);
-                        popup = new { method = "real ContextMenu measured as separate root; native popup not opened", menu.ActualWidth, menu.ActualHeight };
+                        Size extent = PopupSnapshot.ExtentOf(menu);
+                        bitmap = Render(menu, extent.Width, extent.Height, combo.Scale);
+                        popup = new { method = "real ContextMenu measured as separate root; native popup not opened", menu.ActualWidth, menu.ActualHeight,
+                            imageBodyOffset = PopupSnapshot.BodyOffsetOf(menu) };
                     }
                     else bitmap = Render(host.Window, host.Window.ActualWidth, host.Window.ActualHeight, combo.Scale);
                     string path = DiagnosticOutputPaths.Child(destination, name + ".png");
@@ -566,12 +568,13 @@ public sealed class EditorAestheticEvidenceTests
     private static BitmapSource Render(Visual visual, double width, double height, double scale)
     {
         Assert.True(width > 0 && height > 0);
+        Vector bodyOffset = visual is ContextMenu menu ? PopupSnapshot.BodyOffsetOf(menu) : default;
         var drawing = new DrawingVisual();
         using (DrawingContext dc = drawing.RenderOpen())
         {
             dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
             dc.DrawRectangle(new VisualBrush(visual) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top,
-                ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, width, height) }, null, new Rect(0, 0, width, height));
+                ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(-bodyOffset.X, -bodyOffset.Y, width, height) }, null, new Rect(0, 0, width, height));
         }
         var result = new RenderTargetBitmap((int)Math.Ceiling(width * scale), (int)Math.Ceiling(height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
         result.Render(drawing); result.Freeze(); return result;
