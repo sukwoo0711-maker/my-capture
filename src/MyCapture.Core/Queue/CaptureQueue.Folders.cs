@@ -383,12 +383,7 @@ public sealed partial class CaptureQueue
             tentativeEnabled = _limits.UseCurrentFolderForNewCaptures;
             Task publication;
             lock (_writeGate)
-            {
-                var writes = touched.Select(record => (GetFilePath(record, CaptureFileNames.Meta),
-                    JsonSerializer.Serialize(record, MetaSerializerOptions))).ToList();
-                writes.AddRange(BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
-                publication = EnqueuePublication(reservation, writes.ToArray());
-            }
+                publication = EnqueuePublication(reservation, [.. touched.Select(DetachedMetaWrite), .. DetachedIndexWrites()]);
             await publication;
             UpdatePinPressureFlag();
             return result;
@@ -433,12 +428,10 @@ public sealed partial class CaptureQueue
                 Task correction;
                 lock (_writeGate)
                 {
-                    var writes = _records.Where(record => afterRecords.ContainsKey(record.Id)
+                    DetachedWrite[] metadata = _records.Where(record => afterRecords.ContainsKey(record.Id)
                             || !previousRecords.ContainsKey(record.Id))
-                        .Select(record => (GetFilePath(record, CaptureFileNames.Meta),
-                            JsonSerializer.Serialize(record, MetaSerializerOptions))).ToList();
-                    writes.AddRange(BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
-                    correction = EnqueuePublication(null, writes.ToArray());
+                        .Select(DetachedMetaWrite).ToArray();
+                    correction = EnqueuePublication(null, [.. metadata, .. DetachedIndexWrites()]);
                 }
                 try { await correction; }
                 catch (Exception correctionFailure)
@@ -492,9 +485,39 @@ public sealed partial class CaptureQueue
         ? [(FolderRecoveryFile, JsonSerializer.Serialize(CreateFolderState(), SerializerOptions)), (_paths.IndexFile, json)]
         : [(_paths.IndexFile, json)];
 
-    private (string Path, byte[] Content)[] BuildIndexWrites(byte[] json) => _folderStateActivated
-        ? [(FolderRecoveryFile, JsonSerializer.SerializeToUtf8Bytes(CreateFolderState(), SerializerOptions)), (_paths.IndexFile, json)]
-        : [(_paths.IndexFile, json)];
+    /// <summary>
+    /// The writes of <see cref="BuildIndexWrites(string)"/> for the index of this moment, left for
+    /// the writer to serialize. Under _writeGate on the owner context; the records are copied and the
+    /// folder state is built fresh, so later owner-thread changes cannot reach the queued job.
+    /// </summary>
+    private DetachedWrite[] DetachedIndexWrites()
+    {
+        CaptureFolderState? folderState = _folderStateActivated ? CreateFolderState() : null;
+        var records = new List<CaptureRecord>(_records.Count);
+        foreach (CaptureRecord record in _records) records.Add(record.CloneForPublication());
+        var index = new CaptureIndexFile
+        {
+            Records = records, FolderState = folderState,
+            SavedSearches = _savedSearches.Count == 0 ? null : JsonSerializer.SerializeToElement(_savedSearches, SerializerOptions),
+        };
+        var indexWrite = new DetachedWrite(_paths.IndexFile, () => JsonSerializer.SerializeToUtf8Bytes(index, SerializerOptions));
+        return folderState is null
+            ? [indexWrite]
+            : [new(FolderRecoveryFile, () => JsonSerializer.SerializeToUtf8Bytes(folderState, SerializerOptions)), indexWrite];
+    }
+
+    /// <summary>The index text the string writer would publish now; the oracle for byte-identity tests.</summary>
+    internal string SerializeIndexForTest()
+    {
+        lock (_writeGate) return JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
+    }
+
+    /// <summary>The folder recovery text the string writer would publish now, or null while folders are unused.</summary>
+    internal string? SerializeFolderRecoveryForTest()
+    {
+        lock (_writeGate)
+            return _folderStateActivated ? JsonSerializer.Serialize(CreateFolderState(), SerializerOptions) : null;
+    }
 
     private void RestoreFolderState(CaptureFolderState? state, List<CaptureRecord> records)
     {

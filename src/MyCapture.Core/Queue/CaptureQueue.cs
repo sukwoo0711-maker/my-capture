@@ -388,8 +388,7 @@ public sealed partial class CaptureQueue
         int cleanupPending = 0;
         lock (_writeGate)
         {
-            string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
-            publication = EnqueuePublication(reservation, BuildIndexWrites(json), () =>
+            publication = EnqueuePublication(reservation, DetachedIndexWrites(), () =>
             {
                 foreach (CaptureRecord record in removed)
                 {
@@ -419,10 +418,7 @@ public sealed partial class CaptureQueue
             UpdatePinPressureFlag();
             Task correction;
             lock (_writeGate)
-            {
-                string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
-                correction = EnqueuePublication(null, BuildIndexWrites(json));
-            }
+                correction = EnqueuePublication(null, DetachedIndexWrites());
             try { await correction; }
             catch (Exception correctionFailure)
             {
@@ -499,9 +495,10 @@ public sealed partial class CaptureQueue
         SaveAsync().GetAwaiter().GetResult();
 
     /// <summary>
-    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, taken now on the
-    /// calling owner context, joins the same FIFO writer behind every earlier publication. Await
-    /// the task before relying on durability; it faults with the write failure.
+    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, copied now on the
+    /// calling owner context, joins the same FIFO writer behind every earlier publication, which
+    /// serializes it. Await the task before relying on durability; it faults with the
+    /// serialization or write failure.
     /// </summary>
     /// <remarks>
     /// Like <see cref="Save"/> it bypasses the reservation pool, and a later <see cref="Save"/>
@@ -510,11 +507,7 @@ public sealed partial class CaptureQueue
     public Task SaveAsync()
     {
         lock (_writeGate)
-        {
-            var index = CreateIndexSnapshot();
-            string json = JsonSerializer.Serialize(index, SerializerOptions);
-            return EnqueuePublication(null, BuildIndexWrites(json));
-        }
+            return EnqueuePublication(null, DetachedIndexWrites());
     }
 
     /// <summary>
@@ -549,20 +542,16 @@ public sealed partial class CaptureQueue
         SaveRecordMetaOrThrowAsync(record).GetAwaiter().GetResult();
 
     /// <summary>
-    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is serialized now
-    /// on the calling owner context and its write joins the same FIFO writer. Awaiting the task
-    /// gives the same strict guarantee; it faults with the write failure.
+    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is copied now on
+    /// the calling owner context and its write joins the same FIFO writer. Awaiting the task gives
+    /// the same strict guarantee; it faults with the serialization or write failure.
     /// </summary>
     public Task SaveRecordMetaOrThrowAsync(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
         lock (_writeGate)
-        {
-            string path = GetFilePath(record, CaptureFileNames.Meta);
-            string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            return EnqueuePublication(null, [(path, json)]);
-        }
+            return EnqueuePublication(null, [DetachedMetaWrite(record)]);
     }
 
     /// <summary>
@@ -598,8 +587,9 @@ public sealed partial class CaptureQueue
     }
 
     /// <summary>
-    /// Serializes on the calling owner thread, then durably writes metadata and index as one
-    /// ordered job. Hold an eviction lease until completion. No mutable record reaches the writer.
+    /// Copies the record and the index on the calling owner thread, then serializes and durably
+    /// writes metadata and index as one ordered job. Hold an eviction lease until completion.
+    /// No mutable record reaches the writer: it serializes detached copies taken at this call.
     /// </summary>
     public Task PublishRecordAsync(CaptureRecord record, CaptureWriteReservation reservation)
     {
@@ -611,19 +601,28 @@ public sealed partial class CaptureQueue
     {
         ArgumentNullException.ThrowIfNull(record);
         lock (_writeGate)
-        {
-            string path = GetFilePath(record, CaptureFileNames.Meta);
-            byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(record, MetaSerializerOptions);
-            byte[] index = JsonSerializer.SerializeToUtf8Bytes(CreateIndexSnapshot(), SerializerOptions);
-            return EnqueuePublication(reservation, [(path, metadata), .. BuildIndexWrites(index)]);
-        }
+            return EnqueuePublication(reservation, [DetachedMetaWrite(record), .. DetachedIndexWrites()]);
+    }
+
+    /// <summary>
+    /// One file of a queued job whose bytes the writer produces from a detached snapshot. The
+    /// owner thread then pays for copying records, not for serializing a large OCR index (#221).
+    /// </summary>
+    private readonly record struct DetachedWrite(string Path, Func<byte[]> Serialize);
+
+    // Under _writeGate on the owner context: the path is validated and the record copied now.
+    private DetachedWrite DetachedMetaWrite(CaptureRecord record)
+    {
+        string path = GetFilePath(record, CaptureFileNames.Meta);
+        CaptureRecord copy = record.CloneForPublication();
+        return new(path, () => JsonSerializer.SerializeToUtf8Bytes(copy, MetaSerializerOptions));
     }
 
     // Called only under _writeGate, after immutable serialization. A failed predecessor does
     // not poison later writes: each caller observes its own failure, and recovery may publish next.
     private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
         Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, files, (path, content) =>
+        => EnqueuePublication(reservation, () => files, (path, content) =>
         {
             BeforePublicationWriteForTest?.Invoke(path, content);
             AtomicFile.WriteAllText(path, content);
@@ -631,15 +630,25 @@ public sealed partial class CaptureQueue
 
     private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, byte[] Content)[] files,
         Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, files, (path, content) =>
-        {
-            // Keep the existing correctness seam without re-creating strings in normal runs.
-            if (BeforePublicationWriteForTest is { } observe)
-                observe(path, System.Text.Encoding.UTF8.GetString(content));
-            AtomicFile.WriteAllBytes(path, content);
-        }, afterDurableWrite);
+        => EnqueuePublication(reservation, () => files, WritePublicationBytes, afterDurableWrite);
 
-    private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, (string Path, T Content)[] files,
+    // Called only under _writeGate with snapshots no other code can change. The writer serializes
+    // every file before writing any, as the owner thread used to, so a serializer failure still
+    // leaves every file untouched and faults only this job.
+    private Task EnqueuePublication(CaptureWriteReservation? reservation, DetachedWrite[] files,
+        Action? afterDurableWrite = null)
+        => EnqueuePublication(reservation, () => Array.ConvertAll(files, file => (file.Path, file.Serialize())),
+            WritePublicationBytes, afterDurableWrite);
+
+    private void WritePublicationBytes(string path, byte[] content)
+    {
+        // Keep the existing correctness seam without re-creating strings in normal runs.
+        if (BeforePublicationWriteForTest is { } observe)
+            observe(path, System.Text.Encoding.UTF8.GetString(content));
+        AtomicFile.WriteAllBytes(path, content);
+    }
+
+    private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, Func<(string Path, T Content)[]> files,
         Action<string, T> writeFile, Action? afterDurableWrite)
     {
         if (_migrationPublicationBlocked) throw new IOException("Complete migration recovery before saving the library.");
@@ -654,7 +663,7 @@ public sealed partial class CaptureQueue
         {
             try
             {
-                foreach ((string path, T content) in files)
+                foreach ((string path, T content) in files())
                 {
                     writeFile(path, content);
                 }

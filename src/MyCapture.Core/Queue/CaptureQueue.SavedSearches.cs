@@ -59,8 +59,7 @@ public sealed partial class CaptureQueue
     private Task PublishSavedSearchesAsync(CaptureWriteReservation? reservation)
     {
         lock (_writeGate)
-            return EnqueuePublication(reservation,
-                BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
+            return EnqueuePublication(reservation, DetachedIndexWrites());
     }
 
     private void RestoreSavedSearches(JsonElement? searches)

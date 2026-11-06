@@ -283,6 +283,13 @@ public sealed class CaptureRecord
             SourceDocumentPath ?? string.Empty,
             OcrText ?? string.Empty,
             IsVideo ? "동영상 비디오 video recording" : "이미지 스크린샷 image screenshot");
+
+    /// <summary>
+    /// A detached copy for a queued publication. Every field is a value or an immutable string, so
+    /// the copy keeps the state at enqueue time while the owner thread goes on changing the record.
+    /// CaptureRecordPublicationSnapshotTests fails if a field ever stops being safe to copy this way.
+    /// </summary>
+    internal CaptureRecord CloneForPublication() => (CaptureRecord)MemberwiseClone();
 }
 
 /// <summary>
