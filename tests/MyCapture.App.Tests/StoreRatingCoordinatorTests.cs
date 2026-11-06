@@ -618,13 +618,33 @@ public sealed class StoreRatingCoordinatorTests
         Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
         Assert.Equal(firstShown, harness.Settings.StoreRating.InvitationShownUtc);
 
-        // A refused offer leaves nothing to give back.
+        // A refused offer returns no token, so it has nothing to give back, and it counts and saves nothing.
         harness.CardBusy = true;
-        Assert.Null(coordinator.TryOfferOnCard(practice: false));
         events = harness.Events.Count;
-        Assert.False(coordinator.WithdrawCardOffer(second));
+        Assert.Null(coordinator.TryOfferOnCard(practice: false));
+        Assert.Null(coordinator.TryOfferOnCard(practice: false, pendingCapture: true));
         Assert.Equal(events, harness.Events.Count);
         Assert.Equal(1, harness.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(firstShown, harness.Settings.StoreRating.InvitationShownUtc);
+
+        // Nor does it touch an outstanding offer's withdrawal: refused only because the screen is busy,
+        // 24 hours after that offer's showing, it leaves that offer to give back exactly its own showing.
+        var other = new Harness();
+        StoreRatingCoordinator refusing = other.Create();
+        Succeed(refusing, 2);
+        StoreRatingCoordinator.CardOffer? outstanding = refusing.TryOfferOnCard(practice: false);
+        Assert.NotNull(outstanding);
+        other.Clock.Now = other.Clock.Now.Add(StoreRatingPolicy.SecondInvitationDelay);
+        Assert.True(StoreRatingPolicy.ShouldRequest(other.Settings.StoreRating, isPackaged: true, other.Clock.Now));
+        other.CardBusy = true;
+        events = other.Events.Count;
+        Assert.Null(refusing.TryOfferOnCard(practice: false));
+        Assert.Equal(events, other.Events.Count);
+        Assert.Equal(1, other.Settings.StoreRating.InvitationShownCount);
+        Assert.True(refusing.WithdrawCardOffer(outstanding));
+        Assert.Equal(0, other.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(other.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(refusing.WithdrawCardOffer(outstanding));
     }
 
     [Fact]
