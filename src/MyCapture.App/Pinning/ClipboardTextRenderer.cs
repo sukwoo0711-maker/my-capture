@@ -31,15 +31,15 @@ internal static class ClipboardTextRenderer
     private const int PlainLineHeight = 24;
     private const int MaxPlainPreviewCharacters = 16_384;
 
-    private const int TableMargin = 16;
-    private const int TableRowHeight = 34;
-    private const double TableFontSize = TypeScale.Content.TableText;
-    private const int TableHorizontalPadding = 12;
-    private const int TableVerticalPadding = 7;
-    private const int MinimumColumnWidth = 72;
-    private const int MaximumColumnWidth = 320;
-    private const int MaxTableRows = 24;
-    private const int MaxTableColumns = 12;
+    internal const int TableMargin = 16;
+    internal const int TableRowHeight = 34;
+    internal const double TableFontSize = TypeScale.Content.TableText;
+    internal const int TableHorizontalPadding = 12;
+    internal const int TableVerticalPadding = 7;
+    internal const int MinimumColumnWidth = 72;
+    internal const int MaximumColumnWidth = 320;
+    internal const int MaxTableRows = 24;
+    internal const int MaxTableColumns = 12;
     private const int MaxCellPreviewCharacters = 160;
     private const int MaxTableInspectedCharacters = 65_536;
 
@@ -51,11 +51,11 @@ internal static class ClipboardTextRenderer
         FontStretches.Normal);
 
     private static readonly Brush CardBackground = FrozenBrush(0xFF, 0xFC, 0xFC, 0xFD);
-    private static readonly Brush TableBackground = FrozenBrush(0xFF, 0xFF, 0xFF, 0xFF);
-    private static readonly Brush AlternateRowBackground = FrozenBrush(0xFF, 0xF8, 0xFA, 0xFC);
-    private static readonly Brush TextForeground = FrozenBrush(0xFF, 0x1F, 0x29, 0x37);
-    private static readonly Pen GridLine = FrozenPen(0xFF, 0xD1, 0xD5, 0xDB);
-    private static readonly Pen GridBorder = FrozenPen(0xFF, 0x9C, 0xA3, 0xAF);
+    internal static readonly Brush TableBackground = FrozenBrush(0xFF, 0xFF, 0xFF, 0xFF);
+    internal static readonly Brush AlternateRowBackground = FrozenBrush(0xFF, 0xF8, 0xFA, 0xFC);
+    internal static readonly Brush TextForeground = FrozenBrush(0xFF, 0x1F, 0x29, 0x37);
+    internal static readonly Pen GridLine = FrozenPen(0xFF, 0xD1, 0xD5, 0xDB);
+    internal static readonly Pen GridBorder = FrozenPen(0xFF, 0x9C, 0xA3, 0xAF);
 
     /// <summary>The colour of the lines between a table picture's cells.</summary>
     internal static Brush TableGridLineBrush => GridLine.Brush;
@@ -199,13 +199,7 @@ internal static class ClipboardTextRenderer
             string value = columnIndex < row.Count ? row[columnIndex] : string.Empty;
             if (value.Length > 0)
             {
-                double availableWidth = Math.Max(1, columnWidth - (TableHorizontalPadding * 2));
-                FormattedText text = CreateFormattedText(
-                    value,
-                    TableFontSize,
-                    availableWidth,
-                    TableRowHeight - (TableVerticalPadding * 2),
-                    singleLine: true);
+                FormattedText text = CreateTableCellText(value, columnWidth);
                 double textTop = rowTop + ((TableRowHeight - text.Height) / 2);
                 drawing.DrawText(text, new Point(left + TableHorizontalPadding, textTop));
             }
@@ -247,10 +241,19 @@ internal static class ClipboardTextRenderer
             new Rect(left, top, right - left, bottom - top));
     }
 
-    private static int[] MeasureColumnWidths(TablePreview preview)
+    private static int[] MeasureColumnWidths(TablePreview preview) =>
+        MeasureColumnWidths(preview.Rows, preview.ColumnCount, fitColumns: true);
+
+    internal static FormattedText CreateTableCellText(string value, double columnWidth) =>
+        CreateFormattedText(value, TableFontSize, Math.Max(1, columnWidth - (TableHorizontalPadding * 2)),
+            TableRowHeight - (TableVerticalPadding * 2), singleLine: true);
+
+    internal static int[] MeasureColumnWidths(IReadOnlyList<IReadOnlyList<string>> rows, int columnCount,
+        bool fitColumns, Dictionary<string, int>? measured = null)
     {
-        var widths = Enumerable.Repeat(MinimumColumnWidth, preview.ColumnCount).ToArray();
-        foreach (IReadOnlyList<string> row in preview.Rows)
+        measured ??= new(StringComparer.Ordinal);
+        var widths = Enumerable.Repeat(MinimumColumnWidth, columnCount).ToArray();
+        foreach (IReadOnlyList<string> row in rows.Take(MaxTableRows))
         {
             int cellCount = Math.Min(row.Count, widths.Length);
             for (int columnIndex = 0; columnIndex < cellCount; columnIndex++)
@@ -260,21 +263,19 @@ internal static class ClipboardTextRenderer
                     continue;
                 }
 
-                FormattedText text = CreateFormattedText(
-                    row[columnIndex],
-                    TableFontSize,
-                    MaximumColumnWidth - (TableHorizontalPadding * 2),
-                    TableRowHeight - (TableVerticalPadding * 2),
-                    singleLine: true);
-                int preferred = (int)Math.Ceiling(
-                    Math.Min(
-                        MaximumColumnWidth,
+                string value = row[columnIndex];
+                if (!measured.TryGetValue(value, out int preferred))
+                {
+                    FormattedText text = CreateTableCellText(value, MaximumColumnWidth);
+                    preferred = (int)Math.Ceiling(Math.Min(MaximumColumnWidth,
                         text.WidthIncludingTrailingWhitespace + (TableHorizontalPadding * 2)));
+                    measured.Add(value, preferred);
+                }
                 widths[columnIndex] = Math.Max(widths[columnIndex], preferred);
             }
         }
 
-        FitColumns(widths, MaxBitmapWidth - (TableMargin * 2));
+        if (fitColumns) FitColumns(widths, MaxBitmapWidth - (TableMargin * 2));
         return widths;
     }
 
@@ -353,7 +354,7 @@ internal static class ClipboardTextRenderer
         return string.Concat(sourceText.AsSpan(0, length), "\u2026");
     }
 
-    private static TablePreview ParseTablePreview(string sourceText)
+    internal static TablePreview ParseTablePreview(string sourceText)
     {
         var rows = new List<IReadOnlyList<string>>(MaxTableRows);
         var row = new List<string>(MaxTableColumns);
@@ -490,10 +491,10 @@ internal static class ClipboardTextRenderer
         }
     }
 
-    private static double SnapLine(double position, double scale) =>
+    internal static double SnapLine(double position, double scale) =>
         (Math.Floor(position * scale) + 0.5) / scale;
 
-    private static Pen DevicePixelPen(Pen source, double scale)
+    internal static Pen DevicePixelPen(Pen source, double scale)
     {
         if (scale == 1) return source;
         var pen = new Pen(source.Brush, 1 / scale);
@@ -515,7 +516,7 @@ internal static class ClipboardTextRenderer
         return pen;
     }
 
-    private readonly record struct TablePreview(
+    internal readonly record struct TablePreview(
         IReadOnlyList<IReadOnlyList<string>> Rows,
         int ColumnCount);
 }

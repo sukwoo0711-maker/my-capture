@@ -11,7 +11,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class PinTextSelectionViewTests
+public sealed partial class PinTextSelectionViewTests
 {
     [Fact]
     public void SelectedCodeLineAndMultipleLinesKeepOriginalEndings() => StaTestHost.Run(() =>
@@ -178,9 +178,9 @@ public sealed class PinTextSelectionViewTests
         var view = new PinTextSelectionView(content);
         Assert.Null(view.TextBox);
         Assert.NotNull(view.TableGrid);
-        // The cells keep the picture's light lines instead of a DataGrid's default black ones.
-        Assert.Same(ClipboardTextRenderer.TableGridLineBrush, view.TableGrid.HorizontalGridLinesBrush);
-        Assert.Same(ClipboardTextRenderer.TableGridLineBrush, view.TableGrid.VerticalGridLinesBrush);
+        // Cells draw the picture's device-pixel lines; DataGrid must not add its own edges.
+        Assert.Equal(DataGridGridLinesVisibility.None, view.TableGrid.GridLinesVisibility);
+        Assert.Equal(Color.FromRgb(0xD1, 0xD5, 0xDB), Assert.IsType<SolidColorBrush>(ClipboardTextRenderer.TableGridLineBrush).Color);
         Assert.Null(view.SelectedOriginalText);
         view.SelectCells(1, 0, 1, 0);
         Assert.Equal("line\tbreak", view.SelectedOriginalText);
