@@ -528,13 +528,19 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
-        Rect inflated = Rect.Inflate(bounds, 2, 2);
+        bool endpoints = !multiple && selected is PolylineAnnotation { Points.Count: 2 };
+        Rect inflated = !multiple && selected is TextAnnotation { IsStepNumber: false }
+            ? ToSurfaceRect(PointerIntentGeometry.SelectionFrame(selected, DipPerPixel))
+            : Rect.Inflate(bounds, 2, 2);
         bool rotated = !multiple && selected is TextAnnotation { RotationDegrees: not 0 };
         if (rotated)
             dc.PushTransform(new RotateTransform(((TextAnnotation)selected).RotationDegrees,
                 bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
-        dc.DrawRectangle(null, _edgeShadowPen, inflated);
-        dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        if (!endpoints)
+        {
+            dc.DrawRectangle(null, _edgeShadowPen, inflated);
+            dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        }
         if (rotated) dc.Pop();
 
         if (multiple || !selected.SupportsResize)
@@ -545,6 +551,13 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         foreach (SelectionHandle handle in _controller.GetSelectionHandles(DipPerPixel))
         {
             Point center = ToSurfacePoint(handle.Position);
+            if (endpoints)
+            {
+                // Only strokes: the line and arrowhead remain visible through each ring.
+                dc.DrawEllipse(null, _edgeShadowPen, center, HandlePixels / 2, HandlePixels / 2);
+                dc.DrawEllipse(null, _handlePen, center, HandlePixels / 2, HandlePixels / 2);
+                continue;
+            }
             dc.DrawRectangle(
                 _handleFillBrush,
                 _handlePen,

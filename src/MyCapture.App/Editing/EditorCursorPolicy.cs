@@ -99,6 +99,8 @@ internal static class EditorCursorPolicy
                 ResizeHandle.TopRight or ResizeHandle.BottomLeft => EditorCursorKind.ResizeNortheastSouthwest,
                 ResizeHandle.TopCenter or ResizeHandle.BottomCenter => EditorCursorKind.ResizeNorthSouth,
                 ResizeHandle.MiddleLeft or ResizeHandle.MiddleRight => EditorCursorKind.ResizeWestEast,
+                // Endpoint orientation is resolved with the selected line by PointerIntentGeometry.
+                ResizeHandle.LineStart or ResizeHandle.LineEnd => EditorCursorKind.ResizeWestEast,
                 _ when target.OverAnnotation => EditorCursorKind.Move,
                 _ => EditorCursorKind.Arrow,
             },

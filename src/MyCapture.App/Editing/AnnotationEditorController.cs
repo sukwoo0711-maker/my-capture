@@ -669,10 +669,20 @@ internal sealed class AnnotationEditorController
                 }
                 else if (_selected is PolylineAnnotation line && _resizePointsBefore is { } original)
                 {
-                    RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
-                    line.Points = original.Select(p => new PointD(
-                        _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
-                        _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    if (original.Length == 2 && _resizeHandle is ResizeHandle.LineStart or ResizeHandle.LineEnd)
+                    {
+                        int moving = _resizeHandle == ResizeHandle.LineStart ? 0 : 1;
+                        PointD fixedPoint = original[1 - moving];
+                        PointD end = shift ? AnnotationGestureConstraints.Line(fixedPoint, resizePoint) : resizePoint;
+                        line.Points = moving == 0 ? [end, fixedPoint] : [fixedPoint, end];
+                    }
+                    else
+                    {
+                        RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
+                        line.Points = original.Select(p => new PointD(
+                            _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
+                            _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    }
                     RaiseVisual();
                 }
                 else if (_selected is not null)
@@ -1197,12 +1207,21 @@ internal sealed class AnnotationEditorController
         bool toggle = _tool == EditorTool.Select && (shift || control);
         if (_tool == EditorTool.Select || editingStep)
         {
-            ResizeHandle handle = toggle ? ResizeHandle.None : HandleAt(point, HandleTolerance);
+            // Shift also constrains endpoint drags, including when held before the press.
+            bool endpointConstraint = shift && !control && _selected is PolylineAnnotation { Points.Count: 2 };
+            ResizeHandle handle = toggle && !endpointConstraint ? ResizeHandle.None : HandleAt(point, HandleTolerance);
             if (handle != ResizeHandle.None)
                 return new(PointerAction.Resize, _selected, handle,
                     PointerIntentGeometry.ResizeCursor(_selected!, handle));
             AnnotationItem? hit = step
                 ? (_selected!.DistanceTo(point) <= HitTolerance ? _selected : null) : HitTest(point);
+            // The gap between a selected caption's glyphs and its frame moves the caption rather
+            // than starting a marquee; an item drawn there still takes its own press.
+            if (hit is null && !step && _selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: false } caption)
+            {
+                PointD local = GeometryMath.Rotate(point, caption.Rect.Center, -caption.RotationDegrees);
+                if (PointerIntentGeometry.SelectionFrame(caption, DipPerPixel).Contains(local)) hit = caption;
+            }
             if (hit is not null)
                 return new(toggle ? PointerAction.ToggleSelection : PointerAction.Move, hit, Cursor: EditorCursorKind.Move);
             if (!step) return new(PointerAction.Marquee);
@@ -1226,11 +1245,15 @@ internal sealed class AnnotationEditorController
     /// <paramref name="item"/>: a caption's height always follows its text, so its top and
     /// bottom handles are not offered.
     /// </summary>
-    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle) =>
-        (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
-        || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
-            ? ResizeHandle.None
-            : handle;
+    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle)
+    {
+        bool endpoint = handle is ResizeHandle.LineStart or ResizeHandle.LineEnd;
+        if (item is PolylineAnnotation { Points.Count: 2 }) return endpoint ? handle : ResizeHandle.None;
+        if (endpoint) return ResizeHandle.None;
+        return (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
+            || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
+                ? ResizeHandle.None : handle;
+    }
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
@@ -1249,7 +1272,10 @@ internal sealed class AnnotationEditorController
                 _resizePointsBefore = _selected is PolylineAnnotation line ? [.. line.Points] : null;
                 PointD local = _selected is TextAnnotation { RotationDegrees: not 0 } rotated
                     ? GeometryMath.Rotate(point, _transformBefore.Center, -rotated.RotationDegrees) : point;
-                PointD anchor = PointerIntentGeometry.HandlePoint(_transformBefore, handle);
+                PointD anchor = _resizePointsBefore is { Length: 2 } endpoints
+                    && handle is ResizeHandle.LineStart or ResizeHandle.LineEnd
+                        ? endpoints[handle == ResizeHandle.LineStart ? 0 : 1]
+                        : PointerIntentGeometry.HandlePoint(_transformBefore, handle);
                 _resizePointerOffset = new PointD(anchor.X - local.X, anchor.Y - local.Y);
                 return;
             }
@@ -1810,7 +1836,7 @@ internal sealed class AnnotationEditorController
     internal static ResizeHandle HitTestHandle(RectD bounds, PointD point, double tolerance)
     {
         return PointerIntentGeometry.NearestHandle(Enum.GetValues<ResizeHandle>()
-            .Where(h => h != ResizeHandle.None).Select(h => new SelectionHandle(h,
+            .Where(h => h is not (ResizeHandle.None or ResizeHandle.LineStart or ResizeHandle.LineEnd)).Select(h => new SelectionHandle(h,
                 PointerIntentGeometry.HandlePoint(bounds.Normalized(), h))), point, tolerance);
     }
 
@@ -1840,6 +1866,8 @@ internal enum ResizeHandle
     BottomCenter,
     BottomLeft,
     MiddleLeft,
+    LineStart,
+    LineEnd,
 }
 
 /// <summary>
