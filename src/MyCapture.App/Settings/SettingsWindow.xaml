@@ -877,24 +877,25 @@
                                   Header="{loc:Text SettingsStructure_RecordingCompatibility}" AutomationProperties.Name="{loc:Text SettingsStructure_RecordingCompatibility}">
                             <StackPanel>
                                 <StackPanel Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
-                                                                    <Grid Margin="0,0,0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
-                                    <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}"
-                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
-                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
-                                </Grid>
-                                                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
-                                                                    <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
-                                                                              AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
-                                                                              AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
-                                                                              MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
-                                                                        <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
-                                                                        <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
-                                                                    </ComboBox>
+                                    <!-- The fold's title names the choice, so no label repeats it. The list and its guide
+                                         share one row, as the capture page's "After capture" list does. -->
+                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
+                                                  AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
+                                                  AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
+                                                  MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                            <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
+                                            <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
+                                        </ComboBox>
+                                        <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}" Margin="12,4,0,0"
+                                        AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                        Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                    </Grid>
                                                                     <!-- Windows 10 has no borderless capture API, so the automatic method shows the
                                                                          system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
                                                                     <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
