@@ -31,17 +31,17 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests(ITestOutputHelper 
         try
         {
             Assert.False(MediaFoundationVideoEncoder.ForceSoftwareForTest);
-            string source = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_BOUNDARY_SOURCE")
+            string source = TestDiagnosticArtifacts.ExistingFile(Environment.GetEnvironmentVariable("MYCAPTURE_ENCODER_BOUNDARY_SOURCE")
                 ?? throw new InvalidOperationException("MYCAPTURE_ENCODER_BOUNDARY_SOURCE must identify the retained failing source."));
-            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(source));
-            string timelineReference = Path.Combine(Path.GetDirectoryName(source)!, "nv12.mp4");
-            Assert.Equal(TimelineReferenceHash, TestDiagnosticArtifacts.HashFile(timelineReference));
-            double[] expectedTimeline = Mp4SampleTable.Read(timelineReference).PresentationMs.Order().ToArray();
+            // Each pinned input is hashed and parsed from one read; a mismatch fails before parsing.
+            byte[] sourceBytes = TestDiagnosticArtifacts.ReadVerified(source, SourceHash);
+            string timelineReference = DiagnosticOutputPaths.ExistingFile(Path.GetDirectoryName(source)!, "nv12.mp4");
+            double[] expectedTimeline = Mp4SampleTable.Parse(TestDiagnosticArtifacts.ReadVerified(timelineReference,
+                TimelineReferenceHash)).PresentationMs.Order().ToArray();
             Assert.Equal(Frames, expectedTimeline.Length);
-            string retainedSource = DiagnosticOutputPaths.Child(evidence, "source.mp4");
-            File.Copy(source, retainedSource, overwrite: false);
-            Assert.Equal(SourceHash, TestDiagnosticArtifacts.HashFile(retainedSource));
-            Assert.Equal(45, Mp4SampleTable.Read(retainedSource).PresentationMs.Count);
+            // Media Foundation reopens its input by path, so it only reads this verified copy.
+            string retainedSource = TestDiagnosticArtifacts.Retain(evidence, "source.mp4", sourceBytes, SourceHash);
+            Assert.Equal(45, Mp4SampleTable.Parse(sourceBytes).PresentationMs.Count);
             var recording = new RecordingResult(retainedSource, 1500, Fps, 45, Width, Height);
             EncoderFrame[] direct = Collect("direct", null);
             EncoderFrame[] roundtrip = Collect("rgb-roundtrip", new Mp4RenderOptions { PassThroughNv12 = false });
@@ -260,14 +260,17 @@ public sealed partial class Mp4EncoderBoundaryDiagnosticTests(ITestOutputHelper 
         try
         {
             Assert.Equal(run.InputHashes, frames.Select(frame => Hash(frame.Pixels)).ToArray());
-            if (File.Exists(options.OutputPath))
+            // The recorded hash and the parsed sample table describe one read of the encoder output.
+            byte[]? outputFile = File.Exists(options.OutputPath) ? File.ReadAllBytes(options.OutputPath) : null;
+            if (outputFile is not null)
             {
-                run.OutputBytes = new FileInfo(options.OutputPath).Length;
-                run.OutputHash = TestDiagnosticArtifacts.HashFile(options.OutputPath);
+                run.OutputBytes = outputFile.Length;
+                run.OutputHash = Hash(outputFile);
             }
             if (finalized)
             {
-                double[] timeline = Mp4SampleTable.Read(options.OutputPath).PresentationMs.Order().ToArray();
+                double[] timeline = Mp4SampleTable.Parse(outputFile ?? throw new FileNotFoundException(
+                    "The finalized encoder output is missing.", Path.GetFileName(options.OutputPath))).PresentationMs.Order().ToArray();
                 Assert.Equal(expectedTimeline, timeline);
                 Assert.Equal(frames.Length, timeline.Length);
                 double duration = MediaFoundationVideoFrameReader.ReadContainerDurationMs(options.OutputPath);
