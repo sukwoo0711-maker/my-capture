@@ -54,6 +54,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
     private const double ToolRailWidth = 94;
+    // Strength sliders sit beside an exact value box, so a short track is enough to drag; at this
+    // width every single-type English configuration keeps its delete button on the one row.
+    private const double InspectorSliderWidth = 40;
 
     private readonly AnnotationSourceMetadata _frame;
     private readonly BitmapSource _selectedBitmap;
@@ -2822,7 +2825,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
             ToolTip = UiText.Get("Text_27FD5EFB7773"),
-            Width = 64,
+            Width = InspectorSliderWidth,
             MinHeight = 32,
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
@@ -2952,7 +2955,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             IsSnapToTickEnabled = true,
             Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
-            Width = 64,
+            Width = InspectorSliderWidth,
             MinHeight = 32,
             VerticalAlignment = VerticalAlignment.Center,
         };
