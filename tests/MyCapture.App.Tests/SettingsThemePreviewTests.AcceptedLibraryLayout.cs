@@ -160,7 +160,8 @@ public sealed partial class SettingsThemePreviewTests
                         keep.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         PumpLibraryUntil(window, () => !fixture.Records[4].IsManuallyPinned && keep.IsEnabled, "released folder capture");
                         preview.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                        SettleGalleryLayout(window);
+                        // The image decodes off the UI thread (#221); the preview opens once it is ready.
+                        PumpLibraryUntil(window, () => window.OwnedWindows.Count > 0, "image preview");
                         Window imagePreview = Assert.Single(window.OwnedWindows.Cast<Window>());
                         // The zoomable preview holds the image inside its clipped viewport.
                         Assert.IsType<GalleryImagePreviewWindow>(imagePreview);
