@@ -1464,10 +1464,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             if (anchor)
             {
                 FormattedText text = _anchorText ??= CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, TypeScale.Caption, _primaryTextBrush);
-                double x = Math.Clamp(p.X + 15, 4, Math.Max(4, ActualWidth - text.Width - 12));
-                double y = Math.Clamp(p.Y + 12, 4, Math.Max(4, ActualHeight - text.Height - 8));
-                dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
-                dc.DrawText(text, new Point(x, y));
+                Rect chip = AnchorChipBounds(p, new Size(text.Width, text.Height), new Size(ActualWidth, ActualHeight));
+                AnchorChipBoundsForTest = chip;
+                dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, chip, ReadoutRadius, ReadoutRadius);
+                dc.DrawText(text, new Point(chip.X + ReadoutPaddingX, chip.Y + ReadoutPaddingY));
             }
         }
         Target(anchor ? _dragAnchor : _cursorPixel);
@@ -1724,22 +1724,45 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         string text = FormatReadout((int)pixels.Width, (int)pixels.Height, ActiveRatio);
         ReadoutForTest = text;
         FormattedText formatted = CreateText(text, _monoTypeface, TypeScale.Caption, _primaryTextBrush);
-        const double paddingX = 9;
-        const double paddingY = 5;
-        double width = formatted.Width + (paddingX * 2);
-        double height = formatted.Height + (paddingY * 2);
+        double width = formatted.Width + (ReadoutPaddingX * 2);
+        double height = formatted.Height + (ReadoutPaddingY * 2);
 
-        double x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
-        double y = selectionDip.Top - height - 8;
-        if (y < 8)
+        double x = Math.Clamp(selectionDip.Left, ReadoutEdge, Math.Max(ReadoutEdge, ActualWidth - width - ReadoutEdge));
+        double y = selectionDip.Top - height - ReadoutEdge;
+        if (y < ReadoutEdge)
         {
-            y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
+            y = Math.Min(ActualHeight - height - ReadoutEdge, selectionDip.Bottom + ReadoutEdge);
         }
 
         var background = new Rect(x, y, width, height);
         _dimensionLabelBounds = background;
-        dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, 7, 7);
-        dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
+        dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, ReadoutRadius, ReadoutRadius);
+        dc.DrawText(formatted, new Point(x + ReadoutPaddingX, y + ReadoutPaddingY));
+    }
+
+    // A drag shows two chips, the start point and the size read-out, with the same padding and
+    // corners and the same distance from the screen edges.
+    private const double ReadoutPaddingX = 9;
+    private const double ReadoutPaddingY = 5;
+    private const double ReadoutRadius = 7;
+    private const double ReadoutEdge = 8;
+
+    /// <summary>The start-point chip's last bounds, in DIPs.</summary>
+    internal Rect? AnchorChipBoundsForTest { get; private set; }
+
+    /// <summary>
+    /// The start-point chip around a <paramref name="text"/>-sized label: its top-left corner where it
+    /// has always been, just below and to the right of the point the drag started from, with the
+    /// size read-out's padding and its distance from the edges of a <paramref name="view"/>-sized
+    /// screen. It used to pad its label by 4 × 2 DIPs, under half the read-out's 9 × 5.
+    /// </summary>
+    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view)
+    {
+        double width = text.Width + (ReadoutPaddingX * 2);
+        double height = text.Height + (ReadoutPaddingY * 2);
+        double x = Math.Clamp(anchor.X + 11, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
+        double y = Math.Clamp(anchor.Y + 10, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
+        return new Rect(x, y, width, height);
     }
 
     /// <summary>
@@ -1947,6 +1970,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     /// <summary>The colour mode shows the magnifier even with the setting off: it is how a pixel is aimed at.</summary>
     private bool ShowsMagnifier => _showMagnifier || _colorPickMode;
 
+    // The panel sits 3 DIPs outside the image all round.
+    private const double MagnifierPanelRadius = 9;
+    private const double MagnifierImageRadius = MagnifierPanelRadius - 3;
+
+    /// <summary>Where the magnifier last drew its image, in DIPs.</summary>
+    internal Rect? MagnifierImageBoundsForTest { get; private set; }
+
     private void DrawMagnifier(DrawingContext dc)
     {
         if (!ShowsMagnifier || _magnifierCrop is null || !PointerInside)
@@ -2010,8 +2040,17 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         y = Math.Clamp(y, 8, Math.Max(8, ActualHeight - imageHeight - footerHeight - 8));
 
         var panel = new Rect(x - 3, y - 3, width + 6, imageHeight + footerHeight + 6);
-        dc.DrawRoundedRectangle(_chromeBrush, _magnifierBorderPen, panel, 9, 9);
-        dc.DrawImage(_magnifierCrop, new Rect(x, y, width, imageHeight));
+        dc.DrawRoundedRectangle(_chromeBrush, _magnifierBorderPen, panel, MagnifierPanelRadius, MagnifierPanelRadius);
+        // The image's top corners follow the panel's, 3 DIPs further in; square, they touched the
+        // panel's border. The clip runs on past the image's foot, which meets the footer square.
+        var image = new Rect(x, y, width, imageHeight);
+        MagnifierImageBoundsForTest = image;
+        var corners = new RectangleGeometry(new Rect(x, y, width, imageHeight + MagnifierImageRadius),
+            MagnifierImageRadius, MagnifierImageRadius);
+        corners.Freeze();
+        dc.PushClip(corners);
+        dc.DrawImage(_magnifierCrop, image);
+        dc.Pop();
 
         double cellWidth = width / _magnifierCrop.PixelWidth;
         double cellHeight = imageHeight / _magnifierCrop.PixelHeight;
