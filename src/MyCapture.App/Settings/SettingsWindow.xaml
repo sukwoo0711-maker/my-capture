@@ -540,6 +540,9 @@
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
 
+        <!-- A guide button centres on the line it explains, not on its row's spacing below: beside a
+             checkbox or list it takes that control's vertical margins (0,0,0,6 or 0,4,0,8), and a label
+             beside it is centred without its own 2 below. SettingsField rows pin it to the top. -->
         <Style x:Key="Settings.GuideButton" TargetType="Button" BasedOn="{StaticResource Button.Compact}">
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -587,7 +590,7 @@
                                 <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.QuickAccess}" Content="{loc:Text Capture.AfterCard}" />
                                 <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.ClipboardOnly}" Content="{loc:Text Capture.AfterClipboard}" />
                             </ComboBox>
-                            <Button Grid.Column="1" Tag="G01" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,4,0,8" Grid.Column="1" Tag="G01" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -617,7 +620,7 @@
                             Content="{loc:Text Text_B9D242426446}"
                             AutomationProperties.Name="{loc:Text Text_B9D242426446}"
                             IsChecked="{Binding ShowMagnifier}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -631,7 +634,7 @@
                             Content="{loc:Text Settings.ShowSelectionGrid}"
                             AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
                             IsChecked="{Binding ShowSelectionGrid}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -645,7 +648,7 @@
                             Content="{loc:Text WindowDetect_Setting}"
                             AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
                             IsChecked="{Binding AutoDetectWindows}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -693,7 +696,7 @@
                                     Content="{loc:Text Settings.AlwaysShowKeyPanel}"
                                     AutomationProperties.Name="{loc:Text Settings.AlwaysShowKeyPanel}"
                                     IsChecked="{Binding AlwaysShowKeyPanel}" />
-                                    <Button Grid.Column="1" Tag="G03" Content="{loc:Text SettingsStructure_Guide}"
+                                    <Button Margin="12,0,0,6" Grid.Column="1" Tag="G03" Content="{loc:Text SettingsStructure_Guide}"
                                     AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                                 </Grid>
@@ -766,7 +769,7 @@
                             Content="{loc:Text Text_F0CFD62F0971}"
                             AutomationProperties.Name="{loc:Text Text_F0CFD62F0971}"
                             IsChecked="{Binding RecordingIncludeCursor}" />
-                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -780,7 +783,7 @@
                             Content="{loc:Text Recording_CursorHighlight}"
                             AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
                             IsChecked="{Binding RecordingCursorHighlight}" />
-                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -791,7 +794,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
                             <Button Grid.Column="1" Tag="G04" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -855,7 +858,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
+                                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
                                     <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}"
                                     AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -995,7 +998,7 @@
                             AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
                             AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
                             IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
-                            <Button Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -1057,7 +1060,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
                             <Button Grid.Column="1" Tag="G09" Content="{loc:Text SettingsStructure_Compare}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Compare}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1119,7 +1122,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
                             <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1157,7 +1160,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
                             <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1282,7 +1285,7 @@
                                     Content="{loc:Text Settings.ShowSourceWindowTitle}"
                                     AutomationProperties.Name="{loc:Text Settings.ShowSourceWindowTitle}"
                                     IsChecked="{Binding ShowSourceWindowTitle}" />
-                                    <Button Grid.Column="1" Tag="G13" Content="{loc:Text SettingsStructure_Guide}"
+                                    <Button Margin="12,0,0,6" Grid.Column="1" Tag="G13" Content="{loc:Text SettingsStructure_Guide}"
                                     AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                                 </Grid>
@@ -1365,7 +1368,7 @@
                             AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
                             AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
                             IsChecked="{Binding AlwaysShowShortcutHints}" />
-                            <Button Grid.Column="1" Tag="G10" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G10" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
