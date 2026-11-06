@@ -168,6 +168,8 @@ public partial class App
             CaptureOverlayView.SuppressKeyPanelForProbe = false;
         }
 
+        // A step that finished over its release budget (the library delete) fails the run as well.
+        if (exitCode == 0 && recorder.Failed) exitCode = 1;
         try { recorder.Write(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { exitCode = 2; }
         recorder.Dispose();
@@ -213,6 +215,11 @@ public partial class App
                 await recorder.SettleAsync("pins-10 closed", probe.SettleSeconds,
                     () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
                 await recorder.AuditAsync("pins-10 closed");
+                break;
+            case ResidentProbeLibraryDelete.Scenario:
+                await ProbeLibraryDeleteAsync(probe, recorder);
+                await recorder.SettleAsync(ResidentProbeLibraryDelete.Scenario + " closed", probe.SettleSeconds);
+                await recorder.AuditAsync(ResidentProbeLibraryDelete.Scenario + " closed");
                 break;
             case "soak":
                 await ProbeSoakAsync(probe, recorder);
