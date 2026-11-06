@@ -47,6 +47,8 @@ public static class HighContrastPalette
         ["Text.Disabled"] = SystemColorRole.GrayText,
         ["Text.OnAccent"] = SystemColorRole.HighlightText,
         ["Text.Badge"] = SystemColorRole.WindowText,
+        ["Text.Warning"] = SystemColorRole.WindowText,
+        ["Text.Success"] = SystemColorRole.WindowText,
         ["Text.SelectionBackground"] = SystemColorRole.Highlight,
         ["Text.SelectionForeground"] = SystemColorRole.HighlightText,
         ["Accent.Default"] = SystemColorRole.Highlight,

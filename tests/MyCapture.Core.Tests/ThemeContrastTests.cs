@@ -185,5 +185,79 @@ public sealed class ThemeContrastTests
         Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Timeline.FrameLayer"));
         Assert.Equal(SystemColorRole.HighlightText, HighContrastPalette.RoleFor("Timeline.LayerText"));
     }
+
+    /// <summary>
+    /// Warning and success words sit on these surface stacks: a window (the OCR edit count), a
+    /// panel inside a window (the translation review note), floating windows (the recording
+    /// bar's "saved", the capture card's status tint) and the badge (the paused recording clock;
+    /// Surface.Badge resolves to Surface.Raised). Each stack is composited from the backdrop up,
+    /// over the dark and light desktop and both Mica tints.
+    /// </summary>
+    private static readonly (string Name, string[] Stack)[] StatusTextSurfaces =
+    [
+        ("window", ["Surface.Base"]),
+        ("panel in a window", ["Surface.Base", "Surface.Sunken"]),
+        ("floating window", ["Surface.Floating"]),
+        ("badge", ["Surface.Raised"]),
+    ];
+
+    [Fact]
+    public void StatusWordsReachAaOnEverySurfaceThatCarriesThem()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+            foreach (string key in new[] { "Text.Warning", "Text.Success" })
+            foreach ((string surface, ThemeColor background) in StatusTextBackgrounds(colors))
+            {
+                double ratio = ThemeContrast.Ratio(colors[key], background);
+                Assert.True(ratio >= 4.5, $"{theme} {key} on {surface} was {ratio:0.00}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A status word keeps its State hue wherever that hue already reads at 4.5:1 and takes its
+    /// own darker hue only where it does not, so glyphs and words of one status stay one colour
+    /// in the dark and high-contrast palettes. In Windows contrast mode both follow WindowText.
+    /// </summary>
+    [Fact]
+    public void StatusWordsKeepTheirStateHueWhereItReadsAndDifferOnlyWhereItDoesNot()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+            foreach (string family in new[] { "Warning", "Success" })
+            {
+                ThemeColor state = colors["State." + family];
+                bool stateReads = StatusTextBackgrounds(colors).All(pair => ThemeContrast.Ratio(state, pair.Background) >= 4.5);
+                if (stateReads) Assert.True(state == colors["Text." + family], $"{theme} Text.{family} must keep State.{family}");
+                else Assert.True(state != colors["Text." + family], $"{theme} Text.{family} must differ from State.{family}");
+            }
+        }
+
+        Assert.Equal(SystemColorRole.WindowText, HighContrastPalette.RoleFor("Text.Warning"));
+        Assert.Equal(SystemColorRole.WindowText, HighContrastPalette.RoleFor("Text.Success"));
+    }
+
+    private static IEnumerable<(string Surface, ThemeColor Background)> StatusTextBackgrounds(
+        IReadOnlyDictionary<string, ThemeColor> colors)
+    {
+        (string Name, ThemeColor Color)[] backdrops =
+        [
+            ("black", ThemeColor.Rgb(0, 0, 0)),
+            ("white", ThemeColor.Rgb(255, 255, 255)),
+            ("dark mica", DarkMica),
+            ("light mica", LightMica),
+        ];
+        foreach ((string name, string[] stack) in StatusTextSurfaces)
+        foreach ((string backdropName, ThemeColor backdrop) in backdrops)
+        {
+            ThemeColor background = backdrop;
+            foreach (string surface in stack) background = ThemeContrast.Composite(colors[surface], background);
+            yield return ($"{name} ({string.Join(" > ", stack)}) over {backdropName}", background);
+        }
+    }
+
     private static ThemeColor Opaque(ThemeColor color) => ThemeColor.Rgb(color.R, color.G, color.B);
 }

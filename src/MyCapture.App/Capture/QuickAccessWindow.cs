@@ -1035,7 +1035,7 @@ internal sealed partial class QuickAccessWindow : Window
 
     private void TintStatusText()
     {
-        if (TryFindResource("State.Success") is not SolidColorBrush success
+        if (TryFindResource("Text.Success") is not SolidColorBrush success
             || TryFindResource("Text.Primary") is not SolidColorBrush rest) return;
         var tint = new SolidColorBrush(success.Color);
         var fade = new ColorAnimation(success.Color, rest.Color, SuccessTintFade)
