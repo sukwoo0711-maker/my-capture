@@ -127,7 +127,11 @@ public sealed class OcrWholeSpinHeldOutTests(ITestOutputHelper output)
                 {
                     Call call = active ?? throw new InvalidOperationException("Unowned result.");
                     call.RawCount++; call.Raw = Evidence.Raw(raw);
-                });
+                },
+                wholeProgressObserved: null, wholeStageObserved: null,
+                // This contract predates #223, which made the bounded spin the product default. The product
+                // adds no spin entries here, so only the candidate callback differs from the default arm.
+                runtimeWholeSessionSpinning: true);
             NeuralOcrEngine engine = neural;
             engine.EngineReleased += () =>
             {
@@ -249,6 +253,7 @@ public sealed class OcrWholeSpinHeldOutTests(ITestOutputHelper output)
             }
             Data.Write(root, "preflight.json", new { block, arm, identity, contractReceipt, selected = selected.Select(Pin),
                 requested, applied, configTimestamp, session, sources, binaries, originalModels, copiedModels, resolved, native,
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(disableSpinning: false, runtimeSpinning: true),
                 referenceQuality, referenceReport, threadEnvironment, processId = Environment.ProcessId });
             for (int index = 0; index < selected.Length; index++) Recognize(selected[index], index + 1);
             Assert.Equal(121, quality.Count); Assert.Equal(1, initializations); Assert.Equal(0, rows);
@@ -285,6 +290,7 @@ public sealed class OcrWholeSpinHeldOutTests(ITestOutputHelper output)
             {
                 status = pass ? "PASS" : "FAIL", block, arm, started, finished = DateTimeOffset.UtcNow,
                 identity, contractReceipt, referenceQuality, referenceReport, requested, applied, configTimestamp,
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(disableSpinning: false, runtimeSpinning: true),
                 session, sources, binaries, originalModels, copiedModels, resolved, native, threadEnvironment,
                 qualityCount = quality.Count, observations, inputFiles, initializations, rows, releases,
                 naturalRelease, configuredIdleSeconds = NeuralOcrEngine.EngineIdleRelease.TotalSeconds,

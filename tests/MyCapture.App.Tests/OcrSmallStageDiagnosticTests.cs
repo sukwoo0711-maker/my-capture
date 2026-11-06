@@ -144,6 +144,7 @@ public sealed class OcrSmallStageDiagnosticTests(ITestOutputHelper output)
                 selected = inputs.Select(input => input.Sample), sources, binaries, originals, copied, languages,
                 recognitionCallsPlanned = 8, separateDetectorCallsPlanned = 8,
                 rapidOptions = NeuralOcrEngine.CreateOptions(), requestedSpinEntries = new Dictionary<string, string>(),
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(disableSpinning: false, runtimeSpinning: false),
                 heldOutAccess = "None: only four explicitly named development raw files/PNGs are read.",
                 original19 = "NOT_RUN: absent historical corpus", purpose = "Stage observation without tuning",
             });
@@ -188,6 +189,9 @@ public sealed class OcrSmallStageDiagnosticTests(ITestOutputHelper output)
             using (SessionOptions options = RapidOcr.GetDefaultSessionOptions())
             {
                 options.EnableCpuMemArena = false;
+                // The product sessions add these spin entries too (#223); the receipt below does not cover them.
+                foreach ((string key, string value) in NeuralOcrEngine.WholeSessionConfigEntries(disableSpinning: false, runtimeSpinning: false))
+                    options.AddSessionConfigEntry(key, value);
                 Evidence.SessionReceipt detectorSession = Evidence.Session(options,
                     session.Detector, session.Classifier, session.Recognizer, session.Dictionary, noSpin: false);
                 Assert.Equal(session, detectorSession);
