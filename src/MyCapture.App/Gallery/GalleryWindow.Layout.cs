@@ -45,20 +45,33 @@ internal sealed partial class GalleryWindow
     {
         if (SelectionCommands is null || SortCommands is null || LibraryContentCommandBar.ActualWidth <= 0) return;
         double available = LibraryContentCommandBar.ActualWidth;
+        double needed = 0;
         foreach (ToolbarDensity density in new[] { ToolbarDensity.Labelled, ToolbarDensity.IconsOnly, ToolbarDensity.Compact })
         {
             ApplyToolbarDensity(density);
-            var probe = new Size(double.PositiveInfinity, LibraryContentCommandBar.RowDefinitions[0].ActualHeight);
-            // A label's Visibility/Text invalidates its own measure immediately, but WPF propagates that
-            // to its templated button and the outer panel later. A repeated fit at the same width must
-            // not accept Labelled using cached icon-only sizes. Refresh just these small toolbar trees
-            // before measuring; a full UpdateLayout here would re-enter the window's SizeChanged path.
-            InvalidateToolbarMeasure(SelectionCommands);
-            InvalidateToolbarMeasure(SortCommands);
-            SelectionCommands.Measure(probe);
-            SortCommands.Measure(probe);
-            if (SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width <= available) break;
+            needed = MeasureContentToolbar();
+            if (needed <= available) return;
         }
+        // Not even the compact bar fits (English at 150 % text beside the details pane at the minimum width):
+        // the sort box gives back the width its longest choice asked for, down to the compact width, rather
+        // than slide under the commands.
+        SortBox.Width = Math.Max(CompactSortBoxWidth, Math.Floor(SortBox.Width - (needed - available)));
+    }
+
+    private const double CompactSortBoxWidth = 92;
+
+    private double MeasureContentToolbar()
+    {
+        var probe = new Size(double.PositiveInfinity, LibraryContentCommandBar.RowDefinitions[0].ActualHeight);
+        // A label's Visibility/Text invalidates its own measure immediately, but WPF propagates that
+        // to its templated button and the outer panel later. A repeated fit at the same width must
+        // not accept Labelled using cached icon-only sizes. Refresh just these small toolbar trees
+        // before measuring; a full UpdateLayout here would re-enter the window's SizeChanged path.
+        InvalidateToolbarMeasure(SelectionCommands);
+        InvalidateToolbarMeasure(SortCommands);
+        SelectionCommands.Measure(probe);
+        SortCommands.Measure(probe);
+        return SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width;
     }
 
     private static void InvalidateToolbarMeasure(DependencyObject element)
@@ -83,7 +96,37 @@ internal sealed partial class GalleryWindow
         }
         SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 40 : 96;
         SelectionCountLabel.ToolTip = density == ToolbarDensity.Compact ? _viewModel.SelectionText : null;
-        SortBox.Width = density == ToolbarDensity.Compact ? 92 : 112;
+        // No narrower than the longest choice (at 112 DIP English showed "Newest firs") unless the compact bar
+        // still does not fit; see FitContentToolbar.
+        SortBox.Width = Math.Max(density == ToolbarDensity.Compact ? CompactSortBoxWidth : 112, SortChoiceWidth());
+    }
+
+    /// <summary>
+    /// The width that shows the sort box's longest choice whole between the box's padding, which holds the
+    /// arrow. It is measured in the box's own font and DPI, so a language or text size change is followed.
+    /// </summary>
+    private double SortChoiceWidth()
+    {
+        var probe = new TextBlock
+        {
+            FontFamily = SortBox.FontFamily,
+            FontSize = SortBox.FontSize,
+            FontWeight = SortBox.FontWeight,
+            FontStyle = SortBox.FontStyle,
+            FontStretch = SortBox.FontStretch,
+            FlowDirection = SortBox.FlowDirection,
+            Language = SortBox.Language,
+        };
+        TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(SortBox));
+        VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(SortBox));
+        double widest = 0;
+        foreach (ComboBoxItem item in SortBox.Items.OfType<ComboBoxItem>())
+        {
+            probe.Text = item.Content as string ?? string.Empty;
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            widest = Math.Max(widest, probe.DesiredSize.Width);
+        }
+        return Math.Ceiling(widest + SortBox.Padding.Left + SortBox.Padding.Right);
     }
 
     private void InitializeCommandBarLayout()
