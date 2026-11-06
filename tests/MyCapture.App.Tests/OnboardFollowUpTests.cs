@@ -68,8 +68,8 @@ public sealed class QuickAccessCardLabelTests
         {
             card.IsKept = true;
             Border host = QuickAccessDetachedFixture.Layout(card);
-            // Opaque capture-excluded cards omit the two 8-DIP shadow margins.
-            Assert.Equal(card.AllowsTransparency ? 344 : 328, host.ActualWidth);
+            // Opaque capture-excluded cards omit the two 12-DIP shadow bands.
+            Assert.Equal(card.AllowsTransparency ? 352 : 328, host.ActualWidth);
             foreach (Button button in card.ActionButtonsForTest)
                 button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
             var restingSizes = new Dictionary<Button, Size>();
