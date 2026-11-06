@@ -354,6 +354,40 @@ public sealed class RecordingControlWindowExclusionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void WallClockStaysRecordedWhileItsToolTipIsExcludedOrHidden(bool supported) => StaTestHost.Run(() =>
+    {
+        using var mode = new ExclusionMode(supported);
+        bool excludable = supported && NativeExclusion.SupportsLayeredWindows;
+        RectD work = MonitorEnumerator.GetFromPoint(new PointD(100, 100)).WorkArea;
+        RectD region = new RectD(work.Center.X - 160, work.Center.Y - 100, 320, 200).ToPixelBounds();
+        var clock = new RecordingWallClockWindow(region, 1, 30);
+        var tips = new List<ToolTip>();
+        try
+        {
+            clock.Show();
+            clock.UpdateLayout();
+            IntPtr hwnd = new WindowInteropHelper(clock).Handle;
+            // The clock is recorded on purpose and stays so...
+            Assert.True(IsWindowVisible(hwnd));
+            Assert.True(NativeExclusion.IsLayered(hwnd));
+            Assert.Equal(0u, NativeExclusion.Affinity(hwnd));
+
+            // ...but its tooltip, a popup window of its own, is not: it is excluded, or hidden
+            // within IsOpen = true before WPF renders it, whether or not recording has started.
+            AssertRecordingToolTip(clock.Container, excludable, tips);
+            Assert.True(IsWindowVisible(hwnd));
+            Assert.Equal(0u, NativeExclusion.Affinity(hwnd));
+        }
+        finally
+        {
+            foreach (ToolTip tip in tips) tip.IsOpen = false;
+            clock.CloseClock();
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ModePreservesPaletteContentAndLayeredModeHasNoWindowRegion(bool supported) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(supported);
