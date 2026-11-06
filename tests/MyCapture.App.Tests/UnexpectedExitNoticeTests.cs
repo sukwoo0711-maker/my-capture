@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -94,6 +95,147 @@ public sealed class UnexpectedExitNoticeTests
     });
 
     [Fact]
+    public void UnhandledReportKeepsTheMomentItWasShownWhenTheClickComesLater() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-error-report-late-click-");
+        RecentErrorLog previousErrors = ErrorReporting.Errors;
+        RollingFileLog? previousLog = ErrorReporting.FileLog;
+        Func<DateTimeOffset> previousClock = ErrorReporting.Clock;
+        Action<ErrorReport> previousOpen = ErrorReporting.Open;
+        DateTimeOffset now = ErrorReportTests.FixedTime.AddMinutes(-1);
+        var reports = new List<ErrorReport>();
+        var file = new RollingFileLog(Path.Combine(root, "logs"), clock: () => now);
+        ThemedDialog? dialog = null;
+        try
+        {
+            var errors = new RecentErrorLog(() => now);
+            ErrorReporting.Errors = errors;
+            ErrorReporting.FileLog = file;
+            ErrorReporting.Clock = () => now;
+            ErrorReporting.Open = reports.Add;
+            using var recent = new RecentErrorLogProvider(errors);
+            using var written = new RollingFileLogProvider(file, () => now);
+            void LogBoth(string category, Action<ILogger> write)
+            {
+                write(recent.CreateLogger(category));
+                write(written.CreateLogger(category));
+            }
+
+            // An earlier, different failure stays a recent error of the report.
+            LogBoth("MyCapture.App.Test", logger => logger.LogError(ErrorReportTests.CaptureFailure(alternate: true), "Save failed"));
+            // The dispatcher handler logs the exception, then shows the dialog in the same moment.
+            now = ErrorReportTests.FixedTime;
+            Exception error = ErrorReportTests.CaptureFailure();
+            LogBoth("MyCapture.App.App", logger => logger.LogError(error, "Unhandled exception on the dispatcher thread"));
+            string[] atFailure = file.RecentLines(ErrorReport.RecentLogLineCount);
+            dialog = ThemedDialog.CreateUnhandled(error);
+            Show(dialog);
+
+            // The person reads it for a while; meanwhile the app logs more lines than a report carries.
+            now = ErrorReportTests.FixedTime.AddSeconds(3);
+            for (int step = 0; step < ErrorReport.RecentLogLineCount + 2; step++)
+                LogBoth("MyCapture.App.Test", logger => logger.LogInformation("Background step {Step}", step));
+            Assert.DoesNotContain(atFailure[^1], file.RecentLines(ErrorReport.RecentLogLineCount));
+            ActionButtons(dialog)[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+            ErrorReport report = Assert.Single(reports);
+            Assert.Equal(ErrorReportTests.FixedTime, report.Primary.Utc);
+            Assert.Equal(atFailure, report.RecentLogLines);
+            Assert.Contains(" ERR MyCapture.App.App ", report.RecentLogLines[^1], StringComparison.Ordinal);
+            // The handler's own record of this exception is the failure itself, so it is listed once.
+            SafeErrorRecord earlier = Assert.Single(report.RecentErrors);
+            Assert.NotEqual(report.Primary.StackSignature, earlier.StackSignature);
+            string summary = report.FormatSummary();
+            Assert.Contains("2026-11-06 17:25:00 UTC", summary, StringComparison.Ordinal);
+            Assert.DoesNotContain("17:25:03", summary, StringComparison.Ordinal);
+            Assert.Single(summary.Split(Environment.NewLine), line =>
+                line.Contains(SafeErrorRecord.HashToken(report.Primary.StackSignature), StringComparison.Ordinal));
+        }
+        finally
+        {
+            dialog?.Close();
+            ErrorReporting.Errors = previousErrors;
+            ErrorReporting.FileLog = previousLog;
+            ErrorReporting.Clock = previousClock;
+            ErrorReporting.Open = previousOpen;
+            file.Dispose();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void BusyWaitWakesWhenAWindowClosesOrHidesAndOtherwiseAtItsLimit() => StaTestHost.Run(() =>
+    {
+        SynchronizationContext? previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+        Window closing = OffscreenWindow(), hiding = OffscreenWindow();
+        try
+        {
+            Task closed = UnexpectedExitNotice.WindowChangeAsync([closing, hiding], TimeSpan.FromMinutes(10));
+            Ocr410Fixture.Pump();
+            Assert.False(closed.IsCompleted);
+            closing.Close();
+            Complete(closed);
+
+            Task hidden = UnexpectedExitNotice.WindowChangeAsync([hiding], TimeSpan.FromMinutes(10));
+            Ocr410Fixture.Pump();
+            Assert.False(hidden.IsCompleted);
+            hiding.Hide();
+            Complete(hidden);
+
+            // A busy state no window ends, such as a capture still starting, is read again at the limit.
+            Complete(UnexpectedExitNotice.WindowChangeAsync([hiding], TimeSpan.FromMilliseconds(50)));
+        }
+        finally
+        {
+            closing.Close();
+            hiding.Close();
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    });
+
+    [Fact]
+    public void ABusyLaunchReadsItsConditionsAgainOnlyWhenAWindowCloses() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-error-report-notice-wait-");
+        SynchronizationContext? previousContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+        Window question = OffscreenWindow();
+        UnexpectedExitNotice? notice = null;
+        try
+        {
+            UnexpectedExitLog exits = Log(root);
+            Assert.True(exits.TryWrite(ErrorReportTests.Record(ErrorReportTests.CaptureFailure())));
+            var shown = new List<ThemedDialog>();
+            int busyChecks = 0;
+            Task<UnexpectedExitNotice?> offer = UnexpectedExitNotice.OfferAsync(exits, () => Task.CompletedTask,
+                stop: () => false, busy: () => { busyChecks++; return question.IsVisible; },
+                show: dialog => { shown.Add(dialog); Show(dialog); },
+                waitForChange: () => UnexpectedExitNotice.WindowChangeAsync([question], TimeSpan.FromMinutes(10)));
+            PumpUntil(() => busyChecks > 0);
+            // While the first-run question stays open, nothing reads the conditions again.
+            PumpFor(TimeSpan.FromMilliseconds(300));
+            Assert.Equal(1, busyChecks);
+            Assert.Empty(shown);
+
+            question.Close();
+            notice = Assert.IsType<UnexpectedExitNotice>(Complete(offer));
+            Assert.Equal(2, busyChecks);
+            Assert.Same(notice.Dialog, Assert.Single(shown));
+            notice.Dialog.Close();
+            Complete(notice.Handled);
+            Assert.Empty(exits.ReadPending());
+        }
+        finally
+        {
+            notice?.Dialog.Close();
+            question.Close();
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
     public void WindowCloseDoesNotOpenAReport() => StaTestHost.Run(() =>
     {
         int calls = 0;
@@ -127,7 +269,7 @@ public sealed class UnexpectedExitNoticeTests
             UnexpectedExitNotice notice = Assert.IsType<UnexpectedExitNotice>(Complete(UnexpectedExitNotice.OfferAsync(exits,
                 () => { readyCalls++; return Task.CompletedTask; }, stop: () => false,
                 busy: () => ++busyChecks < 3, show: dialog => { shown.Add(dialog); Show(dialog); },
-                delay: _ => Task.CompletedTask)));
+                waitForChange: () => Task.CompletedTask)));
             Assert.Equal(1, readyCalls);
             Assert.Equal(3, busyChecks);
             Assert.Same(notice.Dialog, Assert.Single(shown));
@@ -177,7 +319,7 @@ public sealed class UnexpectedExitNoticeTests
             Assert.Null(Complete(UnexpectedExitNotice.OfferAsync(exits, () => Task.CompletedTask,
                 stop: () => stopping, busy: () => { stopping = true; return true; },
                 show: _ => throw new InvalidOperationException("An exiting app shows no notice"),
-                delay: _ => Task.CompletedTask)));
+                waitForChange: () => Task.CompletedTask)));
             Assert.Single(exits.ReadPending());
         }
         finally
@@ -222,7 +364,33 @@ public sealed class UnexpectedExitNoticeTests
         ((StackPanel)((ScrollViewer)dialog.Content).Content).Children.OfType<WrapPanel>().Single()
             .Children.OfType<Button>().ToArray();
 
-    private static void Show(ThemedDialog dialog)
+    private static void PumpUntil(Func<bool> condition)
+    {
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), "The notice flow did not get there.");
+            Ocr410Fixture.Pump();
+        }
+    }
+
+    private static void PumpFor(TimeSpan duration)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer(duration, DispatcherPriority.Background, (_, _) => frame.Continue = false,
+            Dispatcher.CurrentDispatcher);
+        Dispatcher.PushFrame(frame);
+        timer.Stop();
+    }
+
+    private static Window OffscreenWindow()
+    {
+        var window = new Window { Width = 160, Height = 120 };
+        Show(window);
+        return window;
+    }
+
+    private static void Show(Window dialog)
     {
         Ocr410Fixture.LoadTheme(dialog);
         FluidMotion.SetWindowEntrance(dialog, false);

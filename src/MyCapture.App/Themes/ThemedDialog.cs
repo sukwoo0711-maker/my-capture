@@ -300,14 +300,20 @@ internal sealed class ThemedDialog : Window
         new(UiText.Get("Onboard_StartFailureBody"), UiText.Get("Onboard_StartFailureTitle"), MessageBoxButton.OK,
             MessageBoxResult.OK, error.ToString(), commands: [ReportProblemCommand()]);
 
-    /// <summary>The unexpected-error dialog, with a local report preview beside Close.</summary>
-    internal static ThemedDialog CreateUnhandled(Exception error) =>
-        new(UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK, MessageBoxResult.OK,
+    /// <summary>
+    /// The unexpected-error dialog, with a local report preview beside Close. The report keeps the time
+    /// and records of the moment the dialog opened, however long the person reads before choosing it.
+    /// </summary>
+    internal static ThemedDialog CreateUnhandled(Exception error)
+    {
+        Func<ErrorReport> report = ErrorReporting.Capture(error);
+        return new(UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK, MessageBoxResult.OK,
             error.ToString(), commands: [new(UiText.Get("Support_ReportError"), () =>
             {
-                ErrorReporting.Open(ErrorReporting.ForException(error));
+                ErrorReporting.Open(report());
                 return null;
             }, Closes: true)]);
+    }
 
     /// <summary>A next-launch notice; records are only previewed when its report command is chosen.</summary>
     internal static ThemedDialog CreateUnexpectedExitNotice(Action report) =>

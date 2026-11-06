@@ -8,13 +8,22 @@ internal enum ErrorReportKind { Unhandled, UnexpectedExit }
 internal sealed record ErrorReport(ErrorReportKind Kind, SafeErrorRecord Primary,
     IReadOnlyList<SafeErrorRecord> RecentErrors, IReadOnlyList<string> RecentLogLines, string? RecordedVersion)
 {
-    internal static ErrorReport ForException(Exception error, RecentErrorLog errors, RollingFileLog? log, DateTimeOffset utc)
+    /// <summary>How many of the latest log lines a report carries.</summary>
+    internal const int RecentLogLineCount = 8;
+
+    /// <summary>
+    /// A report about <paramref name="error"/> from the records taken when it was shown, at
+    /// <paramref name="utc"/>. The record the app logged for this same exception just before is left
+    /// out of the recent errors, so the failure is listed once.
+    /// </summary>
+    internal static ErrorReport ForException(Exception error, IReadOnlyList<SafeErrorRecord> recentErrors,
+        IReadOnlyList<string> recentLogLines, DateTimeOffset utc)
     {
         SafeErrorRecord primary = SafeErrorRecord.From(utc, LogLevel.Error, 0, "MyCapture.App.App", null, error);
-        SafeErrorRecord[] recent = errors.Snapshot().Where(item =>
+        SafeErrorRecord[] recent = recentErrors.Where(item =>
             item.ExceptionType != primary.ExceptionType || item.StackSignature != primary.StackSignature
             || Math.Abs((item.Utc - primary.Utc).TotalSeconds) > 2).TakeLast(5).ToArray();
-        return new(ErrorReportKind.Unhandled, primary, recent, log?.RecentLines(8) ?? [], null);
+        return new(ErrorReportKind.Unhandled, primary, recent, recentLogLines, null);
     }
 
     internal string FormatSummary()
@@ -44,7 +53,7 @@ internal sealed record ErrorReport(ErrorReportKind Kind, SafeErrorRecord Primary
                     + (recent == SafeLogLine.Unknown ? string.Empty : " · " + recent));
             }
         }
-        string[] logs = RecentLogLines.Where(SafeLogLine.IsWellFormed).TakeLast(8).ToArray();
+        string[] logs = RecentLogLines.Where(SafeLogLine.IsWellFormed).TakeLast(RecentLogLineCount).ToArray();
         if (logs.Length > 0)
         {
             lines.Add(UiText.Get("Support_RecentLog") + ":");
@@ -75,8 +84,9 @@ internal sealed record ErrorReport(ErrorReportKind Kind, SafeErrorRecord Primary
 
 internal sealed record SupportSubmission(string Diagnostics, string Message, string ErrorSummary, ErrorReport? Report)
 {
-    // Preserve the established support body exactly, including its trailing blank line.
+    // Preserve the established support body exactly, including its trailing blank line. An error
+    // report puts the person's message last: a length limit cuts from the end, so the error summary stays.
     internal string Body => string.IsNullOrWhiteSpace(ErrorSummary) ? SupportReport.Body(Diagnostics, Message)
         : string.Join(Environment.NewLine + Environment.NewLine,
-            new[] { Diagnostics, Message.Trim(), ErrorSummary.Trim() }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            new[] { Diagnostics, ErrorSummary.Trim(), Message.Trim() }.Where(part => !string.IsNullOrWhiteSpace(part)));
 }
