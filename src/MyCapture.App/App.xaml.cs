@@ -1334,8 +1334,10 @@ public partial class App : Application
         // Region, window, full-screen and scrolling captures all complete here. Only a durable, copied
         // result counts toward the Store rating invitation, and not one the practice window asked for; a
         // capture taken as a pin is counted by its new pin. A save or copy failure blocks the invitation.
-        RecordStoreRatingCapture(_currentRecord is not null && copiedToClipboard,
+        bool delivered = _currentRecord is not null && copiedToClipboard;
+        RecordStoreRatingCapture(delivered,
             practice: e.PracticeTarget is not null, pinRequested: e.PinRequested);
+        ResolveStoreRatingCapture(first, delivered);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
         if (e.PinRequested && _currentRecord is { } pinRecord && _commit is not null)
@@ -1498,7 +1500,7 @@ public partial class App : Application
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
         QuickAccessWindow? card = null;
         // Decided before the card is built, so an invitation is on the card from its first appearance.
-        bool invitation = OfferStoreRatingOnCard(practice);
+        var invitation = OfferStoreRatingOnCard(practice);
         try
         {
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
@@ -1507,7 +1509,7 @@ public partial class App : Application
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
-            if (invitation) AttachStoreRatingInvitation(card);
+            if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) =>
             {
@@ -1522,6 +1524,7 @@ public partial class App : Application
             flight?.Land(card);
             ReceiptTimeline.Mark?.Invoke("card-show");
             card.Show();
+            if (invitation is not null) _storeRating?.NoteCardOfferShown(invitation);
             ReceiptTimeline.Mark?.Invoke("card-shown");
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
@@ -1530,7 +1533,7 @@ public partial class App : Application
             flight?.Finish();
             lease.Dispose();
             // An invitation on a card that never showed is not counted.
-            if (invitation && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer();
+            if (invitation is not null && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer(invitation, card);
             _log?.LogWarning(ex, "Could not show the optional capture receipt");
         }
     }

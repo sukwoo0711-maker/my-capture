@@ -1,3 +1,5 @@
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -6,11 +8,13 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Store;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
 using Xunit;
 using Shell = MyCapture.App.Tests.QuickAccessCardFirstTests.Shell;
@@ -37,7 +41,7 @@ public sealed class QuickAccessRatingInvitationTests
         try
         {
             Assert.Equal(Visibility.Collapsed, plain.RatingInvitationForTest.Row.Visibility);
-            offered.OfferRatingInvitation(() => completion.Task, () => { });
+            offered.OfferRatingInvitation(() => completion.Task, () => { }, () => { });
             Border plainHost = QuickAccessDetachedFixture.Layout(plain, scale);
             Border host = QuickAccessDetachedFixture.Layout(offered, scale);
             Rect[] before = ControlBounds(offered);
@@ -81,25 +85,25 @@ public sealed class QuickAccessRatingInvitationTests
         var card = Card();
         try
         {
-            card.OfferRatingInvitation(() => null, () => { });
-            Assert.Throws<InvalidOperationException>(() => card.OfferRatingInvitation(() => null, () => { }));
+            card.OfferRatingInvitation(() => null, () => { }, () => { });
+            Assert.Throws<InvalidOperationException>(() => card.OfferRatingInvitation(() => null, () => { }, () => { }));
         }
         finally { card.Close(); }
-        Assert.Throws<InvalidOperationException>(() => card.OfferRatingInvitation(() => null, () => { }));
+        Assert.Throws<InvalidOperationException>(() => card.OfferRatingInvitation(() => null, () => { }, () => { }));
         QuickAccessWindow shown = Card();
         try
         {
             ShowWithoutHotkey(shown);
-            Assert.Throws<InvalidOperationException>(() => shown.OfferRatingInvitation(() => null, () => { }));
+            Assert.Throws<InvalidOperationException>(() => shown.OfferRatingInvitation(() => null, () => { }, () => { }));
             shown.Hide();
-            Assert.Throws<InvalidOperationException>(() => shown.OfferRatingInvitation(() => null, () => { }));
+            Assert.Throws<InvalidOperationException>(() => shown.OfferRatingInvitation(() => null, () => { }, () => { }));
         }
         finally { shown.Close(); }
         var withHandle = Card();
         try
         {
             new WindowInteropHelper(withHandle).EnsureHandle();
-            Assert.Throws<InvalidOperationException>(() => withHandle.OfferRatingInvitation(() => null, () => { }));
+            Assert.Throws<InvalidOperationException>(() => withHandle.OfferRatingInvitation(() => null, () => { }, () => { }));
         }
         finally { withHandle.Close(); }
     });
@@ -121,7 +125,7 @@ public sealed class QuickAccessRatingInvitationTests
             keyboardBeforeCallback = offered.RatingInvitationForTest.Review.Focusable
                 && offered.RatingInvitationForTest.Close.Focusable && offered.ActionButtonsForTest.All(button => button.Focusable);
             return completion.Task;
-        }, () => throw new InvalidOperationException("Close must not run"));
+        }, () => throw new InvalidOperationException("Close must not run"), () => { });
         try
         {
             ShowWithoutHotkey(offered);
@@ -152,8 +156,8 @@ public sealed class QuickAccessRatingInvitationTests
         var refused = Card();
         var closing = Card();
         int reviews = 0, closes = 0;
-        refused.OfferRatingInvitation(() => { reviews++; return null; }, () => closes++);
-        closing.OfferRatingInvitation(() => { reviews++; return null; }, () => closes++);
+        refused.OfferRatingInvitation(() => { reviews++; return null; }, () => closes++, () => { });
+        closing.OfferRatingInvitation(() => { reviews++; return null; }, () => closes++, () => { });
         try
         {
             // A refused Review opens nothing: the row leaves, keeping its space, rather than keep a button
@@ -187,7 +191,8 @@ public sealed class QuickAccessRatingInvitationTests
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
         QuickAccessWindow card = failure == "action" ? Card() : QuickAccessWindow.ForPendingCapture(Image(), null, targetMonitor: Monitor());
         int callbacks = 0;
-        card.OfferRatingInvitation(() => { callbacks++; return Task.CompletedTask; }, () => callbacks++);
+        int withdrawals = 0;
+        card.OfferRatingInvitation(() => { callbacks++; return Task.CompletedTask; }, () => callbacks++, () => withdrawals++);
         try
         {
             if (failure == "copy") card.ReportInitialCopy(false);
@@ -201,11 +206,79 @@ public sealed class QuickAccessRatingInvitationTests
                 Assert.True(pin.IsCompleted);
             }
             Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, withdrawals);
+            Task anotherFailure = card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned");
+            Assert.True(anotherFailure.IsCompletedSuccessfully);
+            Assert.Equal(1, withdrawals);
             Click(card.RatingInvitationForTest.Review);
             Click(card.RatingInvitationForTest.Close);
             Assert.Equal(0, callbacks);
         }
         finally { card.Close(); SynchronizationContext.SetSynchronizationContext(previous); }
+    });
+
+    [Theory]
+    [InlineData("accepted")]
+    [InlineData("refused")]
+    [InlineData("close")]
+    public void AFailureAfterReviewOrCloseNeverWithdrawsTheInvitation(string answer) => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = QuickAccessWindow.ForPendingCapture(Image(), null, targetMonitor: Monitor());
+        int withdrawals = 0;
+        card.OfferRatingInvitation(() => answer == "accepted" ? Task.CompletedTask : null, () => { }, () => withdrawals++);
+        try
+        {
+            Click(answer == "close" ? card.RatingInvitationForTest.Close : card.RatingInvitationForTest.Review);
+            card.ReportInitialCopy(false);
+            card.ShowCaptureFailure("저장 실패", "저장할 수 없습니다.");
+            Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(0, withdrawals);
+            Assert.False(card.WithdrawRatingInvitation());
+        }
+        finally { card.Close(); }
+    });
+
+    [Theory]
+    [InlineData("capture")]
+    [InlineData("copy")]
+    public void AFailureKnownBeforeOfferingWithdrawsAtTheOfferOnlyOnce(string failure) => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = QuickAccessWindow.ForPendingCapture(Image(), failure == "copy" ? false : null, targetMonitor: Monitor());
+        int withdrawals = 0;
+        try
+        {
+            if (failure == "capture") card.ShowCaptureFailure("저장 실패", "저장할 수 없습니다.");
+            Assert.Equal(0, withdrawals);
+            card.OfferRatingInvitation(() => throw new InvalidOperationException("Review must not run"),
+                () => throw new InvalidOperationException("Close must not run"), () => withdrawals++);
+            Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, withdrawals);
+            card.ShowCaptureFailure("저장 실패", "저장할 수 없습니다.");
+            card.ReportInitialCopy(false);
+            Assert.False(card.WithdrawRatingInvitation());
+            Assert.Equal(1, withdrawals);
+        }
+        finally { card.Close(); }
+    });
+
+    [Fact]
+    public void AppWithdrawalKeepsTheRowSpaceAndNeverCallsBack() => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = Card();
+        int withdrawals = 0;
+        card.OfferRatingInvitation(() => Task.CompletedTask, () => { }, () => withdrawals++);
+        try
+        {
+            Border host = QuickAccessDetachedFixture.Layout(card, 1);
+            double height = host.ActualHeight;
+            Assert.True(card.WithdrawRatingInvitation());
+            Assert.False(card.WithdrawRatingInvitation());
+            Relayout(host, card.Width);
+            Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(height, host.ActualHeight);
+            Assert.Equal(0, withdrawals);
+        }
+        finally { card.Close(); }
     });
 
     [Theory]
@@ -215,21 +288,312 @@ public sealed class QuickAccessRatingInvitationTests
     [InlineData(true, true)]
     public void InvitationIsVisibleAndCountedFromFirstAppearance(bool afterSave, bool coordinatorPath) => RunWithShell(afterSave, shell =>
     {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
         CaptureOverlayCoordinator? coordinator = coordinatorPath ? shell.UseCoordinator() : null;
-        var observations = new List<(Visibility Visibility, int Count, bool Active)>();
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!afterSave) shell.CopyResult = copy.Task;
+        var observations = new List<(Visibility Visibility, int Count, int SuccessfulCaptures, bool Active)>();
         shell.CardFirstVisible = card => observations.Add((card.RatingInvitationForTest.Row.Visibility,
-            shell.Settings.StoreRating.InvitationShownCount, coordinator?.IsActive == true));
+            shell.Settings.StoreRating.InvitationShownCount, shell.Settings.StoreRating.SuccessfulCaptureCount, coordinator?.IsActive == true));
+        Task handler;
         if (coordinator is not null)
         {
             Assert.True(coordinator.StartWithSelection(shell.Frame, shell.Region, "Source - App", recordForRepeat: false));
-            shell.Wait(coordinator.LastTransitionForTest);
-            shell.RunIdleTurns();
+            handler = coordinator.LastTransitionForTest;
         }
-        else Capture(shell);
+        else handler = shell.Select();
+        if (!afterSave)
+        {
+            shell.RunSendTurn();
+            copy.SetResult(true);
+        }
+        shell.Wait(handler);
+        shell.RunIdleTurns();
+        Assert.True(shell.Card is not null, "Capture produced no card. " + string.Join(" | ", shell.Notices.Select(notice => notice.Message)));
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.False(card.HasCaptureFailed, "Capture failed before rating assertions. " + card.DetailForTest.Text);
         var first = Assert.Single(observations);
         Assert.Equal(Visibility.Visible, first.Visibility);
         Assert.Equal(1, first.Count);
+        Assert.Equal(afterSave ? 2 : 1, first.SuccessfulCaptures);
+        Assert.Equal(2, shell.Settings.StoreRating.SuccessfulCaptureCount);
         if (coordinatorPath && !afterSave) Assert.True(first.Active);
+    });
+
+    [Theory]
+    [InlineData("save")]
+    [InlineData("copy")]
+    public void AFailedPredictedCaptureWithdrawsItsShowingAndALaterSuccessCanOfferAgain(string failure) => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        if (failure == "save") shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic capture save failure");
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(1, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        Assert.True(shell.IsRatingInvitationVisible);
+
+        copy.SetResult(failure != "copy");
+        shell.Wait(handler);
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        Assert.False(shell.IsRatingInvitationVisible);
+        Assert.False(StoreRatingPolicy.ShouldRequest(shell.Settings.StoreRating, true, DateTimeOffset.UtcNow));
+
+        shell.Persistence.BeforeRecordMetadataCommit = null;
+        shell.CopyResult = null;
+        shell.Dismiss();
+        QuickAccessWindow next = Capture(shell);
+        Assert.Equal(Visibility.Visible, next.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.NotNull(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.Equal(2, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        Assert.False(shell.Settings.StoreRating.LastCaptureFailed);
+    });
+
+    [Theory]
+    [InlineData("save", "accepted")]
+    [InlineData("save", "refused")]
+    [InlineData("save", "close")]
+    [InlineData("copy", "accepted")]
+    [InlineData("copy", "refused")]
+    [InlineData("copy", "close")]
+    public void AnsweringBeforeThePredictedCaptureFailsKeepsItsShowing(string failure, string answer) => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        if (failure == "save") shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic capture save failure");
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        DateTimeOffset shown = Assert.IsType<DateTimeOffset>(shell.Settings.StoreRating.InvitationShownUtc);
+        shell.SetBusy("_preparingExit", answer == "refused");
+        Click(answer == "close" ? card.RatingInvitationForTest.Close : card.RatingInvitationForTest.Review);
+        shell.SetBusy("_preparingExit", false);
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.False(shell.IsRatingInvitationVisible);
+        Assert.Equal(answer == "accepted" ? 1 : 0, shell.RatingOwners.Count);
+        if (answer == "refused") Assert.Null(shell.Settings.StoreRating.RequestAttemptedUtc);
+
+        copy.SetResult(failure != "copy");
+        shell.Wait(handler);
+        Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Equal(shown, shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(card.WithdrawRatingInvitation());
+    });
+
+    [Fact]
+    public void AFailedPredictedCaptureWithdrawsAfterItsCardWasClosed() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+        card.CloseNow();
+        Assert.Null(shell.Card);
+        copy.SetResult(false);
+        shell.Wait(handler);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        Assert.False(shell.IsRatingInvitationVisible);
+    });
+
+    [Theory]
+    [InlineData("save")]
+    [InlineData("copy")]
+    public void PreservedWindowCaptureWithdrawsAfterItsCardClosesBeforeFailure(string failure) => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var preserved = new Window { Left = -32000, Top = -32000, Width = 120, Height = 80, ShowActivated = false, ShowInTaskbar = false };
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        if (failure == "save") shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic separate capture save failure");
+        try
+        {
+            preserved.Show();
+            Task handler = shell.SelectSeparate();
+            shell.RunSendTurn();
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            card.CloseNow();
+            Assert.Null(shell.Card);
+            copy.SetResult(failure != "copy");
+            shell.Wait(handler);
+            Assert.True(preserved.IsVisible);
+            Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+            Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+            Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+            Assert.False(shell.IsRatingInvitationVisible);
+        }
+        finally { copy.TrySetResult(false); preserved.Close(); }
+    });
+
+    [Fact]
+    public void PreservedWindowSaveFailureBeforeTheCardsTurnNeverOffers() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        shell.SetPersistence(null);
+        Task handler = shell.SelectSeparate();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.True(card.HasCaptureFailed);
+        Assert.Equal(Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        copy.SetResult(true);
+        shell.Wait(handler);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+    });
+
+    [Fact]
+    public void PreservedWindowCaptureSuccessKeepsItsShowingAndEndsItsPrediction() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        var preserved = new Window { Left = -32000, Top = -32000, Width = 120, Height = 80, ShowActivated = false, ShowInTaskbar = false };
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        try
+        {
+            preserved.Show();
+            Task handler = shell.SelectSeparate();
+            shell.RunSendTurn();
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            object first = Assert.IsAssignableFrom<object>(shell.CardFirstState);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            copy.SetResult(true);
+            shell.Wait(handler);
+            Assert.True(preserved.IsVisible);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            Assert.Equal(2, shell.Settings.StoreRating.SuccessfulCaptureCount);
+            Assert.False(shell.Settings.StoreRating.LastCaptureFailed);
+            // The recorded success ends the prediction, so no later report for this capture can withdraw its showing.
+            const BindingFlags state = BindingFlags.Instance | BindingFlags.NonPublic;
+            Assert.True((bool)first.GetType().GetProperty("RatingOutcomeRecorded", state)!.GetValue(first)!);
+            Assert.Null(first.GetType().GetProperty("PendingRatingOffer", state)!.GetValue(first));
+        }
+        finally { copy.TrySetResult(false); preserved.Close(); }
+    });
+
+    [Theory]
+    [InlineData("SaveFailed")]
+    [InlineData("DeferredSaveFailure")]
+    public void AKnownCaptureSaveFailureNeverOffersBeforeTheCardIsBuilt(string failureState) => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        Task handler = shell.Select();
+        object first = Assert.IsAssignableFrom<object>(shell.CardFirstState);
+        PropertyInfo property = first.GetType().GetProperty(failureState, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        property.SetValue(first, failureState == "SaveFailed" ? true : ("저장 실패", "저장할 수 없습니다."));
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        shell.Wait(handler);
+    });
+
+    [Fact]
+    public void AnAlreadyRecordedCaptureNeverGetsAPredictedExtraSuccess() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        Task handler = shell.Select();
+        object first = Assert.IsAssignableFrom<object>(shell.CardFirstState);
+        // Exercise the recorded-before-build decision with one total success, including this capture.
+        first.GetType().GetProperty("RatingOutcomeRecorded", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(first, true);
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.Equal(Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        shell.Wait(handler);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACardShowingIsSavedOnlyByTheWriteQueuedAfterItsFirstAppearance(bool afterSave)
+    {
+        var writes = new Queue<Action>();
+        RunWithShell(() => new Shell(ratingDeferWrite: writes.Enqueue) { ShowsCardAfterSave = afterSave }, shell =>
+        {
+            shell.Settings.StoreRating.SuccessfulCaptureCount = 2;
+            var visible = new List<(int Saves, int Writes)>();
+            var shown = new List<(int Saves, int Writes)>();
+            shell.CardFirstVisible = _ => visible.Add((shell.SavedRatings.Count, writes.Count));
+            shell.CardFirstShown = _ => shown.Add((shell.SavedRatings.Count, writes.Count));
+            QuickAccessWindow card = Capture(shell);
+            Assert.Equal((0, 0), Assert.Single(visible));
+            Assert.Equal((0, 1), Assert.Single(shown));
+            Assert.Empty(shell.SavedRatings);
+            Assert.Single(writes);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            writes.Dequeue()();
+            Assert.Equal((1, shell.Settings.StoreRating.InvitationShownUtc), Assert.Single(shell.SavedRatingShowings));
+            Assert.Single(shell.SavedRatings);
+            Assert.Empty(writes);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACardStillCarriesItsInvitationWhenTheDeferredSettingsSaveFails(bool afterSave)
+    {
+        var writes = new Queue<Action>();
+        var logger = new RatingLogger();
+        var failure = new IOException("Synthetic rating settings failure");
+        RunWithShell(() => new Shell(ratingDeferWrite: writes.Enqueue, ratingSave: _ => throw failure, ratingLog: logger)
+            { ShowsCardAfterSave = afterSave }, shell =>
+        {
+            shell.Settings.StoreRating.SuccessfulCaptureCount = 2;
+            QuickAccessWindow card = Capture(shell);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Empty(logger.Warnings);
+            Assert.Single(writes);
+            Assert.Null(Record.Exception(writes.Dequeue()));
+            Assert.Same(failure, Assert.Single(logger.Warnings).Exception);
+            Assert.Contains("Could not save Store rating state", logger.Warnings[0].Message, StringComparison.Ordinal);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            Assert.NotNull(shell.Settings.StoreRating.InvitationShownUtc);
+            Assert.True(shell.IsRatingInvitationVisible);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnActionFailureOnAnInvitationCardRestoresItsShowingAndVisibleState(bool afterSave) => RunWithShell(afterSave, shell =>
+    {
+        QuickAccessWindow card = Capture(shell);
+        Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.True(shell.IsRatingInvitationVisible);
+        for (int failure = 0; failure < 2; failure++)
+        {
+            shell.Wait(card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned"));
+            Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+            Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+            Assert.False(shell.IsRatingInvitationVisible);
+        }
+        Assert.True(StoreRatingPolicy.ShouldRequest(shell.Settings.StoreRating, true, DateTimeOffset.UtcNow));
     });
 
     [Theory]
@@ -267,10 +631,9 @@ public sealed class QuickAccessRatingInvitationTests
 
     [Theory]
     [MemberData(nameof(IneligibleCases))]
-    public void FailedEligibilityNeverShowsOrCountsInvitation(bool afterSave, string condition) => RunWithShell(afterSave, shell =>
+    public void EligibilityUsesCurrentOrPredictedCaptureState(bool afterSave, string condition) => RunWithShell(afterSave, shell =>
     {
-        // The after-save route evaluates after the outcome was recorded. Set the state at that
-        // boundary so both routes exercise exactly the same policy inputs.
+        // The after-save route has already recorded this capture. Only card first predicts one success.
         if (afterSave) shell.Wait(shell.Select());
         var state = shell.Settings.StoreRating;
         switch (condition)
@@ -288,8 +651,10 @@ public sealed class QuickAccessRatingInvitationTests
         int count = state.InvitationShownCount;
         if (afterSave) shell.RunIdleTurns();
         else Capture(shell);
-        Assert.Equal(Visibility.Collapsed, Assert.IsType<QuickAccessWindow>(shell.Card).RatingInvitationForTest.Row.Visibility);
-        Assert.Equal(count, state.InvitationShownCount);
+        bool predictedSuccess = !afterSave && (condition is "one-success" or "failed");
+        Assert.Equal(predictedSuccess ? Visibility.Visible : Visibility.Collapsed,
+            Assert.IsType<QuickAccessWindow>(shell.Card).RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(predictedSuccess ? count + 1 : count, state.InvitationShownCount);
     });
 
     [Theory]
@@ -340,49 +705,84 @@ public sealed class QuickAccessRatingInvitationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void IgnoredInvitationReturnsOnlyOnceAfterTimeoutOrReplacement(bool afterSave, bool replaced) => RunWithShell(afterSave, shell =>
+    public void IgnoredInvitationReturnsOnlyOnceAfterTimeoutOrReplacement(bool afterSave, bool replaced)
     {
-        for (int showing = 1; showing <= 3; showing++)
+        var clock = new StoreRatingTestClock(new DateTimeOffset(2026, 11, 6, 0, 0, 0, TimeSpan.Zero));
+        RunWithShell(afterSave, shell =>
         {
-            QuickAccessWindow card = Capture(shell);
-            Assert.Equal(showing <= 2 ? Visibility.Visible : Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
-            Assert.Equal(Math.Min(showing, 2), shell.Settings.StoreRating.InvitationShownCount);
-            if (replaced) shell.Dismiss();
-            else card.Advance(QuickAccessWindow.Lifetime * 2, false);
-            Assert.False(card.IsOpen);
-        }
-    });
+            for (int showing = 1; showing <= 3; showing++)
+            {
+                QuickAccessWindow card = Capture(shell);
+                Assert.Equal(showing <= 2 ? Visibility.Visible : Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+                Assert.Equal(Math.Min(showing, 2), shell.Settings.StoreRating.InvitationShownCount);
+                if (replaced) shell.Dismiss();
+                else card.Advance(QuickAccessWindow.Lifetime * 2, false);
+                Assert.False(card.IsOpen);
+                clock.Now += StoreRatingPolicy.SecondInvitationDelay;
+            }
+        }, clock);
+    }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CardAndVisibleWindowNeverOfferTogetherAndHiddenNoticeGivesWay(bool afterSave) => RunWithShell(afterSave, shell =>
+    public void CardAndVisibleWindowNeverOfferTogetherAndHiddenNoticeGivesWay(bool afterSave)
     {
-        QuickAccessWindow card = Capture(shell);
-        Assert.True(shell.IsRatingInvitationVisible);
-        Assert.False(shell.StoreRating.NotifyUserReturned());
-        Assert.False(shell.StoreRating.TryRequestNow());
-        Assert.Equal(0, shell.WindowInvitations);
-        shell.Dismiss();
-        var window = new Window { Left = -32000, Top = -32000, Width = 120, Height = 80, ShowActivated = false, ShowInTaskbar = false };
-        var notice = new RatingNotice();
-        try
+        var clock = new StoreRatingTestClock(new DateTimeOffset(2026, 11, 6, 0, 0, 0, TimeSpan.Zero));
+        RunWithShell(afterSave, shell =>
         {
-            window.Show();
-            shell.EngagementNotices.Add(window, notice);
+            QuickAccessWindow card = Capture(shell);
             Assert.True(shell.IsRatingInvitationVisible);
+            Assert.False(shell.StoreRating.NotifyUserReturned());
+            Assert.False(shell.StoreRating.TryRequestNow());
+            Assert.Equal(0, shell.WindowInvitations);
+            shell.Dismiss();
+            var window = new Window { Left = -32000, Top = -32000, Width = 120, Height = 80, ShowActivated = false, ShowInTaskbar = false };
+            var notice = new RatingNotice();
+            try
+            {
+                window.Show();
+                shell.EngagementNotices.Add(window, notice);
+                Assert.True(shell.IsRatingInvitationVisible);
+                clock.Now += StoreRatingPolicy.SecondInvitationDelay;
+                Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
+                Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+                Assert.Equal(0, notice.HideCalls);
+                shell.Dismiss();
+                window.Hide();
+                Assert.False(shell.IsRatingInvitationVisible);
+                Assert.Equal(Visibility.Visible, Capture(shell).RatingInvitationForTest.Row.Visibility);
+                Assert.Equal(2, shell.Settings.StoreRating.InvitationShownCount);
+                Assert.Equal(1, notice.HideCalls);
+            }
+            finally { window.Close(); }
+        }, clock);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IgnoredCardInvitationWaitsTwentyFourHoursBeforeTheNextCard(bool afterSave)
+    {
+        var clock = new StoreRatingTestClock(new DateTimeOffset(2026, 11, 6, 0, 0, 0, TimeSpan.Zero));
+        RunWithShell(afterSave, shell =>
+        {
+            Assert.Equal(Visibility.Visible, Capture(shell).RatingInvitationForTest.Row.Visibility);
+            DateTimeOffset shown = clock.Now;
+            shell.Dismiss();
             Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
             Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
-            Assert.Equal(0, notice.HideCalls);
+            Assert.Equal(shown, shell.Settings.StoreRating.InvitationShownUtc);
             shell.Dismiss();
-            window.Hide();
-            Assert.False(shell.IsRatingInvitationVisible);
+            clock.Now = shown + StoreRatingPolicy.SecondInvitationDelay - TimeSpan.FromSeconds(1);
+            Assert.Equal(Visibility.Collapsed, Capture(shell).RatingInvitationForTest.Row.Visibility);
+            Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
+            shell.Dismiss();
+            clock.Now = shown + StoreRatingPolicy.SecondInvitationDelay;
             Assert.Equal(Visibility.Visible, Capture(shell).RatingInvitationForTest.Row.Visibility);
             Assert.Equal(2, shell.Settings.StoreRating.InvitationShownCount);
-            Assert.Equal(1, notice.HideCalls);
-        }
-        finally { window.Close(); }
-    });
+        }, clock);
+    }
 
     [Theory]
     [InlineData("escape")]
@@ -392,7 +792,7 @@ public sealed class QuickAccessRatingInvitationTests
     {
         var card = Card();
         var completion = new TaskCompletionSource();
-        card.OfferRatingInvitation(() => completion.Task, () => { });
+        card.OfferRatingInvitation(() => completion.Task, () => { }, () => { });
         try
         {
             ShowWithoutHotkey(card);
@@ -406,17 +806,20 @@ public sealed class QuickAccessRatingInvitationTests
         finally { completion.TrySetResult(); card.CloseNow(); Pump(); }
     });
 
-    private static Shell EligibleShell(bool afterSave)
+    private static Shell EligibleShell(bool afterSave, TimeProvider? ratingClock = null)
     {
-        var shell = new Shell { ShowsCardAfterSave = afterSave };
+        var shell = new Shell(ratingClock: ratingClock) { ShowsCardAfterSave = afterSave };
         shell.StoreRating.RecordCapture(true);
         shell.StoreRating.RecordCapture(true);
         return shell;
     }
 
-    private static void RunWithShell(bool afterSave, Action<Shell> body) => StaTestHost.Run(() =>
+    private static void RunWithShell(bool afterSave, Action<Shell> body, TimeProvider? ratingClock = null) =>
+        RunWithShell(() => EligibleShell(afterSave, ratingClock), body);
+
+    private static void RunWithShell(Func<Shell> create, Action<Shell> body) => StaTestHost.Run(() =>
     {
-        Shell shell = EligibleShell(afterSave);
+        Shell shell = create();
         Exception? failure = null;
         try { body(shell); }
         catch (Exception error) { failure = error; }
@@ -539,5 +942,16 @@ public sealed class QuickAccessRatingInvitationTests
         public bool ShowUpdateCompleted(string version) => false;
         public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null, bool failed = false) { }
         public void Hide() { HideCalls++; IsShown = false; }
+    }
+
+    private sealed class RatingLogger : ILogger
+    {
+        internal List<(string Message, Exception? Exception)> Warnings { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Warnings.Add((formatter(state, exception), exception));
+        }
     }
 }

@@ -19,9 +19,12 @@ internal sealed partial class QuickAccessWindow
     private Button _ratingClose = null!;
     private Func<Task?>? _reviewRating;
     private Action? _closeRating;
+    private Action? _withdrawRating;
     private bool _ratingOffered;
     private bool _ratingRequestRunning;
     private bool _ratingUnavailable;
+    private bool _ratingAnswered;
+    private bool _ratingWithdrawn;
 
     private Grid BuildRatingInvitation()
     {
@@ -59,18 +62,22 @@ internal sealed partial class QuickAccessWindow
     /// <summary>
     /// Puts the invitation on the card. Only before the card is first shown: an invitation never appears
     /// on a card already on screen. <paramref name="review"/> is Review: the Store dialog's request over
-    /// this card, or null when it was refused. <paramref name="close"/> is Close: the invitation ends.
+    /// this card, or null when it was refused. <paramref name="close"/> ends the invitation.
+    /// <paramref name="withdraw"/> restores a showing hidden by a failure before either button was pressed.
     /// </summary>
-    internal void OfferRatingInvitation(Func<Task?> review, Action close)
+    internal void OfferRatingInvitation(Func<Task?> review, Action close, Action withdraw)
     {
         ArgumentNullException.ThrowIfNull(review);
         ArgumentNullException.ThrowIfNull(close);
+        ArgumentNullException.ThrowIfNull(withdraw);
         if (_closed || IsVisible || IsLoaded || new WindowInteropHelper(this).Handle != IntPtr.Zero || _ratingOffered)
             throw new InvalidOperationException("A rating invitation can only be offered once, before the card is shown.");
         _ratingOffered = true;
         _reviewRating = review;
         _closeRating = close;
+        _withdrawRating = withdraw;
         _ratingInvitation.Visibility = _ratingUnavailable ? Visibility.Hidden : Visibility.Visible;
+        if (_ratingUnavailable) HideRatingInvitationForFailure();
     }
 
     /// <summary>
@@ -82,11 +89,19 @@ internal sealed partial class QuickAccessWindow
     private async Task ReviewRatingAsync()
     {
         if (_closed || _ratingInvitation.Visibility != Visibility.Visible || _ratingRequestRunning) return;
+        _ratingAnswered = true;
         _ratingRequestRunning = true;
         Task? request = null;
         try
         {
             ActivateForKeyboard();
+        }
+        catch (Exception)
+        {
+            // A focus failure still leaves the user's Review choice for the coordinator to record.
+        }
+        try
+        {
             request = _reviewRating!();
         }
         catch (Exception)
@@ -117,6 +132,7 @@ internal sealed partial class QuickAccessWindow
     private void CloseRatingInvitation()
     {
         if (_closed || _ratingInvitation.Visibility != Visibility.Visible || _ratingRequestRunning) return;
+        _ratingAnswered = true;
         _ratingInvitation.Visibility = Visibility.Hidden;
         _closeRating!();
     }
@@ -125,7 +141,17 @@ internal sealed partial class QuickAccessWindow
     private void HideRatingInvitationForFailure()
     {
         _ratingUnavailable = true;
-        if (_ratingOffered) _ratingInvitation.Visibility = Visibility.Hidden;
+        if (WithdrawRatingInvitation()) _withdrawRating!();
+    }
+
+    /// <summary>Withdraws an unanswered row once, keeping its space and leaving bookkeeping to the caller.</summary>
+    internal bool WithdrawRatingInvitation()
+    {
+        if (!_ratingOffered || _ratingAnswered || _ratingWithdrawn) return false;
+        _ratingWithdrawn = true;
+        _ratingUnavailable = true;
+        _ratingInvitation.Visibility = Visibility.Hidden;
+        return true;
     }
 
     internal (Grid Row, Button Review, Button Close, TextBlock Message) RatingInvitationForTest =>

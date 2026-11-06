@@ -84,6 +84,8 @@ public partial class App
     internal static void ApplyResidentProbeSettings(AppSettings settings)
     {
         settings.General.IsFirstRun = false;
+        // The release perf gate measures the same path as 5.1.0, which never showed the invitation in the probe.
+        StoreRatingPolicy.MarkAttempted(settings.StoreRating, DateTimeOffset.UtcNow);
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
         settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;

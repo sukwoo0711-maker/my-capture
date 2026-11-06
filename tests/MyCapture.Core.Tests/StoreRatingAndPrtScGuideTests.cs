@@ -32,19 +32,20 @@ public sealed class StoreRatingPolicyTests
     {
         Assert.Equal(2, StoreRatingPolicy.RequiredSuccessfulCaptures);
         Assert.Equal(2, StoreRatingPolicy.MaxInvitations);
+        Assert.Equal(TimeSpan.FromHours(24), StoreRatingPolicy.SecondInvitationDelay);
     }
 
     [Fact]
     public void StoreBuild_AsksOnceEveryConditionHolds() =>
-        Assert.True(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: true, now: Start));
 
     [Fact]
     public void UnpackagedBuild_NeverAsks()
     {
-        Assert.False(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: false));
+        Assert.False(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: false, now: Start));
         StoreRatingState longUsed = Eligible();
         longUsed.FirstSeenUtc = Start.AddYears(-1);
-        Assert.False(StoreRatingPolicy.ShouldRequest(longUsed, isPackaged: false));
+        Assert.False(StoreRatingPolicy.ShouldRequest(longUsed, isPackaged: false, now: Start));
     }
 
     [Theory]
@@ -56,26 +57,89 @@ public sealed class StoreRatingPolicyTests
     {
         StoreRatingState state = Eligible();
         state.SuccessfulCaptureCount = count;
-        Assert.Equal(expected, StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.Equal(expected, StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+    }
+
+    [Theory]
+    [InlineData(0, false, false)]
+    [InlineData(1, false, true)]
+    [InlineData(1, true, true)]
+    [InlineData(-1, true, false)]
+    [InlineData(int.MaxValue, false, true)]
+    public void CountingSuccess_PredictsOnlyThisCaptureWithoutChangingTheState(int count, bool failed, bool expected)
+    {
+        StoreRatingState state = Eligible();
+        state.SuccessfulCaptureCount = count;
+        state.LastCaptureFailed = failed;
+        string before = JsonSerializer.Serialize(state);
+
+        Assert.Equal(expected, StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: true, now: Start));
+        Assert.Equal(before, JsonSerializer.Serialize(state));
+        Assert.Equal(count, state.SuccessfulCaptureCount);
+        Assert.Equal(failed, state.LastCaptureFailed);
+        Assert.Equal(0, state.InvitationShownCount);
+        Assert.Null(state.InvitationShownUtc);
+    }
+
+    [Fact]
+    public void CountingSuccess_KeepsPackageAnswersAndTheSecondShowingDelay()
+    {
+        StoreRatingState state = Eligible();
+        state.SuccessfulCaptureCount = 1;
+        Assert.False(StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: false, now: Start));
+
+        StoreRatingPolicy.MarkInvitationShown(state, Start);
+        Assert.False(StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: true, now: Start));
+        Assert.True(StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: true, now: Start.AddDays(1)));
+        StoreRatingPolicy.MarkInvitationDismissed(state, Start);
+        Assert.False(StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: true, now: Start.AddDays(1)));
+        state.InvitationDismissedUtc = null;
+        StoreRatingPolicy.MarkAttempted(state, Start);
+        Assert.False(StoreRatingPolicy.ShouldRequestCountingSuccess(state, isPackaged: true, now: Start.AddDays(1)));
+    }
+
+    [Fact]
+    public void SecondShowing_WaitsUntilExactlyTwentyFourHours()
+    {
+        StoreRatingState state = Eligible();
+        StoreRatingPolicy.MarkInvitationShown(state, Start);
+
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(1).AddSeconds(-1)));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(1)));
+    }
+
+    [Fact]
+    public void SecondShowing_AFutureStampWaitsForTwentyFourHoursAfterThatStamp()
+    {
+        StoreRatingState state = Eligible();
+        DateTimeOffset shown = Start.AddYears(3);
+        StoreRatingPolicy.MarkInvitationShown(state, shown);
+
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown.AddDays(1).AddSeconds(-1)));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: shown.AddDays(1)));
+        state.InvitationShownUtc = DateTimeOffset.MaxValue;
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: DateTimeOffset.MaxValue));
     }
 
     [Fact]
     public void NoWaitingDay_TheSecondSuccessOnTheFirstDayIsEnough()
     {
-        // The rule takes no clock at all: the one-day wait was removed on 2026-11-06.
-        Assert.DoesNotContain(typeof(StoreRatingPolicy).GetMethod(nameof(StoreRatingPolicy.ShouldRequest))!.GetParameters(),
+        // The clock controls the second showing; a first showing still has no waiting day.
+        Assert.Contains(typeof(StoreRatingPolicy).GetMethod(nameof(StoreRatingPolicy.ShouldRequest))!.GetParameters(),
             parameter => parameter.ParameterType == typeof(DateTimeOffset));
 
         var state = new StoreRatingState();
         Assert.True(StoreRatingPolicy.EnsureFirstSeen(state, Start));
         Assert.True(StoreRatingPolicy.RecordCapture(state, succeeded: true));
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
         Assert.True(StoreRatingPolicy.RecordCapture(state, succeeded: true));
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
 
         // A first-seen stamp from a clock that ran ahead no longer holds the invitation back either.
         state.FirstSeenUtc = Start.AddYears(3);
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Fact]
@@ -83,7 +147,7 @@ public sealed class StoreRatingPolicyTests
     {
         StoreRatingState state = Eligible();
         state.FirstSeenUtc = null;
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Fact]
@@ -92,11 +156,11 @@ public sealed class StoreRatingPolicyTests
         StoreRatingState state = Eligible();
         Assert.True(StoreRatingPolicy.RecordCapture(state, succeeded: false));
         Assert.True(state.LastCaptureFailed);
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
 
         Assert.True(StoreRatingPolicy.RecordCapture(state, succeeded: true));
         Assert.False(state.LastCaptureFailed);
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Fact]
@@ -105,10 +169,10 @@ public sealed class StoreRatingPolicyTests
         StoreRatingState state = Eligible();
         StoreRatingPolicy.MarkInvitationShown(state, Start);
         StoreRatingPolicy.RecordCapture(state, succeeded: false);
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(1)));
 
         StoreRatingPolicy.RecordCapture(state, succeeded: true);
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(1)));
     }
 
     [Fact]
@@ -119,10 +183,10 @@ public sealed class StoreRatingPolicyTests
         StoreRatingPolicy.MarkAttempted(state, attempted);
         Assert.Equal(attempted, state.RequestAttemptedUtc);
         Assert.True(StoreRatingPolicy.IsAnswered(state));
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
         // Later successes never reopen it.
         StoreRatingPolicy.RecordCapture(state, succeeded: true);
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
 
         StoreRatingPolicy.MarkAttempted(state, attempted.AddDays(9));
         Assert.Equal(attempted, state.RequestAttemptedUtc);
@@ -136,17 +200,18 @@ public sealed class StoreRatingPolicyTests
         Assert.Equal(1, state.InvitationShownCount);
         Assert.Equal(Start, state.InvitationShownUtc);
         Assert.False(StoreRatingPolicy.IsAnswered(state));
-        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
+        Assert.True(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(1)));
 
-        StoreRatingPolicy.MarkInvitationShown(state, Start.AddHours(3));
+        StoreRatingPolicy.MarkInvitationShown(state, Start.AddDays(1));
         Assert.Equal(StoreRatingPolicy.MaxInvitations, state.InvitationShownCount);
-        Assert.Equal(Start.AddHours(3), state.InvitationShownUtc);
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.Equal(Start.AddDays(1), state.InvitationShownUtc);
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(2)));
 
         StoreRatingPolicy.RecordCapture(state, succeeded: true);
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(2)));
         // A stray extra mark cannot push the count past the cap.
-        StoreRatingPolicy.MarkInvitationShown(state, Start.AddHours(4));
+        StoreRatingPolicy.MarkInvitationShown(state, Start.AddDays(2));
         Assert.Equal(StoreRatingPolicy.MaxInvitations, state.InvitationShownCount);
     }
 
@@ -157,7 +222,7 @@ public sealed class StoreRatingPolicyTests
         StoreRatingPolicy.MarkInvitationShown(state, Start);
         StoreRatingPolicy.MarkInvitationDismissed(state, Start.AddMinutes(1));
         Assert.True(StoreRatingPolicy.IsAnswered(state));
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
 
         StoreRatingPolicy.MarkInvitationDismissed(state, Start.AddDays(2));
         Assert.Equal(Start.AddMinutes(1), state.InvitationDismissedUtc);
@@ -170,7 +235,7 @@ public sealed class StoreRatingPolicyTests
         StoreRatingPolicy.MarkInvitationShown(state, Start);
         StoreRatingPolicy.MarkAttempted(state, Start.AddMinutes(1));
         Assert.True(StoreRatingPolicy.IsAnswered(state));
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Theory]
@@ -183,7 +248,7 @@ public sealed class StoreRatingPolicyTests
         state.InvitationShownUtc = Start;
         state.InvitationShownCount = storedCount;
         Assert.True(StoreRatingPolicy.IsAnswered(state));
-        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start));
     }
 
     [Theory]
@@ -197,9 +262,10 @@ public sealed class StoreRatingPolicyTests
         StoreRatingState state = Eligible();
         state.InvitationShownCount = storedCount;
         int showings = 0;
-        while (StoreRatingPolicy.ShouldRequest(state, isPackaged: true) && showings <= StoreRatingPolicy.MaxInvitations)
+        while (StoreRatingPolicy.ShouldRequest(state, isPackaged: true, now: Start.AddDays(showings))
+            && showings <= StoreRatingPolicy.MaxInvitations)
         {
-            StoreRatingPolicy.MarkInvitationShown(state, Start.AddHours(showings));
+            StoreRatingPolicy.MarkInvitationShown(state, Start.AddDays(showings));
             showings++;
         }
 
@@ -371,7 +437,7 @@ public sealed class StoreRatingSettingsTests
         Assert.Equal(0, loaded.InvitationShownCount);
         Assert.Null(loaded.InvitationDismissedUtc);
         Assert.True(StoreRatingPolicy.IsAnswered(loaded));
-        Assert.False(StoreRatingPolicy.ShouldRequest(loaded, isPackaged: true));
+        Assert.False(StoreRatingPolicy.ShouldRequest(loaded, isPackaged: true, now: Start));
     }
 
     [Fact]
@@ -388,7 +454,7 @@ public sealed class StoreRatingSettingsTests
         StoreRatingState loaded = Store(workspace, Start.AddDays(36)).Load().StoreRating;
         Assert.Null(loaded.InvitationShownUtc);
         Assert.False(StoreRatingPolicy.IsAnswered(loaded));
-        Assert.True(StoreRatingPolicy.ShouldRequest(loaded, isPackaged: true));
+        Assert.True(StoreRatingPolicy.ShouldRequest(loaded, isPackaged: true, now: Start));
     }
 
     [Fact]
