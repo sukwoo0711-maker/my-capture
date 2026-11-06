@@ -28,7 +28,8 @@ public sealed partial class SettingsThemePreviewTests
     public Task ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette() =>
         RunIsolated(nameof(ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette), VerifyPreviewLifecycle);
 
-    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null)
+    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null,
+        IReadOnlyDictionary<string, string>? childEnvironment = null)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
@@ -65,6 +66,9 @@ public sealed partial class SettingsThemePreviewTests
         start.Environment[ChildFlag] = "1";
         start.Environment[ReceiptRoot] = receiptRoot;
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        // Lets a test hand its child the part of its work that child runs.
+        if (childEnvironment is not null)
+            foreach ((string name, string value) in childEnvironment) start.Environment[name] = value;
         using Process child = Process.Start(start) ?? throw new IOException("Could not start the isolated WPF test.");
         Task<string> output = child.StandardOutput.ReadToEndAsync();
         Task<string> error = child.StandardError.ReadToEndAsync();
