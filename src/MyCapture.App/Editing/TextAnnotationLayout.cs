@@ -39,6 +39,10 @@ internal static class TextAnnotationLayout
     private static readonly Lock MetricsGate = new();
     private static readonly Dictionary<FormatKey, TextMetrics> MetricsCache = [];
 
+    // The painted glyph extents only the selection frame reads, outlined once per distinct
+    // layout. Kept apart from MetricsCache so measuring a caption while typing never outlines it.
+    private static readonly Dictionary<FormatKey, Rect> GlyphBoundsCache = [];
+
     internal static FormattedText Format(TextAnnotation text, double pixelsPerDip) => Format(KeyOf(text, pixelsPerDip));
 
     /// <summary>Every value <see cref="Format(FormatKey)"/> reads from a caption and its surface.</summary>
@@ -98,6 +102,26 @@ internal static class TextAnnotationLayout
     /// Room for the glyph outline: the outline pen's full width, half on each side.
     /// </summary>
     internal static double OutlineMargin(TextAnnotation text) => Math.Max(1, text.FontSize / 12);
+
+    /// <summary>The stored caption box, grown for painted glyph overhang and its outline.</summary>
+    internal static RectD InkBounds(TextAnnotation text)
+    {
+        RectD box = text.Rect.Normalized();
+        if (text.IsStepNumber) return box;
+        Rect glyphs = GlyphBoundsOf(KeyOf(text, 1.0));
+        if (glyphs.IsEmpty) return box;
+        if (text.HasOutline)
+        {
+            double halfPen = (text.OutlineStyle == TextOutlineStyle.Consistent
+                ? text.FontSize / 18 : OutlineMargin(text)) / 2;
+            glyphs.Inflate(halfPen, halfPen);
+        }
+        double left = Math.Min(box.Left, box.Left + glyphs.Left);
+        double top = Math.Min(box.Top, box.Top + glyphs.Top);
+        double right = Math.Max(box.Right, box.Left + glyphs.Right);
+        double bottom = Math.Max(box.Bottom, box.Top + glyphs.Bottom);
+        return new RectD(left, top, right - left, bottom - top);
+    }
 
     /// <summary>
     /// The box <paramref name="text"/> needs for its current text, size and wrapping mode,
@@ -245,4 +269,32 @@ internal static class TextAnnotationLayout
 
     /// <summary>The extents <see cref="Measure"/> and <see cref="GrowToText"/> read from a layout.</summary>
     private readonly record struct TextMetrics(double Width, double WidthIncludingTrailingWhitespace, double Height, double LineHeight);
+
+    /// <summary>
+    /// The painted glyphs' extents in <paramref name="key"/>'s layout, relative to its origin,
+    /// outlined once per distinct key.
+    /// </summary>
+    private static Rect GlyphBoundsOf(in FormatKey key)
+    {
+        lock (MetricsGate)
+        {
+            if (GlyphBoundsCache.TryGetValue(key, out Rect cached))
+            {
+                return cached;
+            }
+        }
+
+        Rect bounds = Format(key).BuildGeometry(default).Bounds;
+        lock (MetricsGate)
+        {
+            if (GlyphBoundsCache.Count >= MetricsCacheLimit)
+            {
+                GlyphBoundsCache.Clear();
+            }
+
+            GlyphBoundsCache[key] = bounds;
+        }
+
+        return bounds;
+    }
 }

@@ -181,10 +181,12 @@ public sealed class EditorTextFitControllerTests
         c.SetSelected(caption);
         int steps = undo.UndoCount;
 
-        c.PointerDown(new PointD(caption.Rect.Right, caption.Rect.Center.Y));
-        c.PointerMove(new PointD(150, 400));
-        c.PointerMove(new PointD(145, 400));
-        c.PointerUp(new PointD(145, 400));
+        PointD handle = Handle(c, ResizeHandle.MiddleRight);
+        double offset = handle.X - caption.Rect.Right;
+        c.PointerDown(handle);
+        c.PointerMove(new PointD(150 + offset, 400));
+        c.PointerMove(new PointD(145 + offset, 400));
+        c.PointerUp(new PointD(145 + offset, 400));
 
         Assert.False(caption.AutoSize);
         Assert.Equal(18, caption.FontSize);
@@ -204,9 +206,11 @@ public sealed class EditorTextFitControllerTests
         c.Tool = EditorTool.Select;
         c.SetSelected(caption);
 
-        c.PointerDown(new PointD(caption.Rect.Left, caption.Rect.Center.Y));
-        c.PointerMove(new PointD(right + 50, 100));
-        c.PointerUp(new PointD(right + 50, 100));
+        PointD handle = Handle(c, ResizeHandle.MiddleLeft);
+        double offset = handle.X - caption.Rect.Left;
+        c.PointerDown(handle);
+        c.PointerMove(new PointD(right + 50 + offset, 100));
+        c.PointerUp(new PointD(right + 50 + offset, 100));
 
         Assert.False(caption.AutoSize);
         Assert.Equal(18, caption.Rect.Width, 6);
@@ -224,10 +228,12 @@ public sealed class EditorTextFitControllerTests
         c.SetSelected(caption);
 
         // Doubling the box height doubles the font: 18 -> 36, not 72.
-        c.PointerDown(new PointD(caption.Rect.Right, caption.Rect.Bottom));
-        c.PointerMove(new PointD(caption.Rect.Right + 10, caption.Rect.Bottom + 5));
-        c.PointerMove(new PointD(before.Rect.Right + 30, before.Rect.Top + (2 * before.Rect.Height)));
-        c.PointerUp(new PointD(before.Rect.Right + 30, before.Rect.Top + (2 * before.Rect.Height)));
+        PointD handle = Handle(c, ResizeHandle.BottomRight);
+        double dx = handle.X - caption.Rect.Right, dy = handle.Y - caption.Rect.Bottom;
+        c.PointerDown(handle);
+        c.PointerMove(new PointD(caption.Rect.Right + 10 + dx, caption.Rect.Bottom + 5 + dy));
+        c.PointerMove(new PointD(before.Rect.Right + 30 + dx, before.Rect.Top + (2 * before.Rect.Height) + dy));
+        c.PointerUp(new PointD(before.Rect.Right + 30 + dx, before.Rect.Top + (2 * before.Rect.Height) + dy));
 
         Assert.Equal(36, caption.FontSize, 6);
         Assert.True(caption.AutoSize);
@@ -251,8 +257,10 @@ public sealed class EditorTextFitControllerTests
         c.Tool = EditorTool.Select;
         c.SetSelected(caption);
 
-        var to = new PointD(before.Left - 20, before.Bottom - (2 * before.Height));
-        c.PointerDown(new PointD(before.Left, before.Top));
+        PointD handle = Handle(c, ResizeHandle.TopLeft);
+        var to = new PointD(before.Left - 20 + handle.X - before.Left,
+            before.Bottom - (2 * before.Height) + handle.Y - before.Top);
+        c.PointerDown(handle);
         c.PointerMove(to);
         c.PointerUp(to);
 
@@ -268,13 +276,16 @@ public sealed class EditorTextFitControllerTests
         TextAnnotation caption = Caption(c, new PointD(100, 100), "aaaabbbbcccc");
         c.Tool = EditorTool.Select;
         c.SetSelected(caption);
-        c.PointerDown(new PointD(caption.Rect.Right, caption.Rect.Center.Y));
-        c.PointerMove(new PointD(145, 0));
-        c.PointerUp(new PointD(145, 0));
+        PointD side = Handle(c, ResizeHandle.MiddleRight);
+        double sideOffset = side.X - caption.Rect.Right;
+        c.PointerDown(side);
+        c.PointerMove(new PointD(145 + sideOffset, 0));
+        c.PointerUp(new PointD(145 + sideOffset, 0));
         RectD fixedBox = caption.Rect;
 
-        var to = new PointD(fixedBox.Right, fixedBox.Top + (2 * fixedBox.Height));
-        c.PointerDown(new PointD(fixedBox.Right, fixedBox.Bottom));
+        PointD corner = Handle(c, ResizeHandle.BottomRight);
+        var to = new PointD(corner.X, fixedBox.Top + (2 * fixedBox.Height) + corner.Y - fixedBox.Bottom);
+        c.PointerDown(corner);
         c.PointerMove(to);
         c.PointerUp(to);
 
@@ -295,7 +306,7 @@ public sealed class EditorTextFitControllerTests
 
         Assert.Equal(ResizeHandle.None, c.HandleAt(new PointD(box.Center.X, box.Top), 4));
         Assert.Equal(ResizeHandle.None, c.HandleAt(new PointD(box.Center.X, box.Bottom), 4));
-        Assert.Equal(ResizeHandle.MiddleRight, c.HandleAt(new PointD(box.Right, box.Center.Y), 4));
+        Assert.Equal(ResizeHandle.MiddleRight, c.HandleAt(Handle(c, ResizeHandle.MiddleRight), 4));
 
         // Pressing where the top handle would be moves the caption instead of resizing it.
         c.PointerDown(new PointD(box.Center.X, box.Top + 1));
@@ -342,4 +353,7 @@ public sealed class EditorTextFitControllerTests
         Assert.Equal(square.Height * 2, badge.Rect.Height, 6);
         Assert.Equal(square.TopLeft, badge.Rect.TopLeft);
     }
+
+    private static PointD Handle(AnnotationEditorController controller, ResizeHandle handle) =>
+        controller.GetSelectionHandles(controller.DipPerPixel).Single(candidate => candidate.Handle == handle).Position;
 }

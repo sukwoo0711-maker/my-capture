@@ -277,6 +277,11 @@ public sealed class EditorFlowTests
         Assert.Equal("파일로 저장", AutomationProperties.GetName(save));
         Assert.Contains(Descendants(save).OfType<TextBlock>(), text => text.Text == "파일로 저장");
         Assert.Equal("이미지를 파일로 저장", save.ToolTip);
+        // The menu command that opens the export dialog ends with an ellipsis; the dialog's title does not.
+        MenuItem export = save.ContextMenu!.Items.OfType<MenuItem>().Last();
+        Assert.Equal("이미지 내보내기…", export.Header);
+        Assert.Equal("이미지 내보내기…", AutomationProperties.GetName(export));
+        Assert.Equal("이미지 내보내기", UiText.Get("ExportReduction_Title"));
         Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C / Ctrl+Enter)", Command(host.Editor, "EditorFlowDone").ToolTip);
         Assert.Equal("복사하고 닫기", AutomationProperties.GetName(Command(host.Editor, "EditorFlowDone")));
 
