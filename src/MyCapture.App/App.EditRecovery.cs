@@ -129,6 +129,7 @@ public partial class App
             }
             await EditDraftSession.WaitForFinalizationsAsync();
             await FlushPreferenceSavesForExitAsync();
+            await CloseUnexpectedExitNoticeAsync();
             return true;
         }
         catch (Exception error) { _log?.LogError(error, "Could not prepare app exit ({Reason})", reason); return false; }
@@ -166,6 +167,7 @@ public partial class App
                 await FlushEditingDraftsAsync();
                 await EditDraftSession.WaitForFinalizationsAsync();
                 await FlushPreferenceSavesForExitAsync();
+                await CloseUnexpectedExitNoticeAsync();
             }, TimeSpan.FromSeconds(3), message => _log?.LogWarning("Session-ending draft flush: {Message}", message));
         }
         finally
