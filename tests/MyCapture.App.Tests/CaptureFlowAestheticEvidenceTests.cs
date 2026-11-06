@@ -250,7 +250,7 @@ public sealed class CaptureFlowAestheticEvidenceTests
                 {
                     MethodInfo offer = typeof(QuickAccessWindow).GetMethod("OfferRatingInvitation", PrivateInstance)
                         ?? throw new InvalidOperationException($"{e.Tag}: the capture card has no rating invitation factory.");
-                    offer.Invoke(card, [new Func<Task?>(() => Task.CompletedTask), new Action(() => { })]);
+                    offer.Invoke(card, [new Func<Task?>(() => Task.CompletedTask), new Action(() => { }), new Action(() => { })]);
                 }
                 ShowOffscreen(card);
                 if (state == "rating-invite")
