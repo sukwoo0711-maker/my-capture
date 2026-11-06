@@ -870,6 +870,7 @@ internal static class HotfixUxSelfTest
         Click(hwnd, customOpen);
         IntPtr flyoutHwnd = PresentationSource.FromVisual(customFlyout) is HwndSource flyoutSource
             ? flyoutSource.Handle : IntPtr.Zero;
+        check("text box capture guard installed at startup", TextBoxCaptureGuard.IsInstalled);
         check($"mouse custom color button opens its inline flyout; host={flyoutHwnd}; owner={hwnd}; foreground={GetForegroundWindow()}",
             window.Editor.IsCustomColorFlyoutOpenForTest && flyoutHwnd == hwnd && hwnd != IntPtr.Zero
             && window.Editor.IsAncestorOf(customFlyout) && GetForegroundWindow() == hwnd);

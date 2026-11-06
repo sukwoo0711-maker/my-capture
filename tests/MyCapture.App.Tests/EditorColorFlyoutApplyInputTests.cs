@@ -1,9 +1,6 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
-using System.Windows.Threading;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
@@ -21,7 +18,8 @@ namespace MyCapture.App.Tests;
 /// release routed before the next layout pass kept capture on the box. These tests post presses
 /// and releases to the editor HWND back to back, so WPF routes each release before that layout
 /// pass, as it did with the self-test's injected input on Windows 10. No real input, cursor,
-/// foreground or clipboard is used.
+/// foreground or clipboard is used. The app-wide fix is TextBoxCaptureGuard; every WPF test
+/// thread runs with it.
 /// </summary>
 public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
 {
@@ -55,7 +53,7 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         input.Select(0, 0);
         // WPF's TextBox returns from this release without releasing: its view waits for layout,
         // and no preview release came first to finish that layout.
-        Assert.False(IsViewValid(input));
+        Assert.False(QueuedMouse.IsViewValid(input));
         var up = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
         {
             RoutedEvent = Mouse.MouseUpEvent,
@@ -245,13 +243,6 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         Assert.Null(Mouse.Captured);
     }
 
-    private static bool IsViewValid(TextBox box)
-    {
-        var host = Assert.IsType<ScrollViewer>(box.Template.FindName("PART_ContentHost", box));
-        var view = Assert.IsAssignableFrom<UIElement>(host.Content);
-        return view.IsMeasureValid && view.IsArrangeValid;
-    }
-
     private static bool Raise(UIElement target, TextComposition composition, RoutedEvent routedEvent)
     {
         var args = new TextCompositionEventArgs(Keyboard.PrimaryDevice, composition) { RoutedEvent = routedEvent };
@@ -276,121 +267,4 @@ public sealed class EditorColorFlyoutApplyInputTests : KoreanCaptionTest
         public override void Complete() => CompleteCalls++;
     }
 
-    /// <summary>
-    /// Posts left-button input to one HWND back to back. WPF's mouse provider accepts these only
-    /// from the HWND under the cursor or holding capture, so each gesture holds native capture as
-    /// a real press would; WPF's own capture replaces it, and a gesture nothing captured gives it
-    /// back. The thread's key state is that of a plain left click: the left button follows each
-    /// press and release, as for real input, and the other buttons and the modifier keys are up.
-    /// </summary>
-    private sealed class QueuedMouse : IDisposable
-    {
-        private const int MouseMove = 0x0200, LeftDown = 0x0201, LeftUp = 0x0202, LeftButtonFlag = 0x0001;
-        // Right, middle and X buttons; Shift, Ctrl, Alt (either side) and the Windows keys.
-        private static readonly byte[] OtherButtonsAndModifiers =
-            [0x02, 0x04, 0x05, 0x06, 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5];
-        private readonly HwndSource _source;
-        private readonly HwndSourceHook _hook;
-        private readonly TextBox? _observed;
-        private int _pending;
-        private int _unaccepted;
-
-        public QueuedMouse(Window window, TextBox? observed = null)
-        {
-            _source = Assert.IsType<HwndSource>(PresentationSource.FromVisual(window));
-            _observed = observed;
-            _hook = Hook;
-            _source.AddHook(_hook);
-        }
-
-        public nint Handle => _source.Handle;
-
-        /// <summary>Whether the observed box's text view had a valid layout when the last release arrived.</summary>
-        public bool? ViewValidAtRelease { get; private set; }
-
-        /// <summary>
-        /// Whether the HWND still held native capture once the last gesture was processed, read
-        /// before this helper gives back the capture it took for a gesture nothing captured.
-        /// </summary>
-        public bool NativeCaptureAfterGesture { get; private set; }
-
-        /// <summary>Clicks <paramref name="element"/> at <paramref name="at"/> (its own coordinates), or its center.</summary>
-        public void Click(FrameworkElement element, Point? at = null) => Post(element, (LeftDown, at), (LeftUp, at));
-
-        public void Drag(FrameworkElement element, Point from, Point to) => Post(element, (LeftDown, from),
-            (MouseMove, new Point((from.X + to.X) / 2, (from.Y + to.Y) / 2)), (MouseMove, to), (LeftUp, to));
-
-        public void Drain()
-        {
-            _source.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
-            _source.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
-        }
-
-        public void Dispose()
-        {
-            _source.RemoveHook(_hook);
-            SetLeftButton(false);
-            Mouse.Capture(null);
-            if (GetCapture() == Handle) _ = ReleaseCapture();
-        }
-
-        private void Post(FrameworkElement element, params (int Message, Point? At)[] steps)
-        {
-            Drain();
-            Assert.True(element.IsVisible && element.ActualWidth > 4 && element.ActualHeight > 4);
-            Assert.Equal(0, _pending);
-            // A capture left from an earlier gesture is not cleared here: the gesture then goes
-            // where WPF sends it, as the user's next click would.
-            nint[] positions = steps.Select(step => Position(element, step.At)).ToArray();
-            _ = SetCapture(Handle);
-            _pending = steps.Length;
-            _unaccepted = 0;
-            for (int i = 0; i < steps.Length; i++)
-            {
-                nint buttons = steps[i].Message == LeftUp ? 0 : LeftButtonFlag;
-                Assert.True(PostMessage(Handle, steps[i].Message, buttons, positions[i]));
-            }
-            Drain();
-            Assert.Equal(0, _pending);
-            Assert.Equal(0, _unaccepted);
-            NativeCaptureAfterGesture = GetCapture() == Handle;
-            if (Mouse.Captured is null && NativeCaptureAfterGesture) _ = ReleaseCapture();
-        }
-
-        private nint Position(FrameworkElement element, Point? at)
-        {
-            Point local = at ?? new Point(element.ActualWidth / 2, element.ActualHeight / 2);
-            Point device = _source.CompositionTarget.TransformToDevice.Transform(
-                element.TranslatePoint(local, (UIElement)_source.RootVisual));
-            return ((int)Math.Round(device.Y) << 16) | ((int)Math.Round(device.X) & 0xFFFF);
-        }
-
-        private nint Hook(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
-        {
-            if (_pending > 0 && message is MouseMove or LeftDown or LeftUp)
-            {
-                if (GetCapture() != hwnd) _unaccepted++;
-                if (message != MouseMove) SetLeftButton(message == LeftDown);
-                if (message == LeftUp && _observed is { } box) ViewValidAtRelease = IsViewValid(box);
-                _pending--;
-            }
-            return 0;
-        }
-
-        private static void SetLeftButton(bool pressed)
-        {
-            var keys = new byte[256];
-            Assert.True(GetKeyboardState(keys));
-            keys[0x01] = pressed ? (byte)0x80 : (byte)0;
-            foreach (byte key in OtherButtonsAndModifiers) keys[key] = 0;
-            Assert.True(SetKeyboardState(keys));
-        }
-    }
-
-    [DllImport("user32.dll")] private static extern nint GetCapture();
-    [DllImport("user32.dll")] private static extern nint SetCapture(nint hwnd);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ReleaseCapture();
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool PostMessage(nint hwnd, int message, nint wParam, nint lParam);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetKeyboardState(byte[] keys);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetKeyboardState(byte[] keys);
 }
