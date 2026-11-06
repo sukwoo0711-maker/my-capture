@@ -34,6 +34,30 @@ internal sealed partial class AnnotationEditorControl
         _customColorFlyout = flyout;
         flyout.Visibility = Visibility.Collapsed;
         _colorFlyoutLayer.Children.Add(flyout);
+        _customColorInput.PreviewMouseUp += OnCustomColorInputPreviewMouseUp;
+        _customColorInput.AddHandler(Mouse.MouseUpEvent, new MouseButtonEventHandler(OnCustomColorInputMouseUp), true);
+    }
+
+    // The flyout opens with the hex code selected, and this app has the TextBox draw its own
+    // selection (no selection adorner), so a press that changes the selection leaves the box's
+    // text view waiting for layout. WPF's TextBox lays out such a view on mouse down but not on
+    // mouse up, where it releases its mouse capture only if the view is already valid. A release
+    // routed before the next layout pass (a press and release injected back to back, as on
+    // Windows 10) therefore left capture on the box, and the next click on Apply went to the box
+    // (#235). Finish that layout before WPF handles the release.
+    private void OnCustomColorInputPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left && _customColorInput.IsMouseCaptured) _customColorInput.UpdateLayout();
+    }
+
+    // Runs after WPF's own handler. If the view still could not lay out, end the finished
+    // selection gesture as WPF does, so the box's capture never outlives it.
+    private void OnCustomColorInputMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || e.RightButton != MouseButtonState.Released
+            || !_customColorInput.IsMouseCaptured) return;
+        e.Handled = true;
+        _customColorInput.ReleaseMouseCapture();
     }
 
     private void OpenCustomColorFlyout()
