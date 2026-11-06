@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using Xunit;
 using static MyCapture.App.Tests.EditorKeysTests;
@@ -13,8 +14,8 @@ using static MyCapture.App.Tests.EditorKeysTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The editor's canvas frame and step-number preview draw what they declare: rounded frame
-/// corners and the badge the next click adds.
+/// The editor's canvas frame, step-number preview and crop size fields draw what they declare:
+/// rounded frame corners, the badge the next click adds, and one unit per value.
 /// </summary>
 public sealed class EditorCanvasFrameTests
 {
@@ -107,6 +108,25 @@ public sealed class EditorCanvasFrameTests
         // Equal measured sizes: the two layers centre on the same point.
         Assert.Equal(outline.StrokeThickness, number.StrokeThickness);
         Assert.Equal(outline.DesiredSize, number.DesiredSize);
+    });
+
+    [Theory]
+    [InlineData("ko-KR", "너비", "높이")]
+    [InlineData("en-US", "Width", "Height")]
+    public void CropSizeFieldsNameTheValueAndShowTheUnitOnce(string language, string width, string height) => StaTestHost.Run(() =>
+    {
+        using var scope = UiText.UseLanguage(language);
+        using EditorWindowHost host = EditorWindowHost.Create(beforeShow: UseShippedTheme);
+        Assert.True(host.Editor.HandleShortcut(Key.X, ModifierKeys.None));
+        host.Window.UpdateLayout();
+
+        var section = Field<FrameworkElement>(host.Editor, "_cropSection");
+        string[] texts = Descendants(section).OfType<TextBlock>().Where(text => text.IsVisible).Select(text => text.Text).ToArray();
+        Assert.Contains(width, texts);
+        Assert.Contains(height, texts);
+        // Like the stroke width and badge size fields: the unit is the field's suffix only.
+        Assert.Equal(2, texts.Count(text => text == "px"));
+        Assert.DoesNotContain(texts, text => text.Contains("(px)", StringComparison.Ordinal));
     });
 
     private static void UseShippedTheme(Window window)

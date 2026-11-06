@@ -3617,8 +3617,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.Ratio" xml:space="preserve"><value>비율</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>자유</value></data>
   <data name="Crop.Original" xml:space="preserve"><value>원본</value></data>
-  <data name="Crop.Width" xml:space="preserve"><value>너비 (px)</value></data>
-  <data name="Crop.Height" xml:space="preserve"><value>높이 (px)</value></data>
+  <data name="Crop.Width" xml:space="preserve"><value>너비</value></data>
+  <data name="Crop.Height" xml:space="preserve"><value>높이</value></data>
   <data name="Crop.Apply" xml:space="preserve"><value>적용</value></data>
   <data name="Crop.Applied" xml:space="preserve"><value>자르기 적용됨</value></data>
   <data name="Crop.Cancelled" xml:space="preserve"><value>미적용 자르기 취소됨</value></data>

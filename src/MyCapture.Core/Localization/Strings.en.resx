@@ -3617,8 +3617,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Crop.Ratio" xml:space="preserve"><value>Aspect ratio</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>Free</value></data>
   <data name="Crop.Original" xml:space="preserve"><value>Original</value></data>
-  <data name="Crop.Width" xml:space="preserve"><value>Width (px)</value></data>
-  <data name="Crop.Height" xml:space="preserve"><value>Height (px)</value></data>
+  <data name="Crop.Width" xml:space="preserve"><value>Width</value></data>
+  <data name="Crop.Height" xml:space="preserve"><value>Height</value></data>
   <data name="Crop.Apply" xml:space="preserve"><value>Apply</value></data>
   <data name="Crop.Applied" xml:space="preserve"><value>Crop applied</value></data>
   <data name="Crop.Cancelled" xml:space="preserve"><value>Pending crop canceled</value></data>
