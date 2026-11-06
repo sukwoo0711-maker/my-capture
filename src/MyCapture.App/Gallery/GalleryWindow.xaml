@@ -350,6 +350,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
+                            gallery:GalleryCardStyle.ClipsToCardCorners="True"
                             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
                         <Grid>
                             <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
@@ -982,7 +983,8 @@
                                         CornerRadius="{DynamicResource Radius.Md}" />
                                 <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                                 <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
-                                <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
+                                <!-- Inside the 2-DIP outline: at 1 DIP the pill sat on the outline's inner half. -->
+                                <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="3,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
                                         Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
                                         Opacity="0" IsHitTestVisible="False" />
@@ -1091,7 +1093,8 @@
                                     CornerRadius="{DynamicResource Radius.Md}" />
                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
-                            <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
+                            <!-- Inside the 2-DIP outline, as on a folder row. -->
+                            <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="3,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
@@ -1615,10 +1618,11 @@
                     <themes:SymbolIcon Size="16" Grid.Column="0" Data="{StaticResource Icon.Search}"
                           Style="{StaticResource Icon.Symbol.Muted}"
                           Margin="6,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <!-- Centred like the placeholder and the icon: typed text sat 4 DIP above the placeholder. -->
                     <TextBox x:Name="SearchBox" Grid.Column="1"
                              Background="Transparent"
                              BorderThickness="0"
-                             Padding="4,4" MinHeight="32"
+                             Padding="4,4" MinHeight="32" VerticalContentAlignment="Center"
                              ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
@@ -2245,13 +2249,18 @@
                         VerticalAlignment="Center">
                 <TextBlock Text="·" Margin="6,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource Text.Muted}"
                            FontSize="{StaticResource FontSize.Caption}" />
+                <!-- 24 DIP like the notice and update buttons: at the compact command height (36) Undo grew the
+                     bar by 10 DIP, which moved the list's bottom and the status text each time it came and went. -->
                 <Button x:Name="LibraryStatusAction" Style="{StaticResource Button.GhostCompact}"
+                        Height="24" MinHeight="24" Padding="8,0"
                         VerticalAlignment="Center" FontWeight="SemiBold" Click="OnStatusActionClick" />
             </StackPanel>
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <Button x:Name="ArchiveCancelButton" Content="{loc:Text Library.Action.Cancel}"
-                        Style="{StaticResource Button.GhostCompact}" Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
-                <Button x:Name="ActivityButton" Style="{StaticResource Button.GhostCompact}" Click="OnActivityClick"
+                        Style="{StaticResource Button.GhostCompact}" Height="24" MinHeight="24" Padding="8,0"
+                        Click="OnCancelArchiveClick" Visibility="Collapsed" Margin="8,0,0,0" />
+                <Button x:Name="ActivityButton" Style="{StaticResource Button.GhostCompact}" Height="24" MinHeight="24" Padding="8,0"
+                        Click="OnActivityClick"
                         Visibility="Collapsed" Margin="8,0,0,0" AutomationProperties.Name="{loc:Text Library.Activity.Title}" />
                 <Popup x:Name="ActivityPopup" PlacementTarget="{Binding ElementName=ActivityButton}" Placement="Top"
                        StaysOpen="False" AllowsTransparency="True">
