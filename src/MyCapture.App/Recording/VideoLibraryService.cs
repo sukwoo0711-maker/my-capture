@@ -44,6 +44,7 @@ internal sealed class VideoLibraryService
     private readonly AppPaths _paths;
     private readonly ILogger<VideoLibraryService> _log;
     private readonly Func<string, VideoMediaInfo>? _abandonedCaptureProbeForTest;
+    private readonly Action<string>? _recoverableRemovalForTest;
     private readonly HashSet<Guid> _busy = [];
     private readonly HashSet<Guid> _openEdits = [];
     private readonly HashSet<Guid> _blocked = [];
@@ -53,12 +54,14 @@ internal sealed class VideoLibraryService
         CaptureQueue queue,
         AppPaths paths,
         ILogger<VideoLibraryService> log,
-        Func<string, VideoMediaInfo>? abandonedCaptureProbeForTest = null)
+        Func<string, VideoMediaInfo>? abandonedCaptureProbeForTest = null,
+        Action<string>? recoverableRemovalForTest = null)
     {
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _abandonedCaptureProbeForTest = abandonedCaptureProbeForTest;
+        _recoverableRemovalForTest = recoverableRemovalForTest;
 
         RecoverAbandonedCaptureWrites();
         RecoverInterruptedCapturePublications();
@@ -73,6 +76,12 @@ internal sealed class VideoLibraryService
     internal Action<string>? BeforeFinalizeCleanupForTest { get; set; }
 
     internal Action<string>? AfterFinalizePayloadSwapForTest { get; set; }
+
+    /// <summary>
+    /// Replaces the decoder probe that validates a finished recording before publication, so a
+    /// test can inject a decoder, platform or timing failure. Startup recovery keeps its own probe.
+    /// </summary>
+    internal Func<string, CancellationToken, VideoMediaInfo>? CaptureCompletionProbeForTest { get; set; }
 
     internal bool IsBusy(Guid recordId) =>
         _busy.Contains(recordId) || _openEdits.Contains(recordId) || _blocked.Contains(recordId);
@@ -148,6 +157,12 @@ internal sealed class VideoLibraryService
     /// Optional stop-to-editor measurement; validation, thumbnail and publication are charged to
     /// their stages as they complete.
     /// </param>
+    /// <remarks>
+    /// Once the encoder has handed over its finished file, a failure is never treated as a
+    /// cancellation. Only the evidence startup recovery discards on removes the file: an empty or
+    /// non-MP4 file, or media the decoder itself rejects. Any other failure keeps the file and its
+    /// discovery sidecar for startup recovery and leaves the session retained.
+    /// </remarks>
     internal async Task<VideoLibraryItem> CompleteCaptureAsync(
         VideoCaptureWriteSession session,
         RecordingResult result,
@@ -168,8 +183,14 @@ internal sealed class VideoLibraryService
         {
             string directory = _queue.GetDirectory(record);
             string expectedStage = Path.GetFullPath(session.StagingOutputPath);
-            if (!string.Equals(Path.GetFullPath(result.OutputPath), expectedStage, StringComparison.Ordinal)
-                || !File.Exists(expectedStage))
+            if (!File.Exists(expectedStage))
+            {
+                // No finished file exists where the session expects one, so nothing is kept.
+                RejectCompletedCapture(session);
+                throw new InvalidDataException("The encoder did not complete the expected private recording file.");
+            }
+
+            if (!string.Equals(Path.GetFullPath(result.OutputPath), expectedStage, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("The encoder did not complete the expected private recording file.");
             }
@@ -190,12 +211,11 @@ internal sealed class VideoLibraryService
             // A path and plausible metadata do not prove that the encoder completed a playable
             // MP4. Decode the first and final presentation samples before creating the durable
             // publish-ready boundary.
-            VideoMediaInfo playable = await ValidateCompletedRenderAsync(
+            VideoMediaInfo playable = await ValidateCompletedCaptureAsync(
+                session,
                 expectedStage,
                 record,
-                record.DurationMs,
-                cancellationToken,
-                allowShorterThanExpected: true);
+                cancellationToken);
             openLatency?.Mark(RecordingOpenStage.Validate);
             // RegionRecorder's wall clock includes Media Foundation startup and a capture/encode
             // call already in flight when Stop is requested. The decoded container timeline is
@@ -263,6 +283,11 @@ internal sealed class VideoLibraryService
                 record.TotalBytes);
             openLatency?.Mark(RecordingOpenStage.Publish);
             return new VideoLibraryItem(record, ToRecordingResult(record, document), document);
+        }
+        catch (Exception ex)
+        {
+            RetainUnpublishedCapture(session, record, ex);
+            throw;
         }
         finally
         {
@@ -475,6 +500,37 @@ internal sealed class VideoLibraryService
         }
     }
 
+    /// <summary>Removes encoder output that completion proved unusable, as startup recovery would.</summary>
+    private void RejectCompletedCapture(VideoCaptureWriteSession session)
+    {
+        session.MarkRejected(this);
+        AbortCapture(session);
+    }
+
+    /// <summary>
+    /// The encoder finished the file, but publication stopped without proving it unusable: a
+    /// decoder, platform, storage or timing failure, a failed publish-ready write, or a cancelled
+    /// completion. The file and its discovery sidecar stay where startup recovery finds them, as
+    /// <see cref="RecoverAbandonedCaptureWrites"/> keeps them after the same failures, and the
+    /// record stays blocked until then. A rejected or completed session is left as it is.
+    /// </summary>
+    private void RetainUnpublishedCapture(
+        VideoCaptureWriteSession session,
+        CaptureRecord record,
+        Exception failure)
+    {
+        if (!session.RetainForRecovery(this))
+        {
+            return;
+        }
+
+        BlockRecordId(record.Id);
+        _log.LogWarning(
+            "Kept completed recording {Id} for startup recovery after {Failure}",
+            record.Id,
+            failure.GetType().Name);
+    }
+
     private VideoEditDocument LoadDocument(CaptureRecord record)
     {
         string path = _queue.GetFilePath(record, CaptureFileNames.VideoEdits);
@@ -536,6 +592,50 @@ internal sealed class VideoLibraryService
         }
     }
 
+    /// <summary>
+    /// Validates the encoder's finished file before publication. Only the evidence
+    /// <see cref="RecoverAbandonedCaptureWrites"/> discards on rejects and removes it here: an
+    /// empty or non-MP4 file, or media the decoder itself rejects as invalid. A decoder, platform,
+    /// storage or timing failure propagates as it is, so the file is kept for recovery instead of
+    /// being read as damage.
+    /// </summary>
+    private async Task<VideoMediaInfo> ValidateCompletedCaptureAsync(
+        VideoCaptureWriteSession session,
+        string stagePath,
+        CaptureRecord record,
+        CancellationToken cancellationToken)
+    {
+        if (FindConclusiveFileDefect(stagePath) is { } defect)
+        {
+            RejectCompletedCapture(session);
+            throw new InvalidDataException(defect);
+        }
+
+        VideoMediaInfo info;
+        try
+        {
+            info = await ProbeOnStaAsync(
+                stagePath,
+                CaptureCompletionProbeForTest ?? VideoFrameRenderPipeline.Probe,
+                cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            RejectCompletedCapture(session);
+            throw;
+        }
+
+        // A size or timeline that differs from the encoder's report does not prove damage either:
+        // startup recovery publishes a decodable file with its decoded values, so it is kept.
+        ValidateDecodedTimeline(info, record, record.DurationMs, allowShorterThanExpected: true);
+        return info;
+    }
+
+    /// <summary>
+    /// Validates an edit render or a startup publication candidate. A failed decode reads as an
+    /// unusable render here: an edit keeps its immutable source, and startup publication keeps its
+    /// publish-ready sidecar for the next start.
+    /// </summary>
     private static async Task<VideoMediaInfo> ValidateCompletedRenderAsync(
         string stagePath,
         CaptureRecord record,
@@ -543,22 +643,15 @@ internal sealed class VideoLibraryService
         CancellationToken cancellationToken,
         bool allowShorterThanExpected = false)
     {
-        if (new FileInfo(stagePath).Length == 0)
+        if (FindConclusiveFileDefect(stagePath) is { } defect)
         {
-            throw new InvalidDataException("The completed video render is empty.");
-        }
-
-        if (!HasIsoBaseMediaFileSignature(stagePath))
-        {
-            throw new InvalidDataException("The completed video render has no MP4 file signature.");
+            throw new InvalidDataException(defect);
         }
 
         VideoMediaInfo info;
         try
         {
-            info = await StaThreadTask.RunAsync(
-                () => VideoFrameRenderPipeline.Probe(stagePath, cancellationToken),
-                "MyCapture video validation");
+            info = await ProbeOnStaAsync(stagePath, VideoFrameRenderPipeline.Probe, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException
                                    or InvalidOperationException
@@ -571,6 +664,40 @@ internal sealed class VideoLibraryService
                 "The completed video render could not be decoded from beginning to end.",
                 ex);
         }
+
+        ValidateDecodedTimeline(info, record, expectedDurationMs, allowShorterThanExpected);
+        return info;
+    }
+
+    /// <summary>
+    /// The defects that prove an encoder file unusable without decoding it, the same evidence
+    /// startup recovery discards on: no bytes, or no MP4 file-type box. A file that cannot be read
+    /// at the moment throws instead, which is not a defect.
+    /// </summary>
+    private static string? FindConclusiveFileDefect(string path)
+    {
+        if (new FileInfo(path).Length == 0)
+        {
+            return "The completed video render is empty.";
+        }
+
+        return HasIsoBaseMediaFileSignature(path)
+            ? null
+            : "The completed video render has no MP4 file signature.";
+    }
+
+    private static Task<VideoMediaInfo> ProbeOnStaAsync(
+        string path,
+        Func<string, CancellationToken, VideoMediaInfo> probe,
+        CancellationToken cancellationToken) =>
+        StaThreadTask.RunAsync(() => probe(path, cancellationToken), "MyCapture video validation");
+
+    private static void ValidateDecodedTimeline(
+        VideoMediaInfo info,
+        CaptureRecord record,
+        double expectedDurationMs,
+        bool allowShorterThanExpected)
+    {
         if (info.Width != record.Width || info.Height != record.Height)
         {
             throw new InvalidDataException(
@@ -595,8 +722,6 @@ internal sealed class VideoLibraryService
                 $"The rendered video duration {info.DurationMs:0}ms does not match " +
                 $"the requested {expectedDurationMs:0}ms interval.");
         }
-
-        return info;
     }
 
     /// <summary>
@@ -1171,7 +1296,7 @@ internal sealed class VideoLibraryService
         return true;
     }
 
-    private static bool CleanupFinalizeFiles(string directory, VideoFinalizeJournal journal)
+    private bool CleanupFinalizeFiles(string directory, VideoFinalizeJournal journal)
     {
         // Marker is the commit decision while the journal exists. Remove the journal before the
         // marker. If any stage/backup cannot be removed, retain both decision files so startup
@@ -1252,7 +1377,7 @@ internal sealed class VideoLibraryService
             "This video has unresolved recovery files and cannot be edited until recovery succeeds.");
     }
 
-    private static void SwapStage(string stage, string target, string backup)
+    private void SwapStage(string stage, string target, string backup)
     {
         if (!DeleteVerified(backup))
         {
@@ -1275,7 +1400,7 @@ internal sealed class VideoLibraryService
         }
     }
 
-    private static bool RestoreTarget(string target, string backup, bool hadTarget)
+    private bool RestoreTarget(string target, string backup, bool hadTarget)
     {
         if (!hadTarget)
         {
@@ -1357,7 +1482,7 @@ internal sealed class VideoLibraryService
         snapshot.Apply(record);
     }
 
-    private static bool CleanupPublishedCaptureSidecars(string directory)
+    private bool CleanupPublishedCaptureSidecars(string directory)
     {
         string pending = Path.Combine(directory, CaptureFileNames.VideoPending);
         string marker = Path.Combine(directory, PublishReady);
@@ -1373,14 +1498,14 @@ internal sealed class VideoLibraryService
         return DeleteVerified(marker);
     }
 
-    private static bool CleanupPendingCaptureSidecars(string pending)
+    private bool CleanupPendingCaptureSidecars(string pending)
     {
         // The primary sidecar is the discovery key. Never remove it before its stale backup.
         return DeleteVerified(pending + AtomicFile.BackupSuffix)
                && DeleteVerified(pending);
     }
 
-    private static bool CleanupCorruptAbandonedCapture(string writing, string pending)
+    private bool CleanupCorruptAbandonedCapture(string writing, string pending)
     {
         // Do not erase the only discovery sidecar until the payload is confirmed gone.
         return DeleteVerified(writing) && CleanupPendingCaptureSidecars(pending);
@@ -1412,7 +1537,7 @@ internal sealed class VideoLibraryService
         }
     }
 
-    private static bool CleanupOrphanFinalizeStages(string directory)
+    private bool CleanupOrphanFinalizeStages(string directory)
     {
         bool removed = true;
         foreach (string path in EnumerateFinalizeStageResidues(directory))
@@ -1558,7 +1683,7 @@ internal sealed class VideoLibraryService
             : boxSize >= 8 && boxSize <= stream.Length;
     }
 
-    private static bool DeleteVerified(string path)
+    private bool DeleteVerified(string path)
     {
         try
         {
@@ -1569,7 +1694,7 @@ internal sealed class VideoLibraryService
 
             if (File.Exists(path))
             {
-                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
+                RemoveRecoverably(path, isDirectory: false);
             }
 
             return !PathExists(path);
@@ -1584,13 +1709,13 @@ internal sealed class VideoLibraryService
         }
     }
 
-    private static void TryDeleteEmptyDirectory(string directory)
+    private void TryDeleteEmptyDirectory(string directory)
     {
         try
         {
             if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
             {
-                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory);
+                RemoveRecoverably(directory, isDirectory: true);
             }
         }
         catch (IOException)
@@ -1598,6 +1723,26 @@ internal sealed class VideoLibraryService
         }
         catch (UnauthorizedAccessException)
         {
+        }
+    }
+
+    /// <summary>
+    /// Moves one file or empty directory to the Recycle Bin. A test can stand in for the Recycle
+    /// Bin to count every move, so it can prove that a kept recording was not moved at all.
+    /// </summary>
+    private void RemoveRecoverably(string path, bool isDirectory)
+    {
+        if (_recoverableRemovalForTest is { } remove)
+        {
+            remove(path);
+        }
+        else if (isDirectory)
+        {
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(path);
+        }
+        else
+        {
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
         }
     }
 
@@ -1772,10 +1917,21 @@ internal sealed class VideoEditSession : IDisposable
     }
 }
 
-/// <summary>Owns one pending recording path and aborts incomplete encoder output on disposal.</summary>
+/// <summary>
+/// Owns one pending recording path. Disposing a recording that never handed over a finished file
+/// (cancelled, or failed while capturing) removes its private output. From completion on, the
+/// library decides instead: it publishes the file, removes it when proven unusable, or retains it
+/// for startup recovery, and disposal leaves that decision alone.
+/// </summary>
 internal sealed class VideoCaptureWriteSession : IDisposable
 {
-    private VideoLibraryService? _owner;
+    private const int Pending = 0;
+    private const int Completing = 1;
+    private const int Completed = 2;
+    private const int RetainedForRecovery = 3;
+    private const int Discarded = 4;
+
+    private readonly VideoLibraryService _owner;
     private int _state;
 
     internal VideoCaptureWriteSession(
@@ -1792,28 +1948,42 @@ internal sealed class VideoCaptureWriteSession : IDisposable
 
     internal string StagingOutputPath { get; }
 
-    internal void BeginCompletion(VideoLibraryService owner)
-    {
-        if (!ReferenceEquals(_owner, owner) || Interlocked.CompareExchange(ref _state, 1, 0) != 0)
-        {
-            throw new InvalidOperationException("The video capture session is no longer pending.");
-        }
-    }
+    /// <summary>
+    /// Completion failed without proving the encoder output unusable. The output and its
+    /// discovery sidecar stay in place, and startup recovery validates and publishes them.
+    /// </summary>
+    internal bool IsRetainedForRecovery => Volatile.Read(ref _state) == RetainedForRecovery;
 
-    internal void MarkCompleted(VideoLibraryService owner)
-    {
-        if (!ReferenceEquals(_owner, owner) || Interlocked.CompareExchange(ref _state, 2, 1) != 1)
-        {
-            throw new InvalidOperationException("The video capture session cannot be completed.");
-        }
-    }
+    internal void BeginCompletion(VideoLibraryService owner) =>
+        Transition(owner, Pending, Completing, "The video capture session is no longer pending.");
+
+    internal void MarkCompleted(VideoLibraryService owner) =>
+        Transition(owner, Completing, Completed, "The video capture session cannot be completed.");
+
+    /// <summary>Completion proved the encoder output unusable; the library removes it.</summary>
+    internal void MarkRejected(VideoLibraryService owner) =>
+        Transition(owner, Completing, Discarded, "The video capture session cannot be rejected.");
+
+    /// <summary>Retains an undecided completion; false once it was completed or rejected.</summary>
+    internal bool RetainForRecovery(VideoLibraryService owner) =>
+        ReferenceEquals(_owner, owner)
+        && Interlocked.CompareExchange(ref _state, RetainedForRecovery, Completing) == Completing;
 
     public void Dispose()
     {
-        VideoLibraryService? owner = Interlocked.Exchange(ref _owner, null);
-        if (owner is not null && Volatile.Read(ref _state) != 2)
+        // Only a recording that never reached completion is cancelled here. A retained one keeps
+        // its file for startup recovery, exactly as after an interrupted process.
+        if (Interlocked.CompareExchange(ref _state, Discarded, Pending) == Pending)
         {
-            owner.AbortCapture(this);
+            _owner.AbortCapture(this);
+        }
+    }
+
+    private void Transition(VideoLibraryService owner, int from, int to, string failure)
+    {
+        if (!ReferenceEquals(_owner, owner) || Interlocked.CompareExchange(ref _state, to, from) != from)
+        {
+            throw new InvalidOperationException(failure);
         }
     }
 }

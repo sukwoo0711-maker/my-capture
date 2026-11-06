@@ -595,12 +595,15 @@ internal sealed class RegionRecordingCoordinator
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not persist completed recording in the gallery");
+            // Disposing a retained session keeps the finished clip and its recovery sidecar for
+            // the next startup; only a clip proven unusable has already been removed.
+            Exception shown = DescribeCompletionFailure(writeSession, ex);
             writeSession.Dispose();
             _writeSession = null;
             _completionInProgress = false;
             _finishing = false;
             controls?.CompleteAndClose();
-            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), ex);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), shown);
             EndSessionIfIdle();
             return;
         }
@@ -670,6 +673,16 @@ internal sealed class RegionRecordingCoordinator
             EndSessionIfIdle();
         }
     }
+
+    /// <summary>
+    /// What the save-failure dialog explains. When the library kept the finished clip for startup
+    /// recovery, the notice says so and when recovery runs; the cause stays in the details.
+    /// </summary>
+    internal static Exception DescribeCompletionFailure(VideoCaptureWriteSession session, Exception error) =>
+        session.IsRetainedForRecovery
+            ? MyCapture.App.Themes.UserFacingError.Mark(
+                new IOException(UiText.Get("Text_C5AC44062ACA").TrimEnd(), error))
+            : error;
 
     /// <summary>
     /// Lets Saved reach the screen before the editor's construction holds the dispatcher: one
