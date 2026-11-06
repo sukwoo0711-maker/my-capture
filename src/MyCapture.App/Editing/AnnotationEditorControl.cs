@@ -2462,7 +2462,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _overlayCanvas.Background = null;
         _viewport.Children.Add(_overlayCanvas);
 
-        return ThemedBorder(new Border
+        Border frame = ThemedBorder(new Border
         {
             Background = Brush("Surface.Sunken", Colors.Black),
             BorderBrush = Brush("Border.Subtle", Colors.DimGray),
@@ -2472,6 +2472,25 @@ internal sealed partial class AnnotationEditorControl : Grid
             ClipToBounds = true,
             Child = _viewport,
         }, "Surface.Sunken");
+        // A Border does not clip its child to its rounded corners, and the canvas paints its
+        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in), which
+        // squared the frame's corners and hid the outline's arcs. Clip it to the inside edge,
+        // as the pin and tutorial frames do.
+        _viewport.SizeChanged += (_, args) => _viewport.Clip = InsideEdgeClip(frame, args.NewSize);
+        return frame;
+    }
+
+    /// <summary>
+    /// The rounded inside edge of <paramref name="frame"/>'s outline, in the coordinates of a child
+    /// of <paramref name="size"/>. WPF draws a corner radius on the outline's centre line, so the
+    /// inside edge turns half the outline's thickness tighter around the same corner centre.
+    /// </summary>
+    private static RectangleGeometry InsideEdgeClip(Border frame, Size size)
+    {
+        double radius = Math.Max(0, frame.CornerRadius.TopLeft - frame.BorderThickness.Left / 2);
+        var clip = new RectangleGeometry(new Rect(size), radius, radius);
+        clip.Freeze();
+        return clip;
     }
 
     private Border BuildInspector()
