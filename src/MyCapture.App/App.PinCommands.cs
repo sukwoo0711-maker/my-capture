@@ -26,6 +26,11 @@ public partial class App
             || Windows.OfType<CaptureOverlayWindow>().Any(window => window.IsVisible),
         () => _overlay?.ConfirmSelectionAsPin(), HandlePasteToScreen);
 
-    private void NotifyPinFailed() => _shellPresenter?.ShowNotification(
-        UiText.Get("QuickAccess.Pin"), UiText.Get("Onboard_PinFailed"), TrayBalloonKind.Error, answersCommand: true);
+    private void NotifyPinFailed()
+    {
+        // A pin that could not open blocks the Store rating invitation like any other error.
+        _storeRating?.RecordCapture(succeeded: false);
+        _shellPresenter?.ShowNotification(
+            UiText.Get("QuickAccess.Pin"), UiText.Get("Onboard_PinFailed"), TrayBalloonKind.Error, answersCommand: true);
+    }
 }

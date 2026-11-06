@@ -34,6 +34,8 @@ public partial class App
                     BackfillLateSourceAsync(delivery.Pending, published: record is not null, lateSource));
             RecordManualCaptureRegion(selection);
             bool copied = await CompleteCaptureCopyAsync(delivery, record, opensCaptureEditor: false);
+            // Counted like any still capture; this path never opens a pin.
+            RecordStoreRatingCapture(record is not null && copied, practice: selection.PracticeTarget is not null, pinRequested: false);
             try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
             catch (Exception error) { _log?.LogWarning(error, "Could not update tray count"); }
             PublishPracticeCapture(selection, record?.Id);

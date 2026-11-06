@@ -3760,6 +3760,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. Microsoft Store 앱이 설치되어 있는지 확인하십시오.</value></data>
   <data name="StoreRating_InviteMessage" xml:space="preserve"><value>MyCapture를 Microsoft Store에서 평가하시겠습니까?</value></data>
   <data name="StoreRating_InviteAction" xml:space="preserve"><value>평가</value></data>
+  <data name="StoreRating_InviteCloseName" xml:space="preserve"><value>평가 초대 닫기</value></data>
   <data name="PrtScGuide_SettingsPath" xml:space="preserve"><value>Windows 설정 &gt; 접근성 &gt; 키보드</value></data>
   <data name="PrtScGuide_SettingsPath_Windows10" xml:space="preserve"><value>Windows 설정 &gt; 접근성 &gt; 키보드</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen 키 충돌</value></data>

@@ -18,7 +18,7 @@ using MyCapture.Platform.Shell;
 namespace MyCapture.App.Capture;
 
 /// <summary>A keyboard-accessible capture receipt. Optional actions never delay durable capture.</summary>
-internal sealed class QuickAccessWindow : Window
+internal sealed partial class QuickAccessWindow : Window
 {
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 2, BorderThickness = new Thickness(0) };
@@ -365,6 +365,7 @@ internal sealed class QuickAccessWindow : Window
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _progressReveal.Tick += (_, _) => RevealProgress();
         _remaining.Margin = new Thickness(0, 6, 0, 0);
+        panel.Children.Add(BuildRatingInvitation());
         panel.Children.Add(_remaining);
         var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
             CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
@@ -801,7 +802,7 @@ internal sealed class QuickAccessWindow : Window
     internal void Advance(TimeSpan time, bool interacting)
     {
         // A failure keeps the card until the user closes it or a retry succeeds.
-        if (IsKept || interacting || IsHeldForFailure) return;
+        if (IsKept || interacting || IsHeldForFailure || _ratingRequestRunning) return;
         // The countdown runs from the moment the card shows, but a card still waiting for its saved
         // capture or for the copy's result stays at the end of it until they arrive (BindCapture,
         // ReportInitialCopy), which leave at least the hold after a result.
@@ -995,6 +996,9 @@ internal sealed class QuickAccessWindow : Window
     private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null, string? spoken = null)
     {
         bool failed = FeedbackTiming.StaysUntilDismissed(kind);
+        // An error never shows next to the rating invitation: any failure the card holds, the capture's
+        // own or an action's, takes the invitation off this card (QuickAccessWindow.StoreRating.cs).
+        if (failed) HideRatingInvitationForFailure();
         bool resolved = false;
         if (failed || kind == FeedbackKind.Confirmation)
             resolved = _failures.RemoveAll(failure => failure.Action == action) > 0;

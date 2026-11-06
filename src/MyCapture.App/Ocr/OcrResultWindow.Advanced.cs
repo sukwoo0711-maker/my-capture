@@ -488,6 +488,9 @@ internal sealed partial class OcrResultWindow
         catch (System.Runtime.InteropServices.COMException)
         {
             _status.Text = UiText.Get("Text_75425A6D9BE8");
+            TextCopied?.Invoke(false);
+            return;
         }
+        TextCopied?.Invoke(true);
     }
 }
