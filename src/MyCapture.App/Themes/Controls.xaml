@@ -1092,15 +1092,19 @@
                         <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
                                 BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False" Opacity="0" />
-                        <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement. -->
+                        <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement.
+                             The submenu has the menu's chrome: its 1-DIP subtle edge, its Shadow.Card
+                             and the 12-DIP clear band for the shadow, which the popup does not align
+                             with the row, so the submenu opens where it did. -->
                         <Popup x:Name="PART_Popup" Placement="Right" AllowsTransparency="True"
                                Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                             <Border Background="{DynamicResource Surface.Floating}"
-                                    BorderBrush="{DynamicResource Border.Strong}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
-                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5"
+                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5" Margin="12"
+                                    Effect="{DynamicResource Shadow.Card}"
                                     SnapsToDevicePixels="True"
-                                    MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                                    MaxHeight="{x:Static themes:PopupMetrics.SubmenuMaxHeight}">
                                 <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"

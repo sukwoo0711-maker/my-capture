@@ -547,18 +547,40 @@ public sealed partial class SettingsThemePreviewTests
         foreach (FrameworkElement part in parts) part.UpdateLayout();
         double width = parts.Sum(part => part.ActualWidth) + 8 * parts.Count;
         double height = parts.Max(part => part.ActualHeight);
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(width), (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32);
+        var bounds = new Rect(0, 0, width, height);
+        var images = new List<(FrameworkElement Body, BitmapSource? Image, Rect Bounds)>();
+        double x = 0;
+        foreach (FrameworkElement part in parts)
+        {
+            // Keep the original vector drawing when there is no popup band.
+            if (part.Margin == default(Thickness))
+                images.Add((part, null, new Rect(x, 0, part.ActualWidth, part.ActualHeight)));
+            else
+            {
+                Size extent = PopupSnapshot.ExtentOf(part);
+                var image = new RenderTargetBitmap((int)Math.Ceiling(extent.Width), (int)Math.Ceiling(extent.Height),
+                    96, 96, PixelFormats.Pbgra32);
+                image.Render(part);
+                Rect imageBounds = PopupSnapshot.DrawBounds(part, new Point(x, 0), image.Width, image.Height);
+                images.Add((part, image, imageBounds));
+                bounds.Union(imageBounds);
+            }
+            x += part.ActualWidth + 8;
+        }
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height), 96, 96, PixelFormats.Pbgra32);
         var visual = new DrawingVisual();
         using (DrawingContext context = visual.RenderOpen())
         {
-            context.DrawRectangle((Brush)window.FindResource("Surface.Base"), null, new Rect(0, 0, width, height));
-            double x = 0;
-            foreach (FrameworkElement part in parts)
+            // Extend the sheet around the unchanged body positions so edge shadows are kept too.
+            context.PushTransform(new TranslateTransform(-bounds.X, -bounds.Y));
+            context.DrawRectangle((Brush)window.FindResource("Surface.Base"), null, bounds);
+            foreach (var item in images)
             {
-                context.DrawRectangle(new VisualBrush(part) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top },
-                    null, new Rect(x, 0, part.ActualWidth, part.ActualHeight));
-                x += part.ActualWidth + 8;
+                if (item.Image is { } image) context.DrawImage(image, item.Bounds);
+                else context.DrawRectangle(new VisualBrush(item.Body) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top },
+                    null, item.Bounds);
             }
+            context.Pop();
         }
         bitmap.Render(visual);
         SavePng(bitmap, name);

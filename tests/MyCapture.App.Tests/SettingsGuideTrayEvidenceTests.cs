@@ -58,7 +58,8 @@ public sealed class SettingsGuideTrayEvidenceTests
 
     internal static void Save(FrameworkElement element, string root, string name)
     {
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth), (int)Math.Ceiling(element.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        Size extent = element is ContextMenu ? PopupSnapshot.ExtentOf(element) : element.RenderSize;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(extent.Width), (int)Math.Ceiling(extent.Height), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

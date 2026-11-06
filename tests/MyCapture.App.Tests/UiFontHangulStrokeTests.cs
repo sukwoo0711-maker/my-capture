@@ -385,8 +385,9 @@ public sealed class UiFontHangulStrokeTests
                 foreach (int dpi in new[] { 96, 144 })
                 {
                     double scale = dpi / 96d;
-                    var bitmap = new RenderTargetBitmap((int)Math.Ceiling(root.ActualWidth * scale),
-                        (int)Math.Ceiling(root.ActualHeight * scale), dpi, dpi, PixelFormats.Pbgra32);
+                    Size extent = name is "context menu" or "submenu" ? PopupSnapshot.ExtentOf(root) : root.RenderSize;
+                    var bitmap = new RenderTargetBitmap((int)Math.Ceiling(extent.Width * scale),
+                        (int)Math.Ceiling(extent.Height * scale), dpi, dpi, PixelFormats.Pbgra32);
                     bitmap.Render(root);
                     Save(OnBackground(bitmap), directory, $"surface-{slug}-{dpi}dpi.png");
                 }

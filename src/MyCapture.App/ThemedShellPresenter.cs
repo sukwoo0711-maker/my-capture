@@ -358,7 +358,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             if (entry.Action is null && entry.Children is { Count: > 0 } children)
             {
                 // A branch carries its own template: its popup opens beside the row with its first
-                // child level with it, and keeps the 1 px border that shows the popup's edge.
+                // child level with it, in the menu's chrome (its 1-DIP subtle edge and Shadow.Card,
+                // with the clear band the popup window keeps for the shadow).
                 var branch = new MenuItem { Header = entry.Label, MinHeight = 36, Template = CreateSubmenuTemplate() };
                 AutomationProperties.SetName(branch, entry.Label);
                 AppendEntries(branch.Items, children, root);
@@ -490,9 +491,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="4" VerticalOffset="-6"
                        AllowsTransparency="True" Focusable="False" PopupAnimation="None"
                        IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
-                    <Border Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Strong}"
+                    <Border Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Subtle}"
                             BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" Padding="5" MinWidth="220"
-                            SnapsToDevicePixels="True">
+                            Margin="12" Effect="{DynamicResource Shadow.Card}" SnapsToDevicePixels="True">
                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
                     </Border>
                 </Popup>

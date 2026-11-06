@@ -26,6 +26,9 @@ public sealed partial class CaptureFlowPolishTests
     private static readonly AppTheme[] ShadowThemes = [AppTheme.Daylight, AppTheme.Midnight];
     private static readonly string[] RecordingShadowStates = ["ready", "recording", "paused", "saving", "saved"];
 
+    // C4 found a cut-off shadow barely visible where its outermost pixel is at most this alpha.
+    private const int BarelyVisibleShadowEdge = 8;
+
     [Theory]
     [InlineData(AppTheme.Daylight)]
     [InlineData(AppTheme.Midnight)]
@@ -191,16 +194,16 @@ public sealed partial class CaptureFlowPolishTests
             // An 8-DIP frame makes the touching-edge inputs integral physical pixels at every
             // scale, so ToPixelBounds cannot turn a touching palette into a flipped one.
             RecordingControlLayout old = RecordingControlLayoutPlanner.Plan(region, work, scale, 8, 56, 480, shadowBandDip: 0);
-            RecordingControlLayout banded = RecordingControlLayoutPlanner.Plan(region, work, scale, 8, 56, 480, shadowBandDip: 32);
+            RecordingControlLayout banded = RecordingControlLayoutPlanner.Plan(region, work, scale, 8, 56, 480, shadowBandDip: RecordingControlWindow.ShadowBand);
             string what = $"recording planner {state}, {Percent(scale)}%";
             Assert.True(old.FrameBounds == banded.FrameBounds, $"{what}: frame changed from {old.FrameBounds} to {banded.FrameBounds}.");
             Assert.True(old.PaletteBounds == banded.PaletteBounds, $"{what}: palette changed from {old.PaletteBounds} to {banded.PaletteBounds}.");
             Assert.True(old.PaletteOverlapsRegion == banded.PaletteOverlapsRegion, $"{what}: palette overlap changed.");
             ContainsRect(banded.WindowBounds, banded.PaletteBounds, what + ": palette");
-            RectD shadow = banded.PaletteBounds.Inflate(32 * scale);
+            RectD shadow = banded.PaletteBounds.Inflate(RecordingControlWindow.ShadowBand * scale);
             RectD clipped = IntersectRect(shadow, work);
             ContainsRect(banded.WindowBounds, clipped, what + ": allowed shadow band");
-            if (state == "middle") ContainsRect(banded.WindowBounds, shadow, what + ": full 32-DIP shadow band");
+            if (state == "middle") ContainsRect(banded.WindowBounds, shadow, what + ": full shadow band");
             if (state == "palette at bottom")
             {
                 CloseDip(banded.PaletteBounds.Bottom, work.Bottom, what + ": palette touches work-area bottom");
@@ -275,7 +278,8 @@ public sealed partial class CaptureFlowPolishTests
                                 (int edge, double farthest) = RecordingShadowPixels(pixels, paletteRect, frameRect, scale, band);
                                 ShadowMeasurement($"recording-shadow-{theme}-{state}-{Percent(scale)}.txt",
                                     FormattableString.Invariant($"{what}: band edge maximum alpha={edge}; farthest clickable shadow pixel center={farthest:F4} DIP (Euclidean distance from the palette; rows below the frame only)."));
-                                Assert.True(edge <= 1, $"{what}: palette-band bottom/side edge has alpha {edge}, expected <= 1.");
+                                Assert.True(edge <= BarelyVisibleShadowEdge,
+                                    $"{what}: palette-band bottom/side edge has alpha {edge}, expected <= {BarelyVisibleShadowEdge}.");
                                 Assert.True(farthest > 0, $"{what}: no clickable shadow pixel was rendered outside the palette.");
                             }
                         }
@@ -284,6 +288,135 @@ public sealed partial class CaptureFlowPolishTests
                 }
             }
         }), typeof(CaptureFlowPolishTests), hungAfter: TimeSpan.FromMinutes(5));
+
+    // Isolated like the other WithTheme tests: its Application shuts down at the end, after which
+    // this process could no longer create the windows of the tests that follow.
+    [Fact]
+    public Task RecordingShadowBandIsTheNarrowestWhoseEdgeIsBarelyVisible() => SettingsThemePreviewTests.RunIsolated(
+        nameof(RecordingShadowBandIsTheNarrowestWhoseEdgeIsBarelyVisible), () => WithTheme(() =>
+    {
+        // A stand-in with the palette's silhouette and shadow (its pill, Surface.Floating, the
+        // 1-DIP Border.Subtle edge and Shadow.Floating), in room wider than any band so that no
+        // window edge cuts the shadow being measured. 216 and 560 DIP are the compact and full widths.
+        const double Room = 48, Height = 56;
+        double band = RecordingControlWindow.ShadowBand;
+        string[] sides = ["top", "left", "bottom", "right"];
+        int narrowerEdge = 0;
+        var report = new System.Text.StringBuilder();
+        foreach (AppTheme theme in ShadowThemes)
+        {
+            ThemeService.Apply(theme);
+            foreach (double width in new[] { 216.0, 560.0 })
+                foreach (double scale in Scales)
+                {
+                    var strip = new Border
+                    {
+                        Width = width,
+                        Height = Height,
+                        Background = (Brush)Application.Current.FindResource("Surface.Floating"),
+                        BorderBrush = (Brush)Application.Current.FindResource("Border.Subtle"),
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(Height / 2),
+                        Effect = (System.Windows.Media.Effects.Effect)Application.Current.FindResource("Shadow.Floating"),
+                    };
+                    var room = new Canvas { Width = width + (2 * Room), Height = Height + (2 * Room) };
+                    Canvas.SetLeft(strip, Room);
+                    Canvas.SetTop(strip, Room);
+                    room.Children.Add(strip);
+                    room.Measure(new Size(room.Width, room.Height));
+                    room.Arrange(new Rect(0, 0, room.Width, room.Height));
+                    room.UpdateLayout();
+                    var pixels = new Pixels(Render(room, scale));
+                    var palette = new Rect(Room, Room, width, Height);
+                    int[] at = BandEdges(pixels, palette, band, scale);
+                    int[] narrower = BandEdges(pixels, palette, band - 1, scale);
+                    string narrowest = string.Join(", ", sides.Select((side, i) => FormattableString.Invariant(
+                        $"{side} {Enumerable.Range(1, (int)Room - 1).First(b => BandEdges(pixels, palette, b, scale)[i] <= BarelyVisibleShadowEdge)}")));
+                    string what = FormattableString.Invariant($"{theme}, {width:0}-DIP palette, {Percent(scale)}%");
+                    report.AppendLine(FormattableString.Invariant(
+                        $"{what}: edge alpha top/left/bottom/right at {band:0} DIP={string.Join('/', at)}, at {band - 1:0} DIP={string.Join('/', narrower)}; narrowest band per side with edge <= {BarelyVisibleShadowEdge}: {narrowest} DIP."));
+                    Assert.True(at.Max() <= BarelyVisibleShadowEdge,
+                        $"{what}: the {band}-DIP band ends at alpha {at.Max()}, expected <= {BarelyVisibleShadowEdge}.");
+                    narrowerEdge = Math.Max(narrowerEdge, narrower.Max());
+                }
+        }
+        ShadowMeasurement("recording-shadow-band.txt", report.ToString().TrimEnd());
+        Assert.True(narrowerEdge > BarelyVisibleShadowEdge,
+            $"A band 1 DIP narrower than {band} also ends at alpha {narrowerEdge}, at most {BarelyVisibleShadowEdge}: "
+            + "the band takes more of the recorded app's clicks than it needs to.");
+    }), typeof(CaptureFlowPolishTests));
+
+    [Fact]
+    public Task RecordingShadowLeavesTheRecordedRegionClickThrough() => SettingsThemePreviewTests.RunIsolated(
+        nameof(RecordingShadowLeavesTheRecordedRegionClickThrough), () => WithTheme(() =>
+        {
+            using var mode = new ExclusionMode(true);
+            MonitorInfo monitor = MonitorEnumerator.GetPrimary();
+            RectD work = monitor.WorkArea;
+            double width = Math.Round(Math.Min(640 * monitor.ScaleFactor, work.Width / 3));
+            double height = Math.Round(Math.Min(360 * monitor.ScaleFactor, work.Height / 3));
+            double left = Math.Round(work.Left + (work.Width / 3));
+            double band = RecordingControlWindow.ShadowBand;
+            var report = new System.Text.StringBuilder();
+            // Every case renders and is measured; the failures are reported together at the end.
+            var failures = new List<string>();
+            void Expect(bool condition, string message) { if (!condition) failures.Add(message); }
+            foreach ((string placement, RectD region) in new[]
+            {
+                ("below", new RectD(left, Math.Round(work.Top + (work.Height / 4)), width, height)),
+                // No room below a region on the work area's bottom: the palette goes above it.
+                ("above", new RectD(left, work.Bottom - height, width, height)),
+                // No room around a full-screen region: the palette sits inside it.
+                ("inside", work),
+            })
+                foreach (AppTheme theme in ShadowThemes)
+                {
+                    ThemeService.Apply(theme);
+                    foreach (string state in RecordingShadowStates)
+                    {
+                        RecordingControlWindow window = ShadowRecording(region, state);
+                        try
+                        {
+                            ShowShadowFixture(window);
+                            Border palette = ShadowField<Border>(window, "_controlStrip");
+                            Border frame = ShadowField<Border>(window, "_regionFrame");
+                            foreach (double scale in Scales)
+                            {
+                                AtScale(window, scale);
+                                string what = $"{theme}, recording {state}, palette {placement} the region, {Percent(scale)}%";
+                                Rect paletteRect = ElementRect(palette, window);
+                                Rect frameRect = ElementRect(frame, window);
+                                // Until recording starts with the window excluded, the frame lies outside the region.
+                                Rect regionRect = frameRect;
+                                regionRect.Inflate(-frame.BorderThickness.Left, -frame.BorderThickness.Top);
+                                Expect(placement switch
+                                {
+                                    "below" => paletteRect.Top >= frameRect.Bottom - 1e-6,
+                                    "above" => paletteRect.Bottom <= frameRect.Top + 1e-6,
+                                    _ => Rect.Intersect(paletteRect, regionRect) is { IsEmpty: false } inner
+                                        && Math.Abs((inner.Width * inner.Height) - (paletteRect.Width * paletteRect.Height)) < 1e-3,
+                                }, $"{what}: palette {paletteRect} is not {placement} the region {regionRect}.");
+                                RenderTargetBitmap image = Render(window, scale);
+                                Save(image, $"recording-region-{placement}-{theme}-{state}-{Percent(scale)}.png");
+                                (int regionAlpha, int regionPixels, int shadow, double farthest, double reach) =
+                                    RegionShadowPixels(new Pixels(image), paletteRect, frameRect, regionRect, scale);
+                                report.AppendLine(FormattableString.Invariant(
+                                    $"{what}: region pixels={regionPixels}, region maximum alpha={regionAlpha}; shadow pixels outside the region and frame={shadow}, farthest center={farthest:F2} DIP (Euclidean), {reach:F2} DIP (along an axis) from the palette."));
+                                Expect(regionPixels > 0, $"{what}: no pixel lies wholly inside the region {regionRect}.");
+                                Expect(regionAlpha == 0,
+                                    $"{what}: a pixel over the recorded region has alpha {regionAlpha}; it takes a click meant for the recorded app.");
+                                if (placement != "inside")
+                                    Expect(shadow > 0, $"{what}: the palette lost its shadow outside the region.");
+                                Expect(reach <= band + (1 / scale),
+                                    $"{what}: a shadow pixel {reach:F2} DIP from the palette lies past its {band}-DIP band and takes clicks there.");
+                            }
+                        }
+                        finally { window.CompleteAndClose(); }
+                    }
+                }
+            ShadowMeasurement("recording-region-shadow.txt", report.ToString().TrimEnd());
+            Assert.True(failures.Count == 0, $"{failures.Count} recording region cases failed:\n" + string.Join("\n", failures.Take(12)));
+        }), typeof(CaptureFlowPolishTests), hungAfter: TimeSpan.FromMinutes(8));
 
     [Fact]
     public void QuickAccessShadowBandPreservesVisibleCardPlacement()
@@ -549,6 +682,61 @@ public sealed partial class CaptureFlowPolishTests
                 farthest = Math.Max(farthest, Math.Sqrt(dx * dx + dy * dy));
             }
         return (edge, farthest);
+    }
+
+    /// <summary>The highest alpha on each side (top, left, bottom, right) of the outermost pixels of a band around the palette.</summary>
+    private static int[] BandEdges(Pixels pixels, Rect palette, double band, double scale)
+    {
+        int left = (int)Math.Round((palette.Left - band) * scale), top = (int)Math.Round((palette.Top - band) * scale);
+        int right = (int)Math.Round((palette.Right + band) * scale) - 1, bottom = (int)Math.Round((palette.Bottom + band) * scale) - 1;
+        int[] edges = new int[4];
+        for (int x = left; x <= right; x++)
+        {
+            edges[0] = Math.Max(edges[0], pixels.Alpha(x, top));
+            edges[2] = Math.Max(edges[2], pixels.Alpha(x, bottom));
+        }
+        for (int y = top; y <= bottom; y++)
+        {
+            edges[1] = Math.Max(edges[1], pixels.Alpha(left, y));
+            edges[3] = Math.Max(edges[3], pixels.Alpha(right, y));
+        }
+        return edges;
+    }
+
+    /// <summary>
+    /// Over the region, the highest alpha of the pixels wholly inside it and their number, leaving
+    /// out the palette's own pixels. Outside the region and its frame, the number of shadow pixels
+    /// (alpha 1 or more) and how far the farthest of their centers lies from the palette: straight
+    /// (Euclidean) and along one axis, as the band is measured.
+    /// </summary>
+    private static (int RegionAlpha, int RegionPixels, int Shadow, double Farthest, double Reach) RegionShadowPixels(
+        Pixels pixels, Rect palette, Rect frame, Rect region, double scale)
+    {
+        Rect pill = palette;
+        pill.Inflate(1 / scale, 1 / scale);
+        int regionAlpha = 0, regionPixels = 0, shadow = 0;
+        double farthest = 0, reach = 0;
+        for (int y = 0; y < pixels.Height; y++)
+            for (int x = 0; x < pixels.Width; x++)
+            {
+                var footprint = new Rect(x / scale, y / scale, 1 / scale, 1 / scale);
+                if (footprint.IntersectsWith(pill)) continue;
+                int alpha = pixels.Alpha(x, y);
+                if (region.Contains(footprint))
+                {
+                    regionPixels++;
+                    regionAlpha = Math.Max(regionAlpha, alpha);
+                    continue;
+                }
+                if (alpha < 1 || footprint.IntersectsWith(frame)) continue;
+                shadow++;
+                double px = (x + 0.5) / scale, py = (y + 0.5) / scale;
+                double dx = Math.Max(Math.Max(palette.Left - px, px - palette.Right), 0);
+                double dy = Math.Max(Math.Max(palette.Top - py, py - palette.Bottom), 0);
+                farthest = Math.Max(farthest, Math.Sqrt((dx * dx) + (dy * dy)));
+                reach = Math.Max(reach, Math.Max(dx, dy));
+            }
+        return (regionAlpha, regionPixels, shadow, farthest, reach);
     }
 
     // Frozen pre-band algorithm: this checks the explicit extraBand:0 compatibility path too.

@@ -49,11 +49,14 @@ internal sealed class RecordingControlWindow : Window
     private const double StripHeight = 56.0;
 
     /// <summary>
-    /// The clear band a layered window keeps around the palette for the palette's Shadow.Floating,
-    /// the band the countdown keeps for the same shadow (<see cref="CountdownWindow.ShadowBand"/>).
-    /// Without it the window ended at the palette's edges and cut the shadow off along them.
+    /// The clear band a layered window keeps around the palette for the palette's Shadow.Floating:
+    /// the smallest whose outermost pixel is at most alpha 8 at 100, 125 and 150 %, where the cut-off
+    /// shadow is barely visible. Without a band the window ended at the palette's edges and cut the
+    /// shadow off along them. It is narrower than the countdown's (<see cref="CountdownWindow.ShadowBand"/>)
+    /// because a layered window takes the clicks of every pixel it draws, and while recording these
+    /// are clicks meant for the app being recorded.
     /// </summary>
-    internal const double ShadowBand = 32;
+    internal const double ShadowBand = 19;
 
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
@@ -836,6 +839,7 @@ internal sealed class RecordingControlWindow : Window
             ((Border)((Viewbox)_controlStrip.Child).Child).Width = CurrentStripWidth - 2;
             Canvas.SetLeft(_controlStrip, (stripBox.Left - windowPixels.Left) / scale);
             Canvas.SetTop(_controlStrip, (stripBox.Top - windowPixels.Top) / scale);
+            _controlStrip.Clip = PaletteShadowClip(stripBox, scale);
 
             // Initial values influence which monitor DPI WPF chooses for HWND creation. Once the
             // HWND exists, SetWindowPos below is authoritative and works in physical pixels.
@@ -867,6 +871,31 @@ internal sealed class RecordingControlWindow : Window
                 QueueDpiLayout();
             }
         }
+    }
+
+    /// <summary>
+    /// Ends the palette's shadow at its band and a pixel outside the recorded region. A layered
+    /// window takes the clicks of every pixel it draws: where the frame made the window wider than
+    /// the band, the shadow's faint tail went on taking clicks past the band, and over the region it
+    /// took clicks meant for the app being recorded (its top shadow reached up into a region above
+    /// the palette, its stronger bottom shadow down into one below it, and all of it into a
+    /// full-screen region around it). The palette itself, inside the region when there is no room
+    /// around it, is never clipped.
+    /// </summary>
+    private Geometry? PaletteShadowClip(RectD stripBox, double scale)
+    {
+        if (_controlStrip.Effect is null) return null;
+        // In the palette's own DIP space, which is the space of its Clip.
+        Rect Local(RectD pixels) => new((pixels.Left - stripBox.Left) / scale, (pixels.Top - stripBox.Top) / scale,
+            Math.Max(0, pixels.Width) / scale, Math.Max(0, pixels.Height) / scale);
+        double radius = _controlStrip.CornerRadius.TopLeft;
+        var palette = new RectangleGeometry(new Rect(0, 0, _controlStrip.Width, _controlStrip.Height), radius, radius);
+        var band = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(Local(stripBox.Inflate(ShadowBand * scale))),
+            new RectangleGeometry(Local(_screenRegion.Normalized().ToPixelBounds().Inflate(1))));
+        var clip = new CombinedGeometry(GeometryCombineMode.Union, band, palette);
+        clip.Freeze();
+        return clip;
     }
 
     private void UpdateRegionFromVisibleFrame()
