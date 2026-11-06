@@ -12,6 +12,36 @@ namespace MyCapture.App.Tests;
 public sealed class TextTranslationServiceTests
 {
     [Fact]
+    public async Task LongUnspacedSourceReachesTheEngineInFullWithinTheLimit()
+    {
+        string source = string.Join(",", Enumerable.Range(1, 300).Select(index => $"item_{index}"));
+        using var fixture = new ServiceFixture(load: () => new FakeEngine(text => text, TranslationHardLimitTests.Count));
+
+        await fixture.Service.TranslateAsync([source], null, CancellationToken.None);
+
+        string[] rows = [.. fixture.Engine.Batches.SelectMany(batch => batch)];
+        Assert.True(rows.Length > 1);
+        Assert.All(rows, row => Assert.InRange(TranslationHardLimitTests.Count(row), 1, 256));
+        // Scheduling may group by length; recover the source order from each unique recorded row.
+        Assert.Equal(source, string.Concat(rows.OrderBy(row => source.IndexOf(row, StringComparison.Ordinal))));
+    }
+
+    [Fact]
+    public async Task CancellationAfterEngineReturnReleasesTheGateAndKeepsTheCache()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var fixture = new ServiceFixture(load: () => new FakeEngine(_ => "번역 결과") { Returning = cancellation.Cancel });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Service.TranslateAsync(
+            ["Translate this sentence."], null, cancellation.Token));
+        TranslatedText result = Assert.Single(await fixture.Service.TranslateAsync(
+            ["Translate this sentence."], null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)));
+
+        Assert.Equal("번역 결과", result.Text);
+        Assert.Single(fixture.Engine.Batches);
+    }
+
+    [Fact]
     public async Task TranslatesEachUniqueSegmentOnceInBatchesAndReportsProgressInOrder()
     {
         using var fixture = new ServiceFixture();
@@ -356,7 +386,7 @@ public sealed class TextTranslationServiceTests
         }
     }
 
-    internal sealed class FakeEngine(Func<string, string> map) : ISentenceTranslator
+    internal sealed class FakeEngine(Func<string, string> map, Func<string, int>? tokenCounter = null) : ISentenceTranslator
     {
         private bool _disposed;
 
@@ -371,7 +401,7 @@ public sealed class TextTranslationServiceTests
         /// <summary>Runs as a call returns, after the rows it ended.</summary>
         internal Action? Returning { get; init; }
 
-        public int CountTokens(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length + 1;
+        public int CountTokens(string text) => tokenCounter?.Invoke(text) ?? text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length + 1;
 
         public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken)
         {
