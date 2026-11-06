@@ -94,6 +94,7 @@ internal readonly record struct ScrollOverlapSearchStatistics(
     int PixelRowComparisons,
     int VerificationRowComparisons,
     int HeaderRowComparisons,
+    int UnchangedFrameRowComparisons,
     int DistinctRowClasses,
     int WorkLimit,
     bool StoppedAtWorkLimit);
@@ -103,7 +104,7 @@ internal readonly record struct ScrollOverlapSearchStatistics(
 /// content against the current canvas tail, longest overlap first. Exact row classes,
 /// memoized tolerant comparisons and recent mismatches avoid repeated pixel work. A bounded
 /// search accepts only directly verified overlaps; unmatched or work-limited frames are
-/// never appended.
+/// never appended. Automatic header detection is deferred while frames still match the seed.
 /// </summary>
 public sealed class ScrollStitcher
 {
@@ -208,9 +209,9 @@ public sealed class ScrollStitcher
             return new ScrollAppendResult(ScrollAppendKind.Seeded, 0, _canvasHeight);
         }
 
-        int headerRowComparisons = ResolveHeaderIfNeeded(frame);
+        int headerRowComparisons = ResolveHeaderIfNeeded(frame, out int unchangedFrameRowComparisons);
         int header = Math.Min(_effectiveHeader, Math.Max(0, frame.Height - _options.MinOverlapRows));
-        int overlap = FindOverlap(frame, header, headerRowComparisons);
+        int overlap = FindOverlap(frame, header, headerRowComparisons, unchangedFrameRowComparisons);
         if (overlap < 0)
         {
             return new ScrollAppendResult(ScrollAppendKind.NoOverlap, 0, 0);
@@ -263,23 +264,27 @@ public sealed class ScrollStitcher
     }
 
     /// <summary>
-    /// Detects an unchanged leading prefix between the seed and second frame. The search is
-    /// capped to a fraction of the frame so a duplicate end frame cannot be mistaken for an
-    /// all-page header; the remaining content still resolves as a full overlap.
+    /// Detects an unchanged leading prefix between the seed and the first changed frame,
+    /// capped to a fraction of the frame. If the entire capped prefix matches, equal-height
+    /// frames are checked from the bottom upward using the same row tolerance. A frame that
+    /// still matches the seed leaves the header unresolved and the canvas unchanged, allowing
+    /// a later repainted frame to determine the header. Prefix and unchanged-frame checks
+    /// are counted separately and neither consumes the overlap search's work limit.
     /// </summary>
-    private int ResolveHeaderIfNeeded(ScrollFrame frame)
+    private int ResolveHeaderIfNeeded(ScrollFrame frame, out int unchangedFrameRowComparisons)
     {
+        unchangedFrameRowComparisons = 0;
         if (_headerResolved)
         {
             return 0;
         }
 
-        _headerResolved = true;
         int contentFloor = _options.MinOverlapRows;
         int ratioCap = (int)Math.Floor(frame.Height * _options.MaxAutoHeaderRatio);
         int maxRows = Math.Min(ratioCap, Math.Min(frame.Height, _canvasHeight) - contentFloor);
         if (maxRows <= 0)
         {
+            _headerResolved = true;
             _effectiveHeader = 0;
             return 0;
         }
@@ -299,6 +304,27 @@ public sealed class ScrollStitcher
             equalPrefix++;
         }
 
+        if (equalPrefix == maxRows && frame.Height == _canvasHeight)
+        {
+            bool unchanged = true;
+            for (int row = frame.Height - 1; row >= maxRows; row--)
+            {
+                unchangedFrameRowComparisons++;
+                if (!RowsMatch(frame.Pixels.AsSpan(row * _stride, _stride),
+                    canvas.AsSpan(row * _stride, _stride), _maxMismatchBytes))
+                {
+                    unchanged = false;
+                    break;
+                }
+            }
+
+            if (unchanged)
+            {
+                return comparisons;
+            }
+        }
+
+        _headerResolved = true;
         _effectiveHeader = equalPrefix;
         return comparisons;
     }
@@ -308,7 +334,8 @@ public sealed class ScrollStitcher
     /// first. Only uncached comparisons of different classes consume the work limit;
     /// header detection and direct verification of a successful candidate are separate.
     /// </summary>
-    private int FindOverlap(ScrollFrame frame, int header, int headerRowComparisons)
+    private int FindOverlap(ScrollFrame frame, int header, int headerRowComparisons,
+        int unchangedFrameRowComparisons)
     {
         int frameContent = frame.Height - header;
         int maxOverlap = Math.Min(frameContent, _canvasHeight - header);
@@ -336,6 +363,7 @@ public sealed class ScrollStitcher
         var counters = new SearchCounters
         {
             HeaderRowComparisons = headerRowComparisons,
+            UnchangedFrameRowComparisons = unchangedFrameRowComparisons,
             DistinctRowClasses = classCount,
             WorkLimit = WorkLimitPerOverlapRow * maxOverlap + WorkLimitBase,
         };
@@ -556,6 +584,7 @@ public sealed class ScrollStitcher
         LastOverlapSearch = new ScrollOverlapSearchStatistics(
             counters.CandidatesConsidered, counters.RowPairChecks, counters.PixelRowComparisons,
             counters.VerificationRowComparisons, counters.HeaderRowComparisons,
+            counters.UnchangedFrameRowComparisons,
             counters.DistinctRowClasses, counters.WorkLimit, counters.StoppedAtWorkLimit);
         return overlap;
     }
@@ -567,6 +596,7 @@ public sealed class ScrollStitcher
         public int PixelRowComparisons;
         public int VerificationRowComparisons;
         public int HeaderRowComparisons;
+        public int UnchangedFrameRowComparisons;
         public int DistinctRowClasses;
         public int WorkLimit;
         public bool StoppedAtWorkLimit;
