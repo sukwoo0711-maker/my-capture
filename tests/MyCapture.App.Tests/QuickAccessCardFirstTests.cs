@@ -855,7 +855,8 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         private readonly Action<string>? _previousTimeline = MyCapture.App.Diagnostics.ReceiptTimeline.Mark;
 
         internal Shell(QueueSettings? queue = null, AfterCaptureAction mode = AfterCaptureAction.QuickAccess, bool motion = false,
-            TimeSpan? copyWait = null)
+            TimeSpan? copyWait = null, Action<Action>? ratingDeferWrite = null, TimeProvider? ratingClock = null,
+            Action<AppSettings>? ratingSave = null, Microsoft.Extensions.Logging.ILogger? ratingLog = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             typeof(System.Windows.Threading.DispatcherObject).GetField("_dispatcher", Flags)!.SetValue(_app, Dispatcher.CurrentDispatcher);
@@ -875,8 +876,14 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             Persistence = new CapturePersistenceService(Queue, Paths, () => Settings.Queue, NullLogger<CapturePersistenceService>.Instance);
             var commit = new CaptureCommitService(Persistence, () => Settings, () => Paths, NullLogger<CaptureCommitService>.Instance,
                 (_, _) => { CopyCalls++; return CopyResult ?? Task.FromResult(true); });
-            StoreRating = new StoreRatingCoordinator(() => Settings, settings => SavedRatings.Add(settings.StoreRating.RequestAttemptedUtc),
-                write => write(), () => true, new CountingRequester(RatingOwners), NullLogger.Instance, isPackaged: true,
+            StoreRating = new StoreRatingCoordinator(() => Settings, settings =>
+                {
+                    ratingSave?.Invoke(settings);
+                    SavedRatings.Add(settings.StoreRating.RequestAttemptedUtc);
+                    SavedRatingShowings.Add((settings.StoreRating.InvitationShownCount, settings.StoreRating.InvitationShownUtc));
+                },
+                ratingDeferWrite ?? (write => write()), () => true, new CountingRequester(RatingOwners), ratingLog ?? NullLogger.Instance,
+                isPackaged: true, clock: ratingClock,
                 isUserActive: () => true, showInvitation: () => { WindowInvitations++; return true; },
                 isInvitationVisible: Predicate("IsStoreInvitationVisible"), isCardBusy: Predicate("IsStoreRatingDeferredOnCard"));
             Set("_engagementNotices", EngagementNotices);
@@ -919,6 +926,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal StoreRatingCoordinator StoreRating { get; }
         internal List<Window?> RatingOwners { get; } = [];
         internal List<DateTimeOffset?> SavedRatings { get; } = [];
+        internal List<(int Count, DateTimeOffset? ShownUtc)> SavedRatingShowings { get; } = [];
         internal Dictionary<Window, IEngagementNotice> EngagementNotices { get; } = [];
         internal int WindowInvitations { get; private set; }
         internal Action<QuickAccessWindow>? CardFirstVisible { get; set; }
@@ -958,6 +966,9 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 
         internal Task Select(CaptureSelectionCompletedEventArgs selection) =>
             (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
+
+        internal Task SelectSeparate() =>
+            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [Selection])!;
 
         /// <summary>The same capture, taken for a step of the practice window.</summary>
         internal CaptureSelectionCompletedEventArgs PracticeSelection() =>

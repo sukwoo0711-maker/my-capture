@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
+using MyCapture.App.Store;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
@@ -44,7 +45,10 @@ namespace MyCapture.App.Tests;
 /// <c>receipt-save-*</c> sections take the earlier ordering instead, the card shown once the save and copy
 /// have finished (the App's test-only <c>ShowsCardAfterSaveForTest</c>), and the <c>receipt-ab-*</c>
 /// sections alternate the two in one process after a cold card-first capture (ten warm captures each),
-/// so a busy desktop loads both alike. The <c>receipt-tray-*</c>, <c>receipt-traysave-*</c> and
+/// so a busy desktop loads both alike. The opt-in <c>receipt-ratingab-region</c> and
+/// <c>receipt-ratingab-1440</c> sections keep card first and alternate an invitation and an answered
+/// rating state after a cold invitation capture (twenty warm captures each), with real settings writes.
+/// The <c>receipt-tray-*</c>, <c>receipt-traysave-*</c> and
 /// <c>receipt-traycardab-*</c> sections hold the tray's hidden message window (an HwndSource the App
 /// holds from launch for the tray icon and hotkeys), as in the App; the other sections leave it out. In
 /// that tray shell, <c>receipt-tray-*</c> takes card first and <c>receipt-traysave-*</c> the earlier
@@ -113,6 +117,7 @@ internal sealed partial class AppResponsivenessProbe
 
     private void RunReceipt()
     {
+        bool ratingAlternate = _section is "receipt-ratingab-region" or "receipt-ratingab-1440";
         // receipt-traysave-* and receipt-traycardab-* are receipt-save-* and receipt-ab-* in the tray shell.
         bool trayCardAlternate = _section.StartsWith("receipt-traycardab-", StringComparison.Ordinal);
         // receipt-save-*: the earlier ordering, the card shown once the save and copy have finished.
@@ -126,9 +131,9 @@ internal sealed partial class AppResponsivenessProbe
         // receipt-tray-*: the tray's hidden message window (NativeMessageWindow) is held from launch, as
         // the App holds it; the other sections leave it out.
         bool tray = _section.StartsWith("receipt-tray", StringComparison.Ordinal);
-        // The tray shell's card-first study times the captures only.
-        bool parts = partsOnly || !tray;
-        int warm = partsOnly ? -1 : trayCardAlternate ? 40 : alternate || tray ? 20 : 10;
+        // The tray shell's and rating studies time the captures only.
+        bool parts = partsOnly || (!tray && !ratingAlternate);
+        int warm = partsOnly ? -1 : trayCardAlternate || ratingAlternate ? 40 : alternate || tray ? 20 : 10;
         string kind = _section[(_section.LastIndexOf('-') + 1)..];
         (int frameWidth, int frameHeight, RectD? part) = kind switch
         {
@@ -141,7 +146,8 @@ internal sealed partial class AppResponsivenessProbe
         RectD region = part ?? new RectD(0, 0, frameWidth, frameHeight);
         bool whole = part is null;
         _size = $"{(int)region.Width}x{(int)region.Height}" + (whole ? " (full screen)" : $" on {frameWidth}x{frameHeight}");
-        _variant = alternate ? "alternating: card first odd / save first even" : saveFirst ? "save first (earlier ordering)" : "card first";
+        _variant = ratingAlternate ? "alternating: card first, rating invitation odd / answered even"
+            : alternate ? "alternating: card first odd / save first even" : saveFirst ? "save first (earlier ordering)" : "card first";
         if (tray) _variant += ", tray message window held";
 
         uint dpi = Ui(() => MonitorEnumerator.GetPrimary().Dpi);
@@ -174,7 +180,7 @@ internal sealed partial class AppResponsivenessProbe
         bool? previousMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         Func<IReadOnlyList<MonitorInfo>> previousMonitors = CaptureFlight.ReadMonitors;
         Func<Window, bool> previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
-        ReceiptShell shell = Ui(() => new ReceiptShell(root, this));
+        ReceiptShell shell = Ui(() => new ReceiptShell(root, this, ratingAlternate));
         // As App.InitializeShell creates it through the tray and hotkey services, before any capture.
         NativeMessageWindow? trayWindow = tray ? Ui(() => new NativeMessageWindow()) : null;
         var captures = new List<ReceiptCapture>();
@@ -215,7 +221,9 @@ internal sealed partial class AppResponsivenessProbe
             {
                 bool first = alternate ? index % 2 == 1 || index == 0 : !saveFirst;
                 Ui(() => shell.ShowsCardAfterSave = !first);
-                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, first, index);
+                bool? invitation = ratingAlternate ? index % 2 == 1 || index == 0 : null;
+                if (invitation is { } offered) Ui(() => shell.PrepareRating(offered));
+                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, first, index, invitation);
                 captures.Add(capture);
                 _delay.Wait(400);
                 // As the next capture command does before its selector opens.
@@ -260,10 +268,11 @@ internal sealed partial class AppResponsivenessProbe
         WriteReceiptResults(captures);
     }
 
-    private ReceiptCapture MeasureReceipt(ReceiptShell shell, FrozenFrame frame, RectD region, bool whole, bool cardFirst, int index)
+    private ReceiptCapture MeasureReceipt(ReceiptShell shell, FrozenFrame frame, RectD region, bool whole, bool cardFirst, int index,
+        bool? invitation = null)
     {
         string kind = index == 0 ? "cold" : "warm";
-        var capture = new ReceiptCapture(index, kind, cardFirst);
+        var capture = new ReceiptCapture(index, kind, cardFirst, invitation);
         var overlayRendered = new ManualResetEventSlim();
 
         // The selector over its frozen frame, as CaptureOverlayCoordinator.ShowOverlay wires it, shown
@@ -634,7 +643,7 @@ internal sealed partial class AppResponsivenessProbe
         csv.AppendLine("section,size,variant,index,kind,capture_variant," + string.Join(",", ReceiptStages) + ",notes");
         foreach (ReceiptCapture c in captures)
         {
-            csv.AppendLine(string.Join(",", _section, Q(_size), Q(_variant), c.Index, c.Kind, c.Variant,
+            csv.AppendLine(string.Join(",", _section, Q(_size), Q(_variant), c.Index, c.Kind, c.Invitation is null ? c.Variant : Q(c.Variant),
                 string.Join(",", ReceiptStages.Select(stage => c.Ms(stage) is double ms ? F(ms) : "")), Q(string.Join("; ", c.Notes))));
         }
 
@@ -653,8 +662,9 @@ internal sealed partial class AppResponsivenessProbe
         var md = new StringBuilder();
         md.AppendLine($"# 캡처 확정 → 빠른 작업 카드: {_section}");
         md.AppendLine();
-        foreach (IGrouping<bool, ReceiptCapture> group in captures.Where(c => c.Index > 0).GroupBy(c => c.CardFirst))
-            WriteReceiptGroup(md, group.ToArray(), captures.FirstOrDefault(c => c.Index == 0 && c.CardFirst == group.Key));
+        foreach (var group in captures.Where(c => c.Index > 0).GroupBy(c => (c.CardFirst, c.Invitation)))
+            WriteReceiptGroup(md, group.ToArray(), captures.FirstOrDefault(c => c.Index == 0
+                && (c.CardFirst, c.Invitation) == group.Key));
 
         var parts = _recorder.Breakdown.Where(pair => pair.Key.Size == _size && pair.Key.Variant == _variant).ToArray();
         int rounds = parts.Length == 0 ? 0 : parts.Max(pair => pair.Value.Count);
@@ -876,7 +886,7 @@ internal sealed partial class AppResponsivenessProbe
 
     private sealed record ReceiptOperation(string Name, string Priority, long Start, long End);
 
-    private sealed class ReceiptCapture(int index, string kind, bool cardFirst)
+    private sealed class ReceiptCapture(int index, string kind, bool cardFirst, bool? invitation)
     {
         private readonly ConcurrentDictionary<string, long> _stages = new();
         private readonly Dictionary<DispatcherOperation, (string Name, long Start)> _running = new(ReferenceEqualityComparer.Instance);
@@ -884,7 +894,13 @@ internal sealed partial class AppResponsivenessProbe
         internal int Index { get; } = index;
         internal string Kind { get; } = kind;
         internal bool CardFirst { get; } = cardFirst;
-        internal string Variant => CardFirst ? "card first" : "save first";
+        internal bool? Invitation { get; } = invitation;
+        internal string Variant => Invitation switch
+        {
+            true => "card first, rating invitation",
+            false => "card first, answered",
+            null => CardFirst ? "card first" : "save first",
+        };
         internal long Start { get; private set; }
         internal List<ReceiptOperation> Operations { get; } = [];
         internal List<string> Notes { get; } = [];
@@ -933,8 +949,8 @@ internal sealed partial class AppResponsivenessProbe
 
     /// <summary>
     /// The real App without its shell, rooted in an isolated library, with the real coordinator.
-    /// Fields are set as App.InitializeShell sets them; the tray, hotkeys, OCR, pins, gallery, Store
-    /// rating and welcome notice stay absent (each is null-checked on this path).
+    /// Fields are set as App.InitializeShell sets them; the tray, hotkeys, OCR, pins, gallery and welcome
+    /// notice stay absent. The rating comparison also wires the real rating coordinator and settings store.
     /// </summary>
     private sealed class ReceiptShell : IDisposable
     {
@@ -943,17 +959,18 @@ internal sealed partial class AppResponsivenessProbe
         private readonly CaptureOverlayCoordinator _coordinator;
         private readonly ReceiptKeyboardRouter _router = new(_ => new NoHotkeys());
         private readonly CaptureQueue _queue;
+        private readonly AppSettings _settings = new();
         private CaptureSelectionCompletedEventArgs? _selection;
         private string? _liftWindow;
         private string? _overlayWindow;
 
-        internal ReceiptShell(string root, AppResponsivenessProbe probe)
+        internal ReceiptShell(string root, AppResponsivenessProbe probe, bool measureRating)
         {
             _probe = probe;
             typeof(DispatcherObject).GetField("_dispatcher", Instance)!.SetValue(_app, Dispatcher.CurrentDispatcher);
             AppPaths paths = AppPaths.CreateForRoot(root);
             paths.EnsureCreated();
-            var settings = new AppSettings();
+            AppSettings settings = _settings;
             settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
             settings.General.FirstCaptureTipShown = true;
             settings.General.PlayCaptureSound = false;
@@ -979,6 +996,23 @@ internal sealed partial class AppResponsivenessProbe
             Set("_capturePaths", paths);
             Set("_services", new ServiceCollection().AddLogging().BuildServiceProvider());
             Set("_receiptKeyboard", _router);
+            if (measureRating)
+            {
+                var settingsStore = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+                Set("_engagementNotices", new Dictionary<Window, IEngagementNotice>());
+                Set("_storeRating", new StoreRatingCoordinator(
+                    () => settings,
+                    settingsStore.Save,
+                    write => Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
+                    Predicate("IsStoreRatingDeferred"),
+                    new NoRatingRequester(),
+                    NullLogger<StoreRatingCoordinator>.Instance,
+                    isPackaged: true,
+                    isUserActive: () => false,
+                    showInvitation: () => false,
+                    isInvitationVisible: Predicate("IsStoreInvitationVisible"),
+                    isCardBusy: Predicate("IsStoreRatingDeferredOnCard")));
+            }
 
             _coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
                 new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance);
@@ -1011,6 +1045,19 @@ internal sealed partial class AppResponsivenessProbe
         }
 
         internal DispatcherOperation? LastContextIdle { get; set; }
+
+        internal void PrepareRating(bool invitation)
+        {
+            _settings.StoreRating = new StoreRatingState
+            {
+                SuccessfulCaptureCount = 1,
+                LastCaptureFailed = false,
+                InvitationShownCount = 0,
+                InvitationShownUtc = null,
+                InvitationDismissedUtc = null,
+                RequestAttemptedUtc = invitation ? null : DateTimeOffset.UtcNow,
+            };
+        }
 
         internal CaptureOverlayWindow ShowSelector(FrozenFrame frame, ManualResetEventSlim rendered, ReceiptCapture capture)
         {
@@ -1065,6 +1112,14 @@ internal sealed partial class AppResponsivenessProbe
         internal void WatchCard(ReceiptCapture capture)
         {
             if (Get("_quickAccess") is not QuickAccessWindow card) return;
+            if (capture.Invitation is not null)
+            {
+                card.IsVisibleChanged += (_, _) =>
+                {
+                    if (card.IsVisible)
+                        capture.Notes.Add($"rating row Visible at first appearance: {card.RatingInvitationForTest.Row.Visibility == Visibility.Visible}");
+                };
+            }
             // After the card's own handlers, which were added in its constructor.
             card.SourceInitialized += (_, _) => capture.Mark("card-hwnd-ready");
             card.Loaded += (_, _) => capture.Mark("card-loaded");
@@ -1088,6 +1143,14 @@ internal sealed partial class AppResponsivenessProbe
         private object? Get(string name) => typeof(App).GetField(name, Instance)!.GetValue(_app);
 
         private void Set(string name, object? value) => typeof(App).GetField(name, Instance)!.SetValue(_app, value);
+
+        private Func<bool> Predicate(string name) =>
+            (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), _app, typeof(App).GetMethod(name, Instance)!);
+
+        private sealed class NoRatingRequester : IStoreRatingRequester
+        {
+            public Task<string> RequestRateAndReviewAsync(Window? owner) => Task.FromResult("not opened by the receipt probe");
+        }
 
         internal sealed class NoHotkeys : IHotkeyRegistrar
         {

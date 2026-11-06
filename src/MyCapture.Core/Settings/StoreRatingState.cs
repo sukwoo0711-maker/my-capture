@@ -38,7 +38,10 @@ public sealed class StoreRatingState
     /// </summary>
     public DateTimeOffset? InvitationShownUtc { get; set; }
 
-    /// <summary>How many times the invitation was shown; one left unanswered is offered once more.</summary>
+    /// <summary>
+    /// How many times the invitation was shown. One left unanswered is offered once more, no sooner than
+    /// 24 hours after the first; a card row an error hid before it was answered is not counted.
+    /// </summary>
     public int InvitationShownCount { get; set; }
 
     /// <summary>When the user closed the invitation with its Close button; it is not offered again.</summary>
@@ -52,10 +55,15 @@ public sealed class StoreRatingState
 /// <remarks>
 /// On 2026-11-06 the user lowered the threshold so the invitation comes sooner: two successful uses
 /// (a delivered capture, a new pin, copied OCR text or a saved recording) are enough, with no waiting
-/// day. An invitation left unanswered is offered once more on a later return, so it shows at most
-/// <see cref="MaxInvitations"/> times; Close, Review or the review link in Settings end it. It is still
-/// never offered right after an error, during the first run, outside the Store build or before the user
-/// returns to the library or settings window, and the Store dialog opens only from its Review button.
+/// day, and the capture card carries it too. On 2026-11-07 the follow-up decisions added four rules:
+/// a card shown before its capture is recorded counts that capture as a success
+/// (<see cref="ShouldRequestCountingSuccess"/>) and withdraws the invitation if the save or copy then
+/// fails; a card counts its showing in memory and saves it once it has shown; a row an error hides
+/// before it is answered is not counted; and an unanswered invitation is offered once more only
+/// <see cref="SecondInvitationDelay"/> after the first showing, so it shows at most
+/// <see cref="MaxInvitations"/> times. Close, Review or the review link in Settings end it. It is still
+/// never offered right after an error, during the first run or outside the Store build, and the Store
+/// dialog opens only from its Review button.
 /// </remarks>
 public static class StoreRatingPolicy
 {
@@ -70,6 +78,9 @@ public static class StoreRatingPolicy
 
     /// <summary>How many times an unanswered invitation is shown before the app stops offering it.</summary>
     public const int MaxInvitations = 2;
+
+    /// <summary>Minimum time between the first and second unanswered showings.</summary>
+    public static readonly TimeSpan SecondInvitationDelay = TimeSpan.FromHours(24);
 
     /// <summary>
     /// A stamp further ahead than this is treated as a clock that was later corrected, and the
@@ -127,18 +138,42 @@ public static class StoreRatingPolicy
     /// <summary>
     /// True only for a packaged (Store) install whose invitation is unanswered and was shown fewer
     /// than <see cref="MaxInvitations"/> times, whose last use succeeded, with enough successful uses.
+    /// A counted showing with a timestamp must be at least <see cref="SecondInvitationDelay"/> old.
     /// </summary>
-    public static bool ShouldRequest(StoreRatingState state, bool isPackaged)
+    public static bool ShouldRequest(StoreRatingState state, bool isPackaged, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(state);
         return isPackaged
             && !IsAnswered(state)
             && Math.Max(state.InvitationShownCount, 0) < MaxInvitations
+            && (state.InvitationShownCount < 1 || state.InvitationShownUtc is not { } shown
+                || now - shown >= SecondInvitationDelay)
             && !state.LastCaptureFailed
             && state.SuccessfulCaptureCount >= RequiredSuccessfulCaptures;
     }
 
-    /// <summary>Counts one showing. Call before showing anything so a crash cannot show it uncounted.</summary>
+    /// <summary>Tests a pending capture's success on a private copy, leaving the live state untouched.</summary>
+    public static bool ShouldRequestCountingSuccess(StoreRatingState state, bool isPackaged, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var predicted = new StoreRatingState
+        {
+            FirstSeenUtc = state.FirstSeenUtc,
+            SuccessfulCaptureCount = state.SuccessfulCaptureCount,
+            LastCaptureFailed = state.LastCaptureFailed,
+            RequestAttemptedUtc = state.RequestAttemptedUtc,
+            InvitationShownUtc = state.InvitationShownUtc,
+            InvitationShownCount = state.InvitationShownCount,
+            InvitationDismissedUtc = state.InvitationDismissedUtc,
+        };
+        RecordCapture(predicted, succeeded: true);
+        return ShouldRequest(predicted, isPackaged, now);
+    }
+
+    /// <summary>
+    /// Counts one showing in this state. The library and settings windows save it before showing
+    /// anything; a card saves it once it has shown.
+    /// </summary>
     public static void MarkInvitationShown(StoreRatingState state, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(state);

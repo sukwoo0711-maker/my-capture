@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
+using MyCapture.App.Store;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
@@ -122,7 +123,10 @@ public partial class App
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, first.Image) ? lifted : null;
         QuickAccessWindow? card = null;
         // Decided before the card is built, so an invitation is on the card from its first appearance.
-        bool invitation = OfferStoreRatingOnCard(first.Practice);
+        bool pendingCapture = !first.RatingOutcomeRecorded;
+        StoreRatingCoordinator.CardOffer? invitation = first.SaveFailed || first.DeferredSaveFailure is not null
+            ? null : OfferStoreRatingOnCard(first.Practice, pendingCapture);
+        if (pendingCapture) first.PendingRatingOffer = invitation;
         try
         {
             // Made waiting for the copy even when it has finished; its result reaches the card as it
@@ -130,7 +134,7 @@ public partial class App
             // through captures in a row (resident probe capture-30: 583 against 421 MB after 30).
             card = QuickAccessWindow.ForPendingCapture(first.Image, copiedToClipboard: null, first.Region, first.Monitor,
                 _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"), _receiptKeyboard);
-            if (invitation) AttachStoreRatingInvitation(card);
+            if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             QuickAccessWindow shown = card;
             shown.Closed += (_, _) =>
@@ -152,6 +156,7 @@ public partial class App
             flight?.Land(shown);
             ReceiptTimeline.Mark?.Invoke("card-show");
             shown.Show();
+            if (invitation is not null) _storeRating?.NoteCardOfferShown(invitation);
             ReceiptTimeline.Mark?.Invoke("card-shown");
             if (first.DeferredSaveFailure is { } failure)
             {
@@ -165,7 +170,7 @@ public partial class App
         {
             flight?.Finish();
             // An invitation on a card that never showed is not counted.
-            if (invitation && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer();
+            if (invitation is not null && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer(invitation, card);
             // The card then shows the usual way once the capture is saved and copied.
             first.Phase = QuickAccessFirstPhase.NotShown;
             first.Card = null;
@@ -196,6 +201,8 @@ public partial class App
     /// </summary>
     private void ReportCopyToQuickAccessFirst(QuickAccessFirst first, bool copied)
     {
+        if (!copied && first.Card is not { IsOpen: true } && first.PendingRatingOffer is { } offer)
+            WithdrawStoreRatingCardOffer(offer, first.Card);
         if (first.CopyReported || first.Card is not { IsOpen: true } card || !ReferenceEquals(_quickAccess, card)) return;
         // Without its saved capture the card cannot retry the copy; the notification names the editor's retry.
         if (!copied && first.SaveFailed) return;
@@ -212,6 +219,8 @@ public partial class App
     private bool ShowQuickAccessFirstFailure(QuickAccessFirst first, string title, string message)
     {
         first.SaveFailed = true;
+        if (first.Card is not { IsOpen: true } && first.PendingRatingOffer is { } offer)
+            WithdrawStoreRatingCardOffer(offer, first.Card);
         if (first.PreserveEditor && first.Phase == QuickAccessFirstPhase.Scheduled)
         {
             // This path keeps another editor, so retain this new image's pending card even
@@ -327,6 +336,12 @@ public partial class App
 
         /// <summary>A capture the practice window asked for: its card never carries the rating invitation.</summary>
         internal bool Practice { get; init; }
+
+        /// <summary>This capture's outcome has reached the rating coordinator.</summary>
+        internal bool RatingOutcomeRecorded { get; set; }
+
+        /// <summary>The offer that counted this capture in advance, until its outcome is known.</summary>
+        internal StoreRatingCoordinator.CardOffer? PendingRatingOffer { get; set; }
 
         internal (string Title, string Message)? DeferredSaveFailure { get; set; }
 

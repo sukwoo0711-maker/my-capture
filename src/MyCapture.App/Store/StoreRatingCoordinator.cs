@@ -8,7 +8,9 @@ namespace MyCapture.App.Store;
 /// <summary>
 /// The inline Store rating invitation, followed only by a chosen review. It shows on an explicit return
 /// to the library or settings window, or on a capture card from its first appearance, in one place at a
-/// time and at most <see cref="StoreRatingPolicy.MaxInvitations"/> times across all of them.
+/// time and at most <see cref="StoreRatingPolicy.MaxInvitations"/> times, at least 24 hours apart.
+/// Cards may predict their pending capture's success and persist only after showing. An untouched
+/// card offer hidden by an error gives its showing back through a deferred write.
 /// </summary>
 internal sealed class StoreRatingCoordinator
 {
@@ -27,7 +29,7 @@ internal sealed class StoreRatingCoordinator
     private readonly Func<bool> _isInvitationVisible;
     private DispatcherTimer? _settleTimer;
     private bool _userReturned;
-    private Showing? _cardOffer;
+    private CardOffer? _cardOffer;
 
     /// <param name="isBusy">Anything on screen a Store dialog must not interrupt, the capture card included.</param>
     /// <param name="showInvitation">Shows the invitation in the active library or settings window; false when it could not.</param>
@@ -63,7 +65,7 @@ internal sealed class StoreRatingCoordinator
         AppSettings settings = _settings();
         if (StoreRatingPolicy.IsAnswered(settings.StoreRating)) return;
         if (StoreRatingPolicy.RecordCapture(settings.StoreRating, succeeded)) _deferWrite(() => Persist(_settings()));
-        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged);
+        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow());
         if (!IsPending) _settleTimer?.Stop();
     }
 
@@ -84,7 +86,7 @@ internal sealed class StoreRatingCoordinator
     internal bool NotifyUserReturned()
     {
         _userReturned = true;
-        IsPending = StoreRatingPolicy.ShouldRequest(_settings().StoreRating, _isPackaged);
+        IsPending = StoreRatingPolicy.ShouldRequest(_settings().StoreRating, _isPackaged, _clock.GetUtcNow());
         return TryRequestNow();
     }
 
@@ -97,46 +99,68 @@ internal sealed class StoreRatingCoordinator
         AppSettings settings = _settings();
         if (!CanOffer(settings) || !CountShowing(settings, out Showing before)) return false;
         IsPending = false;
-        if (_showInvitation()) return true;
+        if (_showInvitation())
+        {
+            _cardOffer = null;
+            return true;
+        }
         // Not on screen after all (an update notice took the window first), so not counted either.
         Restore(settings, before);
         Persist(settings);
-        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged);
+        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow());
         return false;
     }
 
     /// <summary>
-    /// Asked once, just before a capture card is built: whether the card carries the invitation from its
-    /// first appearance. The rules are those of a return (<see cref="StoreRatingPolicy.ShouldRequest"/>,
-    /// never during the first run), and the card adds its own: never for a capture the practice window
-    /// asked for, never while anything else a Store dialog must not interrupt is on screen, and never
-    /// while the invitation is on screen elsewhere. True counts the showing and saves it first;
-    /// <see cref="WithdrawCardOffer"/> takes it back when that card cannot show after all.
+    /// Counts a card's showing in memory before construction. A pending capture is evaluated with one
+    /// predicted success. Practice, first run, busy UI and an invitation elsewhere exclude the offer.
+    /// The returned token identifies this showing until it is answered, withdrawn or superseded.
     /// </summary>
-    internal bool TryOfferOnCard(bool practice)
+    internal CardOffer? TryOfferOnCard(bool practice, bool pendingCapture = false)
     {
-        _cardOffer = null;
-        if (practice || _isCardBusy() || _isInvitationVisible()) return false;
+        if (practice || _isCardBusy() || _isInvitationVisible()) return null;
         AppSettings settings = _settings();
-        if (!CanOffer(settings) || !CountShowing(settings, out Showing before)) return false;
-        _cardOffer = before;
+        if (!CanOffer(settings, pendingCapture)) return null;
+        StoreRatingState state = settings.StoreRating;
+        _cardOffer = new CardOffer(state.InvitationShownCount, state.InvitationShownUtc);
+        StoreRatingPolicy.MarkInvitationShown(state, _clock.GetUtcNow());
         IsPending = false;
         _settleTimer?.Stop();
+        return _cardOffer;
+    }
+
+    /// <summary>Called after the card's Show returns; queues the counted showing once.</summary>
+    internal void NoteCardOfferShown(CardOffer offer)
+    {
+        if (!ReferenceEquals(_cardOffer, offer) || offer.WriteQueued) return;
+        offer.WriteQueued = true;
+        _deferWrite(() => Persist(_settings()));
+    }
+
+    /// <summary>A Review or Close press keeps this showing, even when the review request is refused.</summary>
+    internal void NoteCardOfferAnswered(CardOffer offer)
+    {
+        if (ReferenceEquals(_cardOffer, offer)) _cardOffer = null;
+    }
+
+    /// <summary>Restores only this untouched showing, once, and defers saving the restored live state.</summary>
+    internal bool WithdrawCardOffer(CardOffer offer)
+    {
+        if (!ReferenceEquals(_cardOffer, offer)) return false;
+        _cardOffer = null;
+        AppSettings settings = _settings();
+        Restore(settings, new Showing(offer.PreviousCount, offer.PreviousShownUtc));
+        _deferWrite(() => Persist(_settings()));
+        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow());
         return true;
     }
 
-    /// <summary>
-    /// The card a successful <see cref="TryOfferOnCard"/> was for could not show: its showing is not
-    /// counted. Call it only for that card, before anything else records an outcome or a showing.
-    /// </summary>
-    internal void WithdrawCardOffer()
+    /// <summary>Identity and rollback snapshot for one card's showing.</summary>
+    internal sealed class CardOffer(int count, DateTimeOffset? shownUtc)
     {
-        if (_cardOffer is not { } before) return;
-        _cardOffer = null;
-        AppSettings settings = _settings();
-        Restore(settings, before);
-        Persist(settings);
-        IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged);
+        internal int PreviousCount { get; } = count;
+        internal DateTimeOffset? PreviousShownUtc { get; } = shownUtc;
+        internal bool WriteQueued { get; set; }
     }
 
     /// <summary>Only the invitation's explicit Review button in a library or settings window may call this.</summary>
@@ -160,6 +184,7 @@ internal sealed class StoreRatingCoordinator
         AppSettings settings = _settings();
         StoreRatingState state = settings.StoreRating;
         if (state.InvitationShownUtc is null || StoreRatingPolicy.IsAnswered(state)) return;
+        _cardOffer = null;
         IsPending = false;
         _settleTimer?.Stop();
         StoreRatingPolicy.MarkInvitationDismissed(state, _clock.GetUtcNow());
@@ -168,6 +193,7 @@ internal sealed class StoreRatingCoordinator
 
     internal void NoteManualReviewOpened()
     {
+        _cardOffer = null;
         IsPending = false;
         _settleTimer?.Stop();
         AppSettings settings = _settings();
@@ -189,12 +215,15 @@ internal sealed class StoreRatingCoordinator
             return false;
         }
         LastRequest = RequestAsync(owner);
+        _cardOffer = null;
         return true;
     }
 
     /// <summary>The rules every showing shares. Nothing is offered, or counted, while the first run is under way.</summary>
-    private bool CanOffer(AppSettings settings) =>
-        !settings.General.IsFirstRun && StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged);
+    private bool CanOffer(AppSettings settings, bool pendingCapture = false) =>
+        !settings.General.IsFirstRun && (pendingCapture
+            ? StoreRatingPolicy.ShouldRequestCountingSuccess(settings.StoreRating, _isPackaged, _clock.GetUtcNow())
+            : StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow()));
 
     /// <summary>
     /// Counts one showing and saves it before anything shows; false, with nothing counted, when it cannot

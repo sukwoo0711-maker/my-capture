@@ -55,48 +55,60 @@ public partial class App
         || _engagementNotices.Any(pair => pair.Key.IsVisible && pair.Value.IsShown && pair.Value.Kind == EngagementNoticeKind.Rating);
 
     /// <summary>
-    /// Asked just before a capture card is built: true when the card is to carry the rating invitation from its
-    /// first appearance, with the showing already counted (<see cref="StoreRatingCoordinator.TryOfferOnCard"/>).
-    /// The caller then gives the new card to <see cref="AttachStoreRatingInvitation"/> before it shows, or calls
-    /// <see cref="WithdrawStoreRatingCardOffer"/> when no card shows after all.
+    /// Offers the invitation before a card is built, counting its showing in memory. A pending capture
+    /// contributes a predicted success. The caller saves the showing after Show returns, or withdraws it.
     /// </summary>
-    private bool OfferStoreRatingOnCard(bool practice)
+    private StoreRatingCoordinator.CardOffer? OfferStoreRatingOnCard(bool practice, bool pendingCapture = false)
     {
-        if (_storeRating?.TryOfferOnCard(practice) != true) return false;
+        StoreRatingCoordinator.CardOffer? offer = _storeRating?.TryOfferOnCard(practice, pendingCapture);
+        if (offer is null) return null;
         // One place at a time: an invitation left in a hidden library or settings window gives way to the card.
         foreach (IEngagementNotice notice in _engagementNotices.Values)
             if (notice.IsShown && notice.Kind == EngagementNoticeKind.Rating) notice.Hide();
-        return true;
+        return offer;
     }
 
     /// <summary>
     /// The card offered the invitation shows it from its first appearance (<see cref="QuickAccessWindow.OfferRatingInvitation"/>).
     /// Review opens the Store dialog over the card; Close ends the invitation; a card that closes with neither
-    /// pressed leaves it unanswered, offered once more.
+    /// pressed leaves it unanswered, eligible once more after 24 hours. Failures withdraw an untouched offer.
     /// </summary>
-    private void AttachStoreRatingInvitation(QuickAccessWindow card)
+    private void AttachStoreRatingInvitation(QuickAccessWindow card, StoreRatingCoordinator.CardOffer offer)
     {
         _storeRatingCard = card;
         card.Closed += (_, _) => { if (ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null; };
         card.OfferRatingInvitation(
             review: () =>
             {
-                Task? request = _storeRating?.AcceptInvitationOnCard(card);
-                if (request is not null && ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null;
-                return request;
+                _storeRating?.NoteCardOfferAnswered(offer);
+                if (ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null;
+                return _storeRating?.AcceptInvitationOnCard(card);
             },
             close: () =>
             {
+                _storeRating?.NoteCardOfferAnswered(offer);
                 if (ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null;
                 _storeRating?.DismissInvitation();
-            });
+            },
+            withdraw: () => WithdrawStoreRatingCardOffer(offer, card));
     }
 
-    /// <summary>The card offered the invitation could not show: its showing is not counted.</summary>
-    private void WithdrawStoreRatingCardOffer()
+    /// <summary>Restores this untouched offer's showing and defers its save, hiding its row if still open.</summary>
+    private void WithdrawStoreRatingCardOffer(StoreRatingCoordinator.CardOffer offer, QuickAccessWindow? card)
     {
-        _storeRatingCard = null;
-        _storeRating?.WithdrawCardOffer();
+        if (card is not null && ReferenceEquals(_storeRatingCard, card)) _storeRatingCard = null;
+        if (_storeRating?.WithdrawCardOffer(offer) == true && card is { IsOpen: true })
+            card.WithdrawRatingInvitation();
+    }
+
+    /// <summary>Resolves this capture's prediction once its actual save and copy outcome is recorded.</summary>
+    private void ResolveStoreRatingCapture(QuickAccessFirst? first, bool delivered)
+    {
+        if (first is null) return;
+        first.RatingOutcomeRecorded = true;
+        StoreRatingCoordinator.CardOffer? offer = first.PendingRatingOffer;
+        first.PendingRatingOffer = null;
+        if (!delivered && offer is not null) WithdrawStoreRatingCardOffer(offer, first.Card);
     }
 
     /// <summary>Records a success or an error toward the Store rating invitation; null records nothing.</summary>

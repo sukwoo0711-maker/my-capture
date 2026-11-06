@@ -40,7 +40,7 @@ public sealed class QuickAccessRatingInvitationEvidenceTests
                         QuickAccessWindow card = QuickAccessRatingInvitationTests.Card(scale);
                         try
                         {
-                            if (invitation) card.OfferRatingInvitation(() => Task.CompletedTask, () => { });
+                            if (invitation) card.OfferRatingInvitation(() => Task.CompletedTask, () => { }, () => { });
                             Border host = QuickAccessDetachedFixture.Layout(card, scale);
                             ThemeService.ApplyResources(theme, host.Resources, systemHighContrast: false);
                             QuickAccessRatingInvitationTests.Relayout(host, card.Width);
