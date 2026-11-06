@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using MyCapture.Core.Serialization;
@@ -70,13 +71,34 @@ public sealed partial class CaptureQueue
 
     private static readonly JsonSerializerOptions MetaSerializerOptions = JsonDefaults.Readable;
 
+    // The writer settings JsonSerializer derives from SerializerOptions for SerializeToUtf8Bytes, so
+    // the index keeps its bytes (EveryEntryPoint_WritesTheBytesOfTheStringWriter holds this).
+    private static readonly JsonWriterOptions IndexWriterOptions = new()
+    {
+        Encoder = SerializerOptions.Encoder,
+        Indented = SerializerOptions.WriteIndented,
+        IndentCharacter = SerializerOptions.IndentCharacter,
+        IndentSize = SerializerOptions.IndentSize,
+        NewLine = SerializerOptions.NewLine,
+        MaxDepth = SerializerOptions.MaxDepth == 0 ? 64 : SerializerOptions.MaxDepth,
+        SkipValidation = true,
+    };
+
     private readonly AppPaths _paths;
     private readonly ILogger<CaptureQueue> _log;
     private readonly BatchRecordCollection _records = [];
     private readonly Lock _writeGate = new();
     private readonly SemaphoreSlim _publicationSlots = new(8, 8);
     private Task _publicationTail = Task.CompletedTask;
+    // Length of the index last written or loaded; sizes the next index buffer (#221).
+    private int _lastIndexLength;
     internal Action<string, string>? BeforePublicationWriteForTest { get; set; }
+
+    /// <summary>
+    /// Called on the writer thread right after it serializes the index, with the bytes that thread
+    /// allocated for it and the index length: the allocation contract of #221.
+    /// </summary>
+    internal Action<long, int>? IndexSerializedForTest { get; set; }
     private readonly object _evictionLeaseGate = new();
     private readonly Dictionary<Guid, int> _evictionLeaseCounts = [];
     private int _evictionSuspensionCount;
@@ -227,6 +249,8 @@ public sealed partial class CaptureQueue
 
         if (text is not null && acceptedIndex is { } index)
         {
+            // The default encoder writes ASCII, so the text length sizes the first index buffer.
+            Volatile.Write(ref _lastIndexLength, text.Length);
             records = index.Records;
             loadedFolderState = index.FolderState;
             RestoreSavedSearches(index.SavedSearches);
@@ -608,7 +632,30 @@ public sealed partial class CaptureQueue
     /// One file of a queued job whose bytes the writer produces from a detached snapshot. The
     /// owner thread then pays for copying records, not for serializing a large OCR index (#221).
     /// </summary>
-    private readonly record struct DetachedWrite(string Path, Func<byte[]> Serialize);
+    private readonly record struct DetachedWrite(string Path, Func<ReadOnlyMemory<byte>> Serialize);
+
+    /// <summary>
+    /// On the writer thread. Each job runs on a new thread whose array pool and cached JSON writer
+    /// start empty, so SerializeToUtf8Bytes grew a pooled buffer from 16 KB to the index size and
+    /// then copied it out: 3.5 to 4.5 index lengths a job. One buffer sized from the last index takes
+    /// about one; the job writes it as it is and drops it, since no field holds it.
+    /// </summary>
+    private ReadOnlyMemory<byte> SerializeIndex(CaptureIndexFile index)
+    {
+        Action<long, int>? observe = IndexSerializedForTest;
+        long before = observe is null ? 0 : GC.GetAllocatedBytesForCurrentThread();
+        var buffer = new ArrayBufferWriter<byte>(IndexBufferSize(Volatile.Read(ref _lastIndexLength)));
+        using (var writer = new Utf8JsonWriter(buffer, IndexWriterOptions))
+            JsonSerializer.Serialize(writer, index, SerializerOptions);
+        Volatile.Write(ref _lastIndexLength, buffer.WrittenCount);
+        observe?.Invoke(GC.GetAllocatedBytesForCurrentThread() - before, buffer.WrittenCount);
+        return buffer.WrittenMemory;
+    }
+
+    // Room for an index as long as the last one, plus headroom for growth and for Utf8JsonWriter,
+    // which wants three times a string's length free before it writes the string.
+    private static int IndexBufferSize(int lastLength) =>
+        (int)Math.Min(Array.MaxLength, Math.Max(16 * 1024, lastLength + lastLength / 32L + 4 * 1024));
 
     // Under _writeGate on the owner context: the path is validated and the record copied now.
     private DetachedWrite DetachedMetaWrite(CaptureRecord record)
@@ -618,34 +665,21 @@ public sealed partial class CaptureQueue
         return new(path, () => JsonSerializer.SerializeToUtf8Bytes(copy, MetaSerializerOptions));
     }
 
-    // Called only under _writeGate, after immutable serialization. A failed predecessor does
-    // not poison later writes: each caller observes its own failure, and recovery may publish next.
-    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
-        Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, () => files, (path, content) =>
-        {
-            BeforePublicationWriteForTest?.Invoke(path, content);
-            AtomicFile.WriteAllText(path, content);
-        }, afterDurableWrite);
-
-    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, byte[] Content)[] files,
-        Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, () => files, WritePublicationBytes, afterDurableWrite);
-
     // Called only under _writeGate with snapshots no other code can change. The writer serializes
     // every file before writing any, as the owner thread used to, so a serializer failure still
-    // leaves every file untouched and faults only this job.
+    // leaves every file untouched and faults only this job. A failed predecessor does not poison
+    // later writes: each caller observes its own failure, and recovery may publish next.
     private Task EnqueuePublication(CaptureWriteReservation? reservation, DetachedWrite[] files,
         Action? afterDurableWrite = null)
         => EnqueuePublication(reservation, () => Array.ConvertAll(files, file => (file.Path, file.Serialize())),
             WritePublicationBytes, afterDurableWrite);
 
-    private void WritePublicationBytes(string path, byte[] content)
+    private void WritePublicationBytes(string path, ReadOnlyMemory<byte> content)
     {
         // Keep the existing correctness seam without re-creating strings in normal runs.
         if (BeforePublicationWriteForTest is { } observe)
-            observe(path, System.Text.Encoding.UTF8.GetString(content));
-        AtomicFile.WriteAllBytes(path, content);
+            observe(path, System.Text.Encoding.UTF8.GetString(content.Span));
+        AtomicFile.WriteAllBytes(path, content.Span);
     }
 
     private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, Func<(string Path, T Content)[]> files,

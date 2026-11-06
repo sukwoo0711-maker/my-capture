@@ -172,6 +172,70 @@ public sealed class CaptureRecordPublicationSnapshotTests(ITestOutputHelper outp
     }
 
     [Fact]
+    public async Task RecoverableRemoval_AndItsCorrection_PublishDetachedIndexes_WithTheStringWriterBytes()
+    {
+        using var workspace = new TempWorkspace();
+        CaptureQueue queue = NewQueue(workspace);
+        CaptureRecord kept = AddRecord(queue);
+        Fill(kept);
+        CaptureRecord removed = AddRecord(queue);
+        CaptureRecord restored = AddRecord(queue);
+        await queue.SaveAsync();
+        var rolledBack = new List<Guid>();
+        queue.PrepareRemoval = (record, _) => new IndexOnlyRemoval(() => { lock (rolledBack) rolledBack.Add(record.Id); });
+        int serialized = 0;
+        queue.IndexSerializedForTest = (_, _) => Interlocked.Increment(ref serialized);
+
+        // A recycled removal publishes a detached index, as every other entry point does.
+        Assert.Equal(1, (await queue.RemoveManyPermanentlyAsync([removed.Id])).RemovedCount);
+        Assert.Equal(1, Volatile.Read(ref serialized));
+        AssertIndexMatchesStringWriter(queue, workspace);
+
+        // A failed publication rolls the move back and publishes a corrective index the same way.
+        int writes = 0;
+        queue.BeforePublicationWriteForTest = (_, _) =>
+        {
+            if (Interlocked.Increment(ref writes) == 1) throw new IOException("The disk is full.");
+        };
+        await Assert.ThrowsAsync<IOException>(() => queue.RemoveManyPermanentlyAsync([restored.Id]));
+        Assert.Equal([restored.Id], rolledBack);
+        Assert.NotNull(queue.Find(restored.Id));
+        Assert.Equal(3, Volatile.Read(ref serialized));
+        AssertIndexMatchesStringWriter(queue, workspace);
+    }
+
+    [Fact]
+    public async Task IndexBytes_StayThoseOfTheStringWriter_WhenTheIndexOutgrowsItsBuffer()
+    {
+        using var workspace = new TempWorkspace();
+        CaptureQueue queue = NewQueue(workspace);
+        CaptureRecord oldest = AddRecord(queue);
+        AddRecord(queue);
+        await queue.SaveAsync();
+        AssertIndexMatchesStringWriter(queue, workspace);
+
+        // The oldest record ends the index. Its text, over 64 K characters, escapes to several times
+        // the buffer the last small index sized, so the writer must grow it in place.
+        oldest.OcrText = string.Concat(Enumerable.Repeat("가나다 \"인용\" \\ \u0001\u001f\u007f <b>&amp;</b> 😀 \u2028\r\n\t끝", 3_000));
+        Assert.True(oldest.OcrText.Length > 64 * 1024);
+        await queue.SaveAsync();
+        AssertIndexMatchesStringWriter(queue, workspace);
+
+        oldest.OcrText = "짧음";
+        await queue.SaveAsync();
+        AssertIndexMatchesStringWriter(queue, workspace);
+    }
+
+    private sealed class IndexOnlyRemoval(Action rolledBack) : ICaptureRemovalTransaction
+    {
+        public bool Rollback()
+        {
+            rolledBack();
+            return true;
+        }
+    }
+
+    [Fact]
     public async Task SerializerFailure_WritesNoFileOfItsJob_AndLaterJobsStillPublish()
     {
         using var workspace = new TempWorkspace();
@@ -250,6 +314,69 @@ public sealed class CaptureRecordPublicationSnapshotTests(ITestOutputHelper outp
             $"SaveAsync allocated {saveAllocated:N0} bytes on its caller for a {indexBytes:N0}-byte index.");
         Assert.True(publishAllocated < indexBytes / 10,
             $"PublishRecordAsync allocated {publishAllocated:N0} bytes on its caller for a {indexBytes:N0}-byte index.");
+    }
+
+    [Theory]
+    [InlineData(300, 0)]
+    [InlineData(300, 4 * 1024)]
+    [InlineData(1000, 0)]
+    [InlineData(100, 64 * 1024)]
+    public async Task Writer_SerializesTheIndexIntoOneBufferOfAboutItsLength(int records, int ocrChars)
+    {
+        // Each job runs on a new thread whose pools start empty: SerializeToUtf8Bytes grew a pooled
+        // buffer from 16 KB to the index size and then copied it out, two to three index lengths a
+        // job. A buffer sized from the previous index allocates about one, and so does the first job
+        // after a load.
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 5_000, MaxBytes = 1024L * 1024 * 1024 };
+        var queue = new CaptureQueue(workspace.Paths, limits, NullLogger<CaptureQueue>.Instance);
+        string ocr = new('a', ocrChars);
+        CaptureRecord record = null!;
+        for (int i = 0; i < records; i++)
+        {
+            record = AddRecord(queue);
+            if (ocrChars > 0) record.OcrText = ocr + i;
+            // Load accepts the index only with valid sizes and keeps records whose original exists.
+            record.Width = 2; record.Height = 2;
+            Directory.CreateDirectory(queue.GetDirectory(record));
+            File.WriteAllBytes(queue.GetFilePath(record, CaptureFileNames.Original), [0]);
+        }
+
+        var observed = new List<(string Job, int Thread, long Allocated, int Length)>();
+        string job = "";
+        void Observe(long allocated, int length)
+        {
+            lock (observed) observed.Add((job, Environment.CurrentManagedThreadId, allocated, length));
+        }
+        queue.IndexSerializedForTest = Observe;
+        for (int i = 0; i < 4; i++)
+        {
+            job = $"publish {i}";
+            record.Title = job;
+            using CaptureWriteReservation reservation = await queue.ReservePublicationAsync();
+            long callerBefore = GC.GetAllocatedBytesForCurrentThread();
+            Task publication = queue.PublishRecordAsync(record, reservation);
+            output.WriteLine($"{job}: the caller allocated {GC.GetAllocatedBytesForCurrentThread() - callerBefore:N0} B");
+            await publication;
+        }
+        job = "save";
+        await queue.SaveAsync();
+
+        var loaded = new CaptureQueue(workspace.Paths, limits, NullLogger<CaptureQueue>.Instance);
+        loaded.Load();
+        int loadedCount = loaded.Count;
+        loaded.IndexSerializedForTest = Observe;
+        job = "first save after load";
+        await loaded.SaveAsync();
+
+        foreach (var (name, thread, allocated, length) in observed)
+            output.WriteLine($"{name} (thread {thread}): {allocated:N0} B allocated for a {length:N0}-byte index, {(double)allocated / length:F2}x");
+        Assert.Equal(records, loadedCount);
+        Assert.Equal(6, observed.Count);
+        // Only the first job of a new, empty-handed queue has no earlier length to size from.
+        foreach (var (name, _, allocated, length) in observed.Skip(1))
+            Assert.True(allocated <= length + length / 8 + 16 * 1024,
+                $"{name}: the writer allocated {allocated:N0} bytes to serialize a {length:N0}-byte index.");
     }
 
     private static void AssertIndexMatchesStringWriter(CaptureQueue queue, TempWorkspace workspace)

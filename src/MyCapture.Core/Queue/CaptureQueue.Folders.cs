@@ -481,12 +481,8 @@ public sealed partial class CaptureQueue
         UseCurrentFolderForNewCaptures = _limits.UseCurrentFolderForNewCaptures,
     };
 
-    private (string Path, string Content)[] BuildIndexWrites(string json) => _folderStateActivated
-        ? [(FolderRecoveryFile, JsonSerializer.Serialize(CreateFolderState(), SerializerOptions)), (_paths.IndexFile, json)]
-        : [(_paths.IndexFile, json)];
-
     /// <summary>
-    /// The writes of <see cref="BuildIndexWrites(string)"/> for the index of this moment, left for
+    /// The index of this moment, after the folder recovery file while folders are in use, left for
     /// the writer to serialize. Under _writeGate on the owner context; the records are copied and the
     /// folder state is built fresh, so later owner-thread changes cannot reach the queued job.
     /// </summary>
@@ -500,7 +496,7 @@ public sealed partial class CaptureQueue
             Records = records, FolderState = folderState,
             SavedSearches = _savedSearches.Count == 0 ? null : JsonSerializer.SerializeToElement(_savedSearches, SerializerOptions),
         };
-        var indexWrite = new DetachedWrite(_paths.IndexFile, () => JsonSerializer.SerializeToUtf8Bytes(index, SerializerOptions));
+        var indexWrite = new DetachedWrite(_paths.IndexFile, () => SerializeIndex(index));
         return folderState is null
             ? [indexWrite]
             : [new(FolderRecoveryFile, () => JsonSerializer.SerializeToUtf8Bytes(folderState, SerializerOptions)), indexWrite];
