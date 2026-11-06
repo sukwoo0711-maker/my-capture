@@ -169,12 +169,13 @@ public sealed class CountdownWindowMotionTests
         };
         bool closed = false;
         window.Closed += (_, _) => closed = true;
+        // The test owns the clock: each second is one explicit tick. The window starts its timer as it
+        // loads, so the timer stops right there: a slow first frame must not let a second pass first.
+        window.Loaded += (_, _) => Field<DispatcherTimer>(window, "_timer").Stop();
         try
         {
             window.Show();
             ControlStateMotionTests.Drain(window);
-            // The test owns the clock: each second is one explicit tick.
-            Field<DispatcherTimer>(window, "_timer").Stop();
             body(window);
         }
         finally
