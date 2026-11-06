@@ -123,7 +123,7 @@ public sealed partial class SettingsThemePreviewTests
     // ---- Library fixture -------------------------------------------------------------
 
     private sealed record EvidenceLibrary(GalleryWindow Window, GalleryViewModel ViewModel, CaptureQueue Queue,
-        RecoverableLibraryService Recovery, AppPaths Paths, IReadOnlyList<CaptureRecord> Records);
+        RecoverableLibraryService Recovery, AppPaths Paths, IReadOnlyList<CaptureRecord> Records, EvidenceTrash Trash);
 
     private static byte[] EvidenceThumbnailPng(Color color)
     {
@@ -181,8 +181,11 @@ public sealed partial class SettingsThemePreviewTests
             }
         }
         queue.Save();
-        var recovery = new RecoverableLibraryService(queue, paths, new EvidenceTrash(Path.Combine(root, "fake-trash")), NullLogger.Instance);
+        var trash = new EvidenceTrash(Path.Combine(root, "fake-trash"));
+        var recovery = new RecoverableLibraryService(queue, paths, trash, NullLogger.Instance);
+        // As in the app, a delete of several captures is prepared as one batch.
         queue.PrepareRemoval = recovery.PrepareRemoval;
+        queue.PrepareRemovals = recovery.PrepareRemovals;
         var controller = new GalleryController(queue, NullLogger<GalleryController>.Instance) { Recovery = recovery };
         var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
         var commit = new CaptureCommitService(persistence, () => settings, () => paths,
@@ -204,17 +207,40 @@ public sealed partial class SettingsThemePreviewTests
         window.ReadHotkeys = () => settings.Hotkeys;
         window.Closed += (_, _) => presenter.Dispose();
         FluidMotion.SetWindowEntrance(window, false);
-        return new EvidenceLibrary(window, vm, queue, recovery, paths, records);
+        return new EvidenceLibrary(window, vm, queue, recovery, paths, records, trash);
     }
 
-    /// <summary>Moves directories into an app-owned temporary folder; never the Windows Recycle Bin.</summary>
+    /// <summary>
+    /// Moves directories into an app-owned temporary folder; never the Windows Recycle Bin. A test
+    /// can hold a move part-way, as a slow Recycle Bin would, to see the window while it runs.
+    /// </summary>
     private sealed class EvidenceTrash(string root) : IRecoverableTrash
     {
         private readonly WindowsRecycleBin _identity = new();
         private readonly Dictionary<string, RecycledPathReceipt> _receipts = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ManualResetEventSlim _released = new(initialState: true);
+        private int _holdAfter = -1, _moves;
+        private volatile bool _holding;
+
+        /// <summary>The move after the next <paramref name="moved"/> directories waits for <see cref="ReleaseHold"/>.</summary>
+        public void HoldAfter(int moved)
+        {
+            _released.Reset();
+            Volatile.Write(ref _moves, 0);
+            Volatile.Write(ref _holdAfter, moved);
+        }
+
+        public bool IsHolding => _holding;
+        public void ReleaseHold() => _released.Set();
         public string GetIdentity(string path) => _identity.GetIdentity(path);
         public RecycledPathReceipt RecycleDirectory(string path)
         {
+            if (Interlocked.Increment(ref _moves) == Volatile.Read(ref _holdAfter) + 1)
+            {
+                _holding = true;
+                _released.Wait(TimeSpan.FromSeconds(30));
+                _holding = false;
+            }
             Directory.CreateDirectory(root);
             string target = Path.Combine(root, Guid.NewGuid().ToString("N"));
             string identity = GetIdentity(path);

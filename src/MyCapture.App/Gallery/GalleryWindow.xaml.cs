@@ -799,11 +799,11 @@ internal sealed partial class GalleryWindow : Window
     private static readonly string[] ConfirmationStatusKeys =
         ["Library.SourcePage.Copied", "Library.Source.PathCopied", "Library.Image.Copied"];
 
-    // Export lines that the outcome replaces.
+    // Export, delete and undo lines that the outcome replaces.
     private static readonly string[] ProgressStatusKeys =
     [
         "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
-        "LibraryUndo_Restoring",
+        "LibraryUndo_Restoring", "LibrarySelection_Moving", "LibrarySelection_MovingProgress",
     ];
 
     private void InitializeActionStatus()

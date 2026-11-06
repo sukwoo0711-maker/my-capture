@@ -3071,6 +3071,8 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>Restored {0} {0:plural:item|items} to the library · {1} {1:plural:remains|remain} in the Recycle Bin.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed {0:plural:item still has|items still have} files awaiting cleanup. No disk space recovery is confirmed for {0:plural:it|those items}.</value></data>
+  <data name="LibrarySelection_Moving" xml:space="preserve"><value>Moving {0} {0:plural:item|items} to the Recycle Bin…</value></data>
+  <data name="LibrarySelection_MovingProgress" xml:space="preserve"><value>Moving {0} of {1} {1:plural:item|items} to the Recycle Bin…</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>Recycle Bin unavailable</value></data>
   <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>{0} {0:plural:item|items} cannot be moved to the Recycle Bin. The Recycle Bin may be turned off, or the items may be on a removable or network drive or larger than the Recycle Bin. Delete {0:plural:this item|these items} permanently? Permanently deleted items cannot be restored.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>Delete permanently</value></data>

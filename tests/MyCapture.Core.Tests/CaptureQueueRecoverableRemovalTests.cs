@@ -218,6 +218,66 @@ public sealed class CaptureQueueRecoverableRemovalTests
         using IDisposable newEditorLease = queue.AcquireEvictionLease(second.Id);
     }
 
+    [Fact]
+    public async Task BatchPreparation_PreparesEveryCandidateInOneCall_AndKeepsWhatItDidNotAdmit()
+    {
+        var queue = CreateQueue();
+        var moved = Record(1); var refused = Record(2); var failed = Record(3); var unanswered = Record(4);
+        foreach (CaptureRecord record in new[] { moved, refused, failed, unanswered }) queue.Add(record);
+        queue.PrepareRemoval = (_, _) => throw new InvalidOperationException("a batch must not be prepared one record at a time");
+        var calls = new List<(Guid[] Ids, string Reason)>();
+        queue.PrepareRemovals = (records, reason) =>
+        {
+            calls.Add((records.Select(record => record.Id).ToArray(), reason));
+            return records.Select(record =>
+                record.Id == moved.Id ? new CaptureRemovalAdmission(new Transaction())
+                : record.Id == refused.Id ? new CaptureRemovalAdmission(null, new RecycleBinUnavailableException())
+                : record.Id == failed.Id ? new CaptureRemovalAdmission(null, new IOException("synthetic journal failure"))
+                : default).ToArray();
+        };
+        var result = await queue.RemoveManyAsync([moved.Id, refused.Id, failed.Id, unanswered.Id]);
+        var call = Assert.Single(calls);
+        Assert.Equal("manual-batch", call.Reason);
+        Assert.Equal(new[] { moved.Id, refused.Id, failed.Id, unanswered.Id }.Order(), call.Ids.Order());
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(refused.Id, Assert.Single(result.RecycleUnavailableIds));
+        Assert.Null(queue.Find(moved.Id));
+        Assert.Same(refused, queue.Find(refused.Id));
+        Assert.Same(failed, queue.Find(failed.Id));
+        Assert.Same(unanswered, queue.Find(unanswered.Id));
+        Assert.Equal(30, queue.TotalBytes);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BatchPreparation_ThatFailsOrAnswersShort_KeepsEveryUnansweredRecord(bool throws)
+    {
+        var queue = CreateQueue(); var first = Record(1); var second = Record(2);
+        queue.Add(first); queue.Add(second);
+        queue.PrepareRemoval = (_, _) => new Transaction();
+        queue.PrepareRemovals = (_, _) =>
+        {
+            if (throws) throw new IOException("synthetic Shell failure");
+            return [];
+        };
+        var result = await queue.RemoveManyAsync([first.Id, second.Id]);
+        Assert.Equal(0, result.RemovedCount);
+        Assert.Empty(result.RecycleUnavailableIds);
+        Assert.Equal(2, queue.Count);
+    }
+
+    [Fact]
+    public async Task SingleCandidate_IsPreparedOnItsOwn()
+    {
+        var queue = CreateQueue(); var record = Record(1); queue.Add(record);
+        int single = 0;
+        queue.PrepareRemoval = (_, _) => { single++; return new Transaction(); };
+        queue.PrepareRemovals = (_, _) => throw new InvalidOperationException("one record needs no batch");
+        Assert.Equal(1, (await queue.RemoveManyAsync([record.Id])).RemovedCount);
+        Assert.Equal(1, single);
+    }
+
     private sealed class ThrowingRollback : ICaptureRemovalTransaction
     {
         public bool Rollback() => throw new IOException("synthetic unavailable restore");

@@ -3071,6 +3071,8 @@
   <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>라이브러리에 {0}개 복원됨 · {1}개는 휴지통에 남아 있습니다.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>삭제를 저장하지 못했습니다. 라이브러리를 확인한 후 다시 시도하십시오.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>삭제된 {0}개 항목의 파일 정리가 아직 완료되지 않았습니다. 해당 항목의 디스크 공간 확보는 확인되지 않았습니다.</value></data>
+  <data name="LibrarySelection_Moving" xml:space="preserve"><value>{0}개를 휴지통으로 옮기는 중…</value></data>
+  <data name="LibrarySelection_MovingProgress" xml:space="preserve"><value>{1}개 중 {0}개를 휴지통으로 옮기는 중…</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>휴지통 사용 불가</value></data>
   <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>휴지통으로 옮길 수 없는 항목이 {0}개 있습니다. 휴지통이 꺼져 있거나, 항목이 이동식·네트워크 드라이브에 있거나, 휴지통 용량보다 클 수 있습니다. 이 항목을 영구 삭제하시겠습니까? 영구 삭제한 항목은 복원할 수 없습니다.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>영구 삭제</value></data>

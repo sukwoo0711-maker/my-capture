@@ -31,6 +31,11 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private readonly int _decodePixelWidth;
     private readonly Dictionary<Guid, GalleryItemViewModel> _tileCache = [];
     private readonly LinkedList<Guid> _thumbnailRecency = new();
+    /// <summary>
+    /// Captures whose deletion is under way. The view drops them at once, while their files are
+    /// still moving to the Recycle Bin, so a large delete never leaves blank cards on screen.
+    /// </summary>
+    private readonly HashSet<Guid> _leaving = [];
     private bool _thumbnailLoadingEnabled = true;
     private GalleryThumbnailLoader? _thumbnailLoader;
     private Dispatcher? _thumbnailDispatcher;
@@ -251,7 +256,16 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public bool IsEmpty => _groups.Count == 0;
 
     /// <summary>True when the queue itself is empty (as opposed to a search with no hits).</summary>
-    public bool QueueIsEmpty => _controller.Count == 0;
+    /// <remarks>Captures still leaving for the Recycle Bin already count as gone.</remarks>
+    public bool QueueIsEmpty => _leaving.Count == 0
+        ? _controller.Count == 0
+        : _controller.Records.All(record => _leaving.Contains(record.Id));
+
+    /// <summary>Hides these captures from the next refresh on, while their deletion runs.</summary>
+    internal void SetLeaving(IEnumerable<Guid> ids) => _leaving.UnionWith(ids);
+
+    /// <summary>Ends <see cref="SetLeaving"/>: a capture the deletion kept shows again at the next refresh.</summary>
+    internal void ClearLeaving(IEnumerable<Guid> ids) => _leaving.ExceptWith(ids);
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
 
@@ -319,7 +333,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         IsRefreshingFolderTree = true;
         try { RefreshFolderTree(); }
         finally { IsRefreshingFolderTree = false; }
-        CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false).ToArray();
+        CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false)
+            .Where(record => !_leaving.Contains(record.Id)).ToArray();
         _folderIsEmpty = HasFolderScope && candidates.Length == 0;
         _searchCandidateCount = candidates.Count(record => MatchesMediaFilter(record) && MatchesTagFilter(record));
         // Browsing shows a location like File Explorer: its folder cards and only the captures
@@ -342,7 +357,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             var tiles = new List<GalleryItemViewModel>(group.Records.Count);
             foreach (CaptureRecord record in group.Records)
             {
-                if (!MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
+                if (_leaving.Contains(record.Id) || !MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
                 GalleryItemViewModel tile = GetOrCreateTile(record);
                 tile.SetSearchMatch(HasSearchQuery, searchMatchFields.GetValueOrDefault(record.Id));
                 // Only a capture listed outside its own folder carries the badge; while browsing
