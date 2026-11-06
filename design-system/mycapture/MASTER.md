@@ -27,7 +27,9 @@ Primitive → Semantic → Component. Primitive colours (`Primitive.*`) feed rol
 dimensions and styles. The active neutral ramp is `Primitive.Warm*`: 980/950/900/850 are `#080C12`/`#0B0F17`/
 `#101722`/`#151E2B`; 600/550 are `#6A7B94`/`#56677F`. Legacy primitive names remain compatibility aliases.
 Semantic roles are what UI code uses: `Surface.*` is a four-step depth ladder (Canvas, Base, Raised, Overlay),
-`Text.*` carries hierarchy, `State.*` marks warning, success and danger (timeline layers included), and
+`Text.*` carries hierarchy, `State.*` marks warning, success and danger (timeline layers included; warning
+and success words take `Text.Warning`/`Text.Success`, which reach 4.5:1 on the surfaces that carry them,
+while glyphs, fills and outlines keep `State.*`), and
 `Accent.*` belongs to the approved consumers that `AccentUsagePolicyTests` lists. Component values are the
 `Size.*`, `Space.*`, `Radius.*`, `Focus.*` and `Motion.*` tokens plus the control styles in `Controls.xaml`.
 The table lists the resolved `Tokens.xaml` defaults before runtime palette overrides; sizes are DIP.
@@ -42,6 +44,8 @@ The table lists the resolved `Tokens.xaml` defaults before runtime palette overr
 | Text.Primary | #FFFFFF |
 | Text.Secondary | #C9D1DD |
 | Text.Muted | #9AA5B5 |
+| Text.Warning | #F5B942 |
+| Text.Success | #45D6A2 |
 | Surface.Canvas | #080C12 |
 | Surface.Base | #0B0F17 |
 | Surface.Raised | #101722 |

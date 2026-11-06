@@ -256,6 +256,9 @@ public sealed class QuickAccessMotionTests
             Assert.InRange(StrokeDrawMotion.GetProgress(glyph), 0, 0.999);
             Assert.NotSame(restText, card.StatusForegroundForTest);
             Assert.True(card.StatusForegroundForTest.HasAnimatedProperties);
+            // The words glow in the success text hue; the check keeps the State hue.
+            Assert.Equal(SuccessText, (Color)Assert.IsType<SolidColorBrush>(card.StatusForegroundForTest)
+                .GetAnimationBaseValue(SolidColorBrush.ColorProperty));
             // The button's icon crossfades to a check, which is state for 1.2 s.
             Assert.True(card.ShowsSuccessCheckForTest("Copy"));
             Assert.Same(CheckGeometry, icon.Data);
@@ -360,6 +363,9 @@ public sealed class QuickAccessMotionTests
     private static SymbolIcon ActionIcon(Button button) =>
         QuickAccessLabelFixture.IconOf(button) ?? throw new Xunit.Sdk.XunitException("The action has no icon.");
 
+    // Differs from the fixture's State.Success, so the text tint shows which token it started from.
+    private static readonly Color SuccessText = Color.FromRgb(0x17, 0x77, 0x54);
+
     private static QuickAccessWindow Card(ReceiptKeyboardRouter router, Func<Task<bool>>? copy = null,
         Func<Task<bool>>? save = null)
     {
@@ -370,6 +376,7 @@ public sealed class QuickAccessMotionTests
             excludeFromCapture: false, targetMonitor: Offscreen(), keyboardRouter: router);
         card.Resources["Icon.Check"] = CheckGeometry;
         card.Resources["State.Success"] = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
+        card.Resources["Text.Success"] = new SolidColorBrush(SuccessText);
         card.Resources["Text.Primary"] = new SolidColorBrush(Color.FromRgb(0xF2, 0xF0, 0xEB));
         return card;
     }

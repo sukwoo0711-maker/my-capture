@@ -113,7 +113,7 @@ internal sealed class RecordingWallClockWindow : Window
             FontFamily = TryFont("Font.Mono"),
             FontSize = _currentFontSize,
             FontWeight = FontWeights.SemiBold,
-            Foreground = TryBrush("State.Warning", Color.FromRgb(0xF5, 0xB9, 0x42)),
+            Foreground = TryBrush("Text.Warning", Color.FromRgb(0xF5, 0xB9, 0x42)),
             Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.NoWrap,

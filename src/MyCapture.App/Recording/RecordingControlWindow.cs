@@ -528,7 +528,7 @@ internal sealed class RecordingControlWindow : Window
         _completionProgress.Visibility = Visibility.Collapsed;
         _primaryButton.Visibility = Visibility.Collapsed;
         _statusText.Text = UiText.Get("RecordingStatus_Saved");
-        _statusText.Foreground = TryBrush("State.Success", SuccessFallback);
+        _statusText.Foreground = TryBrush("Text.Success", SuccessFallback);
         AnnounceStatus();
         _savedHold = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = SavedHoldLimit };
         _savedHold.Tick += (_, _) => LeaveAfterSaved();

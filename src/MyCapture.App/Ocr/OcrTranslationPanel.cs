@@ -253,7 +253,7 @@ internal sealed class OcrTranslationPanel : Grid
         if (result.Translation.NeedsReview)
         {
             var warning = new TextBlock { Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap };
-            warning.SetResourceReference(TextBlock.ForegroundProperty, "State.Warning");
+            warning.SetResourceReference(TextBlock.ForegroundProperty, "Text.Warning");
             warning.Text = string.Join("\n", ReviewNotes(result.Translation));
             texts.Children.Add(warning);
         }

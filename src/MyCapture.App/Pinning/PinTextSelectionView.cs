@@ -12,6 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Pin;
+using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Pinning;
 
@@ -23,6 +24,8 @@ internal sealed class PinTextSelectionView : Grid
     private readonly int[] _characterStarts = [];
     private readonly int[] _characterEnds = [];
     private readonly PinTableSelection? _table;
+    private readonly PinTableCellLayout? _tableLayout;
+    private (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical)? _tableSnapKey;
     private readonly TextBlock? _tableLimit;
     private readonly DispatcherTimer? _dragScrollTimer;
     private int _anchorRow;
@@ -44,6 +47,8 @@ internal sealed class PinTextSelectionView : Grid
         backgroundBrush.Freeze();
         Brush foreground = Luminance(background) > 0.179 ? Brushes.Black : Brushes.White;
         Background = backgroundBrush;
+        ConfigureScrollBars(background);
+        Loaded += (_, _) => ConfigureScrollBars(background);
         ClipToBounds = true;
         AutomationProperties.SetName(this, UiText.Get("Pin_SelectText"));
         CommandManager.AddPreviewCanExecuteHandler(this, OnPreviewCanExecute);
@@ -52,23 +57,27 @@ internal sealed class PinTextSelectionView : Grid
         if (content.Kind == PinContentKind.Table)
         {
             _table = new PinTableSelection(_original);
+            _tableLayout = new PinTableCellLayout(_original, _table);
             TableGrid = new DataGrid
             {
                 Style = null,
                 Background = backgroundBrush,
-                Foreground = foreground,
-                RowBackground = backgroundBrush,
-                AlternatingRowBackground = backgroundBrush,
+                Foreground = ClipboardTextRenderer.TextForeground,
+                RowBackground = Brushes.Transparent,
+                AlternatingRowBackground = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                // The picture's own cell lines; a DataGrid without a style draws black ones.
-                HorizontalGridLinesBrush = ClipboardTextRenderer.TableGridLineBrush,
-                VerticalGridLinesBrush = ClipboardTextRenderer.TableGridLineBrush,
+                GridLinesVisibility = DataGridGridLinesVisibility.None,
+                CellStyle = PinTableCell.CreateCellStyle(),
+                RowStyle = PinTableCell.CreateRowStyle(),
+                UseLayoutRounding = false,
+                SnapsToDevicePixels = false,
                 AutoGenerateColumns = false,
                 IsReadOnly = true,
                 CanUserAddRows = false,
                 CanUserDeleteRows = false,
                 CanUserReorderColumns = false,
                 CanUserResizeRows = false,
+                CanUserResizeColumns = false,
                 CanUserSortColumns = false,
                 HeadersVisibility = DataGridHeadersVisibility.None,
                 SelectionUnit = DataGridSelectionUnit.Cell,
@@ -81,17 +90,20 @@ internal sealed class PinTextSelectionView : Grid
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
             VirtualizingPanel.SetVirtualizationMode(TableGrid, VirtualizationMode.Recycling);
+            // The unthemed WPF template otherwise uses the OS's 17-DIP bars. The shared
+            // app style uses 16 DIP; keep isolated hosts and the template's corner equal.
+            TableGrid.Resources[SystemParameters.VerticalScrollBarWidthKey] = (double)ClipboardTextRenderer.TableMargin;
+            TableGrid.Resources[SystemParameters.HorizontalScrollBarHeightKey] = (double)ClipboardTextRenderer.TableMargin;
             AutomationProperties.SetName(TableGrid, UiText.Get("Pin_SelectText"));
             BindPinContextMenu(TableGrid);
             var rows = _table.Rows.Select(row => Enumerable.Range(0, _table.ColumnCount)
                 .Select(column => column < row.Count ? row[column] : string.Empty).ToArray()).ToArray();
             for (int column = 0; column < _table.ColumnCount; column++)
             {
-                TableGrid.Columns.Add(new DataGridTextColumn
+                TableGrid.Columns.Add(new PinTableColumn(_tableLayout, column)
                 {
                     DisplayIndex = column,
-                    Binding = new Binding($"[{column}]"),
-                    Width = DataGridLength.SizeToCells,
+                    Width = _tableLayout.Widths[column],
                     IsReadOnly = true,
                 });
             }
@@ -110,6 +122,15 @@ internal sealed class PinTextSelectionView : Grid
             };
             _dragScrollTimer.Tick += (_, _) => ExtendSelectionTo(_dragPoint);
             Unloaded += (_, _) => StopDragSelection();
+            // The cells' one-device-pixel lines need a redraw after a pass that moved them off
+            // their pixel phase: the first open, scrolling and newly realised rows or columns.
+            LayoutUpdated += OnTableLayoutUpdated;
+            Loaded += (_, _) =>
+            {
+                LayoutUpdated -= OnTableLayoutUpdated;
+                LayoutUpdated += OnTableLayoutUpdated;
+            };
+            Unloaded += (_, _) => LayoutUpdated -= OnTableLayoutUpdated;
             Children.Add(TableGrid);
             if (_table.IsTruncated)
             {
@@ -242,20 +263,53 @@ internal sealed class PinTextSelectionView : Grid
         if (TableGrid is not null)
         {
             TableGrid.FontSize = TypeScale.Content.TableText * _zoom;
-            TableGrid.Margin = new Thickness(16 * _zoom);
-            TableGrid.RowHeight = 34 * _zoom;
+            TableGrid.Margin = new Thickness(ClipboardTextRenderer.TableMargin * _zoom, ClipboardTextRenderer.TableMargin * _zoom, 0, 0);
+            TableGrid.RowHeight = ClipboardTextRenderer.TableRowHeight * _zoom;
             TableGrid.MinColumnWidth = 0;
-            TableGrid.MaxColumnWidth = 320 * _zoom;
-            TableGrid.MinColumnWidth = 72 * _zoom;
-            var textStyle = new Style(typeof(TextBlock));
-            textStyle.Setters.Add(new Setter(TextBlock.MarginProperty, new Thickness(12 * _zoom, 7 * _zoom, 12 * _zoom, 7 * _zoom)));
-            foreach (DataGridTextColumn column in TableGrid.Columns) column.ElementStyle = textStyle;
+            TableGrid.MaxColumnWidth = ClipboardTextRenderer.MaximumColumnWidth * _zoom;
+            _tableLayout!.Zoom = _zoom;
+            foreach (PinTableColumn column in TableGrid.Columns)
+                column.Width = _tableLayout.Widths[column.DisplayIndex] * _zoom;
         }
         if (_tableLimit is not null)
         {
             _tableLimit.FontSize = TypeScale.Caption * _zoom;
             _tableLimit.Margin = new Thickness(4 * _zoom, 0, 4 * _zoom, 4 * _zoom);
         }
+    }
+
+    private void OnTableLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (TableGrid is null || _tableLayout is null) return;
+        var scroll = TableGrid.Template?.FindName("DG_ScrollViewer", TableGrid) as ScrollViewer;
+        Point origin = PinTableCell.RootOrigin(TableGrid, out DpiScale dpi);
+        (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical) key =
+            (origin, dpi.DpiScaleX, dpi.DpiScaleY, scroll?.HorizontalOffset ?? 0, scroll?.VerticalOffset ?? 0);
+        // Without the template's scroll viewer a scroll cannot be told apart, so check every cell.
+        bool moved = scroll is null || key != _tableSnapKey;
+        _tableSnapKey = key;
+        _tableLayout.Resnap(TableGrid, moved);
+    }
+
+    private void ConfigureScrollBars(Color background)
+    {
+        AppTheme theme = ThemeService.EffectiveTheme;
+        if (ThemeService.IsSystemHighContrast || theme == AppTheme.HighContrast ||
+            AppThemeNames.IsLight(theme) || Luminance(background) <= 0.179) return;
+        // Resolve outside our own resources on subsequent Loaded calls as well.
+        Style? basis = (Parent as FrameworkElement)?.TryFindResource(typeof(ScrollBar)) as Style
+            ?? Application.Current?.TryFindResource(typeof(ScrollBar)) as Style;
+        if (basis is null) return;
+        var style = new Style(typeof(ScrollBar), basis);
+        var colors = ThemeCatalog.ColorsFor(AppThemeNames.UsesBackdrop(theme) ? AppTheme.GlassLight : AppTheme.Daylight);
+        foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary" })
+        {
+            ThemeColor color = colors[key];
+            var brush = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));
+            brush.Freeze();
+            style.Resources[key] = brush;
+        }
+        Resources[typeof(ScrollBar)] = style;
     }
 
     internal bool TryScroll(int delta)
@@ -355,7 +409,7 @@ internal sealed class PinTextSelectionView : Grid
                 break;
             case Key.PageUp:
             case Key.PageDown:
-                int page = Math.Max(1, (int)(TableGrid.ActualHeight / TableGrid.RowHeight) - 1);
+                int page = Math.Max(1, (int)((TableGrid.ActualHeight - ClipboardTextRenderer.TableMargin * _zoom) / TableGrid.RowHeight) - 1);
                 row += key == Key.PageUp ? -page : page;
                 break;
             case Key.Tab:
