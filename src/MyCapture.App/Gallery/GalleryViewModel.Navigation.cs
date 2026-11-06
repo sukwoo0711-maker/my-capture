@@ -212,6 +212,14 @@ public sealed partial class GalleryViewModel
         return steps;
     }
 
+    /// <summary>
+    /// What the location header names, written the way a group heading writes a location: the steps after the
+    /// library root joined like a folder path ("Root / Nested", or an opened date "2026-10-11"). Null while no
+    /// location header is shown.
+    /// </summary>
+    private string? LocationHeading() =>
+        ShowLocationHeader ? string.Join(" / ", BuildBreadcrumb().Skip(1).Select(step => step.Name)) : null;
+
     private void RefreshNavigation()
     {
         IReadOnlyList<GalleryBreadcrumb> breadcrumb = BuildBreadcrumb();

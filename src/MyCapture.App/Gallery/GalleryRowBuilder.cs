@@ -106,8 +106,8 @@ public static class GalleryRowBuilder
 
     /// <summary>
     /// Flattens <paramref name="groups"/> into a header/tile-row sequence: for each group, a
-    /// <see cref="GalleryHeaderRow"/> (unless <see cref="GalleryGroupViewModel.ShowsHeading"/> is false, as for a
-    /// folder view whose heading would repeat its location header), then its folder cards chunked into
+    /// <see cref="GalleryHeaderRow"/> (unless <see cref="GalleryGroupViewModel.ShowsHeading"/> is false, as for an
+    /// opened folder or date whose heading would repeat the location header), then its folder cards chunked into
     /// <see cref="GalleryFolderRow"/>s, then its tiles chunked into
     /// <see cref="GalleryTileRow"/>s, each row holding at most <paramref name="columns"/> items.
     /// </summary>
