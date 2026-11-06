@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -174,9 +175,94 @@ internal static class CaptureWindowExclusion
 
     internal static void ExcludeMenuPopup(ContextMenu menu)
     {
-        if (PresentationSource.FromVisual(menu) is HwndSource popup && TryApply(popup.Handle)) return;
+        var popup = PresentationSource.FromVisual(menu) as HwndSource;
+        if (popup is not null && TryApply(popup.Handle)) return;
         Logger.LogWarning("Could not exclude capture control popup; closing it");
         menu.IsOpen = false;
+        HideClosedPopup(popup);
+    }
+
+    // WPF keeps a closed animated popup's window on screen for its closing animation and renders
+    // it meanwhile (about 100 to 200 ms), so capture would still see it: hide the window now.
+    private static void HideClosedPopup(HwndSource? popup)
+    {
+        if (popup is not null && !popup.IsDisposed) _ = ShowWindow(popup.Handle, SwHide);
+    }
+
+    private sealed class ToolTipGuard(Func<bool> closeUnexcluded)
+    {
+        internal Func<bool> CloseUnexcluded { get; } = closeUnexcluded;
+        internal ToolTip? Unexcluded;
+    }
+
+    private static readonly ConditionalWeakTable<Window, ToolTipGuard> ToolTipGuards = new();
+    private static int s_toolTipHandler;
+
+    /// <summary>
+    /// Keeps the tooltips of <paramref name="window"/> out of capture too. WPF opens each tooltip
+    /// in a popup window of its own, which the window's display affinity does not reach, and
+    /// ToolTip.Opened does not route to the window. A tooltip that cannot be excluded (WPF's
+    /// per-pixel-alpha popup on Windows 10) is hidden before it renders while
+    /// <paramref name="closeUnexcluded"/> answers true.
+    /// </summary>
+    internal static void ExcludeToolTips(Window window, Func<bool> closeUnexcluded)
+    {
+        if (Interlocked.Exchange(ref s_toolTipHandler, 1) == 0)
+        {
+            EventManager.RegisterClassHandler(typeof(ToolTip), ToolTip.OpenedEvent,
+                new RoutedEventHandler(OnToolTipOpened), handledEventsToo: true);
+        }
+        ToolTipGuards.AddOrUpdate(window, new ToolTipGuard(closeUnexcluded));
+    }
+
+    /// <summary>Hides a tooltip of <paramref name="window"/> that opened unexcluded, before capture starts.</summary>
+    internal static void CloseUnexcludedToolTip(Window window)
+    {
+        if (!ToolTipGuards.TryGetValue(window, out ToolTipGuard? guard) || guard.Unexcluded is not { } tip) return;
+        guard.Unexcluded = null;
+        CloseNow(tip);
+    }
+
+    private static void CloseNow(ToolTip tip)
+    {
+        var popup = PresentationSource.FromVisual(tip) as HwndSource;
+        tip.IsOpen = false;
+        HideClosedPopup(popup);
+    }
+
+    private static void OnToolTipOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToolTip tip || PresentationSource.FromVisual(tip) is not HwndSource popup
+            || OwnerWindow(tip.PlacementTarget) is not { } owner
+            || !ToolTipGuards.TryGetValue(owner, out ToolTipGuard? guard))
+        {
+            return;
+        }
+        // Opened follows the popup's ShowWindow before WPF renders it, so no frame has shown it yet.
+        bool layered = tip.Parent is Popup { AllowsTransparency: true };
+        if ((!layered || SupportsLayeredWindows) && TryApply(popup.Handle)) return;
+        if (!guard.CloseUnexcluded())
+        {
+            guard.Unexcluded = tip;
+            return;
+        }
+        Logger.LogDebug("Could not exclude a capture control tooltip; hiding it");
+        CloseNow(tip);
+    }
+
+    // WPF gives a popup HWND an owner only while its target's window is in the foreground, which
+    // the palette rarely is while recording, so follow placement targets instead: a menu item's
+    // tooltip targets the item, whose menu popup targets the palette's button.
+    private static Window? OwnerWindow(DependencyObject? element)
+    {
+        for (int step = 0; element is not null && step < 256; step++)
+        {
+            if (element is Window window) return window;
+            element = element is Popup popup
+                ? popup.PlacementTarget
+                : LogicalTreeHelper.GetParent(element) ?? (element is Visual ? VisualTreeHelper.GetParent(element) : null);
+        }
+        return null;
     }
 
     internal static void DisableTransitions(Window window)
@@ -191,4 +277,10 @@ internal static class CaptureWindowExclusion
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
+
+    private const int SwHide = 0;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr window, int command);
 }

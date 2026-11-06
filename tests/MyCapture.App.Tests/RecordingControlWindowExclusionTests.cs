@@ -282,6 +282,78 @@ public sealed class RecordingControlWindowExclusionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void PaletteToolTipsAreExcludedOrHiddenBeforeTheyCanBeRecorded(bool supported) => StaTestHost.Run(() =>
+    {
+        using var mode = new ExclusionMode(supported);
+        // A tooltip is a WPF per-pixel-alpha popup of its own, which Windows 10 cannot exclude.
+        bool excludable = supported && NativeExclusion.SupportsLayeredWindows;
+        RectD work = MonitorEnumerator.GetFromPoint(new PointD(100, 100)).WorkArea;
+        RectD region = new RectD(work.Center.X - 80, work.Center.Y - 50, 160, 100).ToPixelBounds();
+        using var received = new ManualResetEventSlim();
+        using var recorder = new RegionRecorder(
+            new RegionFrameGrabber(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance), false,
+                backend: RecordingCaptureBackend.Gdi),
+            options => new FrameSink(options.Width, options.Height, received), NullLogger.Instance);
+        var window = CreateWindow(region, () => recorder);
+        bool finished = false;
+        Exception? failure = null;
+        window.RecordingFinished += (_, _) => finished = true;
+        window.Failed += (_, args) => failure = args.Exception;
+        var tips = new List<ToolTip>();
+        ContextMenu? menu = null;
+        try
+        {
+            window.Show();
+            window.UpdateLayout();
+            // A forced layered palette cannot be excluded where the OS cannot exclude layered
+            // windows (Windows 10); the small region leaves it outside, so recording still starts.
+            Assert.Equal(NativeExclusion.ExpectsSuccess(supported), window.IsCaptureExcluded);
+
+            // Nothing is recorded yet, so a tooltip that cannot be excluded may still show...
+            (ToolTip ready, IntPtr readyPopup) = OpenToolTip(window.PrimaryButtonForTest, tips);
+            Assert.True(ready.IsOpen);
+            Assert.True(IsWindowVisible(readyPopup));
+            Assert.True(Assert.IsType<System.Windows.Controls.Primitives.Popup>(ready.Parent).AllowsTransparency);
+            Assert.Equal(excludable ? 0x11u : 0u, NativeExclusion.Affinity(readyPopup));
+
+            // ...but it is hidden before the recorder starts. WPF would keep a closed tooltip's
+            // window on screen for its closing animation.
+            window.PrimaryButtonForTest.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.True(window.IsRecording, "Start did not reach the capture worker: " + NativeExclusion.Field<Exception?>(recorder, "_failure"));
+            Assert.Equal(excludable, ready.IsOpen);
+            Assert.Equal(excludable, IsWindowVisible(readyPopup));
+
+            // While recording, a palette tooltip is excluded, or hidden within IsOpen = true before
+            // WPF renders it; so is a tooltip in the ⋯ menu, whose popup the palette owns.
+            AssertRecordingToolTip(window.PauseButtonForTest, excludable, tips);
+            menu = window.CreateMoreMenu();
+            menu.IsOpen = true;
+            NativeExclusion.Drain();
+            Assert.Equal(NativeExclusion.ExpectsSuccess(supported), menu.IsOpen);
+            if (menu.IsOpen) AssertRecordingToolTip(menu.Items.OfType<MenuItem>().First(), excludable, tips);
+
+            PumpUntil(() => received.IsSet || failure is not null);
+            Assert.Null(failure);
+            window.RequestStop();
+            PumpUntil(() => finished || failure is not null);
+            Assert.Null(failure);
+        }
+        finally
+        {
+            foreach (ToolTip tip in tips) tip.IsOpen = false;
+            if (menu is not null) menu.IsOpen = false;
+            if (window.IsRecording)
+            {
+                window.RequestStop();
+                PumpUntil(() => finished || failure is not null);
+            }
+            window.CompleteAndClose();
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ModePreservesPaletteContentAndLayeredModeHasNoWindowRegion(bool supported) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(supported);
@@ -410,6 +482,27 @@ public sealed class RecordingControlWindowExclusionTests
         finally { DeleteObject(actual); DeleteObject(expected); }
     }
 
+    private static void AssertRecordingToolTip(FrameworkElement owner, bool excludable, List<ToolTip> opened)
+    {
+        (ToolTip tip, IntPtr popup) = OpenToolTip(owner, opened);
+        Assert.Equal(excludable, tip.IsOpen);
+        Assert.Equal(excludable, IsWindowVisible(popup));
+        if (excludable) Assert.Equal(0x11u, NativeExclusion.Affinity(popup));
+    }
+
+    // The tooltip service wraps a string tooltip in a ToolTip placed on its owner the same way.
+    // IsOpen = true shows the popup and raises Opened synchronously, before WPF renders it.
+    private static (ToolTip Tip, IntPtr Popup) OpenToolTip(FrameworkElement owner, List<ToolTip> opened)
+    {
+        var tip = new ToolTip { Content = owner.ToolTip ?? "tooltip", PlacementTarget = owner };
+        IntPtr popup = IntPtr.Zero;
+        tip.Opened += (_, _) => popup = Assert.IsType<HwndSource>(PresentationSource.FromVisual(tip)).Handle;
+        opened.Add(tip);
+        tip.IsOpen = true;
+        Assert.NotEqual(IntPtr.Zero, popup);
+        return (tip, popup);
+    }
+
     private static Rect ScreenBounds(FrameworkElement element) => new(
         element.PointToScreen(new Point()), element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight)));
 
@@ -479,6 +572,9 @@ public sealed class RecordingControlWindowExclusionTests
     private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rectangle);
     [DllImport("user32.dll")]
     private static extern int GetWindowRgn(IntPtr hwnd, IntPtr region);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);
     [DllImport("gdi32.dll")]

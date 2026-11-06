@@ -176,6 +176,8 @@ internal sealed class RecordingControlWindow : Window
 
         Content = _root;
         ApplyPhysicalLayout(positionHwnd: false);
+        // Each tooltip of the palette and its menu is a popup window of its own; keep it out too.
+        CaptureWindowExclusion.ExcludeToolTips(this, () => IsRecording);
 
         KeyDown += OnKeyDown;
         SourceInitialized += OnSourceInitialized;
@@ -975,6 +977,8 @@ internal sealed class RecordingControlWindow : Window
             ApplyPhysicalLayout(positionHwnd: true);
             if (!_captureExclusionApplied && _paletteOverlapsRegion)
                 throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
+            // Windows 10 shows tooltips unexcluded before recording; none may stay into the video.
+            CaptureWindowExclusion.CloseUnexcludedToolTip(this);
             _recorder = _recorderFactory();
             string output = _outputPathFactory();
             _recorder.Start(_screenRegion, output, _settings);
