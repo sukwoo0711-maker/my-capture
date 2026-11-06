@@ -593,6 +593,47 @@ public sealed class QuickAccessRatingInvitationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ExitSavesACardShowingStillWaitingForTheIdleWriteOnce(bool afterSave)
+    {
+        var writes = new Queue<Action>();
+        RunWithShell(() => new Shell(ratingDeferWrite: writes.Enqueue) { ShowsCardAfterSave = afterSave }, shell =>
+        {
+            shell.Settings.StoreRating.SuccessfulCaptureCount = 2;
+            QuickAccessWindow card = Capture(shell);
+            Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
+            Assert.Single(writes);
+            Assert.Empty(shell.SavedRatingShowings);
+
+            // The app exits before the UI is idle again: the showing is saved anyway, and only once.
+            shell.QueueSettingsSavesForExit();
+            Assert.Equal((1, shell.Settings.StoreRating.InvitationShownUtc), Assert.Single(shell.SavedRatingShowings));
+            writes.Dequeue()();
+            Assert.Single(shell.SavedRatingShowings);
+        });
+    }
+
+    [Fact]
+    public void ACopyFailureKnownBeforeTheCardIsBuiltNeverOffers() => RunWithShell(false, shell =>
+    {
+        shell.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        shell.CopyResult = Task.FromResult(false);
+        int saves = shell.SavedRatingShowings.Count;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        // Neither shown nor counted, rather than shown and withdrawn as the card reports the copy.
+        Assert.Equal(Visibility.Collapsed, card.RatingInvitationForTest.Row.Visibility);
+        Assert.Equal(0, shell.Settings.StoreRating.InvitationShownCount);
+        Assert.Null(shell.Settings.StoreRating.InvitationShownUtc);
+        shell.Wait(handler);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        Assert.All(shell.SavedRatingShowings.Skip(saves), saved => Assert.Equal(0, saved.Count));
+        Assert.False(shell.IsRatingInvitationVisible);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ACardStillCarriesItsInvitationWhenTheDeferredSettingsSaveFails(bool afterSave)
     {
         var writes = new Queue<Action>();

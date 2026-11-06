@@ -122,9 +122,11 @@ public partial class App
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, first.Image) ? lifted : null;
         QuickAccessWindow? card = null;
-        // Decided before the card is built, so an invitation is on the card from its first appearance.
+        // Decided before the card is built, so an invitation is on the card from its first appearance. A
+        // save or copy already known to have failed offers none, rather than one withdrawn as the card shows.
         bool pendingCapture = !first.RatingOutcomeRecorded;
-        StoreRatingCoordinator.CardOffer? invitation = first.SaveFailed || first.DeferredSaveFailure is not null
+        bool copyFailed = copy.IsCompleted && !(copy.IsCompletedSuccessfully && copy.Result);
+        StoreRatingCoordinator.CardOffer? invitation = first.SaveFailed || first.DeferredSaveFailure is not null || copyFailed
             ? null : OfferStoreRatingOnCard(first.Practice, pendingCapture);
         if (pendingCapture) first.PendingRatingOffer = invitation;
         try

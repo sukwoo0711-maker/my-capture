@@ -12,12 +12,15 @@ namespace MyCapture.App.Store;
 /// Cards may predict their pending capture's success and persist only after showing. An untouched
 /// card offer gives its showing back through a deferred write only when its card never showed or its
 /// capture's own save or copy failed; once that capture is delivered or the card closes, it stands.
+/// Deferred writes hand a snapshot to the background saver; a choice the user makes, and a library or
+/// settings showing, save at once. Exit queues the deferred writes still waiting (<see cref="FlushDeferredWrites"/>).
 /// </summary>
 internal sealed class StoreRatingCoordinator
 {
     internal static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(6);
     private readonly Func<AppSettings> _settings;
     private readonly Action<AppSettings> _save;
+    private readonly Action<AppSettings> _saveInBackground;
     private readonly Action<Action> _deferWrite;
     private readonly Func<bool> _isBusy;
     private readonly Func<bool> _isCardBusy;
@@ -31,18 +34,26 @@ internal sealed class StoreRatingCoordinator
     private DispatcherTimer? _settleTimer;
     private bool _userReturned;
     private CardOffer? _cardOffer;
+    private int _queuedWrites;
 
+    /// <param name="save">Saves at once, on the caller's thread: the choices the user makes and a window's showing.</param>
+    /// <param name="deferWrite">Runs a write later, once the UI is idle.</param>
     /// <param name="isBusy">Anything on screen a Store dialog must not interrupt, the capture card included.</param>
     /// <param name="showInvitation">Shows the invitation in the active library or settings window; false when it could not.</param>
     /// <param name="isInvitationVisible">The invitation is on screen somewhere already.</param>
     /// <param name="isCardBusy">As <paramref name="isBusy"/>, without the capture card itself; defaults to it.</param>
+    /// <param name="saveInBackground">
+    /// What a deferred write runs: takes its own snapshot of the settings and saves it off the UI thread,
+    /// logging a failure itself; defaults to <paramref name="save"/>.
+    /// </param>
     internal StoreRatingCoordinator(Func<AppSettings> settings, Action<AppSettings> save,
         Action<Action> deferWrite, Func<bool> isBusy, IStoreRatingRequester requester, ILogger log,
         bool isPackaged, TimeProvider? clock = null, Func<bool>? isUserActive = null, Func<bool>? showInvitation = null,
-        Func<bool>? isInvitationVisible = null, Func<bool>? isCardBusy = null)
+        Func<bool>? isInvitationVisible = null, Func<bool>? isCardBusy = null, Action<AppSettings>? saveInBackground = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _save = save ?? throw new ArgumentNullException(nameof(save));
+        _saveInBackground = saveInBackground ?? save;
         _deferWrite = deferWrite ?? throw new ArgumentNullException(nameof(deferWrite));
         _isBusy = isBusy ?? throw new ArgumentNullException(nameof(isBusy));
         _requester = requester ?? throw new ArgumentNullException(nameof(requester));
@@ -65,9 +76,20 @@ internal sealed class StoreRatingCoordinator
         if (!_isPackaged) return;
         AppSettings settings = _settings();
         if (StoreRatingPolicy.IsAnswered(settings.StoreRating)) return;
-        if (StoreRatingPolicy.RecordCapture(settings.StoreRating, succeeded)) _deferWrite(() => Persist(_settings()));
+        if (StoreRatingPolicy.RecordCapture(settings.StoreRating, succeeded)) QueueWrite();
         IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow());
         if (!IsPending) _settleTimer?.Stop();
+    }
+
+    /// <summary>
+    /// Exit: hands the deferred writes still waiting for the idle UI to the background saver now, as one
+    /// save of the live state, so waiting for pending saves covers them. Those writes then add nothing.
+    /// </summary>
+    internal void FlushDeferredWrites()
+    {
+        if (_queuedWrites == 0) return;
+        _queuedWrites = 0;
+        PersistLater();
     }
 
     internal void NotifyFlowEnded()
@@ -137,7 +159,7 @@ internal sealed class StoreRatingCoordinator
     {
         if (!ReferenceEquals(_cardOffer, offer) || offer.WriteQueued) return;
         offer.WriteQueued = true;
-        _deferWrite(() => Persist(_settings()));
+        QueueWrite();
     }
 
     /// <summary>A Review or Close press keeps this showing, even when the review request is refused.</summary>
@@ -172,7 +194,7 @@ internal sealed class StoreRatingCoordinator
         _cardOffer = null;
         AppSettings settings = _settings();
         Restore(settings, new Showing(offer.PreviousCount, offer.PreviousShownUtc));
-        _deferWrite(() => Persist(_settings()));
+        QueueWrite();
         IsPending = StoreRatingPolicy.ShouldRequest(settings.StoreRating, _isPackaged, _clock.GetUtcNow());
         return true;
     }
@@ -296,5 +318,29 @@ internal sealed class StoreRatingCoordinator
         if (settings.General.IsFirstRun) return false;
         try { _save(settings); return true; }
         catch (Exception ex) { _log.LogWarning(ex, "Could not save Store rating state"); return false; }
+    }
+
+    /// <summary>
+    /// Saves the live state once the UI is idle, off the UI thread. Each queued write saves once, unless
+    /// <see cref="FlushDeferredWrites"/> has already saved for it.
+    /// </summary>
+    private void QueueWrite()
+    {
+        _queuedWrites++;
+        _deferWrite(() =>
+        {
+            if (_queuedWrites == 0) return;
+            _queuedWrites--;
+            PersistLater();
+        });
+    }
+
+    /// <summary>Hands the live state to the background saver; nothing is written during the first run.</summary>
+    private void PersistLater()
+    {
+        AppSettings settings = _settings();
+        if (settings.General.IsFirstRun) return;
+        try { _saveInBackground(settings); }
+        catch (Exception ex) { _log.LogWarning(ex, "Could not save Store rating state"); }
     }
 }

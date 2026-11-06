@@ -960,6 +960,7 @@ internal sealed partial class AppResponsivenessProbe
         private readonly ReceiptKeyboardRouter _router = new(_ => new NoHotkeys());
         private readonly CaptureQueue _queue;
         private readonly AppSettings _settings = new();
+        private SettingsStore? _ratingStore;
         private CaptureSelectionCompletedEventArgs? _selection;
         private string? _liftWindow;
         private string? _overlayWindow;
@@ -998,7 +999,7 @@ internal sealed partial class AppResponsivenessProbe
             Set("_receiptKeyboard", _router);
             if (measureRating)
             {
-                var settingsStore = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+                var settingsStore = _ratingStore = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
                 Set("_engagementNotices", new Dictionary<Window, IEngagementNotice>());
                 Set("_storeRating", new StoreRatingCoordinator(
                     () => settings,
@@ -1011,7 +1012,9 @@ internal sealed partial class AppResponsivenessProbe
                     isUserActive: () => false,
                     showInvitation: () => false,
                     isInvitationVisible: Predicate("IsStoreInvitationVisible"),
-                    isCardBusy: Predicate("IsStoreRatingDeferredOnCard")));
+                    isCardBusy: Predicate("IsStoreRatingDeferredOnCard"),
+                    // As App.InitializeStoreRating: the idle write snapshots here and writes off the dispatcher.
+                    saveInBackground: snapshot => settingsStore.SaveInBackground(snapshot.DeepClone(), "Could not save Store rating state")));
             }
 
             _coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
@@ -1138,6 +1141,8 @@ internal sealed partial class AppResponsivenessProbe
             _coordinator.Dispose();
             _router.Dispose();
             (Get("_services") as IDisposable)?.Dispose();
+            // The library folder is removed after this: the rating's background save must have finished.
+            _ratingStore?.WaitForPendingSaves(TimeSpan.FromSeconds(5));
         }
 
         private object? Get(string name) => typeof(App).GetField(name, Instance)!.GetValue(_app);

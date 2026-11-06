@@ -983,6 +983,10 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         /// <summary>The App's DismissQuickAccessForCapture, as each capture command runs it first.</summary>
         internal void Dismiss() => typeof(App).GetMethod("DismissQuickAccessForCapture", Flags)!.Invoke(_app, null);
 
+        /// <summary>What exit runs before it waits for pending settings saves (OnExit and the exit preparation).</summary>
+        internal void QueueSettingsSavesForExit() =>
+            typeof(App).GetMethod("QueuePendingSettingsSavesForExit", Flags)!.Invoke(_app, null);
+
         /// <summary>The region capture command (the hotkey's handler).</summary>
         internal void RequestRegionCapture() => typeof(App).GetMethod("HandleCaptureRequested", Flags)!.Invoke(_app, null);
 

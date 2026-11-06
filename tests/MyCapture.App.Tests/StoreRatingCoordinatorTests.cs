@@ -36,6 +36,8 @@ public sealed class StoreRatingCoordinatorTests
         public readonly List<string> Warnings = [];
         public readonly List<int> SavedShowingCounts = [];
         public Action<Action> DeferWrite = write => write();
+        /// <summary>The background saver the deferred writes use; null leaves them on the synchronous save.</summary>
+        public Action<AppSettings>? SaveInBackground;
         public int SaveCalls;
         public bool Busy;
         public bool CardBusy;
@@ -67,7 +69,8 @@ public sealed class StoreRatingCoordinatorTests
                 return ShowSucceeds;
             },
             () => InvitationVisible,
-            () => CardBusy);
+            () => CardBusy,
+            SaveInBackground);
 
         public int Requests => Events.Count(e => e == "request");
 
@@ -726,6 +729,62 @@ public sealed class StoreRatingCoordinatorTests
         Assert.Equal(["save count=2 attempted=False", "invite"], harness.Events);
         Assert.Equal([1], harness.SavedShowingCounts);
         Assert.Empty(writes);
+    }
+
+    [Fact]
+    public void StoreRating_DeferredWritesUseTheBackgroundSaverAndExitQueuesTheWaitingOnesOnce()
+    {
+        var writes = new Queue<Action>();
+        var background = new List<(int Count, int Successes)>();
+        var harness = new Harness
+        {
+            DeferWrite = writes.Enqueue,
+            SaveInBackground = settings => background.Add((settings.StoreRating.InvitationShownCount, settings.StoreRating.SuccessfulCaptureCount)),
+        };
+        harness.Settings.StoreRating.SuccessfulCaptureCount = 1;
+        StoreRatingCoordinator coordinator = harness.Create();
+
+        // A counted success and a card's showing wait for the idle UI; nothing is saved on the spot.
+        coordinator.RecordCapture(succeeded: true);
+        StoreRatingCoordinator.CardOffer? offer = coordinator.TryOfferOnCard(practice: false);
+        Assert.NotNull(offer);
+        coordinator.NoteCardOfferShown(offer);
+        Assert.Equal(2, writes.Count);
+        Assert.Empty(background);
+        Assert.Equal(0, harness.SaveCalls);
+
+        // Exit comes first: one background save of the live state covers both, and those writes add nothing.
+        coordinator.FlushDeferredWrites();
+        Assert.Equal([(1, 2)], background);
+        coordinator.FlushDeferredWrites();
+        while (writes.TryDequeue(out Action? write)) write();
+        Assert.Equal([(1, 2)], background);
+
+        // A write queued afterwards saves once more, in the background as well.
+        Assert.True(coordinator.WithdrawCardOffer(offer));
+        writes.Dequeue()();
+        Assert.Equal([(1, 2), (0, 2)], background);
+        coordinator.FlushDeferredWrites();
+        Assert.Equal(2, background.Count);
+        Assert.Equal(0, harness.SaveCalls);
+
+        // A choice the user makes, and a window's showing, still save at once on the synchronous path.
+        Assert.True(coordinator.NotifyUserReturned());
+        Assert.Equal(1, harness.SaveCalls);
+        coordinator.DismissInvitation();
+        Assert.Equal(2, harness.SaveCalls);
+        Assert.Equal(2, background.Count);
+        Assert.Empty(writes);
+
+        // Nothing reaches the disk during the first run.
+        var firstRun = new Harness { DeferWrite = writes.Enqueue, SaveInBackground = _ => background.Add((-1, -1)) };
+        firstRun.Settings.General.IsFirstRun = true;
+        StoreRatingCoordinator duringFirstRun = firstRun.Create();
+        duringFirstRun.RecordCapture(succeeded: true);
+        duringFirstRun.FlushDeferredWrites();
+        while (writes.TryDequeue(out Action? write)) write();
+        Assert.Equal(2, background.Count);
+        Assert.Equal(0, firstRun.SaveCalls);
     }
 
     [Fact]

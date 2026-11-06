@@ -37,7 +37,11 @@ public partial class App
             isUserActive: () => ActiveEngagementWindow() is not null,
             showInvitation: ShowStoreInvitation,
             isInvitationVisible: IsStoreInvitationVisible,
-            isCardBusy: IsStoreRatingDeferredOnCard);
+            isCardBusy: IsStoreRatingDeferredOnCard,
+            // As the editor preferences: the idle write snapshots on the UI thread and writes the file off it;
+            // exit waits for it (QueuePendingSettingsSavesForExit, SettingsStore.WaitForPendingSaves).
+            saveInBackground: settings => services.GetRequiredService<SettingsStore>()
+                .SaveInBackground(settings.DeepClone(), "Could not save Store rating state"));
         InitializeStoreUpdateObservation();
         if (_settingsApply is not null)
             _settingsApply.PrintScreenCaptureKeyEnabled = PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled;
