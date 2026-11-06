@@ -160,7 +160,10 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     /// <summary>
     /// The first seek after a playback to the end can read past its position at once, as on the
     /// runners after a scrub into the last stretch. It reports its frame without asking again first;
-    /// asking again is the watch's job, after the frame is reported.
+    /// asking again is the watch's job, after the frame is reported. A playback that the editor's
+    /// tick stops at the end before MediaEnded arrives can leave the player in its media-ended state
+    /// (25 of 797 runs on loaded runners): the seek then reads that report, opens the clip again and
+    /// positions it once more, and the landing read after the reopen is the one that reads past.
     /// </summary>
     [Fact]
     public void AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting() => StaTestHost.Run(() =>
@@ -177,13 +180,17 @@ public sealed class VideoEditorMediaEndedRecoveryTests
 
             PlayToTheEnd(editor);
             int positioned = engine.PositionCountForTest;
+            int endedReports = engine.EndedReportCountForTest;
+            int reopened = engine.ReopenCountForTest;
             engine.MissNextLandingForTest = true;
-            (int watches, int positions) = Check(editor, export, failures, "read past after end", 600);
+            Presentation presented = Check(editor, export, failures, "read past after end", 600);
+            int reopens = presented.Reopens - reopened;
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
             Assert.True(
-                positions - positioned == 1,
-                $"the seek was positioned {positions - positioned} time(s) before its frame was reported");
-            Assert.True(engine.SettleCountForTest > watches, "the seek that read past its position was not watched");
+                presented.Positions - positioned == 1 + reopens && presented.EndedReports - endedReports == reopens,
+                $"the seek was positioned {presented.Positions - positioned} time(s) before its frame was reported, "
+                + $"with {reopens} reopen(s) for {presented.EndedReports - endedReports} media-ended report(s)");
+            Assert.True(engine.SettleCountForTest > presented.Watches, "the seek that read past its position was not watched");
         }
         finally
         {
@@ -284,12 +291,15 @@ public sealed class VideoEditorMediaEndedRecoveryTests
         return editor;
     }
 
+    // The engine's counts when a seek was presented: ended watches, positionings, the player's own
+    // media-ended reports and reopens.
+    private readonly record struct Presentation(int Watches, int Positions, int EndedReports, int Reopens);
+
     /// <summary>
     /// Seeks, checks the report and the frame on screen once any position watch has ended, and
-    /// returns how many watches had ended and how often the element was positioned when the seek
-    /// was presented.
+    /// returns the engine's counts when the seek was presented.
     /// </summary>
-    private static (int Watches, int Positions) Check(
+    private static Presentation Check(
         VideoEditorWindow editor,
         MediaFoundationVideoFrameReader export,
         List<string> failures,
@@ -298,10 +308,14 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     {
         PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
         MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
-        var presentations = new ConcurrentDictionary<long, (int Watches, int Positions)>();
+        var presentations = new ConcurrentDictionary<long, Presentation>();
         void OnPresented(PresentedPreviewFrame frame) =>
-            presentations.TryAdd(frame.Generation, (engine.SettleCountForTest, engine.PositionCountForTest));
-        (int Watches, int Positions) atPresentation;
+            presentations.TryAdd(frame.Generation, new Presentation(
+                engine.SettleCountForTest,
+                engine.PositionCountForTest,
+                engine.EndedReportCountForTest,
+                engine.ReopenCountForTest));
+        Presentation atPresentation;
         bool presented;
         DateTime until;
         coordinator.PreviewPresented += OnPresented;
