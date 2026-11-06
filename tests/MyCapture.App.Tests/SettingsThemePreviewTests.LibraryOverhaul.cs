@@ -405,7 +405,7 @@ public sealed partial class SettingsThemePreviewTests
 
                     // No card is ever added over the library's content, and the bar keeps its height.
                     double barHeight = bar.ActualHeight;
-                    void AssertNoCardCoversTheLibrary(bool sameHeight = true)
+                    void AssertNoCardCoversTheLibrary()
                     {
                         SettleGalleryLayout(window);
                         Assert.Empty(Descendants(window).OfType<MyCapture.App.Store.EngagementNotice>());
@@ -417,8 +417,8 @@ public sealed partial class SettingsThemePreviewTests
                             Assert.False(bounds.IntersectsWith(rowsBounds), $"{shown.Name} covers the cards");
                             Assert.True(barBounds.Contains(bounds), $"{shown.Name}: {bounds} in {barBounds}");
                         }
-                        // A result's Undo button is taller than the bar's line; notices and the update button are not.
-                        if (sameHeight) Assert.Equal(barHeight, bar.ActualHeight, 1);
+                        // A result's Undo button, the notices and the update button all fit the bar's line.
+                        Assert.Equal(barHeight, bar.ActualHeight, 1);
                     }
 
                     // "Updated to X": a neutral one-line notice that goes away by itself and is consumed once shown.
@@ -451,7 +451,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.False(window.IsNoticeVisible);
                     Assert.True(notice.IsShown, "the invitation is still pending");
                     Assert.Equal("실행 취소", window.StatusActionLabelForTest);
-                    AssertNoCardCoversTheLibrary(sameHeight: false);
+                    AssertNoCardCoversTheLibrary();
                     // A notice that arrives while the line is busy waits too, and does not erase the follow-up.
                     Assert.False(notice.ShowUpdateCompleted("4.9.2.0"));
                     Assert.Equal([MyCapture.App.Store.EngagementNoticeKind.UpdateCompleted], consumed);

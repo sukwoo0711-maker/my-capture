@@ -356,8 +356,9 @@ public sealed class LibraryUxTests
         vm.NavigateTo(CaptureFolderScope.ForFolder(parent.Id));
         Assert.True(vm.IsCompactLayout);
         Assert.Equal(3, vm.ColumnCount);
-        Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
-        Assert.True(Assert.IsType<GalleryFolderRow>(vm.Rows[1]).IsCompact);
+        // The location header names the folder, so the rows start with its subfolders.
+        Assert.DoesNotContain(vm.Rows, row => row is GalleryHeaderRow);
+        Assert.True(Assert.IsType<GalleryFolderRow>(vm.Rows[0]).IsCompact);
         GalleryTileRow[] tiles = vm.Rows.OfType<GalleryTileRow>().ToArray();
         Assert.Equal([3, 2], tiles.Select(row => row.Tiles.Count));
         Assert.All(tiles, row => Assert.True(row.IsCompact));

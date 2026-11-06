@@ -173,8 +173,11 @@ public sealed partial class SettingsThemePreviewTests
                 SettleGalleryLayout(window);
                 TextBlock text = Descendants(selection).OfType<TextBlock>().Single();
                 double room = sort.ActualWidth - sort.Padding.Left - sort.Padding.Right;
-                Assert.True(text.ActualWidth <= room + 0.5,
-                    $"{label}: the sort choice '{text.Text}' is {text.ActualWidth:0.#} DIP wide in a {sort.ActualWidth:0.#} DIP box with {room:0.#} DIP for text");
+                // A cut choice ends in an ellipsis, so its block never outgrows the room: measure the whole text.
+                double full = FullTextWidth(text);
+                SettleGalleryLayout(window);
+                Assert.True(full <= room + 0.5,
+                    $"{label}: the sort choice '{text.Text}' is {full:0.#} DIP wide in a {sort.ActualWidth:0.#} DIP box with {room:0.#} DIP for text");
             }
         }
         finally

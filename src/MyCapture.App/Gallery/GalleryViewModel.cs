@@ -361,6 +361,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         FolderCardIndex? folderIndex = null;
         var badges = new Dictionary<Guid, (string Name, string Path)?>();
         bool hasFolderReason = false;
+        // A folder view's group is headed by the folder's location, which the location header already shows.
+        string? locationHeading = _scope.FolderId is { } openedFolder ? _controller.Queue.GetFolderDisplayPath(openedFolder) : null;
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -383,7 +385,9 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             GalleryFolderCardViewModel[] cards = group.Folders.Count == 0 ? []
                 : group.Folders.Select(folder => GetOrUpdateFolderCard(folder,
                     folderIndex ??= new FolderCardIndex(_controller.Queue, _leaving), seenFolders)).ToArray();
-            if (tiles.Count > 0 || cards.Length > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards));
+            if (tiles.Count > 0 || cards.Length > 0)
+                _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards)
+                    { ShowsHeading = locationHeading is null || group.Group.Heading != locationHeading });
         }
 
         foreach (Guid stale in _folderCards.Keys.Where(id => !seenFolders.Contains(id)).ToList())
@@ -616,6 +620,12 @@ public sealed class GalleryGroupViewModel
     }
 
     public string Heading { get; }
+
+    /// <summary>
+    /// False when <see cref="Heading"/> only repeats the opened folder's location, which the location header
+    /// above the list already names; the rows then start with the group's folder cards and captures.
+    /// </summary>
+    public bool ShowsHeading { get; init; } = true;
 
     public IReadOnlyList<GalleryItemViewModel> Items { get; }
 

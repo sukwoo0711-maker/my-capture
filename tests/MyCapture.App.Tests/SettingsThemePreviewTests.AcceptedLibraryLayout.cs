@@ -176,7 +176,12 @@ public sealed partial class SettingsThemePreviewTests
                         AssertVisibleSelectionMark(selectedFolder, window);
                         TreeViewItem selectedNode = Descendants((TreeView)window.FindName("FolderTree")).OfType<TreeViewItem>()
                             .Single(item => item.DataContext is GalleryFolderNode node && node.FolderId == created.Id);
-                        AssertSelectedNavigationOutline(selectedNode, window);
+                        // The card keeps its outline and check; the folder's navigation row shows only its wash and
+                        // pill, as File Explorer's navigation pane does. A selected date below keeps both.
+                        var folderWash = (Border)selectedNode.Template.FindName("SelectedLayer", selectedNode);
+                        var folderPill = (FrameworkElement)selectedNode.Template.FindName("Indicator", selectedNode);
+                        PumpLibraryUntil(window, () => folderWash.Opacity >= 0.99 && folderPill.Opacity >= 0.99, "selected folder row");
+                        AssertSelectedFolderRowShowsWashAndPillOnly(selectedNode, $"{theme}: selected folder row");
                         SaveLibraryUxEvidence(window, theme, $"selection-folder-{theme}.png");
                         ((Expander)window.FindName("DateSection")).IsExpanded = true;
                         model.NavigateTo(model.FolderNodes[0].Scope);
