@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -130,6 +131,95 @@ public sealed class GalleryPreviewLoadTests
             finally { application.Shutdown(); }
         }, typeof(GalleryPreviewLoadTests));
 
+    [Fact]
+    public Task PendingPreviewIsCancelledByVideoOrSelectionChange_ButNotByTheSameSelection() =>
+        SettingsThemePreviewTests.RunIsolated(nameof(PendingPreviewIsCancelledByVideoOrSelectionChange_ButNotByTheSameSelection), () =>
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+            application.Resources["PinLabel"] = new PinLabelConverter();
+            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            try
+            {
+                using var fixture = new Fixture();
+                GalleryWindow window = fixture.Window;
+                window.Show();
+                window.UpdateLayout();
+                var decoder = new GatedDecoder(window.DecodePreviewForTest);
+                window.DecodePreviewForTest = decoder.Decode;
+                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+                GalleryItemViewModel image = fixture.Model.FindTile(fixture.Wide.Id)!;
+                GalleryItemViewModel video = fixture.Model.FindTile(fixture.Video.Id)!;
+                var player = new FakeVideoPlayer();
+                window.VideoPlayerFactory = () => player;
+
+                // A video menu request supersedes the image without changing the multi-selection.
+                fixture.Model.Select(image.Id);
+                fixture.Model.Select(video.Id, control: true);
+                Guid[] selected = [.. fixture.Model.Selection.SelectedIds];
+                PreviewFromMenu(window, image);
+                PumpUntil(window, () => decoder.Started.Count == 1, "menu image decode");
+                PreviewFromMenu(window, video);
+                Assert.Equal(selected, fixture.Model.Selection.SelectedIds);
+                Assert.Equal(video.Id, player.VideoId);
+                Assert.Equal(1, player.OpenCount);
+                decoder.Release();
+                PumpUntil(window, () => !window.IsLoadingPreviewForTest, "video superseded image");
+                Pump(window);
+                Assert.Empty(Application.Current.Windows.OfType<GalleryImagePreviewWindow>());
+                Assert.True(Collected(decoder.Finished[0].Image), "A video-superseded image stayed referenced.");
+                player.Close();
+
+                // Returning to the original selection cannot revive a cancelled request.
+                Request(window, fixture.Model, previewButton, fixture.Wide);
+                PumpUntil(window, () => decoder.Started.Count == 2, "selection round-trip decode");
+                fixture.Model.Select(fixture.Tall.Id);
+                fixture.Model.Select(fixture.Wide.Id);
+                decoder.Release();
+                PumpUntil(window, () => !window.IsLoadingPreviewForTest, "selection round-trip cancellation");
+                Pump(window);
+                Assert.Empty(Application.Current.Windows.OfType<GalleryImagePreviewWindow>());
+
+                // Opening a player through another entry point also supersedes the image.
+                player = new FakeVideoPlayer();
+                fixture.Model.Select(image.Id);
+                fixture.Model.Select(video.Id, control: true);
+                PreviewFromMenu(window, image);
+                PumpUntil(window, () => decoder.Started.Count == 3, "direct player image decode");
+                window.SelectVideoForReview(video);
+                Assert.Equal(selected, fixture.Model.Selection.SelectedIds);
+                Assert.Equal(video.Id, player.VideoId);
+                Assert.Equal(1, player.OpenCount);
+                decoder.Release();
+                PumpUntil(window, () => !window.IsLoadingPreviewForTest, "direct player superseded image");
+                Pump(window);
+                Assert.Empty(Application.Current.Windows.OfType<GalleryImagePreviewWindow>());
+
+                // Publishing the same selection keeps the request, including with an existing player.
+                Request(window, fixture.Model, previewButton, fixture.Wide);
+                PumpUntil(window, () => decoder.Started.Count == 4, "same selection decode");
+                fixture.Model.Select(fixture.Wide.Id);
+                decoder.Release();
+                PumpUntil(window, () => window.OwnedWindows.Count == 1 && !window.IsLoadingPreviewForTest, "same selection preview");
+                AssertShowsFile(window, fixture, fixture.Wide);
+                ClosePreview(window);
+                Assert.Equal(1, decoder.MaxRunning);
+                Assert.Equal(4, decoder.Finished.Count);
+            }
+            finally { application.Shutdown(); }
+        }, typeof(GalleryPreviewLoadTests));
+
+    private static void PreviewFromMenu(GalleryWindow window, GalleryItemViewModel tile)
+    {
+        var menuItem = new MenuItem { CommandParameter = tile };
+        typeof(GalleryWindow).GetMethod("OnPreviewMenuClick", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(window, [menuItem, new RoutedEventArgs(MenuItem.ClickEvent)]);
+    }
+
     private static void Request(GalleryWindow window, GalleryViewModel model, Button previewButton, CaptureRecord record)
     {
         model.Select(record.Id);
@@ -230,6 +320,24 @@ public sealed class GalleryPreviewLoadTests
         }
     }
 
+    private sealed class FakeVideoPlayer : IGalleryVideoPlayer
+    {
+        public Guid VideoId { get; private set; }
+        public event EventHandler? Closed;
+        internal int OpenCount { get; private set; }
+
+        public bool Open(Guid id, string title, string path, bool autoPlay)
+        {
+            VideoId = id;
+            OpenCount++;
+            return true;
+        }
+
+        public void RequestPlay() { }
+        public void ShowPlayer(bool activate) { }
+        public void Close() => Closed?.Invoke(this, EventArgs.Empty);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly OcrResultPresenter _presenter;
@@ -240,11 +348,11 @@ public sealed class GalleryPreviewLoadTests
         internal CaptureRecord Tall { get; }
         internal CaptureRecord Small { get; }
         internal CaptureRecord Missing { get; }
+        internal CaptureRecord Video { get; }
 
         internal Fixture()
         {
-            string root = Path.Combine(Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT")
-                ?? Path.GetTempPath(), "preview-load-" + Guid.NewGuid().ToString("N"));
+            string root = OwnedTestDirectory.Create("preview-load-");
             var paths = AppPaths.CreateForRoot(root);
             paths.EnsureCreated();
             var settings = new AppSettings();
@@ -253,6 +361,12 @@ public sealed class GalleryPreviewLoadTests
             Tall = Add(90, 240);
             Small = Add(64, 48);
             Missing = Add(40, 30, writeFile: false);
+            Video = new CaptureRecord
+            {
+                MediaKind = CaptureMediaKind.Video, CreatedAt = DateTimeOffset.Now.AddDays(-1),
+                RelativeDirectory = Guid.NewGuid().ToString("N"),
+            };
+            _queue.Add(Video);
             var controller = new GalleryController(_queue, NullLogger<GalleryController>.Instance);
             Model = new GalleryViewModel(controller, record => _queue.GetFilePath(record, CaptureFileNames.Rendered), 96);
             var persistence = new CapturePersistenceService(_queue, paths, () => settings.Queue,

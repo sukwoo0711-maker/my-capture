@@ -235,8 +235,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
 
         internal ProbeFixture((int Width, int Height)[] sizes)
         {
-            string root = Path.Combine(Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT")
-                ?? Path.GetTempPath(), "preview-perf-" + Guid.NewGuid().ToString("N"));
+            string root = OwnedTestDirectory.Create("preview-perf-");
             var paths = AppPaths.CreateForRoot(root);
             paths.EnsureCreated();
             var settings = new AppSettings();
