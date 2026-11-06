@@ -50,6 +50,14 @@ internal sealed class CountdownWindow : Window
     // A beat longer than the fade: the digit is the only thing moving on this surface.
     private static readonly Duration LandingDuration = new(TimeSpan.FromMilliseconds(200));
 
+    /// <summary>
+    /// The clear band a layered window keeps around its panel for the panel's Shadow.Floating
+    /// (28 DIP blur, 8 DIP down and to the right). Without it the window ended at the panel's
+    /// edge: the shadow was cut off along all four sides and the square window corners showed
+    /// dark wedges behind the rounded ones.
+    /// </summary>
+    internal const double ShadowBand = 32;
+
     private readonly DispatcherTimer _timer;
     private readonly TextBlock _label;
     private readonly TextBlock _leaving;
@@ -183,6 +191,8 @@ internal sealed class CountdownWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(AllowsTransparency ? 18 : 0),
             Effect = AllowsTransparency ? Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect : null,
+            // The window stays centred on the panel; an opaque window has no shadow to make room for.
+            Margin = new Thickness(AllowsTransparency ? ShadowBand : 0),
             Child = content,
         };
 
