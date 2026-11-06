@@ -63,12 +63,17 @@ public sealed class CoreShortcutPromptTests
     [Fact]
     public void ResidentProbeOpensNoLaunchWindowFromAFreshProfile()
     {
-        var settings = new AppSettings { General = { IsFirstRun = true } };
+        // A fresh profile loads the new-installation settings, which handle the core keys first.
+        AppSettings settings = NewInstallDefaults.Create();
+        settings.General.IsFirstRun = true;
+        Assert.True(settings.Hotkeys.ForceCoreShortcuts);
         App.ApplyResidentProbeSettings(settings);
 
         Assert.True(settings.Hotkeys.CoreShortcutsAsked);
+        // The measured copy leaves those keys to the copy the user runs, so it installs no keyboard hook.
+        Assert.False(settings.Hotkeys.ForceCoreShortcuts);
         LaunchPresentation launch = FirstRunPlan.ForLaunch(settings.General.IsFirstRun, quietLaunch: true,
-            openSettings: false, settings.Hotkeys.CoreShortcutsAsked);
+            openSettings: false, settings.Hotkeys.CoreShortcutsAsked, settings.Hotkeys.ForceCoreShortcuts);
         Assert.Equal(new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: false), launch);
     }
 

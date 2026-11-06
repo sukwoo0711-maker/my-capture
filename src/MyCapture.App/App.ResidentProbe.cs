@@ -86,6 +86,10 @@ public partial class App
         settings.General.IsFirstRun = false;
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
+        // A new installation handles its core keys before other programs. The measured copy must not
+        // take them from the copy the user runs: it would install the keyboard hook that a single
+        // copy never needs and measure under other conditions than the previous release.
+        settings.Hotkeys.ForceCoreShortcuts = false;
         settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
