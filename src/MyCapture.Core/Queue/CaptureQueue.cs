@@ -92,6 +92,9 @@ public sealed partial class CaptureQueue
     private Task _publicationTail = Task.CompletedTask;
     // Length of the index last written or loaded; sizes the next index buffer (#221).
     private int _lastIndexLength;
+    // The copy each record had in its last publication, reused while the record's values are the
+    // same, so a publication copies only the records that changed (#221). Under _writeGate.
+    private readonly Dictionary<CaptureRecord, CaptureRecord> _publicationCopies = new(ReferenceEqualityComparer.Instance);
     internal Action<string, string>? BeforePublicationWriteForTest { get; set; }
 
     /// <summary>
@@ -325,6 +328,8 @@ public sealed partial class CaptureQueue
         {
             _records.Add(record);
         }
+        // Copies of the records this load replaced would only hold their text alive.
+        lock (_writeGate) _publicationCopies.Clear();
 
         RecalculateTotalBytes();
         ResumeAfterMigrationLoad();
@@ -661,8 +666,23 @@ public sealed partial class CaptureQueue
     private DetachedWrite DetachedMetaWrite(CaptureRecord record)
     {
         string path = GetFilePath(record, CaptureFileNames.Meta);
-        CaptureRecord copy = record.CloneForPublication();
+        CaptureRecord copy = PublicationCopy(record);
         return new(path, () => JsonSerializer.SerializeToUtf8Bytes(copy, MetaSerializerOptions));
+    }
+
+    // Under _writeGate on the owner context. A queued job only reads its copies, so jobs can share
+    // the copy of a record that did not change between them.
+    private CaptureRecord PublicationCopy(CaptureRecord record)
+    {
+        if (_publicationCopies.TryGetValue(record, out CaptureRecord? copy) && record.HasSameValuesAs(copy)) return copy;
+        copy = record.CloneForPublication();
+        _publicationCopies[record] = copy;
+        return copy;
+    }
+
+    internal int PublicationCopyCountForTest
+    {
+        get { lock (_writeGate) return _publicationCopies.Count; }
     }
 
     // Called only under _writeGate with snapshots no other code can change. The writer serializes

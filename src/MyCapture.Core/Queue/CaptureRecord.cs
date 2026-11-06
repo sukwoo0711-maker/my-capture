@@ -290,6 +290,65 @@ public sealed class CaptureRecord
     /// CaptureRecordPublicationSnapshotTests fails if a field ever stops being safe to copy this way.
     /// </summary>
     internal CaptureRecord CloneForPublication() => (CaptureRecord)MemberwiseClone();
+
+    /// <summary>
+    /// Whether <paramref name="copy"/> holds exactly this record's values, so a publication can reuse
+    /// it instead of copying again (#221). Exact is what the serializer sees: strings by ordinal
+    /// value, numbers by bits (negative zero is not zero), times by instant and offset. Every field
+    /// is compared; CaptureRecordPublicationSnapshotTests fails when a field is left out.
+    /// </summary>
+    internal bool HasSameValuesAs(CaptureRecord copy) =>
+        Id == copy.Id
+        && CreatedAt.EqualsExact(copy.CreatedAt)
+        && UpdatedAt.EqualsExact(copy.UpdatedAt)
+        && SameTime(RetentionStartedAt, copy.RetentionStartedAt)
+        && MediaKind == copy.MediaKind
+        && ContentRevision == copy.ContentRevision
+        && Width == copy.Width
+        && Height == copy.Height
+        && SameNumber(DurationMs, copy.DurationMs)
+        && FrameRate == copy.FrameRate
+        && FrameCount == copy.FrameCount
+        && SameNumber(DpiScale, copy.DpiScale)
+        && SourceMonitor == copy.SourceMonitor
+        && IsPinned == copy.IsPinned
+        && TotalBytes == copy.TotalBytes
+        && HasAnnotations == copy.HasAnnotations
+        && OcrText == copy.OcrText
+        && OcrLanguage == copy.OcrLanguage
+        && OcrQuality == copy.OcrQuality
+        && OcrContentRevision == copy.OcrContentRevision
+        && Title == copy.Title
+        && OriginalContentHash == copy.OriginalContentHash
+        && ImportedFileName == copy.ImportedFileName
+        && SourceVideoId == copy.SourceVideoId
+        && SourceVideoName == copy.SourceVideoName
+        && SourceVideoContentRevision == copy.SourceVideoContentRevision
+        && SourceAssetKind == copy.SourceAssetKind
+        && SameNumber(SourceAssetTimeMs, copy.SourceAssetTimeMs)
+        && SameNumber(SourceAssetRequestedTimeMs, copy.SourceAssetRequestedTimeMs)
+        && SameTime(SourceFrameRequestedAt, copy.SourceFrameRequestedAt)
+        && Tags == copy.Tags
+        && FolderId == copy.FolderId
+        && FolderSequence == copy.FolderSequence
+        && FolderPinBeforeAssignment == copy.FolderPinBeforeAssignment
+        && FolderDestinationResolved == copy.FolderDestinationResolved
+        && SourceWindowTitle == copy.SourceWindowTitle
+        && SourcePageUrl == copy.SourcePageUrl
+        && SourceAppName == copy.SourceAppName
+        && SourceAppPath == copy.SourceAppPath
+        && SourceDocumentPath == copy.SourceDocumentPath
+        && InitialRenderShowsSourceWindowTitle == copy.InitialRenderShowsSourceWindowTitle
+        && RelativeDirectory == copy.RelativeDirectory;
+
+    private static bool SameTime(DateTimeOffset? value, DateTimeOffset? other) =>
+        value is { } time ? other is { } otherTime && time.EqualsExact(otherTime) : other is null;
+
+    private static bool SameNumber(double value, double other) =>
+        BitConverter.DoubleToInt64Bits(value) == BitConverter.DoubleToInt64Bits(other);
+
+    private static bool SameNumber(double? value, double? other) =>
+        value is { } number ? other is { } otherNumber && SameNumber(number, otherNumber) : other is null;
 }
 
 /// <summary>

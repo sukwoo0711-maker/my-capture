@@ -490,7 +490,14 @@ public sealed partial class CaptureQueue
     {
         CaptureFolderState? folderState = _folderStateActivated ? CreateFolderState() : null;
         var records = new List<CaptureRecord>(_records.Count);
-        foreach (CaptureRecord record in _records) records.Add(record.CloneForPublication());
+        foreach (CaptureRecord record in _records) records.Add(PublicationCopy(record));
+        if (_publicationCopies.Count > records.Count)
+        {
+            // Records left the library: keep the copies of the ones this index lists, and no others.
+            _publicationCopies.Clear();
+            int position = 0;
+            foreach (CaptureRecord record in _records) _publicationCopies[record] = records[position++];
+        }
         var index = new CaptureIndexFile
         {
             Records = records, FolderState = folderState,

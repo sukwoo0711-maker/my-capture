@@ -65,6 +65,131 @@ public sealed class CaptureRecordPublicationSnapshotTests(ITestOutputHelper outp
     }
 
     [Fact]
+    public void HasSameValuesAs_SeesAChangeInEveryField()
+    {
+        // A publication reuses the last copy of a record while this comparison holds, so a field it
+        // skipped would publish a stale value. Each field is changed alone, including the changes an
+        // equality operator misses: another offset at the same instant, negative zero, null.
+        CaptureRecord record = NewRecord();
+        Fill(record);
+        Assert.True(record.HasSameValuesAs(record.CloneForPublication()));
+        var missed = new List<string>();
+        int changes = 0, fields = 0;
+        foreach (FieldInfo field in typeof(CaptureRecord).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            fields++;
+            foreach (object? value in OtherValues(field.FieldType, field.GetValue(record)))
+            {
+                CaptureRecord copy = record.CloneForPublication();
+                field.SetValue(copy, value);
+                changes++;
+                if (record.HasSameValuesAs(copy)) missed.Add($"{field.Name} = {value ?? "null"}");
+            }
+        }
+
+        Assert.True(fields > 40, $"Only {fields} fields were found; the check no longer sees the record state.");
+        Assert.True(changes > fields, $"Only {changes} changes were tried.");
+        Assert.Empty(missed);
+    }
+
+    private static IEnumerable<object?> OtherValues(Type type, object? current)
+    {
+        if (Nullable.GetUnderlyingType(type) is { } inner)
+        {
+            if (current is null)
+            {
+                yield return Activator.CreateInstance(inner);
+                yield break;
+            }
+            yield return null;
+            foreach (object? value in OtherValues(inner, current)) yield return value;
+            yield break;
+        }
+        switch (current)
+        {
+            case string text:
+                yield return text + "x";
+                yield return null;
+                break;
+            case null when type == typeof(string):
+                yield return "x";
+                break;
+            case Guid:
+                yield return Guid.NewGuid();
+                break;
+            case DateTimeOffset time:
+                yield return time.ToOffset(time.Offset + TimeSpan.FromHours(1));
+                yield return time.AddTicks(1);
+                break;
+            case double number:
+                yield return number == 0 && !double.IsNegative(number) ? -0.0 : 0.0;
+                yield return number + 1;
+                break;
+            case int number:
+                yield return number + 1;
+                break;
+            case long number:
+                yield return number + 1;
+                break;
+            case bool flag:
+                yield return !flag;
+                break;
+            case Enum value:
+                yield return Enum.GetValues(type).Cast<object>().First(other => !other.Equals(value));
+                break;
+            default:
+                throw new InvalidOperationException($"No other value for {type}; add one so its comparison is checked.");
+        }
+    }
+
+    [Fact]
+    public async Task Publication_CopiesOnlyTheRecordsThatChanged_AndKeepsNoCopyOfRemovedOnes()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 5_000, MaxBytes = 1024L * 1024 * 1024 };
+        var queue = new CaptureQueue(workspace.Paths, limits, NullLogger<CaptureQueue>.Instance);
+        var records = new List<CaptureRecord>();
+        for (int i = 0; i < 1_000; i++)
+        {
+            CaptureRecord added = AddRecord(queue);
+            added.Width = 2; added.Height = 2;
+            Directory.CreateDirectory(queue.GetDirectory(added));
+            File.WriteAllBytes(queue.GetFilePath(added, CaptureFileNames.Original), [0]);
+            records.Add(added);
+        }
+        await queue.SaveAsync();
+        Assert.Equal(1_000, queue.PublicationCopyCountForTest);
+
+        // One changed record costs one copy. A copy is about 440 bytes, the list of 1,000 references
+        // 8 KB; copying every record again was 435 KB.
+        CaptureRecord target = records[^1];
+        target.Title = "changed";
+        long allocated;
+        using (CaptureWriteReservation reservation = await queue.ReservePublicationAsync())
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            Task publication = queue.PublishRecordAsync(target, reservation);
+            allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            await publication;
+        }
+        output.WriteLine($"caller allocation after one change: {allocated:N0} B");
+        Assert.True(allocated < 16 * 1024, $"PublishRecordAsync allocated {allocated:N0} bytes on its caller.");
+        AssertIndexMatchesStringWriter(queue, workspace);
+        AssertMetaMatchesStringWriter(queue, target);
+
+        Assert.Equal(3, (await queue.RemoveManyAsync(records.Take(3).Select(record => record.Id))).RemovedCount);
+        Assert.Equal(997, queue.PublicationCopyCountForTest);
+        AssertIndexMatchesStringWriter(queue, workspace);
+
+        queue.Load();
+        Assert.Equal(997, queue.Count);
+        Assert.Equal(0, queue.PublicationCopyCountForTest);
+        await queue.SaveAsync();
+        Assert.Equal(997, queue.PublicationCopyCountForTest);
+        AssertIndexMatchesStringWriter(queue, workspace);
+    }
+
+    [Fact]
     public async Task QueuedJobs_WriteTheStateOfTheirOwnCall()
     {
         using var workspace = new TempWorkspace();
