@@ -538,10 +538,15 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!--   The on state is the neutral selected fill; focus is an overlay. A 2-DIP primary-text
-           outline on every on toggle read as the focus ring, so only the contrast themes keep
-           it, where the fill is Window and would not show the state. -->
+    <!--   On fills with the selection ink pair: a Text.SelectionBackground fill under
+           Text.SelectionForeground content (Highlight and HighlightText in a Windows contrast
+           theme). On and off differ by fill, not by the 2-DIP primary-text outline that read
+           as the focus ring. Content follows Foreground, so it switches ink with the fill. -->
     <!-- ============================================================= -->
+    <Style x:Key="ToggleButton.CheckedLayer" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+        <Setter Property="Background" Value="{DynamicResource Text.SelectionBackground}" />
+        <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+    </Style>
     <Style TargetType="{x:Type ToggleButton}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
         <Setter Property="Background" Value="Transparent" />
@@ -565,11 +570,9 @@
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
-                        <!-- Above the hover wash, so a checked tool keeps its selected fill on hover.
-                             Its 2-DIP edge shows only where tools have a border: the contrast themes. -->
+                        <!-- Above the hover wash, so a checked toggle keeps its fill on hover. -->
                         <Border x:Name="CheckedLayer"
-                                Style="{StaticResource StateLayer.Selected}"
-                                BorderThickness="2" />
+                                Style="{StaticResource ToggleButton.CheckedLayer}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Center"
@@ -590,10 +593,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                        </Trigger>
-                        <Trigger Property="BorderThickness" Value="0">
-                            <Setter TargetName="CheckedLayer" Property="BorderThickness" Value="0" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.SelectionForeground}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />

@@ -86,15 +86,16 @@ public sealed class VisualSystemControlTests
             }
         }
 
-        // An on toggle is the selected fill with primary text. Its 2-DIP primary-text edge read
-        // as the focus ring (2026-11-06 aesthetic review), so only the contrast theme, where
-        // every tool has a border, keeps it, as one 2-DIP line.
+        // An on toggle is the selection ink fill with selection-ink content, with no edge. The
+        // 2-DIP primary-text edge read as the focus ring (2026-11-06 aesthetic review), and the
+        // owner chose the ink fill over the neutral selected fill (2026-11-07, V8).
         Border toggleOn = Part<Border>(sheet.Toggle, "CheckedLayer");
         Assert.Null(toggleOn.Child);
-        Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(toggleOn.Background));
-        Assert.Equal(new Thickness(contrast ? 2 : 0), toggleOn.BorderThickness);
-        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(toggleOn.BorderBrush));
-        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(sheet.Toggle.Foreground));
+        Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(toggleOn.Background));
+        Assert.Equal(new Thickness(0), toggleOn.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(sheet.Toggle.Foreground));
+        Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(sheet.Toggle.Foreground)), ToThemeColor(ColorOf(toggleOn.Background))) >= 4.5,
+            $"{theme}/{scale}: on-toggle text must read on its fill");
         Assert.Equal(1d, toggleOn.Opacity);
 
         // A focus transition may change ink and opacity, never the command's layout box.
@@ -202,34 +203,40 @@ public sealed class VisualSystemControlTests
         ToggleButton Toggle, ToggleButton Rail, TabItem SelectedTab, ListBoxItem ListItem,
         TextBox Input, ComboBox Combo, Border Card);
 
-    // In a Windows contrast theme the selected fill is Window, the colour of the toggle's own
-    // surface, so an on toggle shows its state only through its 2-DIP WindowText edge there.
+    // An on toggle fills with the selection ink pair in every palette; in a Windows contrast theme
+    // that pair is Highlight under HighlightText, the pairing Windows guarantees for selection.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OnToggleKeepsAnEdgeOnlyInAWindowsContrastTheme(bool systemContrast) => Run(() =>
+    public void OnToggleFillsWithTheSelectionInkPair(bool systemContrast) => Run(() =>
     {
-        ResourceDictionary resources = LoadResources();
-        ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: systemContrast, accent: AppAccent.Red);
-        var toggle = new ToggleButton { Content = "자세히", IsChecked = true, Style = (Style)resources[typeof(ToggleButton)] };
-        var root = new Border { Width = 200, Height = 80, Resources = resources, Child = toggle };
-        Layout(root);
-        Border layer = Part<Border>(toggle, "CheckedLayer");
-        Assert.Equal(1d, layer.Opacity);
-        Assert.Equal(new Thickness(systemContrast ? 2 : 0), layer.BorderThickness);
-        Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(layer.BorderBrush));
-        Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(layer.Background));
-        if (systemContrast)
+        Func<SystemColorRole, Color>? previous = ThemeService.SystemColorsOverrideForTest;
+        ThemeService.SystemColorsOverrideForTest = role => SystemHighContrastThemeTests.NightSky[role];
+        try
         {
-            Assert.Equal(ColorOf(resources, "Surface.Base"), ColorOf(layer.Background));
-            Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(resources, "Text.Primary")),
-                ToThemeColor(ColorOf(resources, "Surface.Base"))) >= 3, "the contrast edge must show on Window");
-        }
-        else
-        {
+            ResourceDictionary resources = LoadResources();
+            ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: systemContrast, accent: AppAccent.Red);
+            var toggle = new ToggleButton { Content = "자세히", IsChecked = true, Style = (Style)resources[typeof(ToggleButton)] };
+            var root = new Border { Width = 200, Height = 80, Resources = resources, Child = toggle };
+            Layout(root);
+            Border layer = Part<Border>(toggle, "CheckedLayer");
+            Assert.Equal(1d, layer.Opacity);
+            Assert.Equal(new Thickness(0), layer.BorderThickness);
+            Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(layer.Background));
+            Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(toggle.Foreground));
+            if (systemContrast)
+            {
+                Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.Highlight], ColorOf(layer.Background));
+                Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.HighlightText], ColorOf(toggle.Foreground));
+            }
             Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(toggle.Foreground)),
-                ToThemeColor(ColorOf(layer.Background))) >= 4.5, "on-toggle text must stay readable on the selected fill");
+                ToThemeColor(ColorOf(layer.Background))) >= 4.5, "on-toggle text must stay readable on its fill");
+
+            toggle.IsChecked = false;
+            Layout(root);
+            Assert.Equal(ColorOf(resources, "Text.Secondary"), ColorOf(toggle.Foreground));
         }
+        finally { ThemeService.SystemColorsOverrideForTest = previous; }
     });
 
     private static ThemeColor ToThemeColor(Color color) => ThemeColor.Argb(color.A, color.R, color.G, color.B);
