@@ -133,7 +133,8 @@ internal static class OcrResultMerger
             // Do not use BuildBlockText here: it removes repeated adjacent text even when it
             // occupies distinct source rows (e.g. two spreadsheet cells with the same value).
             return OcrResult.Success(string.Join('\n', ordered.Select(line => line.Text)),
-                language, ordered, elapsed, orientation, OcrResult.MostTilted([windows.TextAngle, neural.TextAngle]));
+                language, ordered, elapsed, orientation, OcrResult.MostTilted([windows.TextAngle, neural.TextAngle]))
+                .WithNeuralLines(neural.HasText ? neural.Lines : []);
         }
 
         if (windows.Status is OcrStatus.Success or OcrStatus.NoText ||

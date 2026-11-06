@@ -170,7 +170,7 @@ public sealed class Ocr226EngineComparisonTests(ITestOutputHelper output)
         double cpuMs = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds;
         long allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
         Metric metric = Ocr226PreprocessingDiagnosticTests.Score(sample, result);
-        OcrTable table = OcrExtractionAnalyzer.Analyze(result).Table;
+        OcrTable table = OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true).Table;
         bool tabular = corpus == "fixture" || sample.Category.Contains("table", StringComparison.Ordinal) || sample.Category.Contains("grid", StringComparison.Ordinal);
         (string[]? Words, int? Found, bool? LineFound) header = tabular ? Header(sample, result) : default;
         return new Row(corpus, sample.Id, sample.Category, sample.Split, sample.FontPixels, sample.Width, sample.Height, path,

@@ -226,7 +226,7 @@ internal sealed partial class OcrResultWindow
                 return;
             }
             _currentExtraction = _deferredSelection is null ? _allExtraction
-                : OcrExtractionAnalyzer.Analyze(_result, _deferredSelection);
+                : OcrExtractionAnalyzer.Analyze(_result, _deferredSelection, preferNeuralTable: true);
             SetHeaderEstimate();
             RefreshAdvancedView();
         };
@@ -292,9 +292,9 @@ internal sealed partial class OcrResultWindow
     private void ApplyAdvancedResult(OcrResult result)
     {
         _result = result;
-        _allExtraction = OcrExtractionAnalyzer.Analyze(result);
+        _allExtraction = OcrExtractionAnalyzer.Analyze(result, preferNeuralTable: true);
         _currentExtraction = _deferredSelection is null ? _allExtraction
-            : OcrExtractionAnalyzer.Analyze(result, _deferredSelection);
+            : OcrExtractionAnalyzer.Analyze(result, _deferredSelection, preferNeuralTable: true);
         _imageOverlay.SetSelection(_deferredSelection, notify: false);
         _tabs.IsEnabled = true;
         if (!_modeChosen)
