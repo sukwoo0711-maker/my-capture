@@ -28,7 +28,9 @@ namespace MyCapture.App.Editing;
 /// then costs no allocation and hands the composition thread the resources it already has.
 /// When any input differs the resource is built exactly as before, so a paint issues the
 /// same drawing commands with equal resources, and therefore the same pixels, whether or not
-/// it was cached. Items that stop being drawn (deleted, undone, edited live) drop out.
+/// it was cached. Items that stop being drawn (deleted, undone, edited live) drop out. A caption
+/// edited live is drawn through the stand-in its editor keeps for it (see <c>liveText</c>), so
+/// typing rebuilds only that stand-in's layout and outline.
 /// </para>
 /// <para>
 /// Blur layers sample the base capture passed as <c>blurSource</c>. Exports blur exactly the
@@ -81,12 +83,19 @@ internal sealed class AnnotationRenderer
     /// The unannotated base capture in the document's pixel space, sampled by blur layers.
     /// Without it a blur layer draws an opaque cover rather than reveal anything.
     /// </param>
+    /// <param name="liveText">
+    /// The suppressed caption as its live text box currently reads. Its plate and outline are
+    /// drawn in the suppressed caption's place in the paint order, exactly as a committed caption
+    /// draws them, without the glyph fill: the text box draws the glyphs, caret and IME
+    /// composition on top, so the order stays plate, outline, glyphs.
+    /// </param>
     internal void Render(
         DrawingContext dc,
         AnnotationDocument document,
         double pixelsPerDip,
         AnnotationItem? suppress = null,
-        BitmapSource? blurSource = null)
+        BitmapSource? blurSource = null,
+        TextAnnotation? liveText = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         ArgumentNullException.ThrowIfNull(document);
@@ -100,7 +109,7 @@ internal sealed class AnnotationRenderer
         _pass++;
         try
         {
-            RenderItems(dc, document, pixelsPerDip, suppress, blurSource);
+            RenderItems(dc, document, pixelsPerDip, suppress, blurSource, liveText);
         }
         finally
         {
@@ -118,13 +127,22 @@ internal sealed class AnnotationRenderer
         AnnotationDocument document,
         double pixelsPerDip,
         AnnotationItem? suppress,
-        BitmapSource? blurSource)
+        BitmapSource? blurSource,
+        TextAnnotation? liveText)
     {
-        foreach (AnnotationItem item in document.Items)
+        foreach (AnnotationItem documentItem in document.Items)
         {
-            if (ReferenceEquals(item, suppress))
+            AnnotationItem item = documentItem;
+            bool glyphs = true;
+            if (ReferenceEquals(documentItem, suppress))
             {
-                continue;
+                if (liveText is null)
+                {
+                    continue;
+                }
+
+                item = liveText;
+                glyphs = false;
             }
 
             double previousOpacity = item.Opacity;
@@ -149,7 +167,7 @@ internal sealed class AnnotationRenderer
                     DrawPen(dc, pen);
                     break;
                 case TextAnnotation text:
-                    DrawText(dc, text, pixelsPerDip);
+                    DrawText(dc, text, pixelsPerDip, glyphs);
                     break;
                 case ImageAnnotation image:
                     DrawImage(dc, image);
@@ -429,7 +447,11 @@ internal sealed class AnnotationRenderer
         return geometry;
     }
 
-    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip)
+    /// <param name="glyphs">
+    /// False for a caption being typed: only its plate and outline, which its live text box
+    /// cannot draw. The box draws the glyph fill over them.
+    /// </param>
+    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip, bool glyphs)
     {
         Rect box = ToRect(text.Rect);
         TextCache cache = CacheFor<TextCache>(text);
@@ -465,12 +487,12 @@ internal sealed class AnnotationRenderer
         var origin = text.IsStepNumber
             ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
             : new Point(box.Left, box.Top);
-        if (cache.Glyphs is null || !cache.Origin.Equals(origin))
+        if (!cache.Origin.Equals(origin))
         {
             // The layout bakes its origin into every glyph and outline coordinate, so a moved
             // caption builds both again exactly where the uncached paint would have.
             cache.Origin = origin;
-            cache.Glyphs = RecordGlyphs(formatted, origin);
+            cache.Glyphs = null;
             cache.Outline = null;
         }
 
@@ -483,7 +505,10 @@ internal sealed class AnnotationRenderer
             dc.DrawGeometry(null, OutlinePen(outline, thickness), cache.Outline);
         }
 
-        dc.DrawDrawing(cache.Glyphs);
+        if (glyphs)
+        {
+            dc.DrawDrawing(cache.Glyphs ??= RecordGlyphs(formatted, origin));
+        }
 
         if (rotated)
         {

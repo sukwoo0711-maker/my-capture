@@ -310,7 +310,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         _viewport.MouseLeftButtonUp += OnSurfaceMouseUp;
         _viewport.MouseRightButtonDown += OnSurfaceRightDown;
         _viewport.MouseLeave += (_, _) => HidePointerPreview();
-        _controller.VisualInvalidated += (_, _) => RefreshPointerFeedback();
+        _controller.VisualInvalidated += (_, _) =>
+        {
+            SyncLiveTextInk();
+            RefreshPointerFeedback();
+        };
         PreviewKeyDown += (_, _) => RefreshPointerModifiers();
         PreviewKeyUp += (_, _) => RefreshPointerModifiers();
         _viewport.LostMouseCapture += (_, e) =>
@@ -1373,11 +1377,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // Settle that layout before copying the image scale into the live font size.
         UpdateLayout();
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        ColorRgba foreground = annotation.Foreground;
-        double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
-        Color background = annotation.Background.A > 0
-            ? Color.FromArgb(255, annotation.Background.R, annotation.Background.G, annotation.Background.B)
-            : luma > 140 ? Colors.Black : Colors.White;
+        SolidColorBrush ink = annotation.Foreground.ToBrush();
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1390,12 +1390,15 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
-            Foreground = annotation.Foreground.ToBrush(),
-            // TextBox does not draw the caption's outline; keep unplated text readable while editing.
-            Background = new SolidColorBrush(background),
+            Foreground = ink,
+            // The box draws only the glyphs, caret, selection and IME composition. The surface
+            // draws the caption's plate and outline under it with the committed caption's code
+            // (AnnotationEditorController.LiveTextForPaint), so the picture shows through between
+            // the glyphs and typing already looks like the result.
+            Background = Brushes.Transparent,
             Template = CaptionTextBoxTemplate.Value,
-            CaretBrush = 0.299 * background.R + 0.587 * background.G + 0.114 * background.B > 140
-                ? Brushes.Black : Brushes.White,
+            // The caret marks glyphs of the same colour, outlined like them when the outline is on.
+            CaretBrush = ink,
             BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1521,13 +1524,15 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         box.FontSize = Math.Max(1, editing.FontSize * dipPerPixel);
-        TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
+        string content = box.Text ?? string.Empty;
+        TextLayout fit = LiveTextLayout(editing, content);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
-        double minimumWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
-        double availableWidth = Math.Max(minimumWidth, _overlayCanvas.ActualWidth - target.Left + _liveTextInset.X);
-        box.MinWidth = fit.AutoSize ? Math.Max(minimumWidth, Math.Min(160, availableWidth)) : minimumWidth;
-        box.MinHeight = 32;
+        // The box hugs the text at every image scale: at least one em of the live font inside
+        // its chrome, so an empty caption still shows its frame and caret.
+        double em = box.FontSize;
+        box.MinWidth = chrome + em;
+        box.MinHeight = em + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -1546,6 +1551,23 @@ internal sealed partial class AnnotationEditorControl : Grid
         box.RenderTransform = new RotateTransform(editing.RotationDegrees,
             target.Width / 2 + _liveTextInset.X, target.Height / 2 + _liveTextInset.Y);
         UpdateLiveTextViewport(box);
+        // The plate and outline under the box follow the same text and layout, including text
+        // an IME is still composing (it is part of box.Text).
+        if (_controller.UpdateLiveText(content, fit)) _surface.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Keeps the live box's glyphs and caret in the caption's colour when it changes while the
+    /// box stays open; the surface takes the outline and plate from the caption on its next paint.
+    /// </summary>
+    private void SyncLiveTextInk()
+    {
+        if (_activeTextBox is not { } box || _editingText is not { } editing) return;
+        Color ink = editing.Foreground.ToColor();
+        if (box.Foreground is SolidColorBrush { Color: var current } && current == ink) return;
+        SolidColorBrush brush = editing.Foreground.ToBrush();
+        box.Foreground = brush;
+        box.CaretBrush = brush;
     }
 
     private TextLayout LiveTextLayout(TextAnnotation text, string content) =>
