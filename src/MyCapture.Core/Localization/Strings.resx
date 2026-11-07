@@ -3274,8 +3274,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Recording_SizeHint" xml:space="preserve"><value>고정 크기를 고르면 녹화 영역을 지정할 때 드래그로 위치만 정합니다. 가로·세로 96 ~ 7680픽셀.</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>마지막 영역</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>자유</value></data>
-  <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
-  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Recording_Fixed720" xml:space="preserve"><value>1280 × 720</value></data>
+  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920 × 1080</value></data>
   <data name="Ocr_Accuracy" xml:space="preserve"><value>인식 정확도</value></data>
   <data name="Ocr_QualityFast" xml:space="preserve"><value>빠름</value></data>
   <data name="Ocr_QualityBalanced" xml:space="preserve"><value>균형</value></data>

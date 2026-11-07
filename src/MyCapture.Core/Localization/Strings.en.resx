@@ -3274,8 +3274,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Recording_SizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 pixels.</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>Last region</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>Free</value></data>
-  <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
-  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Recording_Fixed720" xml:space="preserve"><value>1280 × 720</value></data>
+  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920 × 1080</value></data>
   <data name="Ocr_Accuracy" xml:space="preserve"><value>Recognition accuracy</value></data>
   <data name="Ocr_QualityFast" xml:space="preserve"><value>Fast</value></data>
   <data name="Ocr_QualityBalanced" xml:space="preserve"><value>Balanced</value></data>

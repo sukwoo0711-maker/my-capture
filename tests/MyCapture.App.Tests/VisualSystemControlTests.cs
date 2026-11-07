@@ -12,6 +12,7 @@ using System.Xml.Linq;
 using MyCapture.App.Themes;
 using MyCapture.Core.Themes;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
@@ -20,7 +21,7 @@ namespace MyCapture.App.Tests;
 /// Optional PNG evidence uses MYCAPTURE_VISUAL_EVIDENCE. A baseline directory containing
 /// before-Tokens.xaml, before-Controls.xaml and before-palettes.json enables paired renders.
 /// </summary>
-public sealed class VisualSystemControlTests
+public sealed class VisualSystemControlTests(ITestOutputHelper output)
 {
     private const int SheetWidth = 720;
     private const int SheetHeight = 540;
@@ -235,6 +236,94 @@ public sealed class VisualSystemControlTests
             toggle.IsChecked = false;
             Layout(root);
             Assert.Equal(ColorOf(resources, "Text.Secondary"), ColorOf(toggle.Foreground));
+        }
+        finally { ThemeService.SystemColorsOverrideForTest = previous; }
+    });
+
+    public static IEnumerable<object[]> OnFocusPalettes() =>
+        new[]
+        {
+            "glass", "glass-light", "daylight", "midnight", "high-contrast",
+            "workspace", "workspace-gallery", "workspace-video",
+            "windows-dusk", "windows-night-sky", "windows-desert", "windows-aquatic",
+        }.Select(palette => new object[] { palette });
+
+    // On and focused, the ring cannot keep Border.Focus: in the app palettes that is Text.Primary,
+    // the on fill's own colour (1:1), and in a Windows contrast theme WindowText sits at about
+    // 1.4-1.8:1 on Highlight. It takes the fill's ink instead, in the same place and size. The
+    // disclosure header keeps its neutral selected tile, so its ring stays the ordinary focus ink.
+    [Theory]
+    [MemberData(nameof(OnFocusPalettes))]
+    public void OnFocusedToggleRingReadsOnItsFillInEveryPalette(string palette) => Run(() =>
+    {
+        IReadOnlyDictionary<SystemColorRole, Color>? system = palette switch
+        {
+            "windows-dusk" => SystemHighContrastThemeTests.Dusk,
+            "windows-night-sky" => SystemHighContrastThemeTests.NightSky,
+            "windows-desert" => SystemHighContrastThemeTests.Desert,
+            "windows-aquatic" => SystemHighContrastThemeTests.Aquatic,
+            _ => null,
+        };
+        Func<SystemColorRole, Color>? previous = ThemeService.SystemColorsOverrideForTest;
+        ThemeService.SystemColorsOverrideForTest = role => (system ?? SystemHighContrastThemeTests.NightSky)[role];
+        try
+        {
+            ResourceDictionary resources = LoadResources();
+            if (palette is "workspace-gallery" or "workspace-video")
+                WorkspaceTheme.Apply(resources, palette == "workspace-gallery" ? WorkspaceRole.Gallery : WorkspaceRole.VideoEditor,
+                    AppTheme.Workspace, systemHighContrast: false, accent: AppAccent.Red);
+            else
+                ThemeService.ApplyResources(palette switch
+                {
+                    "glass-light" => AppTheme.GlassLight,
+                    "daylight" => AppTheme.Daylight,
+                    "midnight" => AppTheme.Midnight,
+                    "high-contrast" => AppTheme.HighContrast,
+                    "workspace" => AppTheme.Workspace,
+                    _ => AppTheme.Glass,
+                }, resources, systemHighContrast: system is not null, accent: AppAccent.Red);
+
+            // Tag stands in for keyboard focus in this fixture (see LoadResources).
+            var toggle = new ToggleButton { Content = "자세히", IsChecked = true, Tag = "True", Style = (Style)resources[typeof(ToggleButton)] };
+            var disclosure = new ToggleButton { Content = "꾸미기", IsChecked = true, Tag = "True", Style = (Style)resources["ToggleButton.Disclosure"] };
+            var panel = new StackPanel();
+            panel.Children.Add(toggle);
+            panel.Children.Add(disclosure);
+            var root = new Border { Width = 200, Height = 120, Resources = resources, Child = panel };
+            Layout(root);
+
+            foreach ((ToggleButton control, string fillKey, string ringKey) in new[]
+            {
+                (toggle, "Text.SelectionBackground", "Text.SelectionForeground"),
+                (disclosure, "Surface.Selected", "Border.Focus"),
+            })
+            {
+                Border fill = Part<Border>(control, "CheckedLayer");
+                Border ring = Part<Border>(control, "FocusRing");
+                Assert.Equal(1d, fill.Opacity);
+                Assert.Equal(1d, ring.Opacity);
+                Assert.Equal(new Thickness(1), ring.Margin);
+                Assert.Equal(new Thickness(2), ring.BorderThickness);
+                Assert.Equal(ColorOf(resources, fillKey), ColorOf(fill.Background));
+                Assert.Equal(ColorOf(resources, ringKey), ColorOf(ring.BorderBrush));
+                Color ringInk = ColorOf(ring.BorderBrush);
+                Color fillInk = ColorOf(fill.Background);
+                Assert.Equal(byte.MaxValue, ringInk.A);
+                Assert.Equal(byte.MaxValue, fillInk.A);
+                double ratio = ThemeContrast.Ratio(ToThemeColor(ringInk), ToThemeColor(fillInk));
+                output.WriteLine($"{palette} {control.Content}: ring {ringInk} on fill {fillInk} = {ratio:F2}:1");
+                Assert.True(ratio >= 3, $"{palette}/{control.Content}: the on+focus ring is {ratio:F2}:1 on its fill (expected 3:1)");
+            }
+
+            // Off and focused, the ring is the ordinary focus ink; on without focus, there is no ring.
+            toggle.IsChecked = false;
+            Layout(root);
+            Assert.Equal(ColorOf(resources, "Border.Focus"), ColorOf(Part<Border>(toggle, "FocusRing").BorderBrush));
+            Assert.Equal(1d, Part<Border>(toggle, "FocusRing").Opacity);
+            toggle.IsChecked = true;
+            toggle.Tag = null;
+            Layout(root);
+            Assert.Equal(0d, Part<Border>(toggle, "FocusRing").Opacity);
         }
         finally { ThemeService.SystemColorsOverrideForTest = previous; }
     });

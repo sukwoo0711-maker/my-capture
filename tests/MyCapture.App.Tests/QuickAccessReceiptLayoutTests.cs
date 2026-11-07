@@ -173,8 +173,9 @@ public sealed class QuickAccessReceiptLayoutTests
         finally { card.Close(); }
     });
 
-    // The keep icon takes the toggle's ink like every toggle's content, so the on state's selection
-    // fill (Text.SelectionBackground) cannot hide it under a Text.Primary icon.
+    // Off, the keep icon stays Text.Primary like the card's other command icons. On, it takes the
+    // toggle's selection ink, so the on state's fill (Text.SelectionBackground, the colour of
+    // Text.Primary) cannot hide it.
     [Fact]
     public void KeepIconTakesTheToggleInkOnTheSelectionFill() => StaTestHost.Run(() =>
     {
@@ -184,8 +185,7 @@ public sealed class QuickAccessReceiptLayoutTests
             Border host = QuickAccessDetachedFixture.Layout(card);
             var keep = card.KeepToggleForTest;
             SymbolIcon icon = Assert.IsType<SymbolIcon>(keep.Content);
-            Assert.Same(keep.Foreground, icon.Stroke);
-            Assert.Equal(Ink(host, "Text.Secondary"), Assert.IsType<SolidColorBrush>(icon.Stroke).Color);
+            Assert.Equal(Ink(host, "Text.Primary"), Assert.IsType<SolidColorBrush>(icon.Stroke).Color);
 
             keep.IsChecked = true;
             host.UpdateLayout();
@@ -196,6 +196,10 @@ public sealed class QuickAccessReceiptLayoutTests
             Assert.Equal(Ink(host, "Text.SelectionBackground"), background);
             Assert.True(MyCapture.Core.Themes.ThemeContrast.Ratio(Theme(stroke), Theme(background)) >= 4.5,
                 "the keep icon must read on the on-state fill");
+
+            keep.IsChecked = false;
+            host.UpdateLayout();
+            Assert.Equal(Ink(host, "Text.Primary"), Assert.IsType<SolidColorBrush>(icon.Stroke).Color);
         }
         finally { card.Close(); }
     });
