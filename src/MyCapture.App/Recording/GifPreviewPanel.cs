@@ -1,4 +1,5 @@
 using MyCapture.App.Themes;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -22,7 +23,18 @@ internal sealed class GifPreviewPanel : Border
 
     private readonly Func<GifPreviewSample, int, CancellationToken, Task<BitmapSource>> _renderOriginal;
     private readonly GifSamplePlayer _player;
-    private readonly TextBlock _info = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) };
+    private readonly TextBlock _info = new() { TextWrapping = TextWrapping.Wrap };
+    // Hidden twins stand in for what a sample brings. The info line's twin, with the paused-start
+    // notice, shares the line's cell, so the card keeps its height as a sample arrives. The twins
+    // of the play captions and the widest frame counter sit in canvases, which take no space:
+    // they only enter the decision to wrap the controls, so the controls keep their rows as a
+    // sample arrives, plays or pauses, while the button and the counter keep their own widths.
+    private readonly TextBlock _infoReserve = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Hidden };
+    private readonly TextBlock _frameReserve = new() { Visibility = Visibility.Hidden };
+    private readonly TextBlock[] _playCaptionReserves;
+    // The widest info line a sample of the source can show (see WidestInfo). Word for word it is
+    // at least as wide as any real line, so it wraps into at least as many lines.
+    private readonly string _widestInfo;
     private readonly TextBlock _message = new() { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16) };
     private readonly Grid _pair = new();
     private readonly Image _gif = new() { Stretch = Stretch.Uniform };
@@ -45,7 +57,9 @@ internal sealed class GifPreviewPanel : Border
     private bool _syncingSlider;
     private bool _syncingScroll;
 
-    internal GifPreviewPanel(Func<GifPreviewSample, int, CancellationToken, Task<BitmapSource>> renderOriginal)
+    /// <param name="renderOriginal">Renders the original of a sample frame for comparison.</param>
+    /// <param name="sourceDurationMs">Length of the recording the samples come from, for the info line's reserve; 0 when unknown.</param>
+    internal GifPreviewPanel(Func<GifPreviewSample, int, CancellationToken, Task<BitmapSource>> renderOriginal, double sourceDurationMs = 0)
     {
         _renderOriginal = renderOriginal;
         _player = new GifSamplePlayer(Dispatcher);
@@ -59,7 +73,13 @@ internal sealed class GifPreviewPanel : Border
         heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         root.Children.Add(heading);
         _info.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        root.Children.Add(_info);
+        _infoReserve.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        var infoCell = new Grid { Margin = new Thickness(0, 2, 0, 8) };
+        infoCell.Children.Add(_info);
+        infoCell.Children.Add(_infoReserve);
+        root.Children.Add(infoCell);
+        _widestInfo = WidestInfo(sourceDurationMs);
+        ReserveInfo(notice: !FluidMotion.AnimationsEnabled);
 
         _originalCaption.Text = UiText.Get("GifPreview_Original");
         foreach (TextBlock caption in new[] { _gifCaption, _originalCaption })
@@ -105,6 +125,12 @@ internal sealed class GifPreviewPanel : Border
         var playContent = new StackPanel { Orientation = Orientation.Horizontal };
         playContent.Children.Add(_playIcon);
         playContent.Children.Add(_playText);
+        // Measured in the button's font for the wrap decision below; the canvas adds no width.
+        _playCaptionReserves = [.. new[] { "GifPreview_Play", "GifPreview_Pause" }
+            .Select(key => new TextBlock { Text = UiText.Get(key), Visibility = Visibility.Hidden })];
+        var playCaptionHost = new Canvas();
+        foreach (TextBlock reserve in _playCaptionReserves) playCaptionHost.Children.Add(reserve);
+        playContent.Children.Add(playCaptionHost);
         _play.Content = playContent;
         _play.Click += (_, _) => TogglePlayback();
         AutomationProperties.SetName(_position, UiText.Get("GifPreview_Position"));
@@ -116,14 +142,19 @@ internal sealed class GifPreviewPanel : Border
             UpdatePlayButton();
         };
         _frameLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _frameReserve.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _frameReserve.Text = UiText.Format("GifPreview_Frame", 444, 444);
         Configure(_compare, "GifPreview_Compare", "GifPreview_CompareHelp");
         Configure(_actualSize, "GifPreview_ActualSize", "GifPreview_ActualSizeHelp");
         _compare.Checked += (_, _) => { _player.Pause(); UpdatePlayButton(); ApplyLayout(); };
         _compare.Unchecked += (_, _) => ApplyLayout();
         _actualSize.Checked += (_, _) => ApplyLayout();
         _actualSize.Unchecked += (_, _) => ApplyLayout();
+        var frameReserveHost = new Canvas();
+        frameReserveHost.Children.Add(_frameReserve);
         AddAt(controls, _play, 0);
         AddAt(controls, _position, 1);
+        AddAt(controls, frameReserveHost, 2);
         AddAt(controls, _frameLabel, 2);
         AddAt(controls, _compare, 3);
         AddAt(controls, _actualSize, 4);
@@ -131,7 +162,12 @@ internal sealed class GifPreviewPanel : Border
         controls.LayoutUpdated += (_, _) =>
         {
             if (controls.ActualWidth <= 0) return;
-            double needed = _play.DesiredSize.Width + _frameLabel.DesiredSize.Width
+            // Count the longer play caption and the widest counter, not the current ones.
+            double caption = _playCaptionReserves.Max(reserve => reserve.DesiredSize.Width);
+            double play = _play.DesiredSize.Width
+                + (_playText.Visibility == Visibility.Visible ? Math.Max(0, caption - _playText.DesiredSize.Width) : 0);
+            double frame = Math.Max(_frameLabel.DesiredSize.Width, _frameReserve.DesiredSize.Width);
+            double needed = play + frame
                 + _compare.DesiredSize.Width + _actualSize.DesiredSize.Width
                 + _position.MinWidth + _position.Margin.Left + _position.Margin.Right;
             bool wrap = needed > controls.ActualWidth + 0.5;
@@ -176,6 +212,7 @@ internal sealed class GifPreviewPanel : Border
     {
         Detach();
         KoreanWordWrap.Show(_info, string.Empty);
+        ReserveInfo(notice: !FluidMotion.AnimationsEnabled);
         ShowMessage(UiText.Get("GifPreview_Preparing"));
     }
 
@@ -183,6 +220,7 @@ internal sealed class GifPreviewPanel : Border
     {
         Detach();
         KoreanWordWrap.Show(_info, string.Empty);
+        ReserveInfo(notice: !FluidMotion.AnimationsEnabled);
         ShowMessage(UiText.Format("GifPreview_Failed", message));
     }
 
@@ -201,6 +239,7 @@ internal sealed class GifPreviewPanel : Border
         _syncingSlider = false;
         string info = UiText.Format("GifPreview_Info", sample.Window.StartMs / 1000, sample.Window.EndMs / 1000,
             frames.PixelWidth, frames.PixelHeight, frames.Frames.Count, frames.Timeline.TotalMs / 1000);
+        ReserveInfo(notice: !autoplay);
         KoreanWordWrap.Show(_info, autoplay ? info : info + Environment.NewLine + UiText.Get("GifPreview_MotionReduced"));
         SetControlsEnabled(true);
         _player.Load(frames.Timeline);
@@ -254,6 +293,24 @@ internal sealed class GifPreviewPanel : Border
         _frameLabel.Text = string.Empty;
         SetControlsEnabled(false);
         UpdatePlayButton();
+    }
+
+    /// <summary>Holds the info line's place, with the notice line when playback will start paused.</summary>
+    private void ReserveInfo(bool notice) => KoreanWordWrap.Show(_infoReserve,
+        notice ? _widestInfo + Environment.NewLine + UiText.Get("GifPreview_MotionReduced") : _widestInfo);
+
+    /// <summary>
+    /// The widest info line a sample of a source this long can show, every number in 4s, the
+    /// widest digit of Pretendard: the start and end with as many digits as the source's length
+    /// (three when it is unknown), the size and frame count with three (at most 960 px and 400
+    /// frames) and the loop with two (a 6 s sample at half speed loops in 12 s).
+    /// </summary>
+    private static string WidestInfo(double sourceDurationMs)
+    {
+        double seconds = Math.Round(sourceDurationMs / 1000, 1);
+        int digits = double.IsFinite(seconds) && seconds > 0 ? ((long)seconds).ToString(CultureInfo.InvariantCulture).Length : 3;
+        double time = double.Parse(new string('4', digits) + ".4", CultureInfo.InvariantCulture);
+        return UiText.Format("GifPreview_Info", time, time, 444, 444, 444, 44.4);
     }
 
     private void ShowMessage(string text)

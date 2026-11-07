@@ -10,6 +10,7 @@ public sealed partial class StoragePublicationFaultTests
 {
     internal const string ChildRootVariable = "MYCAPTURE_STORAGE_FAULT_CHILD_ROOT";
     private const string ChildBoundaryVariable = "MYCAPTURE_STORAGE_FAULT_CHILD_BOUNDARY";
+    private const string ChildDotnetVariable = "MYCAPTURE_STORAGE_TEST_DOTNET";
 
     [Theory]
     [InlineData(0)]
@@ -19,11 +20,44 @@ public sealed partial class StoragePublicationFaultTests
     public Task OwnedProcessKilledAtPublicationBoundary_RestartsWithExpectedDurableState(int boundary) =>
         RunCrashBoundaryAsync(boundary, $"process-kill-{boundary}");
 
+    private static string ChildDotnetHost() => ChildDotnetHost(
+        DotnetHostCandidate(RuntimeEnvironment.GetRuntimeDirectory()), Environment.GetEnvironmentVariable(ChildDotnetVariable));
+
+    /// <summary>
+    /// The child runner is started by the dotnet host of the runtime running these tests, never by a
+    /// path from the environment. The former override can only confirm that host; any other value fails.
+    /// </summary>
+    internal static string ChildDotnetHost(string? candidate, string? requested)
+    {
+        // A layout without a host beside the shared runtime keeps the previous PATH lookup.
+        string host = candidate is not null && File.Exists(candidate) ? candidate : "dotnet";
+        if (!string.IsNullOrWhiteSpace(requested) &&
+            !string.Equals(Path.GetFullPath(requested), host, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(ChildDotnetVariable + " must name the dotnet host of the runtime running these tests.");
+        return host;
+    }
+
+    /// <summary>
+    /// <c>&lt;root&gt;\shared\Microsoft.NETCore.App\&lt;version&gt;\</c> gives <c>&lt;root&gt;\dotnet.exe</c>.
+    /// Any other runtime directory layout has no trusted host candidate.
+    /// </summary>
+    internal static string? DotnetHostCandidate(string runtimeDirectory)
+    {
+        string version = Path.TrimEndingDirectorySeparator(Path.GetFullPath(runtimeDirectory));
+        string? framework = Path.GetDirectoryName(version);
+        string? shared = Path.GetDirectoryName(framework);
+        string? root = Path.GetDirectoryName(shared);
+        return root is not null
+            && string.Equals(Path.GetFileName(framework), "Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetFileName(shared), "shared", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")
+            : null;
+    }
+
     private async Task<string> RunCrashBoundaryAsync(int boundary, string scenario)
     {
+        string dotnet = ChildDotnetHost();
         Fixture fixture = await Fixture.CreateAsync(scenario);
-        string dotnet = Environment.GetEnvironmentVariable("MYCAPTURE_STORAGE_TEST_DOTNET")
-            ?? Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
         string ready = Path.Combine(fixture.Root, "child-ready.json");
         string assembly = typeof(StoragePublicationFaultTests).Assembly.Location;
         var start = new ProcessStartInfo(dotnet)
@@ -47,7 +81,8 @@ public sealed partial class StoragePublicationFaultTests
         File.WriteAllText(Path.Combine(fixture.Root, "child-command.json"), JsonSerializer.Serialize(new
         {
             executable = dotnet, arguments = start.ArgumentList.ToArray(), cwd = start.WorkingDirectory,
-            fixture = fixture.Root, boundary,
+            fixture = fixture.Root, boundary, runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory(),
+            ambientDotnetHostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH"),
         }, JsonDefaults.Readable));
 
         using var child = new Process { StartInfo = start };
@@ -184,11 +219,13 @@ public sealed partial class StoragePublicationFaultTests
     [StorageFaultWorkerFact]
     public async Task CrashBoundaryWorker()
     {
-        string root = Environment.GetEnvironmentVariable(ChildRootVariable)
+        string requested = Environment.GetEnvironmentVariable(ChildRootVariable)
             ?? throw new InvalidOperationException("The crash worker requires its owning parent fixture.");
         int boundary = int.Parse(Environment.GetEnvironmentVariable(ChildBoundaryVariable)!, System.Globalization.CultureInfo.InvariantCulture);
         Assert.InRange(boundary, 0, 3);
-        Fixture fixture = Fixture.OpenChild(root);
+        // The parent's root is validated before any file access, and the marker uses only that root.
+        Fixture fixture = Fixture.OpenChild(requested);
+        string root = fixture.Root;
         fixture.SetReplacement();
         string[] targets = fixture.PublicationPaths;
         fixture.Queue.BeforePublicationWriteForTest = (path, _) =>

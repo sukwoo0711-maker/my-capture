@@ -254,9 +254,11 @@ public sealed partial class StoragePublicationFaultTests
             return directory?.FullName ?? throw new InvalidOperationException("Storage fixture requires the repository test output.");
         }
 
+        private static string OwnedRoot() => Path.Combine(RepositoryRoot(), "artifacts", "storage-fault-tests");
+
         internal static async Task<Fixture> CreateAsync(string scenario, bool longPath = false)
         {
-            string root = Path.Combine(RepositoryRoot(), "artifacts", "storage-fault-tests", scenario + "-" + Guid.NewGuid().ToString("N"));
+            string root = Path.Combine(OwnedRoot(), scenario + "-" + Guid.NewGuid().ToString("N"));
             Assert.False(Directory.Exists(root));
             Directory.CreateDirectory(root);
             var fixture = new Fixture(root, longPath);
@@ -285,13 +287,22 @@ public sealed partial class StoragePublicationFaultTests
             return fixture;
         }
 
-        internal static Fixture OpenChild(string root)
+        /// <summary>The crash worker's fixture; its environment-supplied root is validated before any file access.</summary>
+        internal static Fixture OpenChild(string root) => new(ChildRoot(OwnedRoot(), root));
+
+        /// <summary>
+        /// An existing direct child of <paramref name="ownedRoot"/> without links that holds the parent's
+        /// prepared receipt. Escapes, device and network paths fail before they are read; nothing is created.
+        /// </summary>
+        internal static string ChildRoot(string ownedRoot, string requested)
         {
-            string canonical = Path.GetFullPath(root);
-            string allowed = Path.Combine(RepositoryRoot(), "artifacts", "storage-fault-tests") + Path.DirectorySeparatorChar;
-            if (!canonical.StartsWith(allowed, StringComparison.OrdinalIgnoreCase) || !File.Exists(Path.Combine(canonical, "prepared.json")))
+            string allowed = ValidatedFilePaths.DirectoryRoot(ownedRoot);
+            string root = ValidatedFilePaths.DirectoryWithinRoot(allowed, requested);
+            if (!string.Equals(Path.GetDirectoryName(root), allowed, StringComparison.Ordinal) || !Directory.Exists(root))
+                throw new InvalidOperationException("Child fixture must be an existing direct child of the owned storage-fault directory.");
+            if (!File.Exists(ValidatedFilePaths.FileWithinRoot(root, "prepared.json", ".json")))
                 throw new InvalidOperationException("Child fixture must be a prepared owned storage-fault directory.");
-            return new Fixture(canonical);
+            return root;
         }
 
         internal CaptureQueue Reload()

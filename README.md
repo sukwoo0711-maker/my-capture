@@ -45,7 +45,7 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 | 영역 캡처 | `Ctrl+Shift+C` | 캡처는 클립보드에 복사되므로 이어서 `F3`을 누르면 핀이 됩니다. 캡처 직후 뜨는 작은 카드에서는 클릭하거나 `Alt+Q`를 누른 뒤 `E` 편집, `S` 저장, `T` 텍스트 복사 |
 | 핀 모두 숨기기/보이기 | `Shift+F3` | 4.5.0부터 새 설치 기본값. 트레이 메뉴의 '핀 모두 숨기기'로도 실행 |
 | 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료 |
-| 라이브러리 열기 | 설정에서 지정(예: `Ctrl+Shift+Z`) | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
+| 라이브러리 열기 | `Ctrl+Shift+Z` | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
 | 클립보드 이미지를 GitHub 첨부 URL로 | 설정에서 지정(예: `F9`) | 설정한 이슈 Write 칸에 붙여 넣고 user-attachments URL을 복사 |
 | 편집기 개인정보 가리기 | `Ctrl+Shift+R` | 편집기 안에서. 이 PC에서 인식한 개인정보 후보를 편집 가능한 가림막으로 추가 |
 | 편집기 도장 찍기 | `S` | 편집기 안에서. 한 번 등록한 로고나 블로그 이름을 등록한 위치에 일반 이미지로 추가. 처음에는 이미지 파일을 고르고, 오른쪽 클릭 메뉴에서 이미지 변경, 불투명도, 지우기 |
@@ -54,7 +54,7 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 | 핀 이미지 빠른 저장 | `Ctrl+S` | 핀에 포커스가 있을 때 원본 PNG 저장 |
 | 핀 이미지 다른 이름으로 저장 | `Ctrl+Shift+S` | 오른쪽 클릭 메뉴에서도 실행 가능 |
 
-새로 설치하면 영역 캡처 `Ctrl+Shift+C`, 영역 녹화 `Ctrl+Shift+X`, 클립보드 핀 `F3`, 핀 모두 숨기기 `Shift+F3`이 정해져 있습니다. 다른 프로그램이 이미 쓰는 키는 실행할 때 알려 주므로 설정에서 다른 키로 바꾸십시오. `Ctrl+Shift+Z`는 여러 편집기의 다시 실행 키라서 라이브러리 열기와 GitHub 첨부는 필요한 사람이 설정에서 지정합니다. 이전 버전부터 쓰던 설정은 저장된 키를 그대로 유지합니다.
+새로 설치하면 영역 캡처 `Ctrl+Shift+C`, 영역 녹화 `Ctrl+Shift+X`, 라이브러리 열기 `Ctrl+Shift+Z`, 클립보드 핀 `F3`, 핀 모두 숨기기 `Shift+F3`이 정해져 있습니다. 앞의 네 키는 다른 프로그램이 먼저 등록한 같은 키도 MyCapture가 먼저 처리하므로, MyCapture가 실행 중인 동안에는 다른 프로그램의 같은 단축키(예: 파일 탐색기의 `F3` 검색, 편집기의 `Ctrl+Shift+Z` 다시 실행)가 동작하지 않습니다. 처음 실행할 때 **핵심 단축키** 안내가 이를 알리며, 키를 바꾸거나 먼저 처리를 끄려면 **설정 → 단축키**를 엽니다. GitHub 첨부는 필요한 사람이 설정에서 지정합니다. 이전 버전부터 쓰던 설정은 저장된 키를 그대로 유지합니다.
 
 단축키는 설정에서 바꿀 수 있습니다. 그 밖의 전역 단축키, 창 제목 기록, 빠른 저장 파일명 규칙은 [기능과 화면](docs/features.md#기본-단축키)에 정리했습니다.
 
@@ -123,14 +123,14 @@ A click-through pin does not take clicks, so press `Shift+F3` twice or choose Tu
 | Region capture | `Ctrl+Shift+C` (the capture goes to the clipboard, so `F3` pins it; on the small card that appears, click it or press `Alt+Q`, then `E` edit, `S` save, `T` copy text) |
 | Hide or show all pins | `Shift+F3` (new installs from 4.5.0); also in the tray menu |
 | Start or stop region recording | `Ctrl+Shift+X` |
-| Open the library | Assign in Settings (for example `Ctrl+Shift+Z`) |
+| Open the library | `Ctrl+Shift+Z` |
 | Turn the clipboard image into a GitHub attachment URL | Assign in Settings (for example `F9`) |
 | Redact personal data (in the editor) | `Ctrl+Shift+R` |
 | Place your logo stamp (in the editor) | `S` (the first time you choose the picture; right-click the button for change, opacity and remove) |
 | Save the editor image or the focused pin | `Ctrl+S` |
 | Save as | `Ctrl+Shift+S` |
 
-A new install sets `Ctrl+Shift+C` for region capture, `Ctrl+Shift+X` for recording, `F3` to pin the clipboard and `Shift+F3` to hide or show all pins. If another app already uses one of these keys, MyCapture tells you at startup so you can pick another in Settings. The library and GitHub attachment shortcuts stay unassigned because `Ctrl+Shift+Z` is redo in many editors. Settings from earlier versions keep their saved keys.
+A new install sets `Ctrl+Shift+C` for region capture, `Ctrl+Shift+X` for recording, `Ctrl+Shift+Z` to open the library, `F3` to pin the clipboard and `Shift+F3` to hide or show all pins. MyCapture takes the first four even when another app registered them first, so while it runs those apps' same shortcuts (such as `F3` search in File Explorer or `Ctrl+Shift+Z` redo in editors) do not work. The first launch says so in a **Core shortcuts** notice; change the keys or turn this off in **Settings → Shortcuts**. The GitHub attachment shortcut stays unassigned. Settings from earlier versions keep their saved keys.
 
 All shortcuts can be changed in Settings.
 

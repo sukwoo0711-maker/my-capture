@@ -19,21 +19,60 @@ internal readonly record struct SelectionHandle(ResizeHandle Handle, PointD Posi
 
 internal static class PointerIntentGeometry
 {
-    internal static IReadOnlyList<SelectionHandle> SelectionHandles(AnnotationItem item, double dipPerPixel)
+    // The square handle's eight-DIP body and two-DIP pen reach five DIP from its centre.
+    internal const double CaptionFrameOffsetDip = 6;
+
+    internal static RectD SelectionFrame(AnnotationItem item, double dipPerPixel)
     {
         double scale = double.IsFinite(dipPerPixel) && dipPerPixel > 0 ? dipPerPixel : 1;
-        RectD bounds = item.Bounds;
+        RectD bounds = item is TextAnnotation { IsStepNumber: false } caption
+            ? TextAnnotationLayout.InkBounds(caption).Inflate(CaptionFrameOffsetDip / scale)
+            : item.Bounds;
         // Leave an eight-DIP move area between the eight-DIP handle hit areas.
         double width = Math.Max(bounds.Width, 24 / scale);
         double height = Math.Max(bounds.Height, 24 / scale);
-        RectD display = new(bounds.Center.X - width / 2, bounds.Center.Y - height / 2, width, height);
+        return new RectD(bounds.Center.X - width / 2, bounds.Center.Y - height / 2, width, height);
+    }
+
+    /// <summary>
+    /// The length of a selected two-point line's body, centred on its midpoint, that always moves
+    /// the line: the same eight DIP <see cref="SelectionFrame"/> keeps between handle hit areas.
+    /// </summary>
+    internal const double LineMoveZoneDip = 8;
+
+    /// <summary>
+    /// Whether <paramref name="point"/> lies on the middle <see cref="LineMoveZoneDip"/> of
+    /// <paramref name="line"/>'s body, between its endpoints. Each endpoint handle reaches eight DIP
+    /// along both axes, so on a line no longer than 16 DIP each way the two would otherwise meet
+    /// and every press would stretch an end. On longer lines the handles end before this zone.
+    /// </summary>
+    internal static bool InLineMoveZone(PolylineAnnotation line, PointD point, double dipPerPixel, double hitTolerance)
+    {
+        if (line.Points.Count != 2) return false;
+        PointD start = line.Points[0], end = line.Points[1];
+        double dx = end.X - start.X, dy = end.Y - start.Y;
+        double length = Math.Sqrt((dx * dx) + (dy * dy));
+        if (!(length > 0)) return false;
+        double scale = double.IsFinite(dipPerPixel) && dipPerPixel > 0 ? dipPerPixel : 1;
+        double along = (((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / length;
+        return along >= 0 && along <= length
+            && Math.Abs(along - (length / 2)) <= LineMoveZoneDip / 2 / scale
+            && line.DistanceTo(point) <= hitTolerance;
+    }
+
+    internal static IReadOnlyList<SelectionHandle> SelectionHandles(AnnotationItem item, double dipPerPixel)
+    {
+        if (item is PolylineAnnotation { Points.Count: 2 } line)
+            return [new(ResizeHandle.LineStart, line.Points[0]), new(ResizeHandle.LineEnd, line.Points[1])];
+
+        RectD display = SelectionFrame(item, dipPerPixel);
         var result = new List<SelectionHandle>(8);
         foreach (ResizeHandle handle in Enum.GetValues<ResizeHandle>())
         {
             if (handle == ResizeHandle.None || AnnotationEditorController.UsableHandle(item, handle) == ResizeHandle.None) continue;
             PointD point = HandlePoint(display, handle);
             if (item is TextAnnotation { RotationDegrees: not 0 } text)
-                point = GeometryMath.Rotate(point, bounds.Center, text.RotationDegrees);
+                point = GeometryMath.Rotate(point, text.Rect.Center, text.RotationDegrees);
             result.Add(new SelectionHandle(handle, point));
         }
         return result;
@@ -64,10 +103,19 @@ internal static class PointerIntentGeometry
 
     internal static EditorCursorKind ResizeCursor(AnnotationItem item, ResizeHandle handle)
     {
+        if (item is PolylineAnnotation { Points.Count: 2 } line
+            && handle is ResizeHandle.LineStart or ResizeHandle.LineEnd)
+            return DirectionCursor(Math.Atan2(line.Points[1].Y - line.Points[0].Y,
+                line.Points[1].X - line.Points[0].X) * 180 / Math.PI);
         if (item is not TextAnnotation { RotationDegrees: not 0 } text)
             return EditorCursorPolicy.Resolve(EditorTool.Select, new EditorPointerTarget(Handle: handle));
         PointD direction = HandlePoint(new RectD(-1, -1, 2, 2), handle);
         double degrees = Math.Atan2(direction.Y, direction.X) * 180 / Math.PI + text.RotationDegrees;
+        return DirectionCursor(degrees);
+    }
+
+    private static EditorCursorKind DirectionCursor(double degrees)
+    {
         int quadrant = ((int)Math.Round(degrees / 45) % 4 + 4) % 4;
         return quadrant switch
         {

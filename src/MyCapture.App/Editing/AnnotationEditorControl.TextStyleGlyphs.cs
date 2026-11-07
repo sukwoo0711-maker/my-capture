@@ -71,7 +71,7 @@ internal sealed partial class AnnotationEditorControl
                     Width = 18, Height = 18, CornerRadius = new CornerRadius(2), Child = letter,
                 };
                 highlight.SetBinding(Border.BackgroundProperty, ToggleForeground());
-                letter.SetResourceReference(TextBlock.ForegroundProperty, "Surface.Raised");
+                letter.Style = KnockoutLetterStyle();
                 glyph.Children.Add(highlight);
             }
             else
@@ -87,4 +87,23 @@ internal sealed partial class AnnotationEditorControl
     {
         RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(ToggleButton), 1),
     };
+
+    // The background glyph's letter is cut out of its ink box: it takes the panel colour while the
+    // toggle is off and the toggle's selection fill while it is on, where the box is selection ink.
+    private static Style KnockoutLetterStyle()
+    {
+        var style = new Style(typeof(TextBlock));
+        style.Setters.Add(new Setter(TextBlock.ForegroundProperty, new DynamicResourceExtension("Surface.Raised")));
+        var on = new DataTrigger
+        {
+            Binding = new Binding(nameof(ToggleButton.IsChecked))
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(ToggleButton), 1),
+            },
+            Value = true,
+        };
+        on.Setters.Add(new Setter(TextBlock.ForegroundProperty, new DynamicResourceExtension("Text.SelectionBackground")));
+        style.Triggers.Add(on);
+        return style;
+    }
 }

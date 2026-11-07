@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -21,6 +22,14 @@ public sealed partial class SettingsThemePreviewTests
             GalleryWindow window = f.Window;
             SynchronizationContext? previous = SynchronizationContext.Current;
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(application.Dispatcher));
+            // The step a failure, or a timeout of the isolated process, is reported against.
+            string stage = "fixture";
+            var elapsed = Stopwatch.StartNew();
+            void Stage(string next)
+            {
+                stage = next;
+                RecordIsolatedProgress("library row reset: " + next);
+            }
             try
             {
                 // Keep the eager first projection and test the real width-change handler.
@@ -30,6 +39,8 @@ public sealed partial class SettingsThemePreviewTests
                 // column count cannot change. Admit the requested width at any DPI up to 300%.
                 using var tracking = new WindowTrackSizeScope(window, new Size(2000 * 3 + 100, 0));
                 window.Show(); window.Activate(); SettleGalleryLayout(window);
+                RecordIsolatedProgress($"library row reset shown; {LibraryLayoutState(window, f.ViewModel, tracking: tracking)}");
+                Stage("active window at 2000 DIP");
                 Assert.True(window.IsActive, "This native focus regression requires the active test window.");
                 var rows = (ListBox)window.FindName("RowsList");
                 var search = (TextBox)window.FindName("SearchBox");
@@ -45,9 +56,10 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(search.Focus());
                 Assert.Same(search, Keyboard.FocusedElement);
 
+                Stage("narrowed from 2000 DIP to the minimum width with Search focused");
                 window.Width = window.MinWidth;
                 SettleGalleryLayout(window);
-                Assert.True(f.ViewModel.ColumnCount < columns);
+                AssertColumnCountMoved(window, f.ViewModel, columns, fewer: true, stage, tracking);
                 Assert.Same(source, rows.ItemsSource);
                 Assert.Same(f.ViewModel.Rows, source);
                 Assert.Same(view, CollectionViewSource.GetDefaultView(rows.ItemsSource));
@@ -59,6 +71,7 @@ public sealed partial class SettingsThemePreviewTests
 
                 // The old row containers were replaced. Re-entry must still find the
                 // remembered capture by identity, ahead of the different selected tile.
+                Stage("grid re-entry after the row reset");
                 Assert.True(window.FocusGridEntry());
                 PumpLibraryUntil(window, () => Keyboard.FocusedElement is ListBoxItem
                     { DataContext: GalleryItemViewModel tile } && tile.Id == rememberedId,
@@ -68,6 +81,7 @@ public sealed partial class SettingsThemePreviewTests
                 // Resize while a nonfirst card actually owns keyboard focus in a scrolled viewport.
                 // Keep the Search-focus/re-entry checks above unchanged. No refocus or ScrollIntoView
                 // is performed after this second resize, so a detached/stale focused card cannot pass.
+                Stage("scrolled active card at the minimum height");
                 Assert.True(search.Focus());
                 window.Height = window.MinHeight;
                 SettleGalleryLayout(window);
@@ -84,9 +98,10 @@ public sealed partial class SettingsThemePreviewTests
                 PumpLibraryUntil(window, ActiveCardIsFocusedAndVisible, "scrolled active card before row reset");
                 int narrowColumns = f.ViewModel.ColumnCount;
 
+                Stage("widened to 2000 DIP with the scrolled active card focused");
                 window.Width = 2000;
                 SettleGalleryLayout(window);
-                Assert.True(f.ViewModel.ColumnCount > narrowColumns);
+                AssertColumnCountMoved(window, f.ViewModel, narrowColumns, fewer: false, stage, tracking);
                 PumpLibraryUntil(window, ActiveCardIsFocusedAndVisible,
                     "row reset keeps the actual active card focused and visible without refocusing");
                 Assert.Same(source, rows.ItemsSource);
@@ -97,6 +112,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.InRange(scroll.VerticalOffset, 0, scroll.ScrollableHeight);
 
                 // XAML attaches the product handler to this same RowsList before this handler.
+                Stage("narrowed while a later handler moves focus to Search");
                 int wideColumns = f.ViewModel.ColumnCount;
                 bool observedPending = false, movedToSearch = false;
                 SizeChangedEventHandler moveFocusToSearch = (_, args) =>
@@ -111,7 +127,7 @@ public sealed partial class SettingsThemePreviewTests
                     window.Width = window.MinWidth;
                     SettleGalleryLayout(window);
                     DrainFocusCallbacks();
-                    Assert.True(f.ViewModel.ColumnCount < wideColumns);
+                    AssertColumnCountMoved(window, f.ViewModel, wideColumns, fewer: true, stage, tracking);
                     Assert.True(observedPending, "The product must have queued a restoration before the focus move.");
                     Assert.True(movedToSearch);
                     Assert.Same(search, Keyboard.FocusedElement);
@@ -119,6 +135,7 @@ public sealed partial class SettingsThemePreviewTests
                 finally { rows.SizeChanged -= moveFocusToSearch; }
 
                 // Prove the remembered folder route defers before testing cancellation.
+                Stage("deferred folder re-entry and its cancellation");
                 GalleryFolderRow folderRow = f.ViewModel.Rows.OfType<GalleryFolderRow>().First();
                 rows.ScrollIntoView(folderRow);
                 SettleGalleryLayout(window);
@@ -141,6 +158,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Same(search, Keyboard.FocusedElement);
 
                 // Exercise the product input hook while the actual resize restore is pending.
+                Stage("input cancels the pending resize restoration");
                 window.Width = window.MinWidth;
                 SettleGalleryLayout(window);
                 scroll.ScrollToEnd();
@@ -162,7 +180,7 @@ public sealed partial class SettingsThemePreviewTests
                     window.Width = 2000;
                     SettleGalleryLayout(window);
                     DrainFocusCallbacks();
-                    Assert.True(f.ViewModel.ColumnCount > narrowColumns);
+                    AssertColumnCountMoved(window, f.ViewModel, narrowColumns, fewer: false, stage, tracking);
                     Assert.True(inputSawPending);
                     Assert.True(inputCancelledPending);
                     Assert.False(ActiveCardIsFocusedAndVisible());
@@ -170,6 +188,7 @@ public sealed partial class SettingsThemePreviewTests
                 finally { rows.SizeChanged -= cancelWithInput; }
 
                 // Hide at Send priority after the resize callback has queued its Loaded work.
+                Stage("hiding cancels the pending resize restoration");
                 Assert.True(search.Focus());
                 window.Width = window.MinWidth;
                 SettleGalleryLayout(window);
@@ -204,6 +223,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(window.IsActive);
 
                 // Put enough synthetic cards beyond the viewport/cache to require tile realization.
+                Stage("re-entry realizes a virtualized card");
                 Assert.True(search.Focus());
                 for (int index = 0; index < 48; index++)
                     _ = AddLibraryFolderCapture(f.Queue, DateTimeOffset.UtcNow.AddMinutes(-index),
@@ -262,6 +282,10 @@ public sealed partial class SettingsThemePreviewTests
                     return new Rect(viewport.RenderSize).Contains(center);
                 }
 
+            }
+            catch (Exception error) when (CaptureLibraryLayout(error, window, f.ViewModel, out string layout))
+            {
+                throw LibraryStepFailure(stage, elapsed, layout, error);
             }
             finally
             {

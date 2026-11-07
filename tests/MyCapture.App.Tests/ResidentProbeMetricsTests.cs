@@ -61,6 +61,26 @@ public sealed class ResidentProbeMetricsTests
     }
 
     [Fact]
+    public void LibraryDeleteRunsLastInTheReleaseTableAndItsBudgetRejectsOneShellOperationPerCapture()
+    {
+        Assert.Equal(ResidentProbeLibraryDelete.Scenario, ResidentProbeOptions.AllScenarios[^1]);
+        Assert.Equal(124, ResidentProbeLibraryDelete.Count(quick: false));
+        Assert.Equal(12, ResidentProbeLibraryDelete.Count(quick: true));
+        // 124 directories with the real Recycle Bin on the developer PC, 2026-11-06. One Shell
+        // operation per capture kept the cards until the move ended (42.6 s) and restored for 396 s;
+        // one operation for the selection moved them in 14.9 s and restored them in 8.1 s, with the
+        // cards gone as in the slowest first delete measured (1.2 s).
+        IReadOnlyList<string> before = ResidentProbeLibraryDelete.OverBudget(new(124, 42_560, 42_560, 396_370));
+        Assert.Equal(3, before.Count);
+        Assert.Contains("library-delete: 124 selected → cards gone: 42560 ms, budget 5000 ms", before);
+        Assert.Empty(ResidentProbeLibraryDelete.OverBudget(new(124, 1_200, 14_920, 8_100)));
+        // The quick probe of 12 on the same PC: the build before the batches (d28e9172) and the batched one.
+        Assert.Equal(new[] { "library-delete: undo 12 → result on the status line: 28204 ms, budget 6800 ms" },
+            ResidentProbeLibraryDelete.OverBudget(new(12, 1_652, 1_652, 28_204)));
+        Assert.Empty(ResidentProbeLibraryDelete.OverBudget(new(12, 975, 1_097, 4_053)));
+    }
+
+    [Fact]
     public void RenderCompletionRemainsSeparateFromFirstRenderingAndUnknownIsNull()
     {
         var first = new ResidentProbeRecorder.Breakdown("capture", 1, 29, 800, []);

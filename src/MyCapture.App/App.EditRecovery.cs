@@ -129,6 +129,10 @@ public partial class App
             }
             await EditDraftSession.WaitForFinalizationsAsync();
             await FlushPreferenceSavesForExitAsync();
+            // Only an explicit exit is final here. An import hold, or a Store update that fails, leaves the
+            // app running, so its notice only leaves the screen and the records stay for the next launch.
+            if (reason == AppExitReason.Explicit) await CloseUnexpectedExitNoticeAsync();
+            else WithdrawUnexpectedExitNotice();
             return true;
         }
         catch (Exception error) { _log?.LogError(error, "Could not prepare app exit ({Reason})", reason); return false; }

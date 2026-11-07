@@ -520,9 +520,10 @@ internal sealed class PracticePinScene : TutorialScene
                 HighlightItem.Invoke(item, [bounds.Contains(new Point(cursor.X, cursor.Y))]);
             }
             _menu.UpdateLayout();
-            dc.PushClip(new RectangleGeometry(_target));
-            dc.DrawImage(OffscreenWindow.SnapshotElement(_menu, _menu.ActualWidth, _menu.ActualHeight, _scale, opaque: false),
-                new Rect(_target.X, _target.Y - _source.Y * _scale, _menu.ActualWidth * _scale, _menu.ActualHeight * _scale));
+            OffscreenWindow.PopupSnapshot snapshot = OffscreenWindow.SnapshotPopup(_menu, _scale);
+            dc.PushClip(new RectangleGeometry(snapshot.CropBoundsAt(_source, _target.Location, _scale)));
+            dc.DrawImage(snapshot.Bitmap,
+                snapshot.BoundsAt(new Point(_target.X, _target.Y - _source.Y * _scale), _scale));
             dc.Pop();
         }
     }

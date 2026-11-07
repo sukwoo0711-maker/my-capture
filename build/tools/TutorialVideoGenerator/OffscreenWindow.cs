@@ -71,7 +71,7 @@ internal sealed class OffscreenWindow : IDisposable
     /// Surface.Base); false for layered content such as a countdown card, keeping its transparency.
     /// </param>
     internal static BitmapSource SnapshotElement(Visual visual, double width, double height, double scale = 1, Brush? backdrop = null,
-        bool opaque = true)
+        bool opaque = true, Rect? underlayBounds = null)
     {
         double factor = Stage.Scale * scale;
         var bitmap = new RenderTargetBitmap(Math.Max(1, (int)Math.Round(width * factor)), Math.Max(1, (int)Math.Round(height * factor)),
@@ -81,8 +81,9 @@ internal sealed class OffscreenWindow : IDisposable
             var underlay = new DrawingVisual();
             using (DrawingContext dc = underlay.RenderOpen())
             {
-                if (opaque) dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-                if (backdrop is not null) dc.DrawRectangle(backdrop, null, new Rect(0, 0, width, height));
+                Rect bounds = underlayBounds ?? new Rect(0, 0, width, height);
+                if (opaque) dc.DrawRectangle(Brushes.Black, null, bounds);
+                if (backdrop is not null) dc.DrawRectangle(backdrop, null, bounds);
             }
 
             bitmap.Render(underlay);
@@ -91,6 +92,36 @@ internal sealed class OffscreenWindow : IDisposable
         bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;
+    }
+
+    /// <summary>Captures the popup's margin band; item coordinates remain relative to its body.</summary>
+    internal static PopupSnapshot SnapshotPopup(FrameworkElement body, double scale = 1, bool opaque = false)
+    {
+        Thickness margin = body.Margin;
+        var size = new Size(body.ActualWidth, body.ActualHeight);
+        BitmapSource bitmap = SnapshotElement(body, margin.Left + size.Width + margin.Right,
+            margin.Top + size.Height + margin.Bottom, scale, opaque: opaque,
+            underlayBounds: new Rect(new Point(margin.Left, margin.Top), size));
+        return new PopupSnapshot(bitmap, margin, size);
+    }
+
+    internal readonly record struct PopupSnapshot(BitmapSource Bitmap, Thickness Margin, Size BodySize)
+    {
+        internal Rect BoundsAt(Point bodyOrigin, double scale = 1) => new(
+            bodyOrigin.X - Margin.Left * scale, bodyOrigin.Y - Margin.Top * scale,
+            (Margin.Left + BodySize.Width + Margin.Right) * scale,
+            (Margin.Top + BodySize.Height + Margin.Bottom) * scale);
+
+        /// <summary>Includes the shadow only at popup edges present in a body-relative crop.</summary>
+        internal Rect CropBoundsAt(Rect crop, Point origin, double scale)
+        {
+            double left = crop.Left <= 0 ? Margin.Left : 0;
+            double top = crop.Top <= 0 ? Margin.Top : 0;
+            double right = crop.Right >= BodySize.Width ? Margin.Right : 0;
+            double bottom = crop.Bottom >= BodySize.Height ? Margin.Bottom : 0;
+            return new Rect(origin.X - left * scale, origin.Y - top * scale,
+                (left + crop.Width + right) * scale, (top + crop.Height + bottom) * scale);
+        }
     }
 
     /// <summary>Centre of <paramref name="element"/> in client coordinates.</summary>

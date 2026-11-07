@@ -266,7 +266,10 @@ public sealed class LibraryUndoAndRetentionNoticeTests
             for (int index = 0; index < count; index++) Records.Add(Add(DateTimeOffset.Now.AddMinutes(-index)));
             Trash = new FolderTrash(Path.Combine(Paths.DataRoot, "fake-trash"));
             Service = new RecoverableLibraryService(Queue, Paths, Trash, NullLogger.Instance);
+            // As in the app: a delete of several captures is prepared as one batch. This trash
+            // has no batch move of its own, so the interface's one-at-a-time default runs.
             Queue.PrepareRemoval = Service.PrepareRemoval;
+            Queue.PrepareRemovals = Service.PrepareRemovals;
         }
 
         public CaptureRecord Add(DateTimeOffset created)

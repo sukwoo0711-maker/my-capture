@@ -10,12 +10,51 @@ namespace MyCapture.Platform.Shell;
 public sealed record RecycledPathReceipt(string OriginalPath, string RecycledPath, string Identity,
     string ShellIdList, bool IsDirectory);
 
+/// <summary>
+/// One item of a batch move to the Recycle Bin: its receipt, or the exception that the same item
+/// would have thrown from <see cref="IRecoverableTrash.RecycleDirectory"/> on its own.
+/// </summary>
+public sealed record RecycleOutcome(string Path, RecycledPathReceipt? Receipt, Exception? Failure);
+
 public interface IRecoverableTrash
 {
     string GetIdentity(string path);
     RecycledPathReceipt RecycleDirectory(string path);
     void RestoreDirectory(RecycledPathReceipt receipt);
     RecycledPathReceipt? FindRecycledDirectory(string originalPath, string identity);
+
+    /// <summary>
+    /// Moves several directories to the Recycle Bin: one outcome per path, in order.
+    /// <paramref name="progress"/> receives how many items are finished. This default moves them
+    /// one at a time; the Windows implementation uses one Shell operation for all of them.
+    /// </summary>
+    IReadOnlyList<RecycleOutcome> RecycleDirectories(IReadOnlyList<string> paths, Action<int>? progress = null)
+    {
+        var outcomes = new RecycleOutcome[paths.Count];
+        for (int index = 0; index < paths.Count; index++)
+        {
+            try { outcomes[index] = new RecycleOutcome(paths[index], RecycleDirectory(paths[index]), null); }
+            catch (Exception ex) { outcomes[index] = new RecycleOutcome(paths[index], null, ex); }
+            progress?.Invoke(index + 1);
+        }
+        return outcomes;
+    }
+
+    /// <summary>
+    /// Restores several recorded items: per receipt, in order, the exception that kept it in the
+    /// Recycle Bin, or null once it is back. This default restores them one at a time; the Windows
+    /// implementation uses one Recycle Bin restore for all of them.
+    /// </summary>
+    IReadOnlyList<Exception?> RestoreDirectories(IReadOnlyList<RecycledPathReceipt> receipts)
+    {
+        var failures = new Exception?[receipts.Count];
+        for (int index = 0; index < receipts.Count; index++)
+        {
+            try { RestoreDirectory(receipts[index]); }
+            catch (Exception ex) { failures[index] = ex; }
+        }
+        return failures;
+    }
 }
 
 /// <summary>
@@ -65,6 +104,260 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
     public RecycledPathReceipt RecycleFile(string path) => Recycle(path, false);
     public void RestoreDirectory(RecycledPathReceipt receipt) => Restore(receipt);
     public void RestoreFile(RecycledPathReceipt receipt) => Restore(receipt);
+
+    private const string RecycleBinFolder = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+
+    /// <summary>
+    /// Moves the directories to the Recycle Bin in one Shell operation. Every Shell operation costs
+    /// the Recycle Bin about 0.2 s before its first item, so a hundred captures took over 20 s one at
+    /// a time and take a few seconds together. Each item is checked before and after exactly as
+    /// <see cref="RecycleDirectory"/> checks it. The Shell stops at the first item that fails or is
+    /// refused, so any item the operation did not confirm is then tried alone: every outcome is the
+    /// one the item would have had by itself.
+    /// </summary>
+    public IReadOnlyList<RecycleOutcome> RecycleDirectories(IReadOnlyList<string> paths, Action<int>? progress = null)
+    {
+        var outcomes = new RecycleOutcome[paths.Count];
+        int finished = 0, reported = 0;
+        void Report(int count)
+        {
+            count = Math.Min(count, paths.Count);
+            if (count <= reported) return;
+            reported = count;
+            progress?.Invoke(count);
+        }
+        void Finish(int index, RecycledPathReceipt? receipt, Exception? failure)
+        {
+            outcomes[index] = new RecycleOutcome(paths[index], receipt, failure);
+            Report(++finished);
+        }
+
+        var queued = new List<(int Index, string Path, string Identity)>(paths.Count);
+        for (int index = 0; index < paths.Count; index++)
+        {
+            try
+            {
+                string path = ValidatePath(paths[index]);
+                if (!Directory.Exists(path)) throw new IOException("The recycle target does not exist.");
+                RejectLinks(path, true);
+                queued.Add((index, path, GetIdentity(path)));
+            }
+            catch (Exception ex) { Finish(index, null, ex); }
+        }
+
+        if (queued.Count == 1)
+        {
+            (int index, string path, _) = queued[0];
+            try { Finish(index, Recycle(path, true), null); }
+            catch (Exception ex) { Finish(index, null, ex); }
+            return outcomes;
+        }
+
+        ProgressSink?[] sinks;
+        int before = finished, processed = 0;
+        try { sinks = queued.Count == 0 ? [] : OnSta(() => DeleteTogether(queued, () => Report(before + ++processed))); }
+        catch (Exception) { sinks = new ProgressSink?[queued.Count]; } // nothing confirmed: each is tried alone
+
+        for (int item = 0; item < queued.Count; item++)
+        {
+            (int index, string path, string identity) = queued[item];
+            ProgressSink? sink = sinks[item];
+            if (sink?.RefusedPermanentDelete == true)
+            {
+                Finish(index, null, new RecycleBinUnavailableException());
+                continue;
+            }
+
+            if (sink is { Result: >= 0, RecycledPath: { } recycled, IdList: { } idList })
+            {
+                try
+                {
+                    if (Exists(path) || !Exists(recycled) || GetIdentity(recycled) != identity)
+                        throw new IOException("The Recycle Bin item did not match the original filesystem object.");
+                    Finish(index, new RecycledPathReceipt(path, recycled, identity, idList, true), null);
+                }
+                catch (Exception ex) { Finish(index, null, ex); }
+                continue;
+            }
+
+            // Not confirmed. An item the operation stopped before is still in place and moves alone;
+            // an original that left without a confirmation is reported the way one move reports it.
+            if (Directory.Exists(path))
+            {
+                try { Finish(index, Recycle(path, true), null); }
+                catch (Exception ex) { Finish(index, null, ex); }
+            }
+            else
+            {
+                Finish(index, null, new IOException("The Shell did not confirm a recoverable Recycle Bin move."));
+            }
+        }
+
+        return outcomes;
+    }
+
+    /// <summary>Queues every item on one operation and performs it; the sinks say what it confirmed.</summary>
+    private ProgressSink?[] DeleteTogether(IReadOnlyList<(int Index, string Path, string Identity)> queued, Action processed)
+    {
+        IFileOperation? operation = null;
+        var items = new IShellItem?[queued.Count];
+        var sinks = new ProgressSink?[queued.Count];
+        try
+        {
+            operation = (IFileOperation)new FileOperation();
+            operation.SetOperationFlags(RecycleFlags);
+            for (int item = 0; item < queued.Count; item++)
+            {
+                try
+                {
+                    items[item] = ItemFromPath(queued[item].Path);
+                    var sink = new ProgressSink(deleted: processed);
+                    operation.DeleteItem(items[item]!, sink);
+                    sinks[item] = sink;
+                }
+                catch (Exception) { } // not queued: tried alone after the operation
+            }
+
+            DiagnosticStageForTest?.Invoke("recycle-batch:queued");
+            // A refused or failing item stops the operation; the items after it stay where they are.
+            try { operation.PerformOperations(); }
+            catch (COMException) { }
+            DiagnosticStageForTest?.Invoke("recycle-batch:performed");
+            return sinks;
+        }
+        finally
+        {
+            foreach (IShellItem? item in items) Release(item);
+            Release(operation);
+        }
+    }
+
+    /// <summary>
+    /// Restores the recorded items with one Recycle Bin restore, as Explorer restores a selection,
+    /// instead of one Shell restore per item (about a second each). Each item is checked before and
+    /// after exactly as <see cref="RestoreDirectory"/> checks it, nothing is ever overwritten, and an
+    /// item the batch did not bring back is then tried alone.
+    /// </summary>
+    public IReadOnlyList<Exception?> RestoreDirectories(IReadOnlyList<RecycledPathReceipt> receipts)
+    {
+        var failures = new Exception?[receipts.Count];
+        var queued = new List<(int Index, RecycledPathReceipt Receipt, string Original)>(receipts.Count);
+        for (int index = 0; index < receipts.Count; index++)
+        {
+            try
+            {
+                RecycledPathReceipt receipt = receipts[index];
+                string original = ValidatePath(receipt.OriginalPath);
+                if (Exists(original)) throw new IOException("The original location is occupied; nothing was overwritten.");
+                if (!Exists(receipt.RecycledPath) || GetIdentity(receipt.RecycledPath) != receipt.Identity)
+                    throw new IOException("The recorded Recycle Bin item is no longer available.");
+                string parent = Path.GetDirectoryName(original)!;
+                ValidatePath(parent);
+                Directory.CreateDirectory(parent);
+                queued.Add((index, receipt, original));
+            }
+            catch (Exception ex) { failures[index] = ex; }
+        }
+
+        if (queued.Count > 1)
+        {
+            try { OnSta(() => RestoreTogether(queued)); }
+            catch (Exception) { } // each item still in the Recycle Bin is tried alone below
+        }
+
+        foreach ((int index, RecycledPathReceipt receipt, string original) in queued)
+        {
+            try
+            {
+                if (queued.Count > 1 && Exists(original) && !Exists(receipt.RecycledPath))
+                {
+                    if (GetIdentity(original) != receipt.Identity)
+                        throw new IOException("The Shell could not restore the exact recorded item.");
+                    continue;
+                }
+
+                Restore(receipt);
+            }
+            catch (Exception ex) { failures[index] = ex; }
+        }
+
+        return failures;
+    }
+
+    /// <summary>Invokes the Recycle Bin's own restore once for every exactly matching item.</summary>
+    private bool RestoreTogether(IReadOnlyList<(int Index, RecycledPathReceipt Receipt, string Original)> queued)
+    {
+        IShellFolder? desktop = null, folder = null;
+        IContextMenu? context = null;
+        nint menu = 0, root = 0, childArray = 0;
+        var children = new List<nint>(queued.Count);
+        var originals = new List<string>(queued.Count);
+        try
+        {
+            DiagnosticStageForTest?.Invoke("restore-batch:namespace-lookup-start");
+            Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktop));
+            uint eaten = 0, attributes = 0;
+            desktop.ParseDisplayName(0, 0, RecycleBinFolder, ref eaten, out root, ref attributes);
+            Guid folderId = typeof(IShellFolder).GUID;
+            desktop.BindToObject(root, 0, ref folderId, out folder);
+            Guid itemId = typeof(IShellItem).GUID;
+            foreach ((_, RecycledPathReceipt receipt, string original) in queued)
+            {
+                nint child = 0;
+                IShellItem? item = null;
+                try
+                {
+                    eaten = 0;
+                    attributes = 0;
+                    folder.ParseDisplayName(0, 0, receipt.RecycledPath, ref eaten, out child, ref attributes);
+                    Marshal.ThrowExceptionForHR(SHCreateItemWithParent(root, folder, child, ref itemId, out item));
+                    // Only the exact recorded item joins; anything else is left to the single restore.
+                    if (!string.Equals(GetPath(item), receipt.RecycledPath, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(ReadDeletedOriginalPath(receipt.RecycledPath), original, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    children.Add(child);
+                    originals.Add(original);
+                    child = 0;
+                }
+                catch (Exception) { }
+                finally
+                {
+                    Release(item);
+                    if (child != 0) Marshal.FreeCoTaskMem(child);
+                }
+            }
+
+            if (children.Count == 0) return false;
+            DiagnosticStageForTest?.Invoke("restore-batch:namespace-lookup-end");
+            Guid contextId = typeof(IContextMenu).GUID;
+            childArray = Marshal.AllocHGlobal(nint.Size * children.Count);
+            for (int index = 0; index < children.Count; index++) Marshal.WriteIntPtr(childArray, index * nint.Size, children[index]);
+            folder.GetUIObjectOf(0, (uint)children.Count, childArray, ref contextId, 0, out nint pointer);
+            try { context = (IContextMenu)Marshal.GetObjectForIUnknown(pointer); }
+            finally { Marshal.Release(pointer); }
+            menu = CreatePopupMenu();
+            Marshal.ThrowExceptionForHR(context.QueryContextMenu(menu, 0, 1, 0x7FFF, 1));
+            // A location taken since the check sends every item to the single restore, which refuses it.
+            if (originals.Any(Exists)) return false;
+            var command = new InvokeCommandInfo
+            {
+                Size = Marshal.SizeOf<InvokeCommandInfo>(), Mask = 0x00000400 | 0x00000100,
+                Verb = "undelete", Show = 0,
+            };
+            DiagnosticStageForTest?.Invoke("restore-batch:undelete-start");
+            Marshal.ThrowExceptionForHR(context.InvokeCommand(ref command));
+            DiagnosticStageForTest?.Invoke("restore-batch:undelete-end");
+            return true;
+        }
+        finally
+        {
+            if (menu != 0) DestroyMenu(menu);
+            Release(context); Release(folder); Release(desktop);
+            if (childArray != 0) Marshal.FreeHGlobal(childArray);
+            foreach (nint child in children) Marshal.FreeCoTaskMem(child);
+            if (root != 0) Marshal.FreeCoTaskMem(root);
+        }
+    }
 
     private RecycledPathReceipt Recycle(string path, bool directory)
     {
@@ -342,8 +635,10 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
     }
     private static void Release(object? value) { if (value is not null && Marshal.IsComObject(value)) Marshal.FinalReleaseComObject(value); }
 
+    /// <param name="restoreTarget">A restore's original location, which a move must never overwrite.</param>
+    /// <param name="deleted">Told when the Shell has finished with this sink's item (moved or not).</param>
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-    private sealed class ProgressSink(string? restoreTarget = null) : IFileOperationProgressSink
+    private sealed class ProgressSink(string? restoreTarget = null, Action? deleted = null) : IFileOperationProgressSink
     {
         public int Result { get; private set; } = unchecked((int)0x80004005);
         public string? RecycledPath { get; private set; }
@@ -373,6 +668,8 @@ public sealed class WindowsRecycleBin : IRecoverableTrash
                 try { RecycledPath = GetPath(created); IdList = GetIdList(created); }
                 catch (Exception) { Result = unchecked((int)0x80004005); }
             }
+            try { deleted?.Invoke(); }
+            catch (Exception) { } // progress is advisory and never reaches the Shell
             return 0;
         }
         public int PreNewItem(uint flags, IShellItem destination, string name) => 0;

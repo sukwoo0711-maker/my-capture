@@ -131,7 +131,7 @@ public sealed class CaptureInfoEvidenceTests
             {
                 Settle(menu);
                 Assert.NotEmpty(menu.Items);
-                Save(output, $"card-context-menu-ko-KR-96dpi-{phase}.png", Compose(Snapshot(firstCard), Snapshot(menu)));
+                Save(output, $"card-context-menu-ko-KR-96dpi-{phase}.png", Compose(Snapshot(firstCard), Snapshot(menu), menu));
             }
             finally { menu.IsOpen = false; }
 
@@ -275,7 +275,7 @@ public sealed class CaptureInfoEvidenceTests
                     Settle(moreMenu);
                     if (typeof(VideoEditorWindow).GetProperty("SourceFileSizeReadTask", Members) is not null)
                         Assert.Contains(moreMenu.Items.OfType<MenuItem>(), item => Equals(item.Header, UiText.Get("MediaInfo.Title")));
-                    Save(output, $"video-editor-more-menu-ko-KR-96dpi-{phase}.png", Compose(bar, Snapshot(moreMenu)));
+                    Save(output, $"video-editor-more-menu-ko-KR-96dpi-{phase}.png", Compose(bar, Snapshot(moreMenu), moreMenu));
                 }
                 finally { moreMenu.IsOpen = false; }
             }
@@ -404,7 +404,7 @@ public sealed class CaptureInfoEvidenceTests
             MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
             Assert.Equal(4, items.Length);
             Assert.All(items, item => Assert.False(string.IsNullOrWhiteSpace(item.InputGestureText)));
-            Save(output, filename, Compose(owner, Snapshot(menu)));
+            Save(output, filename, Compose(owner, Snapshot(menu), menu));
         }
         finally { menu.IsOpen = false; }
     }
@@ -479,7 +479,9 @@ public sealed class CaptureInfoEvidenceTests
     private static BitmapSource Snapshot(FrameworkElement element)
     {
         Settle(element);
-        int width = (int)Math.Ceiling(element.ActualWidth), height = (int)Math.Ceiling(element.ActualHeight);
+        Size extent = element is ContextMenu ? PopupSnapshot.ExtentOf(element) : element.RenderSize;
+        Vector bodyOffset = element is ContextMenu ? PopupSnapshot.BodyOffsetOf(element) : default;
+        int width = (int)Math.Ceiling(extent.Width), height = (int)Math.Ceiling(extent.Height);
         Assert.True(width > 0 && height > 0, $"Empty render: {element.GetType().Name}");
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         var drawing = new DrawingVisual();
@@ -495,9 +497,10 @@ public sealed class CaptureInfoEvidenceTests
                 context.DrawRectangle(new VisualBrush(element)
                 {
                     ViewboxUnits = BrushMappingMode.Absolute,
-                    Viewbox = new Rect(0, 0, element.ActualWidth, element.ActualHeight),
+                    Viewbox = new Rect(-bodyOffset.X, -bodyOffset.Y, extent.Width, extent.Height),
                     Stretch = Stretch.Fill,
-                }, null, new Rect(0, 0, width, height));
+                }, null, element is ContextMenu && element.Margin != default(Thickness)
+                    ? new Rect(new Point(), extent) : new Rect(0, 0, width, height));
             }
         }
         bitmap.Render(drawing);
@@ -522,16 +525,23 @@ public sealed class CaptureInfoEvidenceTests
         Assert.True(samplePixels > 100, "The tooltip owner render must contain the synthetic blue preview, not a blank background.");
     }
 
-    private static BitmapSource Compose(BitmapSource owner, BitmapSource popup)
+    private static BitmapSource Compose(BitmapSource owner, BitmapSource popup, FrameworkElement? popupBody = null)
     {
         const int gap = 16;
-        int width = owner.PixelWidth + gap + popup.PixelWidth, height = Math.Max(owner.PixelHeight, popup.PixelHeight);
+        var ownerBounds = new Rect(0, 0, owner.PixelWidth, owner.PixelHeight);
+        Rect popupBounds = popupBody is null
+            ? new Rect(owner.PixelWidth + gap, 0, popup.PixelWidth, popup.PixelHeight)
+            : PopupSnapshot.DrawBounds(popupBody, new Point(owner.PixelWidth + gap, 0), popup.PixelWidth, popup.PixelHeight);
+        Rect canvas = Rect.Union(ownerBounds, popupBounds);
+        ownerBounds.Offset(-canvas.X, -canvas.Y);
+        popupBounds.Offset(-canvas.X, -canvas.Y);
+        int width = (int)Math.Ceiling(canvas.Width), height = (int)Math.Ceiling(canvas.Height);
         var drawing = new DrawingVisual();
         using (DrawingContext context = drawing.RenderOpen())
         {
             context.DrawRectangle((Brush)Application.Current.FindResource("Surface.Base"), null, new Rect(0, 0, width, height));
-            context.DrawImage(owner, new Rect(0, 0, owner.PixelWidth, owner.PixelHeight));
-            context.DrawImage(popup, new Rect(owner.PixelWidth + gap, 0, popup.PixelWidth, popup.PixelHeight));
+            context.DrawImage(owner, ownerBounds);
+            context.DrawImage(popup, popupBounds);
         }
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(drawing);

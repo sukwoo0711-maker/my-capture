@@ -10,7 +10,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// New installations register capture, recording and clipboard pin keys and hide key captions; files
+/// New installations assign and force core shortcuts and hide key captions; files
 /// written by earlier versions keep every chord, and current caption choices persist.
 /// </summary>
 public sealed class SettingsUxDefaultsTests
@@ -19,13 +19,13 @@ public sealed class SettingsUxDefaultsTests
 
     private static Hotkey[] OptionalHotkeys(HotkeySettings keys) =>
     [
-        keys.OpenLibrary, keys.ToggleClickThrough, keys.RepeatLastRegion,
+        keys.ToggleClickThrough, keys.RepeatLastRegion,
         keys.CaptureWindow, keys.CaptureFullScreen, keys.UploadGitHubImage, keys.ScrollingCapture, keys.DelayedCapture,
         keys.RestoreClosedPin, keys.CaptureText, keys.PauseRecording,
     ];
 
     [Fact]
-    public void NewInstall_RegistersCaptureRecordingAndClipboardPinKeys_AndHidesKeyCaptions()
+    public void NewInstall_AssignsAndForcesCoreShortcuts_AndHidesKeyCaptions()
     {
         using var workspace = new TempWorkspace();
 
@@ -34,6 +34,9 @@ public sealed class SettingsUxDefaultsTests
         Assert.True(fresh.General.IsFirstRun);
         Assert.Equal("Ctrl+Shift+C", fresh.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
+        Assert.Equal(CoreShortcuts.OpenLibrary, fresh.Hotkeys.OpenLibrary);
+        Assert.True(fresh.Hotkeys.ForceCoreShortcuts);
+        Assert.True(fresh.Hotkeys.CoreShortcutsAsked);
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(fresh);
         Assert.False(fresh.General.ShowShortcutHints);
@@ -58,6 +61,9 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(reloaded.General.IsFirstRun);
         Assert.Equal("Ctrl+Shift+C", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
+        Assert.Equal(CoreShortcuts.OpenLibrary, reloaded.Hotkeys.OpenLibrary);
+        Assert.True(reloaded.Hotkeys.ForceCoreShortcuts);
+        Assert.True(reloaded.Hotkeys.CoreShortcutsAsked);
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(reloaded);
         Assert.False(reloaded.General.ShowShortcutHints);
@@ -86,6 +92,8 @@ public sealed class SettingsUxDefaultsTests
 
         Assert.False(loaded.General.IsFirstRun);
         Assert.Equal("Ctrl+Shift+Z", loaded.Hotkeys.OpenLibrary.ToString());
+        Assert.False(loaded.Hotkeys.ForceCoreShortcuts);
+        Assert.False(loaded.Hotkeys.CoreShortcutsAsked);
         Assert.Equal("F3", loaded.Hotkeys.PasteToScreen.ToString());
         Assert.Equal("Shift+F3", loaded.Hotkeys.HideAllPins.ToString());
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
@@ -107,6 +115,8 @@ public sealed class SettingsUxDefaultsTests
         AppSettings loaded = Store(workspace).Load();
 
         Assert.Equal("Ctrl+Shift+Z", loaded.Hotkeys.OpenLibrary.ToString());
+        Assert.False(loaded.Hotkeys.ForceCoreShortcuts);
+        Assert.False(loaded.Hotkeys.CoreShortcutsAsked);
         Assert.Equal("F3", loaded.Hotkeys.PasteToScreen.ToString());
         Assert.Equal("Shift+F3", loaded.Hotkeys.HideAllPins.ToString());
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
@@ -160,6 +170,7 @@ public sealed class SettingsUxDefaultsTests
         using var workspace = new TempWorkspace();
         SettingsStore store = Store(workspace);
         AppSettings chosen = NewInstallDefaults.Create();
+        chosen.Hotkeys.OpenLibrary = Hotkey.None;
         chosen.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkF3);
         chosen.General.ShowShortcutHints = true;
         store.Save(chosen);
@@ -204,7 +215,9 @@ public sealed class SettingsUxDefaultsTests
 
         Assert.Equal("Ctrl+Shift+C", draft.CaptureHotkey);
         Assert.Equal("Ctrl+Shift+X", draft.RecordRegionHotkey);
-        Assert.Equal(string.Empty, draft.OpenLibraryHotkey);
+        Assert.Equal(CoreShortcuts.OpenLibrary.ToString(), draft.OpenLibraryHotkey);
+        // Priority stays the user's answer: this earlier file has not answered, so it stays off.
+        Assert.False(draft.ForceCoreShortcuts);
         Assert.Equal("F3", draft.PasteToScreenHotkey);
         Assert.Equal("Shift+F3", draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
@@ -212,6 +225,8 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(draft.AlwaysShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
+        Assert.False(mapped.Hotkeys.CoreShortcutsAsked);
+        Assert.False(mapped.Hotkeys.ForceCoreShortcuts);
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(mapped);
         Assert.Equal(1, mapped.General.ShortcutHintsRevision);

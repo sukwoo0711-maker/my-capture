@@ -188,9 +188,10 @@ public sealed class PinDpiTests : KoreanCaptionTest
             Assert.Equal(ClipboardCodeRenderer.FontFamilyName, textBox.FontFamily.Source);
             Assert.Equal(ClipboardCodeRenderer.FontSizeDip * state.Zoom, textBox.FontSize);
             Assert.Equal(ClipboardCodeRenderer.LineHeightDip * state.Zoom, TextBlock.GetLineHeight(textBox));
-            Assert.Equal(new Thickness(ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+            Assert.Equal(new Thickness(
+                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom - TextBoxLayout.ContentInsetDip,
                 ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom,
-                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom - TextBoxLayout.ContentInsetDip,
                 ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom), textBox.Padding);
             Assert.Equal(Color.FromRgb(0x12, 0x34, 0x56), Assert.IsType<SolidColorBrush>(selection.Background).Color);
             Assert.Same(selection.Background, textBox.Background);

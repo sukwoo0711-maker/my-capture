@@ -124,7 +124,7 @@ public sealed class StoreOnlyUpdateTests
         {
             Updates = new() { AutoCheck = false, LastCheckUtc = now, DismissedVersion = "4.5.3" },
             StoreUpdate = new() { LastSeenVersion = "4.5.2", CompletionNoticeVersion = "4.5.3" },
-            StoreRating = new() { InvitationShownUtc = now },
+            StoreRating = new() { InvitationShownUtc = now, InvitationShownCount = 1, InvitationDismissedUtc = now.AddMinutes(1) },
         };
 
         AppSettings clone = settings.DeepClone();
@@ -137,6 +137,8 @@ public sealed class StoreOnlyUpdateTests
         Assert.Equal("4.5.2", clone.StoreUpdate.LastSeenVersion);
         Assert.Equal("4.5.3", clone.StoreUpdate.CompletionNoticeVersion);
         Assert.Equal(now, clone.StoreRating.InvitationShownUtc);
+        Assert.Equal(1, clone.StoreRating.InvitationShownCount);
+        Assert.Equal(now.AddMinutes(1), clone.StoreRating.InvitationDismissedUtc);
         clone.Updates.DismissedVersion = "4.5.4";
         clone.StoreUpdate.CompletionNoticeVersion = null;
         Assert.Equal("4.5.3", settings.Updates.DismissedVersion);

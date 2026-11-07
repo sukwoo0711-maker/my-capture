@@ -97,8 +97,9 @@ public sealed partial class SettingsThemePreviewTests
         string root = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_VIDEO_EVIDENCE")!);
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_VIDEO_PHASE") ?? "after";
         Assert.Contains(phase, new[] { "before", "after" });
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth * 1.5),
-            (int)Math.Ceiling(element.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
+        Size extent = element is ContextMenu ? PopupSnapshot.ExtentOf(element) : element.RenderSize;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(extent.Width * 1.5),
+            (int)Math.Ceiling(extent.Height * 1.5), 144, 144, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

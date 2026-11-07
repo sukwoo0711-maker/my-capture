@@ -162,6 +162,7 @@ public sealed class OcrWholeSpinLifecycleTests(ITestOutputHelper output)
                         logicalProcessors = Environment.ProcessorCount, stopwatchFrequency = Stopwatch.Frequency,
                         threadEnvironment, requestedConfigEntries,
                         appliedCallbackEntries = actualScenario.ConfigApplications.ToArray(),
+                        productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(arm == "no-spin", arm != "no-spin"),
                         configReceiptMeaning = ConfigReceiptMeaning,
                     });
                     warmPreflight = true;
@@ -206,6 +207,7 @@ public sealed class OcrWholeSpinLifecycleTests(ITestOutputHelper output)
                 warmPreflight, scenarioCompleted, integrity, disposed, identity,
                 threadEnvironment, requestedConfigEntries,
                 appliedCallbackEntries = scenario?.ConfigApplications.ToArray(), configReceiptMeaning = ConfigReceiptMeaning,
+                productConfigEntries = NeuralOcrEngine.WholeSessionConfigEntries(arm == "no-spin", arm != "no-spin"),
                 sources, binaries, originalModels, copiedModels, resolved, native, inputs,
                 windowsAvailable = scenario?.WindowsAvailable, windowsLanguages = scenario?.WindowsLanguages,
                 outcome, snapshot, issues, errorType = failure?.GetType().FullName, hResult = failure?.HResult,

@@ -137,30 +137,44 @@ public sealed class ErrorRecoveryAndDangerTests
     {
         using var scope = UiText.UseLanguage(language);
         Action<string> previous = SupportDiagnostics.OpenUri;
+        Action<ErrorReport> previousReport = ErrorReporting.Open;
         var opened = new List<string>();
+        var reports = new List<ErrorReport>();
         try
         {
             SupportDiagnostics.OpenUri = opened.Add;
+            ErrorReporting.Open = reports.Add;
             foreach ((string name, ThemedDialog dialog) in new[] { ("error-unhandled", ThemedDialog.CreateUnhandled(new InvalidOperationException("boom"))),
                 ("error-startup", ThemedDialog.CreateStartupFailure(new InvalidOperationException("boom"))) })
             {
+                bool unhandled = name == "error-unhandled";
                 Show(dialog);
                 Button[] buttons = ActionButtons(dialog);
-                Assert.Equal([UiText.Get("Dialog.ReportProblem"), UiText.Get("Dialog.Close")], buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
+                string reportLabel = UiText.Get(unhandled ? "Support_ReportError" : "Dialog.ReportProblem");
+                Assert.Equal([reportLabel, UiText.Get("Dialog.Close")], buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
                 Assert.True(buttons[1].IsDefault && buttons[1].IsCancel);
-                // The message tells the reader to attach the details to the report the button opens.
-                Assert.Contains(UiText.Get("Dialog.ReportProblem"), Strip(BodyText(dialog)), StringComparison.OrdinalIgnoreCase);
-                buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.True(dialog.IsVisible, "the details stay available to copy into the report");
+                Assert.Contains(reportLabel, Strip(BodyText(dialog)), StringComparison.OrdinalIgnoreCase);
                 SaveEvidence(dialog, $"{name}-{language}");
+                buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (unhandled)
+                {
+                    Assert.False(dialog.IsVisible);
+                    Assert.Equal(typeof(InvalidOperationException).FullName, Assert.Single(reports).Primary.ExceptionType);
+                    Assert.Empty(opened);
+                }
+                else Assert.True(dialog.IsVisible, "the details stay available to copy into the report");
                 dialog.Close();
             }
 
-            Assert.Equal([SupportDiagnostics.IssueUri, SupportDiagnostics.IssueUri], opened);
+            Assert.Equal([SupportDiagnostics.IssueUri], opened);
             SupportDiagnostics.OpenUri = _ => throw new InvalidOperationException("no browser");
             Assert.False(SupportDiagnostics.TryOpenIssuePage());
         }
-        finally { SupportDiagnostics.OpenUri = previous; }
+        finally
+        {
+            SupportDiagnostics.OpenUri = previous;
+            ErrorReporting.Open = previousReport;
+        }
     });
 
     [Theory]

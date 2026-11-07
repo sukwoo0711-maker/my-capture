@@ -135,7 +135,6 @@ public sealed class AccentUsagePolicyTests
     [InlineData("Card.SelectionBox", "<Path x:Name=\"SelectionCheck\" Stroke=\"{DynamicResource Text.OnAccent}\" />")]
     [InlineData("Card.SelectionBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"Background\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
     [InlineData("Gallery.TileRowList", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
-    [InlineData("LibraryUx.TreeItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
     [InlineData("LibraryUx.DateItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
     [InlineData("Gallery.FolderStripButton", "<DataTrigger Binding=\"{Binding IsSelected}\" Value=\"True\"><Setter Property=\"BorderBrush\" Value=\"{DynamicResource Accent.Default}\" /></DataTrigger>")]
     public void LibrarySelectionAllowanceDoesNotAuthorizeOtherStylesOrFiles(string style, string part)
@@ -156,7 +155,7 @@ public sealed class AccentUsagePolicyTests
         XElement owner = attribute.Parent!;
         string? style = owner.AncestorsAndSelf().Where(element => element.Name.LocalName == "Style")
             .Select(element => (string?)element.Attribute(names + "Key")).FirstOrDefault(key => key is not null);
-        if (style is "Gallery.TileRowList" or "LibraryUx.TreeItem" or "LibraryUx.DateItem")
+        if (style is "Gallery.TileRowList" or "LibraryUx.DateItem")
             return owner.Name.LocalName == "Border" && (string?)owner.Attribute(names + "Name") == "SelectedLayer"
                 && attribute.Name.LocalName == "BorderBrush" && attribute.Value == "{DynamicResource Accent.Default}";
         if (style == "Gallery.FolderStripButton")

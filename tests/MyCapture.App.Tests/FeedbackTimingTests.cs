@@ -184,6 +184,12 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
             Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Format("Library.Archive.Progress", 3, 12)));
             Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Format("Folder410.ExportProgress", 3, 12)));
             Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Get("Folder410.ExportPreparing")));
+            // A long delete counts its move; the result that replaces the line is a result.
+            Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Format("LibrarySelection_Moving", 124)));
+            Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Format("LibrarySelection_MovingProgress", 37, 124)));
+            Assert.Equal(FeedbackKind.Progress, GalleryWindow.ClassifyActionStatus(UiText.Format("LibrarySelection_MovingProgress", 1, 1)));
+            Assert.NotEqual(FeedbackKind.Progress,
+                GalleryWindow.ClassifyActionStatus(GalleryWindow.DeleteStatus(124, new MyCapture.Core.Queue.CaptureBatchRemovalResult(124, 0), null)));
             Assert.Equal(FeedbackKind.Confirmation, GalleryWindow.ClassifyActionStatus(UiText.Get("Library.Source.PathCopied")));
             Assert.Equal(FeedbackKind.Result, GalleryWindow.ClassifyActionStatus(UiText.Format("Library.Archive.Done", 12)));
             Assert.Equal(FeedbackKind.Result, GalleryWindow.ClassifyActionStatus(UiText.Format("LibraryUx_MovedTo", "제품리뷰", 2)));

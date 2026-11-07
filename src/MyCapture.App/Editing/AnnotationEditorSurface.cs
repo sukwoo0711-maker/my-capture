@@ -380,8 +380,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         AnnotationItem? suppress = _controller.EditingText;
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
-        // base capture in annotation pixel space that blur layers sample.
-        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap);
+        // base capture in annotation pixel space that blur layers sample. A caption being typed
+        // keeps its committed plate and outline under the live box, which draws its glyphs.
+        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap,
+            _controller.LiveTextForPaint(), _controller.LiveTextScroll);
         SourceWindowTitleRenderer.Draw(dc, SourceWindowTitle, _cropRegion.Width, _cropRegion.Height);
 
         dc.Pop();
@@ -528,13 +530,19 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
-        Rect inflated = Rect.Inflate(bounds, 2, 2);
+        bool endpoints = !multiple && selected is PolylineAnnotation { Points.Count: 2 };
+        Rect inflated = !multiple && selected is TextAnnotation { IsStepNumber: false }
+            ? ToSurfaceRect(PointerIntentGeometry.SelectionFrame(selected, DipPerPixel))
+            : Rect.Inflate(bounds, 2, 2);
         bool rotated = !multiple && selected is TextAnnotation { RotationDegrees: not 0 };
         if (rotated)
             dc.PushTransform(new RotateTransform(((TextAnnotation)selected).RotationDegrees,
                 bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
-        dc.DrawRectangle(null, _edgeShadowPen, inflated);
-        dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        if (!endpoints)
+        {
+            dc.DrawRectangle(null, _edgeShadowPen, inflated);
+            dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        }
         if (rotated) dc.Pop();
 
         if (multiple || !selected.SupportsResize)
@@ -542,15 +550,61 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             return;
         }
 
+        // The rings pass behind an arrow's heads, so a head keeps the pixels it has unselected
+        // however small the image scale makes it.
+        Geometry? behindHeads = endpoints ? OutsideArrowHeads((PolylineAnnotation)selected) : null;
+        if (behindHeads is not null) dc.PushClip(behindHeads);
         foreach (SelectionHandle handle in _controller.GetSelectionHandles(DipPerPixel))
         {
             Point center = ToSurfacePoint(handle.Position);
+            if (endpoints)
+            {
+                // Only strokes: the line remains visible through each ring.
+                dc.DrawEllipse(null, _edgeShadowPen, center, HandlePixels / 2, HandlePixels / 2);
+                dc.DrawEllipse(null, _handlePen, center, HandlePixels / 2, HandlePixels / 2);
+                continue;
+            }
             dc.DrawRectangle(
                 _handleFillBrush,
                 _handlePen,
                 new Rect(center.X - (HandlePixels / 2), center.Y - (HandlePixels / 2), HandlePixels, HandlePixels));
         }
+        if (behindHeads is not null) dc.Pop();
     }
+
+    /// <summary>
+    /// The surface outside <paramref name="line"/>'s arrowheads and a margin of
+    /// <see cref="ArrowHeadClearancePixels"/> device pixels around them, or <see langword="null"/>
+    /// when it has none.
+    /// </summary>
+    private Geometry? OutsideArrowHeads(PolylineAnnotation line)
+    {
+        var heads = new GeometryGroup();
+        foreach (Geometry head in AnnotationRenderer.ArrowHeads(line)) heads.Children.Add(head);
+        if (heads.Children.Count == 0) return null;
+        double scale = Math.Max(0.0001, DipPerPixel);
+        // Widened in image pixels, the heads' own space, by as many image pixels as the margin's
+        // device pixels take at this image scale; the union is then placed on the surface.
+        double margin = ArrowHeadClearancePixels / Math.Max(0.0001, VisualTreeHelper.GetDpi(this).PixelsPerDip) / scale;
+        Point origin = ToSurfacePoint(default);
+        // Round joins keep the margin even around each corner, the tip included.
+        var clear = new CombinedGeometry(GeometryCombineMode.Union, heads,
+            heads.GetWidenedPathGeometry(new Pen(Brushes.Black, 2 * margin) { LineJoin = PenLineJoin.Round }))
+        {
+            Transform = new MatrixTransform(scale, 0, 0, scale, origin.X, origin.Y),
+        };
+        var everything = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
+        var outside = new CombinedGeometry(GeometryCombineMode.Exclude, everything, clear);
+        outside.Freeze();
+        return outside;
+    }
+
+    /// <summary>
+    /// How far the endpoint rings stop short of an arrowhead, in device pixels. A pixel that a head
+    /// touches lies within the pixel's diagonal (about 1.41) of the head, so past this margin neither
+    /// edge's anti-aliasing reaches it, and it keeps the colour it has unselected.
+    /// </summary>
+    private const double ArrowHeadClearancePixels = 1.5;
 
     private static IEnumerable<Point> HandleCenters(Rect rect)
     {

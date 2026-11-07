@@ -101,6 +101,10 @@ internal sealed class RegionRecordingCoordinator
     internal VideoFrameCaptureService? FrameCaptureService { get; set; }
     internal Action<Guid>? ShowFrameInLibrary { get; set; }
     internal Action<RecordingWatermarkSettings>? PersistWatermarkSettings { get; set; }
+
+    /// <summary>Called with true once a finished recording is in the library, false when the recording or its save failed.</summary>
+    internal Action<bool>? RecordingSaved { get; set; }
+
     // Installed only by the explicit isolated resident long-run diagnostic before Toggle.
     // The grabber snapshots the delegate for the lifetime of that recording.
     internal Action<byte[], int, int, int>? SyntheticRecordingFrame { get; set; }
@@ -493,6 +497,7 @@ internal sealed class RegionRecordingCoordinator
         _writeSession = null;
         _completionInProgress = false;
         _finishing = false;
+        ReportRecordingSaved(false);
         MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_89CF3D468EC1"), e.Exception);
     }
 
@@ -548,6 +553,16 @@ internal sealed class RegionRecordingCoordinator
         EndSessionIfIdle();
     }
 
+    /// <summary>Tells the observer whether the finished recording reached the library; it never interrupts the flow.</summary>
+    private void ReportRecordingSaved(bool saved)
+    {
+        try { RecordingSaved?.Invoke(saved); }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            _log.LogWarning(error, "Could not report the saved recording");
+        }
+    }
+
     private async void OnRecordingFinished(object? sender, RecordingResult result)
     {
         RecordingOpenLatency openLatency = _openLatency ?? new RecordingOpenLatency(Stopwatch.GetTimestamp());
@@ -595,15 +610,21 @@ internal sealed class RegionRecordingCoordinator
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not persist completed recording in the gallery");
+            // Disposing a retained session keeps the finished clip and its recovery sidecar for
+            // the next startup; only a clip proven unusable has already been removed.
+            Exception shown = DescribeCompletionFailure(writeSession, ex);
             writeSession.Dispose();
             _writeSession = null;
             _completionInProgress = false;
             _finishing = false;
             controls?.CompleteAndClose();
-            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), ex);
+            ReportRecordingSaved(false);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), shown);
             EndSessionIfIdle();
             return;
         }
+
+        ReportRecordingSaved(true);
 
         if (controls is not null && ReferenceEquals(_controls, controls))
         {
@@ -670,6 +691,16 @@ internal sealed class RegionRecordingCoordinator
             EndSessionIfIdle();
         }
     }
+
+    /// <summary>
+    /// What the save-failure dialog explains. When the library kept the finished clip for startup
+    /// recovery, the notice says so and when recovery runs; the cause stays in the details.
+    /// </summary>
+    internal static Exception DescribeCompletionFailure(VideoCaptureWriteSession session, Exception error) =>
+        session.IsRetainedForRecovery
+            ? MyCapture.App.Themes.UserFacingError.Mark(
+                new IOException(UiText.Get("Text_C5AC44062ACA").TrimEnd(), error))
+            : error;
 
     /// <summary>
     /// Lets Saved reach the screen before the editor's construction holds the dispatcher: one

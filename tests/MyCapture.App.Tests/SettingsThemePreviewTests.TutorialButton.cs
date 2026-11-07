@@ -102,15 +102,18 @@ public sealed partial class SettingsThemePreviewTests
                             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
                         foreach (Border row in rows.Where(row => !ReferenceEquals(row, originalText)))
                         {
-                            var textColumn = Assert.IsType<Grid>(row.Child).Children.OfType<StackPanel>().Single();
-                            string category = KoreanWordWrap.Strip(textColumn.Children.OfType<TextBlock>().Single().Text);
+                            // A result's name and category stack in one block; a tutorial button stands beside it.
+                            var line = Assert.IsType<Grid>(row.Child).Children.OfType<DockPanel>().Single();
+                            TextBlock[] lines = line.Children.OfType<StackPanel>().Single().Children.OfType<TextBlock>().ToArray();
+                            Assert.Equal(2, lines.Length);
+                            string category = KoreanWordWrap.Strip(lines[1].Text);
                             if (category == UiText.Get("Workspace.Library") || category == UiText.Get("Help.QuickAccess"))
                             {
                                 Assert.Empty(TutorialButtons(row));
                                 continue;
                             }
                             Button button = Assert.Single(TutorialButtons(row));
-                            VerifyTutorialButton(help, button, (string)button.Tag);
+                            VerifyTutorialButton(help, button, (string)button.Tag, searchResult: true);
                             VerifyTutorialRouting(help, [button]);
                         }
                     }
@@ -155,11 +158,30 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Same(button, FocusManager.GetFocusedElement(window));
     }
 
-    private static void VerifyTutorialButton(Window owner, Button button, string featureId)
+    /// <param name="searchResult">
+    /// A help search result: the button stands beside the block of the name and its category
+    /// (7–9 after the block, centred on it); a tab row's button stands beside its one title line.
+    /// </param>
+    private static void VerifyTutorialButton(Window owner, Button button, string featureId, bool searchResult = false)
     {
         var line = Assert.IsType<DockPanel>(button.Parent);
         Assert.Single(line.Children.OfType<Button>());
-        TextBlock title = Assert.Single(line.Children.OfType<TextBlock>());
+        TextBlock title;
+        FrameworkElement beside;
+        if (searchResult)
+        {
+            var block = Assert.Single(line.Children.OfType<StackPanel>());
+            Assert.Empty(line.Children.OfType<TextBlock>());
+            TextBlock[] lines = block.Children.OfType<TextBlock>().ToArray();
+            Assert.Equal(2, lines.Length);
+            title = lines[0];
+            beside = block;
+        }
+        else
+        {
+            title = Assert.Single(line.Children.OfType<TextBlock>());
+            beside = title;
+        }
         Assert.Equal(FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get(featureId)), AutomationProperties.GetName(button));
         Assert.Equal(AutomationProperties.GetName(button), button.ToolTip);
         Assert.Null(button.Content);
@@ -174,7 +196,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotNull(button.Template.FindName("HoverLayer", button));
         Assert.NotNull(button.Template.FindName("PressedLayer", button));
         Rect bounds = button.TransformToAncestor(line).TransformBounds(new Rect(button.RenderSize));
-        Rect caption = title.TransformToAncestor(line).TransformBounds(new Rect(title.RenderSize));
+        Rect caption = beside.TransformToAncestor(line).TransformBounds(new Rect(beside.RenderSize));
         Assert.InRange(bounds.Right, 0, line.ActualWidth + 0.5);
         Assert.InRange(bounds.Bottom, 0, line.ActualHeight + 0.5);
         var row = Assert.IsAssignableFrom<FrameworkElement>(line.Parent);

@@ -39,6 +39,9 @@ internal sealed class OcrResultPresenter : IDisposable
     internal OcrResultWindow Window => _window;
     internal event EventHandler<OcrPinRequest>? PinRequested;
 
+    /// <summary>The window's copy command finished: true once the text is on the clipboard.</summary>
+    internal event Action<bool>? TextCopied;
+
     private CancellationTokenSource? _inFlight;
     private CancellationTokenSource? _cachedImageLoad;
     private Func<OcrRequest>? _currentRequestFactory;
@@ -99,6 +102,7 @@ internal sealed class OcrResultPresenter : IDisposable
         if (accuracy is not null) _window.ConfigureAccuracy(accuracy, ChangeQualityAsync, CancelQualityChange);
         _window.RerunRequested += (_, _) => Rerun();
         _window.PinRequested += (_, request) => PinRequested?.Invoke(this, request);
+        _window.TextCopied += copied => TextCopied?.Invoke(copied);
         _window.GeometryRequested += (_, _) => RefreshGeometry();
         _window.Dismissed += (_, _) =>
         {

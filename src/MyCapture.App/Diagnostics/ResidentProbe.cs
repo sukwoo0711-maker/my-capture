@@ -24,6 +24,10 @@ namespace MyCapture.App.Diagnostics;
 /// The probe never registers global shortcuts, never writes the Run key, never checks for updates,
 /// never imports the legacy library and never writes the clipboard (the clipboard writer is replaced
 /// before any product code runs). Selection frames are synthetic, at the virtual desktop's size.
+/// The one step that reaches outside the data root is the large library delete
+/// (<see cref="ResidentProbeLibraryDelete"/>): its synthetic captures pass through the user's Recycle
+/// Bin and its Undo brings them all back, leaving there only the deletion's retired journal folder,
+/// as every Undo in the app does. The probe never empties the Recycle Bin.
 /// Ordinary modes retain native one-pixel/metadata prewarm. The explicit long-run preflight also
 /// substitutes those input boundaries before shell startup; it does not measure native acquisition.
 /// </remarks>
@@ -58,7 +62,12 @@ internal sealed class ResidentProbeOptions
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel"];
 
-    internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
+    /// <summary>
+    /// The release table's steps, in order. The large library delete runs last: the captures it adds
+    /// stay in the probe's library, and no earlier step is measured with them.
+    /// </summary>
+    internal static readonly string[] AllScenarios =
+        ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10", ResidentProbeLibraryDelete.Scenario];
 
     private ResidentProbeOptions(string output, IReadOnlyList<string> scenarios, bool quick, bool audit)
     {
@@ -273,6 +282,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
     private readonly List<Timing> _timings = [];
     private readonly List<string> _failures = [];
     private readonly List<string> _notes = [];
+    private readonly SortedDictionary<string, object?> _machineState = new(StringComparer.Ordinal);
     private readonly List<(string Step, string Kind, WeakReference Reference)> _tracked = [];
     private readonly List<ResidentProbeMemoryMap.Snapshot> _audits = [];
     private readonly List<Breakdown> _breakdowns = [];
@@ -448,6 +458,16 @@ internal sealed class ResidentProbeRecorder : IDisposable
         lock (_gate) _notes.Add(note);
     }
 
+    /// <summary>
+    /// A state of this PC that a step's times depend on and that the probe does not set, such as how
+    /// much the Recycle Bin already holds before the library delete. The report writes it with the
+    /// run's environment, so that runs are compared where it matches.
+    /// </summary>
+    internal void MachineState(string name, object? value)
+    {
+        lock (_gate) _machineState[name] = value;
+    }
+
     internal void Fail(Exception error)
     {
         lock (_gate) _failures.Add(error.ToString());
@@ -526,6 +546,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 VirtualDesktop = $"{desktop.Width}x{desktop.Height}",
                 Monitors = MonitorEnumerator.GetAll().Select(monitor =>
                     $"{monitor.Bounds.Width}x{monitor.Bounds.Height}@{monitor.Dpi}{(monitor.IsPrimary ? " primary" : "")}").ToArray(),
+                MachineState = _machineState,
                 _options.Quick,
                 _options.Audit,
                 Variants = _options.Variants.Order().ToArray(),

@@ -53,10 +53,9 @@ public sealed class LibraryFirstPageProbeTests
     [LibraryFirstPageFixtureFact]
     public void PrepareImmutablePreindexedSyntheticLibraries()
     {
-        string requested = TestDiagnosticArtifacts.Confined(Environment.GetEnvironmentVariable(LibraryFirstPageFixtureFactAttribute.Variable)
+        // A fresh output only: an existing file or directory is preserved and rejected before creation.
+        string output = TestDiagnosticArtifacts.NewDirectory(Environment.GetEnvironmentVariable(LibraryFirstPageFixtureFactAttribute.Variable)
             ?? throw new InvalidOperationException("An explicit fresh output is required."));
-        Assert.False(Directory.Exists(requested));
-        string output = DiagnosticOutputPaths.Create(requested);
         foreach (int count in new[] { 0, 1000 })
         {
             // The historical generator keeps its original default behavior. This distinct workload

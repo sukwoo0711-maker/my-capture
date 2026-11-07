@@ -1,8 +1,13 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -15,8 +20,9 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// The library's column count follows the real content width from the window's minimum size
 /// up: no card, and no command on a card, is ever cut off by the right edge of the library,
-/// in the root, a date, an opened folder and a search. Set MYCAPTURE_LIBRARY_UX_EVIDENCE to
-/// keep PNGs of the narrowest states.
+/// in the root, a date, an opened folder and a search. Each view's sweep, with the details pane
+/// open and then hidden, runs in an isolated process of its own (<see cref="LibraryColumnPart"/>).
+/// Set MYCAPTURE_LIBRARY_UX_EVIDENCE to keep PNGs of the narrowest states.
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
@@ -32,29 +38,87 @@ public sealed partial class SettingsThemePreviewTests
     public Task LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside() =>
         RunLibraryColumnTest(nameof(LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside), constrainWindow: false, maximumWidth: 1044);
 
-    private Task RunLibraryColumnTest(string testName, bool constrainWindow, double? maximumWidth = null) =>
-        RunIsolated(testName, () =>
+    /// <summary>
+    /// Runs the column test as one isolated process per view and details state, in the order a single
+    /// process used to run them. An external UI Automation client that follows the foreground window
+    /// can hold back the dispatcher's background work for seconds at a width (#239); this way a slow
+    /// sweep can only use up the time limit of its own process.
+    /// </summary>
+    private static async Task RunLibraryColumnTest(string testName, bool constrainWindow, double? maximumWidth = null)
+    {
+        // The parent starts one process per part; each child runs only the part it was given.
+        bool child = Environment.GetEnvironmentVariable(ChildFlag) == "1";
+        LibraryColumnPart[] parts = child
+            ? new[] { LibraryColumnPart.Parse(Environment.GetEnvironmentVariable(LibraryColumnPart.Variable)) }
+            : LibraryColumnPart.All.ToArray();
+        foreach (LibraryColumnPart part in parts)
         {
-            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-                application.Resources.MergedDictionaries.Add(new ResourceDictionary
-                { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
-            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
-            application.Resources["PinLabel"] = new PinLabelConverter();
-            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
             try
             {
-                using var scope = UiText.UseLanguage("ko-KR");
-                VerifyLibraryColumns(constrainWindow, maximumWidth);
+                await RunIsolated(testName, () =>
+                {
+                    var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                    foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                        { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+                    application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+                    application.Resources["PinLabel"] = new PinLabelConverter();
+                    application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+                    try
+                    {
+                        using var scope = UiText.UseLanguage("ko-KR");
+                        VerifyLibraryColumns(constrainWindow, maximumWidth, part);
+                    }
+                    finally
+                    {
+                        ThemeService.Apply(AppTheme.Midnight);
+                        application.Shutdown();
+                    }
+                }, childEnvironment: new Dictionary<string, string> { [LibraryColumnPart.Variable] = part.Value });
             }
-            finally
+            catch (Exception error) when (!child)
             {
-                ThemeService.Apply(AppTheme.Midnight);
-                application.Shutdown();
+                throw new LibraryLayoutFailure($"library columns, {part}: {error.Message}", error);
             }
-        });
+        }
+    }
 
-    private static void VerifyLibraryColumns(bool constrainWindow, double? maximumWidth)
+    /// <summary>
+    /// One isolated process of the column test: one view's sweep with the details pane open or hidden.
+    /// The process also takes the step that followed that sweep when one process ran every part: the
+    /// next view at the minimum width, hiding the pane after the last open view, or showing it again
+    /// after the last hidden one. Every view change after a mixed-width sweep is still covered.
+    /// </summary>
+    private readonly record struct LibraryColumnPart(bool DetailsOpen, int View)
+    {
+        internal const string Variable = "MYCAPTURE_LIBRARY_COLUMNS_PART";
+
+        /// <summary>The views in the order the test visits them, as named in its stages.</summary>
+        internal static readonly string[] Views = ["root", "date", "folder", "search"];
+
+        /// <summary>Every part, in the order a single process used to run them.</summary>
+        internal static IReadOnlyList<LibraryColumnPart> All { get; } = new[] { true, false }
+            .SelectMany(open => Enumerable.Range(0, Views.Length).Select(view => new LibraryColumnPart(open, view)))
+            .ToArray();
+
+        internal string Value => $"{(DetailsOpen ? "open" : "hidden")}:{Views[View]}";
+
+        internal static LibraryColumnPart Parse(string? value)
+        {
+            foreach (LibraryColumnPart part in All)
+                if (part.Value == value) return part;
+            throw new InvalidOperationException(
+                $"{Variable} is '{value ?? "unset"}'; it must be one of {string.Join(", ", All.Select(part => part.Value))}.");
+        }
+
+        public override string ToString() => $"{Views[View]}, {(DetailsOpen ? "details open" : "details hidden")}";
+    }
+
+    /// <summary>
+    /// Runs one part of the column test: the minimum root, then the part's view at the minimum width
+    /// and across its sweep, then the step that followed that sweep (see <see cref="LibraryColumnPart"/>).
+    /// </summary>
+    private static void VerifyLibraryColumns(bool constrainWindow, double? maximumWidth, LibraryColumnPart part)
     {
         ThemeService.Apply(AppTheme.Glass);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-columns-");
@@ -70,6 +134,19 @@ public sealed partial class SettingsThemePreviewTests
             if (index < 11) filed.Add(record.Id);
         }
         f.Queue.MoveCapturesAsync(filed, f.Design.Id).GetAwaiter().GetResult();
+        // The step a failure, or a timeout of the isolated process, is reported against.
+        string stage = "minimum window";
+        var elapsed = Stopwatch.StartNew();
+        // UI Automation clients reach WPF elements through Send-priority operations that their own
+        // threads post; while those keep arriving, the dispatcher holds back its background work.
+        int uiThread = Environment.CurrentManagedThreadId;
+        int sendCalls = 0;
+        DispatcherHookEventHandler countSendCall = (_, e) =>
+        {
+            if (e.Operation.Priority == DispatcherPriority.Send && Environment.CurrentManagedThreadId != uiThread)
+                Interlocked.Increment(ref sendCalls);
+        };
+        window.Dispatcher.Hooks.OperationPosted += countSendCall;
         try
         {
             window.Width = window.MinWidth;
@@ -82,8 +159,10 @@ public sealed partial class SettingsThemePreviewTests
             vm.Refresh();
             PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, "library columns: folder cards");
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
+            RecordIsolatedProgress($"library columns shown for {part}; {LibraryLayoutState(window, vm)}");
 
             // The minimum window with the details pane open fits two full cards that share its width.
+            stage = "minimum root";
             Assert.True(vm.ColumnCount == 2,
                 $"Minimum root needs two columns; actual {vm.ColumnCount}, window {window.ActualWidth}, client {((FrameworkElement)window.Content).ActualWidth}, rows {rowsList.ActualWidth}, scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth}");
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root");
@@ -101,117 +180,182 @@ public sealed partial class SettingsThemePreviewTests
             var rail = (FrameworkElement)window.FindName("GalleryDetailsRail");
             var hide = (Button)window.FindName("HideDetailsButton");
             var showDetails = (Button)window.FindName("ShowDetailsButton");
-            foreach (bool detailsOpen in new[] { true, false })
+            Assert.Equal(LibraryColumnPart.Views, views.Select(view => view.Name).ToArray());
+
+            void HideDetails()
             {
+                const string pane = "details hidden";
+                // Hiding the pane from the keyboard leaves focus on the rail's button.
+                stage = "hiding details at the minimum width";
+                window.Width = window.MinWidth;
+                vm.NavigateTo(CaptureFolderScope.All);
+                // Keyboard focus needs the window to be foreground, which a test desktop may refuse.
+                window.Activate();
+                bool keyboard = hide.Focus() && hide.IsKeyboardFocused;
+                hide.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, hide));
+                SettleGalleryLayout(window);
+                Assert.False(window.IsDetailsPaneOpen);
+                Assert.False(details.IsVisible);
+                Assert.True(rail.IsVisible);
+                if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
+                AssertInsideClient(showDetails, client, pane);
+                Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
+                // Hiding details leaves enough space for a third card.
+                Assert.Equal(3, vm.ColumnCount);
+                AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
+                SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
+            }
+
+            void ShowAtMinimumWidth(int view, bool detailsOpen)
+            {
+                (string name, Action show) = views[view];
                 string pane = detailsOpen ? "details open" : "details hidden";
-                if (!detailsOpen)
-                {
-                    // Hiding the pane from the keyboard leaves focus on the rail's button.
-                    window.Width = window.MinWidth;
-                    vm.NavigateTo(CaptureFolderScope.All);
-                    // Keyboard focus needs the window to be foreground, which a test desktop may refuse.
-                    window.Activate();
-                    bool keyboard = hide.Focus() && hide.IsKeyboardFocused;
-                    hide.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, hide));
-                    SettleGalleryLayout(window);
-                    Assert.False(window.IsDetailsPaneOpen);
-                    Assert.False(details.IsVisible);
-                    Assert.True(rail.IsVisible);
-                    if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
-                    AssertInsideClient(showDetails, client, pane);
-                    Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
-                    // Hiding details leaves enough space for a third card.
-                    Assert.Equal(3, vm.ColumnCount);
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
-                    SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
-                }
-
-                foreach ((string name, Action show) in views)
-                {
-                    window.Width = window.MinWidth;
-                    show();
-                    SettleGalleryLayout(window);
-                    Assert.Equal(name == "folder", vm.IsCompactLayout);
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at the minimum width, {pane}");
-                    if (detailsOpen && name is "folder" or "search")
-                        SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
-                    var columnsSeen = new HashSet<int>();
-                    double windowChrome = window.ActualWidth - client.ActualWidth;
-                    double originalClientWidth = client.Width;
-                    try
-                    {
-                        bool virtualLayout = false;
-                        foreach (double width in LibrarySweepWidths(window, scroll, vm).ToArray())
-                        {
-                            if (!virtualLayout)
-                            {
-                                window.Width = width;
-                                SettleGalleryLayout(window);
-                                virtualLayout = Math.Abs(window.ActualWidth - width) > 0.5;
-                            }
-                            string layout = "window";
-                            if (virtualLayout)
-                            {
-                                // Hosted desktops can cap the HWND before the next column boundary.
-                                // Exercise the same loaded content, SizeChanged handler and row panel
-                                // at the remaining logical widths without changing the desktop.
-                                double expectedClientWidth = width - windowChrome;
-                                client.Width = expectedClientWidth;
-                                SettleGalleryLayout(window);
-                                Assert.InRange(client.ActualWidth, expectedClientWidth - 0.5, expectedClientWidth + 0.5);
-                                layout = "virtual client";
-                            }
-                            AssertCardsInsideLibrary(rowsList, scroll, vm, $"{name} at {width:0.#} DIP ({layout}), {pane}");
-                            columnsSeen.Add(vm.ColumnCount);
-                        }
-                    }
-                    finally
-                    {
-                        client.Width = originalClientWidth;
-                        SettleGalleryLayout(window);
-                    }
-                    // Keep all column-boundary coverage even on desktops narrower than the sweep.
-                    Assert.True(columnsSeen.Count >= 3, $"{name}, {pane}: only {string.Join(", ", columnsSeen)} columns were reached");
-                    vm.SearchQuery = string.Empty;
-                }
+                stage = $"{name} at the minimum width, {pane}";
+                window.Width = window.MinWidth;
+                show();
+                SettleGalleryLayout(window);
+                Assert.Equal(name == "folder", vm.IsCompactLayout);
+                AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
+                if (detailsOpen && name is "folder" or "search")
+                    SaveLibraryUxEvidence(window, AppTheme.Glass, $"columns-minimum-{name}-glass-ko-KR.png");
             }
 
-            // The rail brings the pane back, with focus on its hide button, and the columns follow.
-            window.Width = window.MinWidth;
-            vm.NavigateTo(CaptureFolderScope.All);
-            bool keyboardBack = showDetails.Focus() && showDetails.IsKeyboardFocused;
-            showDetails.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, showDetails));
-            SettleGalleryLayout(window);
-            Assert.True(window.IsDetailsPaneOpen);
-            Assert.True(details.IsVisible);
-            Assert.False(rail.IsVisible);
-            if (keyboardBack) Assert.True(hide.IsKeyboardFocused, "focus must move to the pane's hide button");
-            // The pane is usable at once; its fade-in only softens the arrival and settles at full opacity.
-            Assert.True(details.IsHitTestVisible && details.IsEnabled);
-            PumpLibraryUntil(window, () => details.Opacity, opacity => opacity == 1.0, "details fade-in");
-            Assert.Equal(2, vm.ColumnCount);
-            AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root, details shown again");
-
-            // The default height shows whole rows; render the widths the owner compares, with the
-            // details pane shown and hidden. Only kept when MYCAPTURE_LIBRARY_UX_EVIDENCE is set.
-            window.Height = 760;
-            vm.Select(f.Records[0].Id);
-            foreach (bool open in new[] { true, false })
+            void SweepWidths(int view, bool detailsOpen)
             {
-                window.SetDetailsPaneOpen(open);
-                foreach (double width in new[] { window.MinWidth, 1200, 1600 })
+                string name = views[view].Name;
+                string pane = detailsOpen ? "details open" : "details hidden";
+                var columnsSeen = new HashSet<int>();
+                double windowChrome = window.ActualWidth - client.ActualWidth;
+                double originalClientWidth = client.Width;
+                var sweep = Stopwatch.StartNew();
+                int windowWidths = 0, virtualWidths = 0;
+                // Where the sweep spends its time: changing the width, settling layout, checking the cards.
+                long resizing = 0, settling = 0, checking = 0, mark = 0;
+                long Lap()
                 {
-                    window.Width = width;
-                    SettleGalleryLayout(window);
-                    if (Math.Abs(window.ActualWidth - width) > 0.5) continue;
-                    AssertCardsInsideLibrary(rowsList, scroll, vm, $"evidence {width:0} DIP, details {(open ? "shown" : "hidden")}");
-                    SaveLibraryUxEvidence(window, AppTheme.Glass, $"layout-{width:0}-{(open ? "details" : "no-details")}-glass-ko-KR.png");
+                    long now = sweep.ElapsedMilliseconds, lap = now - mark;
+                    mark = now;
+                    return lap;
                 }
+                (long Milliseconds, double Width) slowest = (0, 0);
+                int sendCallsBefore = Volatile.Read(ref sendCalls);
+                try
+                {
+                    bool virtualLayout = false;
+                    foreach (double width in LibrarySweepWidths(window, scroll, vm).ToArray())
+                    {
+                        long stepStarted = mark = sweep.ElapsedMilliseconds;
+                        stage = $"{name} at {width:0.#} DIP, {pane}";
+                        if (!virtualLayout)
+                        {
+                            window.Width = width;
+                            resizing += Lap();
+                            SettleGalleryLayout(window);
+                            settling += Lap();
+                            virtualLayout = Math.Abs(window.ActualWidth - width) > 0.5;
+                        }
+                        string layout = "window";
+                        if (virtualLayout)
+                        {
+                            // Hosted desktops can cap the HWND before the next column boundary.
+                            // Exercise the same loaded content, SizeChanged handler and row panel
+                            // at the remaining logical widths without changing the desktop.
+                            double expectedClientWidth = width - windowChrome;
+                            client.Width = expectedClientWidth;
+                            resizing += Lap();
+                            SettleGalleryLayout(window);
+                            settling += Lap();
+                            Assert.InRange(client.ActualWidth, expectedClientWidth - 0.5, expectedClientWidth + 0.5);
+                            layout = "virtual client";
+                        }
+                        stage = $"{name} at {width:0.#} DIP ({layout}), {pane}";
+                        AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
+                        checking += Lap();
+                        columnsSeen.Add(vm.ColumnCount);
+                        if (virtualLayout) virtualWidths++; else windowWidths++;
+                        long step = sweep.ElapsedMilliseconds - stepStarted;
+                        if (step > slowest.Milliseconds) slowest = (step, width);
+                    }
+                }
+                finally
+                {
+                    client.Width = originalClientWidth;
+                    SettleGalleryLayout(window);
+                }
+                int sendCallsDuring = Volatile.Read(ref sendCalls) - sendCallsBefore;
+                bool foreground = LibraryUser32.GetForegroundWindow() == new WindowInteropHelper(window).Handle;
+                // A timeout of the isolated process then names the last finished sweep and its cost.
+                RecordIsolatedProgress($"library columns {name}, {pane}: {windowWidths} window and {virtualWidths} virtual client widths "
+                    + $"in {sweep.ElapsedMilliseconds} ms (resize {resizing}, settle {settling}, check {checking}), "
+                    + $"slowest {slowest.Milliseconds} ms at {slowest.Width:0.#} DIP, columns {string.Join(", ", columnsSeen.Order())}, "
+                    + $"{sendCallsDuring} Send-priority calls from other threads, window {(foreground ? "in" : "not in")} the foreground");
+                // Keep all column-boundary coverage even on desktops narrower than the sweep.
+                stage = $"{name}, {pane}: column coverage";
+                Assert.True(columnsSeen.Count >= 3, $"{name}, {pane}: only {string.Join(", ", columnsSeen)} columns were reached");
+                vm.SearchQuery = string.Empty;
             }
-            window.SetDetailsPaneOpen(true);
+
+            void ShowDetailsAgain()
+            {
+                // The rail brings the pane back, with focus on its hide button, and the columns follow.
+                stage = "details shown again at the minimum width";
+                window.Width = window.MinWidth;
+                vm.NavigateTo(CaptureFolderScope.All);
+                bool keyboardBack = showDetails.Focus() && showDetails.IsKeyboardFocused;
+                showDetails.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, showDetails));
+                SettleGalleryLayout(window);
+                Assert.True(window.IsDetailsPaneOpen);
+                Assert.True(details.IsVisible);
+                Assert.False(rail.IsVisible);
+                if (keyboardBack) Assert.True(hide.IsKeyboardFocused, "focus must move to the pane's hide button");
+                // The pane is usable at once; its fade-in only softens the arrival and settles at full opacity.
+                Assert.True(details.IsHitTestVisible && details.IsEnabled);
+                PumpLibraryUntil(window, () => details.Opacity, opacity => opacity == 1.0, "details fade-in");
+                Assert.Equal(2, vm.ColumnCount);
+                AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root, details shown again");
+            }
+
+            void RenderEvidence()
+            {
+                // The default height shows whole rows; render the widths the owner compares, with the
+                // details pane shown and hidden. Only kept when MYCAPTURE_LIBRARY_UX_EVIDENCE is set.
+                window.Height = 760;
+                vm.Select(f.Records[0].Id);
+                foreach (bool open in new[] { true, false })
+                {
+                    window.SetDetailsPaneOpen(open);
+                    foreach (double width in new[] { window.MinWidth, 1200, 1600 })
+                    {
+                        stage = $"evidence {width:0} DIP, details {(open ? "shown" : "hidden")}";
+                        window.Width = width;
+                        SettleGalleryLayout(window);
+                        if (Math.Abs(window.ActualWidth - width) > 0.5) continue;
+                        AssertCardsInsideLibrary(rowsList, scroll, vm, stage);
+                        SaveLibraryUxEvidence(window, AppTheme.Glass, $"layout-{width:0}-{(open ? "details" : "no-details")}-glass-ko-KR.png");
+                    }
+                }
+                window.SetDetailsPaneOpen(true);
+            }
+
+            if (!part.DetailsOpen) HideDetails();
+            ShowAtMinimumWidth(part.View, part.DetailsOpen);
+            SweepWidths(part.View, part.DetailsOpen);
+            // The step that followed this sweep when one process ran every part.
+            if (part.View + 1 < views.Length) ShowAtMinimumWidth(part.View + 1, part.DetailsOpen);
+            else if (part.DetailsOpen) HideDetails();
+            else
+            {
+                ShowDetailsAgain();
+                RenderEvidence();
+            }
+        }
+        catch (Exception error) when (CaptureLibraryLayout(error, window, vm, out string layout))
+        {
+            throw LibraryStepFailure(stage, elapsed, layout, error);
         }
         finally
         {
+            window.Dispatcher.Hooks.OperationPosted -= countSendCall;
             window.CloseForExit();
         }
     }
@@ -383,5 +527,209 @@ public sealed partial class SettingsThemePreviewTests
             $"{label}: {vm.ColumnCount} columns leave room for another card in {usable:0.#} DIP");
         GalleryTileRow? fullest = vm.Rows.OfType<GalleryTileRow>().MaxBy(row => row.Tiles.Count);
         if (fullest is not null) Assert.True(fullest.Tiles.Count <= vm.ColumnCount, $"{label}: a row holds more cards than columns");
+    }
+
+    /// <summary>A library assertion failure whose message already carries the layout facts.</summary>
+    private sealed class LibraryLayoutFailure(string message, Exception? inner = null)
+        : Xunit.Sdk.XunitException(message, inner);
+
+    /// <summary>
+    /// Exception filter for the library layout tests. It runs before any inner <c>finally</c>
+    /// restores a width, so the layout it keeps is the one the assertion saw; the caller rethrows
+    /// the failure with it. A failure that already carries the layout passes through unchanged.
+    /// </summary>
+    private static bool CaptureLibraryLayout(Exception error, GalleryWindow window, GalleryViewModel vm, out string layout)
+    {
+        layout = error is LibraryLayoutFailure ? string.Empty : LibraryLayoutState(window, vm);
+        return error is not LibraryLayoutFailure;
+    }
+
+    /// <summary>
+    /// A failed library step with the layout it left. xUnit prints an assertion without its inner
+    /// exception, so the original failure, with its message and stack, is part of this message.
+    /// </summary>
+    private static LibraryLayoutFailure LibraryStepFailure(string stage, Stopwatch elapsed, string layout, Exception error) =>
+        new($"{stage}, {elapsed.ElapsedMilliseconds} ms into the test. Layout at the failure: {layout}"
+            + $"{Environment.NewLine}Original failure: {error}", error);
+
+    /// <summary>
+    /// Requires a resize to move the column count the expected way. On a failure the message keeps
+    /// the layout as the assertion saw it, then lets the dispatcher settle layout a few more times and
+    /// keeps that layout too, so a resize the dispatcher had not processed yet is told apart from a
+    /// width that never allowed another count. The assertion fails in both cases.
+    /// </summary>
+    private static void AssertColumnCountMoved(GalleryWindow window, GalleryViewModel vm, int before, bool fewer,
+        string stage, WindowTrackSizeScope? tracking = null)
+    {
+        int after = vm.ColumnCount;
+        if (fewer ? after < before : after > before) return;
+        string asserted = LibraryLayoutState(window, vm, before, tracking);
+        var settling = Stopwatch.StartNew();
+        int passes = 0;
+        while (passes < 5 && vm.ColumnCount == after)
+        {
+            SettleGalleryLayout(window);
+            passes++;
+        }
+        string later = vm.ColumnCount == after
+            ? $"still {after} after {passes} more settle passes ({settling.ElapsedMilliseconds} ms)"
+            : $"{vm.ColumnCount} after {passes} more settle passes ({settling.ElapsedMilliseconds} ms)";
+        throw new LibraryLayoutFailure($"{stage}: the column count must {(fewer ? "fall below" : "rise above")} {before} "
+            + $"but is {after}; {later}.{Environment.NewLine}As asserted: {asserted}{Environment.NewLine}"
+            + $"After settling: {LibraryLayoutState(window, vm, before, tracking)}");
+    }
+
+    /// <summary>
+    /// The facts a library resize failure needs, read without changing layout or focus: the desktop,
+    /// work area and DPI the window was given; its requested, actual, minimum and maximum sizes; the
+    /// library's scrolling width; the column count before and now against the count that width allows;
+    /// whether layout, the dispatcher and the product's focus restoration had settled; and where focus is.
+    /// </summary>
+    private static string LibraryLayoutState(GalleryWindow window, GalleryViewModel vm, int? columnsBefore = null,
+        WindowTrackSizeScope? tracking = null)
+    {
+        var facts = new List<string>();
+        void Add(string name, Func<string> read)
+        {
+            // An unreadable fact is reported as such; it never replaces the failure it explains.
+            try { facts.Add($"{name} {read()}"); }
+            catch (Exception error) { facts.Add($"{name} <{error.GetType().Name}: {error.Message}>"); }
+        }
+
+        nint hwnd = new WindowInteropHelper(window).Handle;
+        var rows = window.FindName("RowsList") as ListBox;
+        ScrollViewer? scroll = rows is null ? null : Descendants(rows).OfType<ScrollViewer>().FirstOrDefault();
+        Add("desktop", () => $"small {Environment.GetEnvironmentVariable(WindowTrackSizeScope.SmallDesktopEnvironmentVariable) ?? "unset"}, "
+            + $"work area {LibraryRect(SystemParameters.WorkArea)}, virtual screen {SystemParameters.VirtualScreenWidth:0.#}x"
+            + $"{SystemParameters.VirtualScreenHeight:0.#}, max track {SystemParameters.MaximumWindowTrackWidth:0.#}x"
+            + $"{SystemParameters.MaximumWindowTrackHeight:0.#} DIP");
+        Add("monitor", () => LibraryMonitor(hwnd));
+        Add("dpi", () => $"{VisualTreeHelper.GetDpi(window).PixelsPerInchX:0.#} layout"
+            + (hwnd == 0 ? ", no window handle" : $", {LibraryUser32.GetDpiForWindow(hwnd)} native, {LibraryDpiAwareness(hwnd)}"));
+        Add("window", () => $"requested {window.Width:0.#}x{window.Height:0.#}, actual {window.ActualWidth:0.#}x{window.ActualHeight:0.#}, "
+            + $"min {window.MinWidth:0.#}x{window.MinHeight:0.#} DIP, max width {LibraryLimit(window.MaxWidth)}, "
+            + $"max height {LibraryLimit(window.MaxHeight)}, {window.WindowState}, "
+            + (hwnd != 0 && LibraryUser32.GetWindowRect(hwnd, out LibraryNativeRect frame)
+                ? $"native {frame.Right - frame.Left}x{frame.Bottom - frame.Top} px at {frame.Left},{frame.Top}"
+                : "no native frame"));
+        if (tracking is not null) Add("track size scope", () => $"{tracking.MessageCount} WM_GETMINMAXINFO");
+        Add("client", () => window.Content is FrameworkElement client
+            ? $"{client.ActualWidth:0.#} (width {client.Width:0.#})" : "none");
+        Add("details", () => $"{(window.IsDetailsPaneOpen ? "open" : "hidden")} "
+            + $"{((FrameworkElement)window.FindName("GalleryDetailsPanel")).ActualWidth:0.#}");
+        Add("rows list", () => rows is null ? "none" : $"{rows.ActualWidth:0.#}");
+        Add("scroll", () => scroll is null ? "none"
+            : $"{scroll.ActualWidth:0.#}, viewport {scroll.ViewportWidth:0.#}x{scroll.ViewportHeight:0.#}, "
+            + $"extent {scroll.ExtentWidth:0.#}x{scroll.ExtentHeight:0.#}, offset {scroll.VerticalOffset:0.#} of "
+            + $"{scroll.ScrollableHeight:0.#}, bar {scroll.ComputedVerticalScrollBarVisibility}");
+        Add("columns", () =>
+        {
+            string allowed = scroll is null ? "no scroll viewer" : LibraryAllowedColumns(scroll, vm);
+            int widest = vm.Rows.OfType<GalleryTileRow>().Select(row => row.Tiles.Count).DefaultIfEmpty().Max();
+            return (columnsBefore is { } before ? $"{before} before, " : string.Empty)
+                + $"{vm.ColumnCount} now; {allowed}; widest row {widest}";
+        });
+        Add("layout", () => $"window {LibraryLayoutValidity(window)}, rows {(rows is null ? "-" : LibraryLayoutValidity(rows))}, "
+            + $"scroll {(scroll is null ? "-" : LibraryLayoutValidity(scroll))}");
+        Add("dispatcher", () => $"{(window.Dispatcher.CheckAccess() ? "owner thread" : "other thread")}, "
+            + $"{(window.Dispatcher.HasShutdownStarted ? "shutting down" : "running")}, "
+            + $"focus restore {(window.GridResizeFocusRestorePendingForTest ? "pending" : "idle")}");
+        Add("focus", () => $"{LibraryFocusedElement(Keyboard.FocusedElement)}, window {(window.IsActive ? "active" : "inactive")}, "
+            + $"foreground {(hwnd != 0 && LibraryUser32.GetForegroundWindow() == hwnd ? "this window" : "another window")}, "
+            + $"grid {(rows?.IsKeyboardFocusWithin == true ? "has focus" : "has no focus")}");
+        return string.Join("; ", facts);
+    }
+
+    /// <summary>The column count the test's own rule allows for the loaded width (see <see cref="AssertCardsInsideLibrary"/>).</summary>
+    private static string LibraryAllowedColumns(ScrollViewer scroll, GalleryViewModel vm)
+    {
+        double usable = LibraryUsableWidth(scroll);
+        int allowed = GalleryRowBuilder.ColumnCountForWidth(usable, vm.IsCompactLayout, vm.MinimumTrackWidth);
+        return $"{usable:0.#} DIP usable allows {allowed} at a {vm.MinimumTrackWidth:0.#}-DIP "
+            + $"{(vm.IsCompactLayout ? "compact" : "full")} track";
+    }
+
+    private static string LibraryLayoutValidity(UIElement element) =>
+        element.IsMeasureValid && element.IsArrangeValid ? "valid"
+            : $"pending (measure {(element.IsMeasureValid ? "valid" : "invalid")}, arrange {(element.IsArrangeValid ? "valid" : "invalid")})";
+
+    private static string LibraryFocusedElement(IInputElement? element) => element switch
+    {
+        null => "focus on nothing",
+        FrameworkElement framework => $"focus on {framework.GetType().Name}"
+            + (string.IsNullOrEmpty(framework.Name) ? string.Empty : $" {framework.Name}")
+            + (framework.DataContext is null ? string.Empty : $" ({framework.DataContext.GetType().Name})"),
+        _ => $"focus on {element.GetType().Name}",
+    };
+
+    private static string LibraryMonitor(nint hwnd)
+    {
+        if (hwnd == 0) return "no window handle";
+        var info = new LibraryMonitorInfo { Size = Marshal.SizeOf<LibraryMonitorInfo>() };
+        nint monitor = LibraryUser32.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        return monitor != 0 && LibraryUser32.GetMonitorInfo(monitor, ref info)
+            ? $"{LibraryRect(info.Monitor)}, work {LibraryRect(info.Work)} px{((info.Flags & 1) != 0 ? ", primary" : string.Empty)}"
+            : "unavailable";
+    }
+
+    private static string LibraryDpiAwareness(nint hwnd) =>
+        LibraryUser32.GetAwarenessFromDpiAwarenessContext(LibraryUser32.GetWindowDpiAwarenessContext(hwnd)) switch
+        {
+            0 => "DPI unaware",
+            1 => "system DPI aware",
+            2 => "per-monitor DPI aware",
+            int other => $"DPI awareness {other}",
+        };
+
+    // The isolated child's output is read back through a console code page that loses the infinity sign.
+    private static string LibraryLimit(double length) => double.IsPositiveInfinity(length) ? "none" : $"{length:0.#}";
+
+    private static string LibraryRect(Rect rect) => $"{rect.Left:0.#},{rect.Top:0.#} {rect.Width:0.#}x{rect.Height:0.#}";
+
+    private static string LibraryRect(LibraryNativeRect rect) =>
+        $"{rect.Left},{rect.Top} {rect.Right - rect.Left}x{rect.Bottom - rect.Top}";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LibraryNativeRect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LibraryMonitorInfo
+    {
+        public int Size;
+        public LibraryNativeRect Monitor, Work;
+        public uint Flags;
+    }
+
+    /// <summary>
+    /// The user32 calls the library layout facts read. Nested so that an import of the same name in
+    /// another part of this partial class cannot collide with them.
+    /// </summary>
+    private static class LibraryUser32
+    {
+        [DllImport("user32.dll")]
+        internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
+
+        [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetMonitorInfo(nint monitor, ref LibraryMonitorInfo info);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetWindowRect(nint hwnd, out LibraryNativeRect rect);
+
+        [DllImport("user32.dll")]
+        internal static extern uint GetDpiForWindow(nint hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern nint GetWindowDpiAwarenessContext(nint hwnd);
+
+        [DllImport("user32.dll")]
+        internal static extern int GetAwarenessFromDpiAwarenessContext(nint context);
+
+        [DllImport("user32.dll")]
+        internal static extern nint GetForegroundWindow();
     }
 }

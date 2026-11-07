@@ -48,13 +48,20 @@ public sealed partial class SettingsThemePreviewTests
                     Expander expander = Assert.Single(panel.Children.OfType<Expander>());
                     CheckBenchmarkContrast(expander.Foreground, window.Background, $"{theme}: {expander.Header}", failures);
                     var header = Assert.IsType<ToggleButton>(expander.Template.FindName("HeaderToggle", expander));
-                    Assert.Same(application.FindResource(typeof(ToggleButton)), header.Style);
+                    Assert.Same(application.FindResource("ToggleButton.Disclosure"), header.Style);
                     expander.IsExpanded = false;
                     Assert.False(header.IsChecked);
                     expander.IsExpanded = true;
                     Assert.True(header.IsChecked);
+                    // Open, the header text sits on the disclosure toggle's neutral selected tile, not on
+                    // the window and not on the ink fill of other on toggles: that tile is its backdrop.
+                    var headerFill = Assert.IsType<Border>(header.Template.FindName("CheckedLayer", header));
+                    Assert.Equal(1d, headerFill.Opacity);
+                    Assert.Equal(((SolidColorBrush)application.FindResource("Surface.Selected")).Color,
+                        Assert.IsType<SolidColorBrush>(headerFill.Background).Color);
                     foreach (TextBlock text in Descendants(panel).OfType<TextBlock>().Where(text => text.IsVisible && text.Text.Length > 0))
-                        CheckBenchmarkContrast(text.Foreground, window.Background, $"{theme}: {text.Text}", failures);
+                        CheckBenchmarkContrast(text.Foreground, text.IsDescendantOf(header) ? headerFill.Background : window.Background,
+                            $"{theme}: {text.Text}", failures);
                     foreach (Control control in Descendants(panel).OfType<Control>().Where(control => control is ComboBox or CheckBox or Slider))
                         Assert.NotNull(control.Style);
                 }

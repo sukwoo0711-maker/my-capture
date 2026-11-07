@@ -313,15 +313,15 @@ internal sealed class CaptureModeBar : Border
         double chromeWidth = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
         double fullWidth = chromeWidth;
         bool secondaryActions = _otherActions && !_recording;
+        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         for (int i = 0; i < _items.Children.Count; i++)
         {
             var item = (FrameworkElement)_items.Children[i];
             bool secondary = ReferenceEquals(item, _scroll) || ReferenceEquals(item, _delay);
             if (secondary ? !secondaryActions : item.Visibility == Visibility.Collapsed) continue;
             fullWidth += ReferenceEquals(item, _kindSwitch)
-                ? _captureKind.Width + _captureKind.Margin.Left + _captureKind.Margin.Right
-                    + _recordKind.Width + _recordKind.Margin.Left + _recordKind.Margin.Right
-                : item.Width + item.Margin.Left + item.Margin.Right;
+                ? LaidOutWidth(_captureKind, dpi) + LaidOutWidth(_recordKind, dpi)
+                : LaidOutWidth(item, dpi);
         }
 
         _compactActions = secondaryActions && fullWidth > availableWidth;
@@ -330,15 +330,27 @@ internal sealed class CaptureModeBar : Border
         if (_delay.Visibility != visibility) _delay.Visibility = visibility;
         double contentWidth = fullWidth - chromeWidth;
         if (_compactActions)
-            contentWidth -= _scroll.Width + _scroll.Margin.Left + _scroll.Margin.Right
-                + _delay.Width + _delay.Margin.Left + _delay.Margin.Right;
+            contentWidth -= LaidOutWidth(_scroll, dpi) + LaidOutWidth(_delay, dpi);
         // Keep the wrapping boundary on the layout pixel grid, rounded up. At 150% a natural
         // 527-DIP row otherwise rounds down to 526 2/3 during arrange and wraps its last target
         // below the height measured for one row. Narrower displays still wrap within the bar.
-        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         double width = Math.Min(contentWidth, Math.Max(0, availableWidth - chromeWidth));
-        _items.Width = Math.Ceiling(width * dpi) / dpi;
+        _items.Width = Math.Ceiling((width * dpi) - 0.0001) / dpi;
     }
+
+    /// <summary>
+    /// The width <paramref name="item"/> takes in the row: layout rounding puts its width and its
+    /// margins on the pixel grid separately. Counted from the DIP values instead, the row came out
+    /// narrower than its commands at 150% (each 1-DIP divider takes 2 px) and Close wrapped below
+    /// the bar, and 7 DIPs wider at 125% (each 36-DIP face with its 2-DIP margins takes 47 px),
+    /// which left a gap after Close.
+    /// </summary>
+    private double LaidOutWidth(FrameworkElement item, double dpi) =>
+        Laid(item.Width, dpi) + Laid(item.Margin.Left + item.Margin.Right, dpi);
+
+    // The same rounding WPF's layout applies to a size and to a margin, which is no rounding at all
+    // when the bar does not round its layout.
+    private double Laid(double value, double dpi) => UseLayoutRounding ? Math.Round(value * dpi) / dpi : value;
 
     /// <summary>Fills in the current mode without raising <see cref="ModeRequested"/>.</summary>
     internal void ShowMode(CaptureSelectorMode mode, bool windowSelected = false)

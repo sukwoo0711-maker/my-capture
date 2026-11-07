@@ -870,6 +870,7 @@ internal static class HotfixUxSelfTest
         Click(hwnd, customOpen);
         IntPtr flyoutHwnd = PresentationSource.FromVisual(customFlyout) is HwndSource flyoutSource
             ? flyoutSource.Handle : IntPtr.Zero;
+        check("text box capture guard installed at startup", TextBoxCaptureGuard.IsInstalled);
         check($"mouse custom color button opens its inline flyout; host={flyoutHwnd}; owner={hwnd}; foreground={GetForegroundWindow()}",
             window.Editor.IsCustomColorFlyoutOpenForTest && flyoutHwnd == hwnd && hwnd != IntPtr.Zero
             && window.Editor.IsAncestorOf(customFlyout) && GetForegroundWindow() == hwnd);
@@ -923,12 +924,23 @@ internal static class HotfixUxSelfTest
             }
             catch (Exception error) { return "nativeObservation=UNAVAILABLE; observationError=" + error.GetType().Name; }
         }
+        // Read-only public getters: the box's selection, whether its text view has a valid
+        // layout (WPF's TextBox releases its mouse capture on mouse up only then; #235), the
+        // right button, and how many layout passes ran since the trace began.
+        int layoutPasses = 0;
+        EventHandler countLayoutPass = (_, _) => layoutPasses++;
+        string ObserveInputState()
+        {
+            string view = customInput.Template?.FindName("PART_ContentHost", customInput) is ScrollViewer { Content: UIElement textView }
+                ? (textView.IsMeasureValid && textView.IsArrangeValid ? "VALID" : "INVALID") : "UNAVAILABLE";
+            return $"inputSelection={customInput.SelectionStart}+{customInput.SelectionLength}; inputView={view}; rightButton={Mouse.RightButton}; layoutPasses={layoutPasses}";
+        }
         void ObserveColorApply(string phase)
         {
             if (customApplyTrace.Count >= 64) { dropped++; return; }
             double ms = (Stopwatch.GetTimestamp() - applyTraceStarted) * 1000.0 / Stopwatch.Frequency;
             string expectedStatus = UiText.Format("Text_67CAE5B118A3", "#22AA66");
-            customApplyTrace.Add($"HOTFIX_COLOR_APPLY_{phase}: elapsedMs={ms:0.000}; open={window.Editor.IsCustomColorFlyoutOpenForTest}; input={customInput.Text}; status={window.Editor.StatusText}; expectedStatus={expectedStatus}; statusMatches={window.Editor.StatusText == expectedStatus}; focus={ColorRole(Keyboard.FocusedElement)}; openerFocused={ReferenceEquals(Keyboard.FocusedElement, customOpen)}; editorFocusWithin={window.Editor.IsKeyboardFocusWithin}; foreground={GetForegroundWindow()}; owner={hwnd}; down={applyDown}; up={applyUp}; clicks={applyClicks}; closed={popupClosed}; pressed={customApply.IsPressed}; captured={ColorRole(Mouse.Captured)}; leftButton={Mouse.LeftButton}; visible={customApply.IsVisible}; enabled={customApply.IsEnabled}; size={customApply.ActualWidth:0.###}x{customApply.ActualHeight:0.###}; applySame={applySame}; applyIdentityStatus={applyIdentityStatus}; inputSetCursorPosObserved={inputSetCursorPos.HasValue}; inputSetCursorPos={inputSetCursorPos?.X},{inputSetCursorPos?.Y}; applySetCursorPosObserved={applySetCursorPos.HasValue}; applySetCursorPos={applySetCursorPos?.X},{applySetCursorPos?.Y}; {ObserveNativeColorState()}.");
+            customApplyTrace.Add($"HOTFIX_COLOR_APPLY_{phase}: elapsedMs={ms:0.000}; open={window.Editor.IsCustomColorFlyoutOpenForTest}; input={customInput.Text}; status={window.Editor.StatusText}; expectedStatus={expectedStatus}; statusMatches={window.Editor.StatusText == expectedStatus}; focus={ColorRole(Keyboard.FocusedElement)}; openerFocused={ReferenceEquals(Keyboard.FocusedElement, customOpen)}; editorFocusWithin={window.Editor.IsKeyboardFocusWithin}; foreground={GetForegroundWindow()}; owner={hwnd}; down={applyDown}; up={applyUp}; clicks={applyClicks}; closed={popupClosed}; pressed={customApply.IsPressed}; captured={ColorRole(Mouse.Captured)}; leftButton={Mouse.LeftButton}; visible={customApply.IsVisible}; enabled={customApply.IsEnabled}; size={customApply.ActualWidth:0.###}x{customApply.ActualHeight:0.###}; applySame={applySame}; applyIdentityStatus={applyIdentityStatus}; inputSetCursorPosObserved={inputSetCursorPos.HasValue}; inputSetCursorPos={inputSetCursorPos?.X},{inputSetCursorPos?.Y}; applySetCursorPosObserved={applySetCursorPos.HasValue}; applySetCursorPos={applySetCursorPos?.X},{applySetCursorPos?.Y}; {ObserveInputState()}; {ObserveNativeColorState()}.");
         }
         MouseButtonEventHandler observeInputPreviewDown = (_, e) =>
         {
@@ -977,6 +989,7 @@ internal static class HotfixUxSelfTest
         customInput.AddHandler(Mouse.MouseUpEvent, observeInputUp, handledEventsToo: true);
         customInput.AddHandler(Mouse.GotMouseCaptureEvent, observeInputGotCapture, handledEventsToo: true);
         customInput.AddHandler(Mouse.LostMouseCaptureEvent, observeInputLostCapture, handledEventsToo: true);
+        customInput.LayoutUpdated += countLayoutPass;
         try
         {
             ObserveColorApply("BEFORE_INPUT_CLICK");
@@ -1008,6 +1021,7 @@ internal static class HotfixUxSelfTest
             customInput.RemoveHandler(Mouse.MouseUpEvent, observeInputUp);
             customInput.RemoveHandler(Mouse.GotMouseCaptureEvent, observeInputGotCapture);
             customInput.RemoveHandler(Mouse.LostMouseCaptureEvent, observeInputLostCapture);
+            customInput.LayoutUpdated -= countLayoutPass;
             customApply.RemoveHandler(Mouse.PreviewMouseDownEvent, observeApplyDown);
             customApply.RemoveHandler(Mouse.PreviewMouseUpEvent, observeApplyUp);
             customApply.RemoveHandler(ButtonBase.ClickEvent, observeApplyClick);

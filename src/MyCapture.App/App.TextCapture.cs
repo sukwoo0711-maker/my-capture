@@ -135,6 +135,7 @@ public partial class App
         }
 
         if (outcome.Status == TextCaptureStatus.Cancelled || Dispatcher.HasShutdownStarted) return;
+        RecordStoreRatingTextCopy(outcome.Status);
         ShowTextCaptureOutcome(outcome, image, context);
     }
 

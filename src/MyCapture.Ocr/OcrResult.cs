@@ -182,7 +182,7 @@ public sealed class OcrResult
 
     public OcrResult WithQuality(OcrQuality quality) =>
         new(Status, Text, LanguageTag, Lines, Elapsed, Message, ReadingOrientation, TextAngle)
-        { Quality = OcrQualityNames.Normalize(quality) };
+        { Quality = OcrQualityNames.Normalize(quality), NeuralLines = NeuralLines };
 
     /// <summary>Recognised text, newline-joined by line. Empty unless <see cref="OcrStatus.Success"/>.</summary>
     public string Text { get; }
@@ -192,6 +192,16 @@ public sealed class OcrResult
 
     /// <summary>Recognised lines with word boxes, in original image coordinates.</summary>
     public IReadOnlyList<OcrLine> Lines { get; }
+
+    /// <summary>
+    /// Lines of the PP-OCR reading that a dual-engine merge combined, in source pixels;
+    /// empty for every other result.
+    /// </summary>
+    internal IReadOnlyList<OcrLine> NeuralLines { get; private init; } = [];
+
+    internal OcrResult WithNeuralLines(IReadOnlyList<OcrLine> lines) =>
+        new(Status, Text, LanguageTag, Lines, Elapsed, Message, ReadingOrientation, TextAngle)
+        { Quality = Quality, NeuralLines = lines };
 
     /// <summary>The winning recognition axes; public word/line boxes stay in source pixels.</summary>
     internal OcrReadingOrientation ReadingOrientation { get; }

@@ -141,7 +141,7 @@ public sealed partial class SettingsThemePreviewTests
             Left = -10000, Top = -10000,
             ShowActivated = false, ShowInTaskbar = false,
         };
-        if (gif) dialog.Height = 980;
+        // Both forms open at their own height (SizeToContent); the GIF one no longer needs 980.
         FluidMotion.SetWindowEntrance(dialog, false);
         return dialog;
     }

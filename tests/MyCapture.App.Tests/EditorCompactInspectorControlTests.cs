@@ -57,6 +57,7 @@ public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
 
             Assert.Equal(!beforeValue, values[index](text));
             Assert.Equal(!beforeValue, toggle.IsChecked);
+            if (toggle.IsChecked == true) AssertGlyphTakesTheSelectionInk(toggle);
             Assert.Equal(beforeValue ? ToggleState.Off : ToggleState.On, provider.ToggleState);
             Assert.Same(toggle, Keyboard.FocusedElement);
             Assert.Equal(undoCount + 1, controller.Undo.UndoCount);
@@ -215,6 +216,29 @@ public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
         controller.SetSelected(text);
         host.Settle();
         return text;
+    }
+
+    // On, a style toggle is the selection fill: its glyph takes the selection ink, and the
+    // background glyph's letter is cut out of its ink box in the fill colour.
+    private static void AssertGlyphTakesTheSelectionInk(ToggleButton toggle)
+    {
+        static System.Windows.Media.Color Of(object brush) => Assert.IsType<System.Windows.Media.SolidColorBrush>(brush).Color;
+        System.Windows.Media.Color fill = Of(Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle)).Background);
+        System.Windows.Media.Color ink = Of(toggle.Foreground);
+        Assert.Equal(Of(toggle.FindResource("Text.SelectionBackground")), fill);
+        Assert.Equal(Of(toggle.FindResource("Text.SelectionForeground")), ink);
+        var glyph = Assert.IsAssignableFrom<DependencyObject>(toggle.Content);
+        int parts = 0;
+        foreach (DependencyObject part in Descendants(glyph).Prepend(glyph))
+        {
+            switch (part)
+            {
+                case System.Windows.Shapes.Shape shape: Assert.Equal(ink, Of(shape.Stroke)); parts++; break;
+                case Border box: Assert.Equal(ink, Of(box.Background)); parts++; break;
+                case TextBlock letter: Assert.Equal(letter.Parent is Border ? fill : ink, Of(letter.Foreground)); parts++; break;
+            }
+        }
+        Assert.True(parts > 0, $"{AutomationProperties.GetAutomationId(toggle)} has no glyph part");
     }
 
     private static void PressSpace(ToggleButton toggle)

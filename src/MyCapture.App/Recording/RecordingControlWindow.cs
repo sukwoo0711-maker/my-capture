@@ -48,6 +48,16 @@ internal sealed class RecordingControlWindow : Window
     private const double BorderThicknessPx = 6.0;
     private const double StripHeight = 56.0;
 
+    /// <summary>
+    /// The clear band a layered window keeps around the palette for the palette's Shadow.Floating:
+    /// the smallest whose outermost pixel is at most alpha 8 at 100, 125 and 150 %, where the cut-off
+    /// shadow is barely visible. Without a band the window ended at the palette's edges and cut the
+    /// shadow off along them. It is narrower than the countdown's (<see cref="CountdownWindow.ShadowBand"/>)
+    /// because a layered window takes the clicks of every pixel it draws, and while recording these
+    /// are clicks meant for the app being recorded.
+    /// </summary>
+    internal const double ShadowBand = 19;
+
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
     // Preparation and finalisation keep room for their status. The running session uses a
@@ -176,6 +186,8 @@ internal sealed class RecordingControlWindow : Window
 
         Content = _root;
         ApplyPhysicalLayout(positionHwnd: false);
+        // Each tooltip of the palette and its menu is a popup window of its own; keep it out too.
+        CaptureWindowExclusion.ExcludeToolTips(this, () => IsRecording);
 
         KeyDown += OnKeyDown;
         SourceInitialized += OnSourceInitialized;
@@ -516,7 +528,7 @@ internal sealed class RecordingControlWindow : Window
         _completionProgress.Visibility = Visibility.Collapsed;
         _primaryButton.Visibility = Visibility.Collapsed;
         _statusText.Text = UiText.Get("RecordingStatus_Saved");
-        _statusText.Foreground = TryBrush("State.Success", SuccessFallback);
+        _statusText.Foreground = TryBrush("Text.Success", SuccessFallback);
         AnnounceStatus();
         _savedHold = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = SavedHoldLimit };
         _savedHold.Tick += (_, _) => LeaveAfterSaved();
@@ -794,7 +806,8 @@ internal sealed class RecordingControlWindow : Window
                 scale,
                 BorderThicknessPx,
                 StripHeight,
-                CurrentStripWidth);
+                CurrentStripWidth,
+                AllowsTransparency ? ShadowBand : 0);
             // An excluded frame may sit inside the capture so full-screen edges remain visible.
             // Without exclusion keep every border pixel outside the source rectangle.
             RectD frameBox = IsRecording && _captureExclusionApplied ? _screenRegion : layout.FrameBounds;
@@ -826,6 +839,7 @@ internal sealed class RecordingControlWindow : Window
             ((Border)((Viewbox)_controlStrip.Child).Child).Width = CurrentStripWidth - 2;
             Canvas.SetLeft(_controlStrip, (stripBox.Left - windowPixels.Left) / scale);
             Canvas.SetTop(_controlStrip, (stripBox.Top - windowPixels.Top) / scale);
+            _controlStrip.Clip = PaletteShadowClip(stripBox, scale);
 
             // Initial values influence which monitor DPI WPF chooses for HWND creation. Once the
             // HWND exists, SetWindowPos below is authoritative and works in physical pixels.
@@ -857,6 +871,31 @@ internal sealed class RecordingControlWindow : Window
                 QueueDpiLayout();
             }
         }
+    }
+
+    /// <summary>
+    /// Ends the palette's shadow at its band and a pixel outside the recorded region. A layered
+    /// window takes the clicks of every pixel it draws: where the frame made the window wider than
+    /// the band, the shadow's faint tail went on taking clicks past the band, and over the region it
+    /// took clicks meant for the app being recorded (its top shadow reached up into a region above
+    /// the palette, its stronger bottom shadow down into one below it, and all of it into a
+    /// full-screen region around it). The palette itself, inside the region when there is no room
+    /// around it, is never clipped.
+    /// </summary>
+    private Geometry? PaletteShadowClip(RectD stripBox, double scale)
+    {
+        if (_controlStrip.Effect is null) return null;
+        // In the palette's own DIP space, which is the space of its Clip.
+        Rect Local(RectD pixels) => new((pixels.Left - stripBox.Left) / scale, (pixels.Top - stripBox.Top) / scale,
+            Math.Max(0, pixels.Width) / scale, Math.Max(0, pixels.Height) / scale);
+        double radius = _controlStrip.CornerRadius.TopLeft;
+        var palette = new RectangleGeometry(new Rect(0, 0, _controlStrip.Width, _controlStrip.Height), radius, radius);
+        var band = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(Local(stripBox.Inflate(ShadowBand * scale))),
+            new RectangleGeometry(Local(_screenRegion.Normalized().ToPixelBounds().Inflate(1))));
+        var clip = new CombinedGeometry(GeometryCombineMode.Union, band, palette);
+        clip.Freeze();
+        return clip;
     }
 
     private void UpdateRegionFromVisibleFrame()
@@ -975,6 +1014,8 @@ internal sealed class RecordingControlWindow : Window
             ApplyPhysicalLayout(positionHwnd: true);
             if (!_captureExclusionApplied && _paletteOverlapsRegion)
                 throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
+            // Windows 10 shows tooltips unexcluded before recording; none may stay into the video.
+            CaptureWindowExclusion.CloseUnexcludedToolTip(this);
             _recorder = _recorderFactory();
             string output = _outputPathFactory();
             _recorder.Start(_screenRegion, output, _settings);
@@ -1427,7 +1468,7 @@ internal sealed class RecordingControlWindow : Window
         int h = (int)Math.Round(_screenRegion.Height);
         return string.Create(
             CultureInfo.CurrentCulture,
-            $"{w}×{h} · {_settings.TargetFps}fps");
+            $"{w} × {h} · {_settings.TargetFps}fps");
     }
 
     /// <summary>
@@ -1783,7 +1824,8 @@ internal static class RecordingControlLayoutPlanner
         double dpiScale,
         double borderDip,
         double stripHeightDip,
-        double minimumStripWidthDip)
+        double minimumStripWidthDip,
+        double shadowBandDip = 0)
     {
         RectD region = screenRegion.Normalized().ToPixelBounds();
         RectD desktop = paletteWorkArea.Normalized().ToPixelBounds();
@@ -1812,7 +1854,10 @@ internal static class RecordingControlLayoutPlanner
                     Math.Max(desktop.Top, desktop.Bottom - stripHeightPx));
 
         var palette = new RectD(stripLeft, stripTop, stripWidthPx, stripHeightPx);
-        RectD window = Union(frame, palette);
+        // The window also holds the band the palette's shadow draws into, as far as the work area
+        // reaches. Past it the band would lie over the taskbar, whose clicks its shadow pixels take.
+        RectD shadow = Overlap(palette.Inflate(Math.Max(0, shadowBandDip) * scale), desktop) ?? palette;
+        RectD window = Union(frame, Union(palette, shadow));
         return new RecordingControlLayout(
             window,
             frame,
@@ -1846,6 +1891,13 @@ internal static class RecordingControlLayoutPlanner
         Math.Min(left.Top, right.Top),
         Math.Max(left.Right, right.Right) - Math.Min(left.Left, right.Left),
         Math.Max(left.Bottom, right.Bottom) - Math.Min(left.Top, right.Top));
+
+    private static RectD? Overlap(RectD left, RectD right)
+    {
+        double x = Math.Max(left.Left, right.Left), y = Math.Max(left.Top, right.Top);
+        double r = Math.Min(left.Right, right.Right), b = Math.Min(left.Bottom, right.Bottom);
+        return r > x && b > y ? new RectD(x, y, r - x, b - y) : null;
+    }
 
     private static bool RectanglesOverlap(RectD left, RectD right) =>
         left.Left < right.Right

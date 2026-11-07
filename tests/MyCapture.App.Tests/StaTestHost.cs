@@ -86,6 +86,8 @@ internal static class WpfTestThread
             MyCapture.App.Themes.ThemeService.SystemLightThemeReaderForTest = static () => false;
             try
             {
+                // Every WPF test thread runs with the guard that App.OnStartup installs.
+                MyCapture.App.TextBoxCaptureGuard.Install();
                 body();
             }
             finally
