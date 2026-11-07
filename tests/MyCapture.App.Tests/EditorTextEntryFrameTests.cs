@@ -84,6 +84,60 @@ public sealed class EditorTextEntryFrameTests
         Assert.Null(Field<Rectangle?>(host.Editor, "_caretOutline"));
     });
 
+    [Fact]
+    public void TypingLeavesTheCaretOutlineToTheLayoutPass() => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(640, 360, Picture));
+        Invoke(host.Editor, "PlaceTextBox", new PointD(80, 80));
+        var box = Field<TextBox>(host.Editor, "_activeTextBox");
+        host.Window.UpdateLayout();
+        Rectangle ring = CaretRing(box);
+        int passes = 0;
+        EventHandler counted = (_, _) => passes++;
+        box.LayoutUpdated += counted;
+        try
+        {
+            foreach (char typed in "입력 중 자막 ab")
+            {
+                passes = 0;
+                TypeCharacter(box, typed.ToString());
+                // Asking the box where the caret is would lay out the whole editor, and paint the
+                // surface, inside the keystroke; the pass that follows it places the outline.
+                Assert.Equal(0, passes);
+                host.Window.UpdateLayout();
+                AssertRingAtCaret(box, ring);
+            }
+
+            // A caret move that changes nothing else still gets the pass that places the outline.
+            passes = 0;
+            box.CaretIndex = 2;
+            Assert.Equal(0, passes);
+            host.Window.UpdateLayout();
+            Assert.True(passes > 0);
+            AssertRingAtCaret(box, ring);
+        }
+        finally
+        {
+            box.LayoutUpdated -= counted;
+        }
+    });
+
+    private static void AssertRingAtCaret(TextBox box, Rectangle ring)
+    {
+        Rect caret = box.GetRectFromCharacterIndex(box.CaretIndex);
+        Assert.Equal(Visibility.Visible, ring.Visibility);
+        Rect bounds = ring.TransformToAncestor(box).TransformBounds(new Rect(ring.RenderSize));
+        Assert.Equal(caret.X, (bounds.Left + bounds.Right) / 2, 3);
+        Assert.Equal(caret.Bottom + 1, bounds.Bottom, 3);
+    }
+
+    /// <summary>A typed character as the keyboard delivers it, to the box's text input handler.</summary>
+    private static void TypeCharacter(TextBox box, string text) =>
+        box.RaiseEvent(new TextCompositionEventArgs(Keyboard.PrimaryDevice, new TextComposition(InputManager.Current, box, text))
+        {
+            RoutedEvent = TextCompositionManager.TextInputEvent,
+        });
+
     [Theory]
     [InlineData(0xEF, 0x44, 0x44)]
     [InlineData(0xFF, 0xFF, 0xFF)]

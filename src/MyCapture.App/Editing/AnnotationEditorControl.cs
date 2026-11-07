@@ -1428,18 +1428,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         SizeChangedEventHandler resize = (_, _) => LayoutLiveTextBox(textBox);
         ScrollChangedEventHandler scroll = (_, e) =>
         {
-            _caretOutlineStale = true;
+            MarkCaretOutlineStale();
             if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
                 UpdateLiveTextViewport(textBox);
             SyncLiveTextScroll(textBox);
         };
-        // A caret move over laid-out text places the outline at once; after a text change, the
-        // layout pass that lays the text out again places it.
-        RoutedEventHandler caretMoved = (_, _) =>
-        {
-            _caretOutlineStale = true;
-            UpdateCaretOutline(textBox);
-        };
+        // The layout pass places the outline, as it places the box's own caret; a caret move only
+        // marks it (see MarkCaretOutlineStale).
+        RoutedEventHandler caretMoved = (_, _) => MarkCaretOutlineStale();
         EventHandler laidOut = (_, _) => UpdateCaretOutline(textBox);
         ScrollViewer? contentHost = null;
         bool connected = false;
