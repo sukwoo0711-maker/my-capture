@@ -88,9 +88,10 @@ public partial class App
         StoreRatingPolicy.MarkAttempted(settings.StoreRating, DateTimeOffset.UtcNow);
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
-        // A new installation handles its core keys before other programs. The measured copy must not
-        // take them from the copy the user runs: it would install the keyboard hook that a single
-        // copy never needs and measure under other conditions than the previous release.
+        // Defensive only. A new installation handles its core keys before other programs, but the
+        // probe registers no global shortcuts at all (InitializeShell skips _hotkeys.Initialize while
+        // s_residentProbe is set), so no keyboard hook is installed either way. Priority stays off so
+        // the measured settings still match the previous release if the probe ever registers them.
         settings.Hotkeys.ForceCoreShortcuts = false;
         settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;

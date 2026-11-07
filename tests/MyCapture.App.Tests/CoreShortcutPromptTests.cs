@@ -70,7 +70,8 @@ public sealed class CoreShortcutPromptTests
         App.ApplyResidentProbeSettings(settings);
 
         Assert.True(settings.Hotkeys.CoreShortcutsAsked);
-        // The measured copy leaves those keys to the copy the user runs, so it installs no keyboard hook.
+        // A defence only: the probe registers no global shortcuts, so it installs no keyboard hook
+        // whatever this flag says.
         Assert.False(settings.Hotkeys.ForceCoreShortcuts);
         LaunchPresentation launch = FirstRunPlan.ForLaunch(settings.General.IsFirstRun, quietLaunch: true,
             openSettings: false, settings.Hotkeys.CoreShortcutsAsked, settings.Hotkeys.ForceCoreShortcuts);
