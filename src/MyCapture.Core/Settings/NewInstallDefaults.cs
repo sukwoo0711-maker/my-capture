@@ -17,7 +17,8 @@ namespace MyCapture.Core.Settings;
 /// <para>
 /// Only a launch with no settings file at all, and the "reset to defaults" command, use these
 /// values. The four core shortcuts take priority over other programs, and the first launch
-/// explains the assignments. Ctrl+Shift+Z opens the library, F3 pins content, Shift+F3 hides or
+/// explains the assignments; a reset keeps the user's own answer about that priority instead.
+/// Ctrl+Shift+Z opens the library, F3 pins content, Shift+F3 hides or
 /// shows the pins, and the upload shortcut stays unassigned.
 /// Shortcut keys stay visible in every button tooltip, double-click does not close a new pin,
 /// and pins left open at exit reopen at the next launch.

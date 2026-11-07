@@ -216,7 +216,8 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", draft.CaptureHotkey);
         Assert.Equal("Ctrl+Shift+X", draft.RecordRegionHotkey);
         Assert.Equal(CoreShortcuts.OpenLibrary.ToString(), draft.OpenLibraryHotkey);
-        Assert.True(draft.ForceCoreShortcuts);
+        // Priority stays the user's answer: this earlier file has not answered, so it stays off.
+        Assert.False(draft.ForceCoreShortcuts);
         Assert.Equal("F3", draft.PasteToScreenHotkey);
         Assert.Equal("Shift+F3", draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
@@ -225,6 +226,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.False(mapped.Hotkeys.CoreShortcutsAsked);
+        Assert.False(mapped.Hotkeys.ForceCoreShortcuts);
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(mapped);
         Assert.Equal(1, mapped.General.ShortcutHintsRevision);
