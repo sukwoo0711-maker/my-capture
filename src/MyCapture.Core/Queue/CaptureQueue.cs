@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using MyCapture.Core.Serialization;
@@ -70,13 +71,39 @@ public sealed partial class CaptureQueue
 
     private static readonly JsonSerializerOptions MetaSerializerOptions = JsonDefaults.Readable;
 
+    // The writer settings JsonSerializer derives from these options for SerializeToUtf8Bytes, so the
+    // index and the metadata keep their bytes (EveryEntryPoint_WritesTheBytesOfTheStringWriter holds this).
+    private static readonly JsonWriterOptions IndexWriterOptions = WriterOptions(SerializerOptions);
+
+    private static readonly JsonWriterOptions MetaWriterOptions = WriterOptions(MetaSerializerOptions);
+
+    // Up to this many OCR characters, escaped (six bytes each at most) with the writer's three-times
+    // look-ahead, the metadata fits a buffer of SmallMetaBytes.
+    private const int SmallMetaOcrChars = 100;
+
+    private const int SmallMetaBytes = 4 * 1024;
+
     private readonly AppPaths _paths;
     private readonly ILogger<CaptureQueue> _log;
     private readonly BatchRecordCollection _records = [];
     private readonly Lock _writeGate = new();
     private readonly SemaphoreSlim _publicationSlots = new(8, 8);
     private Task _publicationTail = Task.CompletedTask;
+    // Length of the index last written or loaded; sizes the next index buffer (#221).
+    private int _lastIndexLength;
+    // The copy each record had in its last publication, reused while the record's values are the
+    // same, so a publication copies only the records that changed (#221). Under _writeGate.
+    private readonly Dictionary<CaptureRecord, CaptureRecord> _publicationCopies = new(ReferenceEqualityComparer.Instance);
     internal Action<string, string>? BeforePublicationWriteForTest { get; set; }
+
+    /// <summary>
+    /// Called on the writer thread right after it serializes the index, with the bytes that thread
+    /// allocated for it and the index length: the allocation contract of #221.
+    /// </summary>
+    internal Action<long, int>? IndexSerializedForTest { get; set; }
+
+    /// <summary>The same for each metadata file the writer serializes.</summary>
+    internal Action<long, int>? MetaSerializedForTest { get; set; }
     private readonly object _evictionLeaseGate = new();
     private readonly Dictionary<Guid, int> _evictionLeaseCounts = [];
     private int _evictionSuspensionCount;
@@ -227,6 +254,8 @@ public sealed partial class CaptureQueue
 
         if (text is not null && acceptedIndex is { } index)
         {
+            // The default encoder writes ASCII, so the text length sizes the first index buffer.
+            Volatile.Write(ref _lastIndexLength, text.Length);
             records = index.Records;
             loadedFolderState = index.FolderState;
             RestoreSavedSearches(index.SavedSearches);
@@ -301,6 +330,8 @@ public sealed partial class CaptureQueue
         {
             _records.Add(record);
         }
+        // Copies of the records this load replaced would only hold their text alive.
+        lock (_writeGate) _publicationCopies.Clear();
 
         RecalculateTotalBytes();
         ResumeAfterMigrationLoad();
@@ -388,8 +419,7 @@ public sealed partial class CaptureQueue
         int cleanupPending = 0;
         lock (_writeGate)
         {
-            string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
-            publication = EnqueuePublication(reservation, BuildIndexWrites(json), () =>
+            publication = EnqueuePublication(reservation, DetachedIndexWrites(), () =>
             {
                 foreach (CaptureRecord record in removed)
                 {
@@ -419,10 +449,7 @@ public sealed partial class CaptureQueue
             UpdatePinPressureFlag();
             Task correction;
             lock (_writeGate)
-            {
-                string json = JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions);
-                correction = EnqueuePublication(null, BuildIndexWrites(json));
-            }
+                correction = EnqueuePublication(null, DetachedIndexWrites());
             try { await correction; }
             catch (Exception correctionFailure)
             {
@@ -499,9 +526,10 @@ public sealed partial class CaptureQueue
         SaveAsync().GetAwaiter().GetResult();
 
     /// <summary>
-    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, taken now on the
-    /// calling owner context, joins the same FIFO writer behind every earlier publication. Await
-    /// the task before relying on durability; it faults with the write failure.
+    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, copied now on the
+    /// calling owner context, joins the same FIFO writer behind every earlier publication, which
+    /// serializes it. Await the task before relying on durability; it faults with the
+    /// serialization or write failure.
     /// </summary>
     /// <remarks>
     /// Like <see cref="Save"/> it bypasses the reservation pool, and a later <see cref="Save"/>
@@ -510,11 +538,7 @@ public sealed partial class CaptureQueue
     public Task SaveAsync()
     {
         lock (_writeGate)
-        {
-            var index = CreateIndexSnapshot();
-            string json = JsonSerializer.Serialize(index, SerializerOptions);
-            return EnqueuePublication(null, BuildIndexWrites(json));
-        }
+            return EnqueuePublication(null, DetachedIndexWrites());
     }
 
     /// <summary>
@@ -549,20 +573,16 @@ public sealed partial class CaptureQueue
         SaveRecordMetaOrThrowAsync(record).GetAwaiter().GetResult();
 
     /// <summary>
-    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is serialized now
-    /// on the calling owner context and its write joins the same FIFO writer. Awaiting the task
-    /// gives the same strict guarantee; it faults with the write failure.
+    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is copied now on
+    /// the calling owner context and its write joins the same FIFO writer. Awaiting the task gives
+    /// the same strict guarantee; it faults with the serialization or write failure.
     /// </summary>
     public Task SaveRecordMetaOrThrowAsync(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
         lock (_writeGate)
-        {
-            string path = GetFilePath(record, CaptureFileNames.Meta);
-            string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            return EnqueuePublication(null, [(path, json)]);
-        }
+            return EnqueuePublication(null, [DetachedMetaWrite(record)]);
     }
 
     /// <summary>
@@ -598,8 +618,9 @@ public sealed partial class CaptureQueue
     }
 
     /// <summary>
-    /// Serializes on the calling owner thread, then durably writes metadata and index as one
-    /// ordered job. Hold an eviction lease until completion. No mutable record reaches the writer.
+    /// Copies the record and the index on the calling owner thread, then serializes and durably
+    /// writes metadata and index as one ordered job. Hold an eviction lease until completion.
+    /// No mutable record reaches the writer: it serializes detached copies taken at this call.
     /// </summary>
     public Task PublishRecordAsync(CaptureRecord record, CaptureWriteReservation reservation)
     {
@@ -611,35 +632,109 @@ public sealed partial class CaptureQueue
     {
         ArgumentNullException.ThrowIfNull(record);
         lock (_writeGate)
-        {
-            string path = GetFilePath(record, CaptureFileNames.Meta);
-            byte[] metadata = JsonSerializer.SerializeToUtf8Bytes(record, MetaSerializerOptions);
-            byte[] index = JsonSerializer.SerializeToUtf8Bytes(CreateIndexSnapshot(), SerializerOptions);
-            return EnqueuePublication(reservation, [(path, metadata), .. BuildIndexWrites(index)]);
-        }
+            return EnqueuePublication(reservation, [DetachedMetaWrite(record), .. DetachedIndexWrites()]);
     }
 
-    // Called only under _writeGate, after immutable serialization. A failed predecessor does
-    // not poison later writes: each caller observes its own failure, and recovery may publish next.
-    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, string Content)[] files,
-        Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, files, (path, content) =>
-        {
-            BeforePublicationWriteForTest?.Invoke(path, content);
-            AtomicFile.WriteAllText(path, content);
-        }, afterDurableWrite);
+    /// <summary>
+    /// One file of a queued job whose bytes the writer produces from a detached snapshot. The
+    /// owner thread then pays for copying records, not for serializing a large OCR index (#221).
+    /// </summary>
+    private readonly record struct DetachedWrite(string Path, Func<ReadOnlyMemory<byte>> Serialize);
 
-    private Task EnqueuePublication(CaptureWriteReservation? reservation, (string Path, byte[] Content)[] files,
-        Action? afterDurableWrite = null)
-        => EnqueuePublication(reservation, files, (path, content) =>
-        {
-            // Keep the existing correctness seam without re-creating strings in normal runs.
-            if (BeforePublicationWriteForTest is { } observe)
-                observe(path, System.Text.Encoding.UTF8.GetString(content));
-            AtomicFile.WriteAllBytes(path, content);
-        }, afterDurableWrite);
+    /// <summary>
+    /// On the writer thread. Each job runs on a new thread whose array pool and cached JSON writer
+    /// start empty, so SerializeToUtf8Bytes grew a pooled buffer from 16 KB to the index size and
+    /// then copied it out: 3.5 to 4.5 index lengths a job. One buffer sized from the last index takes
+    /// about one; the job writes it as it is and drops it, since no field holds it.
+    /// </summary>
+    private ReadOnlyMemory<byte> SerializeIndex(CaptureIndexFile index)
+    {
+        Action<long, int>? observe = IndexSerializedForTest;
+        long before = observe is null ? 0 : GC.GetAllocatedBytesForCurrentThread();
+        var buffer = new ArrayBufferWriter<byte>(IndexBufferSize(Volatile.Read(ref _lastIndexLength)));
+        using (var writer = new Utf8JsonWriter(buffer, IndexWriterOptions))
+            JsonSerializer.Serialize(writer, index, SerializerOptions);
+        Volatile.Write(ref _lastIndexLength, buffer.WrittenCount);
+        observe?.Invoke(GC.GetAllocatedBytesForCurrentThread() - before, buffer.WrittenCount);
+        return buffer.WrittenMemory;
+    }
 
-    private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, (string Path, T Content)[] files,
+    // Room for an index as long as the last one, plus headroom for growth and for Utf8JsonWriter,
+    // which wants three times a string's length free before it writes the string.
+    private static int IndexBufferSize(int lastLength) =>
+        (int)Math.Min(Array.MaxLength, Math.Max(16 * 1024, lastLength + lastLength / 32L + 4 * 1024));
+
+    // Under _writeGate on the owner context: the path is validated and the record copied now.
+    private DetachedWrite DetachedMetaWrite(CaptureRecord record)
+    {
+        string path = GetFilePath(record, CaptureFileNames.Meta);
+        CaptureRecord copy = PublicationCopy(record);
+        return new(path, () => SerializeMeta(copy));
+    }
+
+    /// <summary>
+    /// On the writer thread. SerializeToUtf8Bytes rents its first buffer, 16 KB, from the array pool,
+    /// which starts empty on each job's new thread, so every job allocated it anew for about 1 KB of
+    /// metadata while a record has little or no OCR text (#221). The metadata starts in 4 KB then and
+    /// in 16 KB otherwise; the buffer grows as SerializeToUtf8Bytes's does, by doubling or to what the
+    /// writer asks for, and the bytes are copied out once, as it copies them.
+    /// </summary>
+    private byte[] SerializeMeta(CaptureRecord copy)
+    {
+        Action<long, int>? observe = MetaSerializedForTest;
+        long before = observe is null ? 0 : GC.GetAllocatedBytesForCurrentThread();
+        var buffer = new ArrayBufferWriter<byte>((copy.OcrText?.Length ?? 0) <= SmallMetaOcrChars ? SmallMetaBytes : 16 * 1024);
+        using (var writer = new Utf8JsonWriter(buffer, MetaWriterOptions))
+            JsonSerializer.Serialize(writer, copy, MetaSerializerOptions);
+        byte[] bytes = buffer.WrittenSpan.ToArray();
+        observe?.Invoke(GC.GetAllocatedBytesForCurrentThread() - before, bytes.Length);
+        return bytes;
+    }
+
+    private static JsonWriterOptions WriterOptions(JsonSerializerOptions options) => new()
+    {
+        Encoder = options.Encoder,
+        Indented = options.WriteIndented,
+        IndentCharacter = options.IndentCharacter,
+        IndentSize = options.IndentSize,
+        NewLine = options.NewLine,
+        MaxDepth = options.MaxDepth == 0 ? 64 : options.MaxDepth,
+        SkipValidation = true,
+    };
+
+    // Under _writeGate on the owner context. A queued job only reads its copies, so jobs can share
+    // the copy of a record that did not change between them.
+    private CaptureRecord PublicationCopy(CaptureRecord record)
+    {
+        if (_publicationCopies.TryGetValue(record, out CaptureRecord? copy) && record.HasSameValuesAs(copy)) return copy;
+        copy = record.CloneForPublication();
+        _publicationCopies[record] = copy;
+        return copy;
+    }
+
+    internal int PublicationCopyCountForTest
+    {
+        get { lock (_writeGate) return _publicationCopies.Count; }
+    }
+
+    // Called only under _writeGate with snapshots no other code can change. The writer serializes
+    // every file before writing any, as the owner thread used to, so a serializer failure still
+    // leaves every file untouched and faults only this job. A failed predecessor does not poison
+    // later writes: each caller observes its own failure, and recovery may publish next.
+    private Task EnqueuePublication(CaptureWriteReservation? reservation, DetachedWrite[] files,
+        Action? afterDurableWrite = null)
+        => EnqueuePublication(reservation, () => Array.ConvertAll(files, file => (file.Path, file.Serialize())),
+            WritePublicationBytes, afterDurableWrite);
+
+    private void WritePublicationBytes(string path, ReadOnlyMemory<byte> content)
+    {
+        // Keep the existing correctness seam without re-creating strings in normal runs.
+        if (BeforePublicationWriteForTest is { } observe)
+            observe(path, System.Text.Encoding.UTF8.GetString(content.Span));
+        AtomicFile.WriteAllBytes(path, content.Span);
+    }
+
+    private Task EnqueuePublication<T>(CaptureWriteReservation? reservation, Func<(string Path, T Content)[]> files,
         Action<string, T> writeFile, Action? afterDurableWrite)
     {
         if (_migrationPublicationBlocked) throw new IOException("Complete migration recovery before saving the library.");
@@ -654,7 +749,7 @@ public sealed partial class CaptureQueue
         {
             try
             {
-                foreach ((string path, T content) in files)
+                foreach ((string path, T content) in files())
                 {
                     writeFile(path, content);
                 }

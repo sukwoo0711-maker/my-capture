@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace MyCapture.Core.Queue;
 
 public sealed partial class CaptureQueue
@@ -72,12 +70,7 @@ public sealed partial class CaptureQueue
     private Task PublishTagsAsync(IEnumerable<CaptureRecord> records, CaptureWriteReservation? reservation)
     {
         lock (_writeGate)
-        {
-            var writes = records.Select(record => (GetFilePath(record, CaptureFileNames.Meta),
-                JsonSerializer.Serialize(record, MetaSerializerOptions))).ToList();
-            writes.AddRange(BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
-            return EnqueuePublication(reservation, writes.ToArray());
-        }
+            return EnqueuePublication(reservation, [.. records.Select(DetachedMetaWrite), .. DetachedIndexWrites()]);
     }
 
     private async Task CorrectTagsAsync(IEnumerable<CaptureRecord> records)
@@ -88,10 +81,8 @@ public sealed partial class CaptureQueue
             // Each correction is ordered after existing jobs, but a locked sidecar must not
             // prevent the remaining metadata or the restored index from being published.
             foreach (CaptureRecord record in records)
-                corrections.Add(EnqueuePublication(null, [(GetFilePath(record, CaptureFileNames.Meta),
-                    JsonSerializer.Serialize(record, MetaSerializerOptions))]));
-            corrections.Add(EnqueuePublication(null,
-                BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions))));
+                corrections.Add(EnqueuePublication(null, [DetachedMetaWrite(record)]));
+            corrections.Add(EnqueuePublication(null, DetachedIndexWrites()));
         }
         Task completion = Task.WhenAll(corrections);
         try { await completion; }

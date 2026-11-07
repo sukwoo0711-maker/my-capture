@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Storage;
 
@@ -228,7 +227,7 @@ public sealed partial class CaptureQueue
             UpdatePinPressureFlag();
             Task publication;
             lock (_writeGate)
-                publication = EnqueuePublication(reservation, BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
+                publication = EnqueuePublication(reservation, DetachedIndexWrites());
             try { await publication; }
             catch
             {
@@ -344,7 +343,7 @@ public sealed partial class CaptureQueue
     private Task SaveCorrectiveSnapshotAsync()
     {
         lock (_writeGate)
-            return EnqueuePublication(null, BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
+            return EnqueuePublication(null, DetachedIndexWrites());
     }
 
     /// <summary>Restores an already verified directory, without assigning today's capture destination.</summary>
