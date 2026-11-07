@@ -401,7 +401,7 @@ public sealed partial class CaptureFlowPolishTests
                                 (int regionAlpha, int regionPixels, int shadow, double farthest, double reach) =
                                     RegionShadowPixels(new Pixels(image), paletteRect, frameRect, regionRect, scale);
                                 report.AppendLine(FormattableString.Invariant(
-                                    $"{what}: region pixels={regionPixels}, region maximum alpha={regionAlpha}; shadow pixels outside the region and frame={shadow}, farthest center={farthest:F2} DIP (Euclidean), {reach:F2} DIP (along an axis) from the palette."));
+                                    $"{what}: palette {paletteRect}, frame {frameRect}; region pixels={regionPixels}, region maximum alpha={regionAlpha}; shadow pixels outside the region and frame={shadow}, farthest center={farthest:F2} DIP (Euclidean), {reach:F2} DIP (along an axis) from the palette."));
                                 Expect(regionPixels > 0, $"{what}: no pixel lies wholly inside the region {regionRect}.");
                                 Expect(regionAlpha == 0,
                                     $"{what}: a pixel over the recorded region has alpha {regionAlpha}; it takes a click meant for the recorded app.");

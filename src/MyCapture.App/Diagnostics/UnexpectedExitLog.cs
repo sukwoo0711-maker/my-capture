@@ -52,8 +52,8 @@ internal sealed partial class UnexpectedExitLog
                 packaged ?? AppPackage.IsPackaged, windowsVersion ?? Environment.OSVersion.Version.ToString());
             byte[] bytes = Utf8.GetBytes(Serialize(record));
             if (bytes.Length > MaximumRecordBytes) return false;
-            Directory.CreateDirectory(Folder);
-            using var file = new FileStream(Path.Combine(Folder, record.Name), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            string folder = ValidatedFilePaths.CreateDirectory(Folder);
+            using var file = new FileStream(Path.Combine(folder, record.Name), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
             file.Write(bytes);
             file.Flush(flushToDisk: true);
             return true;
@@ -77,12 +77,13 @@ internal sealed partial class UnexpectedExitLog
     {
         try
         {
+            string folder = ValidatedFilePaths.DirectoryRoot(Folder);
             foreach (UnexpectedExitRecord record in records)
             {
                 try
                 {
                     if (!SafeName(record.Name) || !record.Name.EndsWith(".exit", StringComparison.Ordinal)) continue;
-                    File.Move(Path.Combine(Folder, record.Name), Path.Combine(Folder, Path.ChangeExtension(record.Name, ".seen")));
+                    File.Move(Path.Combine(folder, record.Name), Path.Combine(folder, Path.ChangeExtension(record.Name, ".seen")));
                 }
                 catch (Exception) { }
             }
@@ -100,8 +101,16 @@ internal sealed partial class UnexpectedExitLog
         catch (Exception) { return []; }
     }
 
-    private FileInfo[] Files() => !Directory.Exists(Folder) ? [] : new DirectoryInfo(Folder).GetFiles()
-        .Where(file => SafeName(file.Name) && (file.Attributes & FileAttributes.ReparsePoint) == 0).ToArray();
+    /// <summary>
+    /// The folder comes from the user's profile, so every access confines it again: a folder that became a
+    /// link or an ambiguous name is skipped like any other unreadable folder.
+    /// </summary>
+    private FileInfo[] Files()
+    {
+        string folder = ValidatedFilePaths.DirectoryRoot(Folder);
+        return !Directory.Exists(folder) ? [] : new DirectoryInfo(folder).GetFiles()
+            .Where(file => SafeName(file.Name) && (file.Attributes & FileAttributes.ReparsePoint) == 0).ToArray();
+    }
 
     private static bool SafeName(string name) => NamePattern().Match(name) is { Success: true } match
         && DateTimeOffset.TryParseExact(match.Groups[1].Value, NameTimeFormat, CultureInfo.InvariantCulture,

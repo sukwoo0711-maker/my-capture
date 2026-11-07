@@ -128,6 +128,38 @@ public sealed class UnexpectedExitLogTests
     }
 
     [Fact]
+    public void ExitFolderThroughJunctionIsNeitherWrittenNorReadAndTargetPreserved()
+    {
+        string root = OwnedTestDirectory.Create("mc-error-report-link-");
+        string target = OwnedTestDirectory.Create("mc-error-report-link-target-");
+        string link = Path.Combine(root, "unexpected-exits");
+        try
+        {
+            SafeErrorRecord primary = ErrorReportTests.Record(ErrorReportTests.CaptureFailure());
+            var direct = new UnexpectedExitLog(target);
+            Assert.True(direct.TryWrite(primary));
+            UnexpectedExitRecord stored = Assert.Single(direct.ReadPending());
+            UpdatePathsTests.CreateJunction(link, target);
+            string[] before = Directory.GetFiles(target).Select(Path.GetFileName).OfType<string>().ToArray();
+
+            var linked = Log(root);
+            Assert.False(linked.TryWrite(primary with { Utc = primary.Utc.AddSeconds(1) }));
+            Assert.Empty(linked.ReadPending());
+            Assert.Empty(linked.SafeEntries());
+            linked.MarkHandled([stored]);
+
+            Assert.Equal(before, Directory.GetFiles(target).Select(Path.GetFileName).OfType<string>().ToArray());
+            Assert.Equal(stored.Name, Assert.Single(direct.ReadPending()).Name);
+        }
+        finally
+        {
+            if (Directory.Exists(link)) TestRecycleBin.DeleteDirectory(link);
+            OwnedTestDirectory.Delete(root);
+            OwnedTestDirectory.Delete(target);
+        }
+    }
+
+    [Fact]
     public void LoggingErrorsCreatesNoUnexpectedExitFolderOrFiles()
     {
         string root = OwnedTestDirectory.Create("mc-error-report-memory-");

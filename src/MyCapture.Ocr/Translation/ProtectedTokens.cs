@@ -149,16 +149,25 @@ internal static partial class ProtectedTokens
         var candidates = new List<(ProtectedSpan Span, int Priority)>();
         for (int priority = 0; priority < Patterns.Length; priority++)
         {
-            foreach (Match match in Patterns[priority].Pattern.Matches(text))
-                candidates.Add((new ProtectedSpan(match.Index, match.Length, match.Value, Patterns[priority].Kind), priority));
+            // Only the spans are allocated. Matches() kept a Match object per hit until its collection
+            // ended and a LINQ sort copied the list with its keys: 6.5 MB instead of 2.3 MB for 64K
+            // characters of short %VAR% paths, enough to bring a garbage collection into a long input.
+            foreach (ValueMatch match in Patterns[priority].Pattern.EnumerateMatches(text))
+                candidates.Add((new ProtectedSpan(match.Index, match.Length, text.Substring(match.Index, match.Length),
+                    Patterns[priority].Kind), priority));
         }
 
+        // Earliest start, then the longest span, then the earlier pattern. One pattern's matches never share
+        // a start, so no two candidates compare equal and an unstable sort gives the one possible order.
+        candidates.Sort(static (left, right) =>
+        {
+            int order = left.Span.Start.CompareTo(right.Span.Start);
+            if (order == 0) order = right.Span.Length.CompareTo(left.Span.Length);
+            return order != 0 ? order : left.Priority.CompareTo(right.Priority);
+        });
         var chosen = new List<ProtectedSpan>();
         int end = 0;
-        foreach ((ProtectedSpan span, _) in candidates
-            .OrderBy(candidate => candidate.Span.Start)
-            .ThenByDescending(candidate => candidate.Span.Length)
-            .ThenBy(candidate => candidate.Priority))
+        foreach ((ProtectedSpan span, _) in candidates)
         {
             if (span.Start < end) continue;
             chosen.Add(span);

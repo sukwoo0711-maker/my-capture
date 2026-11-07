@@ -369,10 +369,27 @@ public sealed partial class CaptureFlowPolishTests
     private static void AtScale(Window window, double scale)
     {
         VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));
-        window.InvalidateMeasure();
+        // A window lays itself out again when its monitor's DPI changes; these fixtures detach that
+        // handler. Setting only the root DPI re-arranges just the elements whose content changed size,
+        // and an element that kept its size keeps the offset rounded at the previous scale. On CI one of
+        // the recording palette and the recorded region was rounded at the new scale and the other at
+        // the old one, which moved the palette a fraction of a pixel off its place above the region, a
+        // layout no real scale change produces.
+        InvalidateLayoutTree(window);
         window.UpdateLayout();
         Assert.Equal(scale, VisualTreeHelper.GetDpi(window).DpiScaleX);
         Assert.True(window.Left < -1000 && window.Top < -1000, "The window left its place off screen.");
+    }
+
+    private static void InvalidateLayoutTree(DependencyObject node)
+    {
+        if (node is UIElement element)
+        {
+            element.InvalidateMeasure();
+            element.InvalidateArrange();
+        }
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+            InvalidateLayoutTree(VisualTreeHelper.GetChild(node, i));
     }
 
     private static void LayOut(FrameworkElement element)
