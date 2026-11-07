@@ -171,6 +171,48 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
     });
 
     [Theory]
+    [InlineData("Malgun Gothic", false, false)]
+    [InlineData("Malgun Gothic", true, true)]
+    [InlineData("Times New Roman", true, false)]
+    [InlineData("Segoe UI", false, true)]
+    public void ALongCaptionsFrameCoversItsGlyphsWithoutOutliningThem(string font, bool italic, bool wrap) => StaTestHost.Run(() =>
+    {
+        var text = new TextAnnotation
+        {
+            Text = string.Concat(Enumerable.Repeat("전체 내용 가나다😀 abcXYZ fjgy 0123\n", 10)) + "끝 f",
+            FontFamily = font,
+            Italic = italic,
+            FontSize = 48,
+            HasOutline = true,
+            OutlineStyle = TextOutlineStyle.Consistent,
+            AutoSize = !wrap,
+            Rect = new RectD(40, 30, 420, 60),
+        };
+        Assert.True(text.Text.Length > TextAnnotationLayout.ExactInkLimit);
+        text.Rect = TextAnnotationLayout.Measure(text);
+        RectD ink = TextAnnotationLayout.InkBounds(text);
+
+        // The frame takes the layout's black-box extents, not an outline of every glyph.
+        var outlined = (System.Collections.IDictionary)typeof(TextAnnotationLayout)
+            .GetField("GlyphBoundsCache", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+        Assert.False(outlined.Contains(TextAnnotationLayout.KeyOf(text, 1.0)));
+
+        // They cover every painted glyph and its outline, and stay within a third of an em beside it.
+        Rect painted = OutlinedGlyphs(text, 1).Bounds;
+        RectD box = text.Rect;
+        double left = Math.Min(box.Left, painted.Left), right = Math.Max(box.Right, painted.Right);
+        double top = Math.Min(box.Top, painted.Top), bottom = Math.Max(box.Bottom, painted.Bottom);
+        string detail = $"frame ink {ink}, painted {painted}, box {box}";
+        const double rounding = 0.001;
+        Assert.True(ink.Left <= left + rounding && ink.Right >= right - rounding, detail);
+        Assert.True(ink.Top <= top + rounding && ink.Bottom >= bottom - rounding, detail);
+        double third = text.FontSize / 3;
+        Assert.True(ink.Left >= left - third && ink.Right <= right + third, detail);
+        Assert.True(ink.Top >= top - third && ink.Bottom <= bottom + third, detail);
+        output.WriteLine($"{font} italic={italic} wrap={wrap}: slack left {left - ink.Left:0.00} right {ink.Right - right:0.00} top {top - ink.Top:0.00} bottom {ink.Bottom - bottom:0.00} DIP");
+    });
+
+    [Theory]
     [InlineData(1)]
     [InlineData(1.25)]
     [InlineData(1.5)]
