@@ -549,12 +549,16 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             return;
         }
 
+        // The rings pass behind an arrow's heads, so a head keeps the pixels it has unselected
+        // however small the image scale makes it.
+        Geometry? behindHeads = endpoints ? OutsideArrowHeads((PolylineAnnotation)selected) : null;
+        if (behindHeads is not null) dc.PushClip(behindHeads);
         foreach (SelectionHandle handle in _controller.GetSelectionHandles(DipPerPixel))
         {
             Point center = ToSurfacePoint(handle.Position);
             if (endpoints)
             {
-                // Only strokes: the line and arrowhead remain visible through each ring.
+                // Only strokes: the line remains visible through each ring.
                 dc.DrawEllipse(null, _edgeShadowPen, center, HandlePixels / 2, HandlePixels / 2);
                 dc.DrawEllipse(null, _handlePen, center, HandlePixels / 2, HandlePixels / 2);
                 continue;
@@ -564,7 +568,42 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
                 _handlePen,
                 new Rect(center.X - (HandlePixels / 2), center.Y - (HandlePixels / 2), HandlePixels, HandlePixels));
         }
+        if (behindHeads is not null) dc.Pop();
     }
+
+    /// <summary>
+    /// The surface outside <paramref name="line"/>'s arrowheads and a margin of
+    /// <see cref="ArrowHeadClearancePixels"/> device pixels around them, or <see langword="null"/>
+    /// when it has none.
+    /// </summary>
+    private Geometry? OutsideArrowHeads(PolylineAnnotation line)
+    {
+        var heads = new GeometryGroup();
+        foreach (Geometry head in AnnotationRenderer.ArrowHeads(line)) heads.Children.Add(head);
+        if (heads.Children.Count == 0) return null;
+        double scale = Math.Max(0.0001, DipPerPixel);
+        // Widened in image pixels, the heads' own space, by as many image pixels as the margin's
+        // device pixels take at this image scale; the union is then placed on the surface.
+        double margin = ArrowHeadClearancePixels / Math.Max(0.0001, VisualTreeHelper.GetDpi(this).PixelsPerDip) / scale;
+        Point origin = ToSurfacePoint(default);
+        // Round joins keep the margin even around each corner, the tip included.
+        var clear = new CombinedGeometry(GeometryCombineMode.Union, heads,
+            heads.GetWidenedPathGeometry(new Pen(Brushes.Black, 2 * margin) { LineJoin = PenLineJoin.Round }))
+        {
+            Transform = new MatrixTransform(scale, 0, 0, scale, origin.X, origin.Y),
+        };
+        var everything = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
+        var outside = new CombinedGeometry(GeometryCombineMode.Exclude, everything, clear);
+        outside.Freeze();
+        return outside;
+    }
+
+    /// <summary>
+    /// How far the endpoint rings stop short of an arrowhead, in device pixels. A pixel that a head
+    /// touches lies within the pixel's diagonal (about 1.41) of the head, so past this margin neither
+    /// edge's anti-aliasing reaches it, and it keeps the colour it has unselected.
+    /// </summary>
+    private const double ArrowHeadClearancePixels = 1.5;
 
     private static IEnumerable<Point> HandleCenters(Rect rect)
     {

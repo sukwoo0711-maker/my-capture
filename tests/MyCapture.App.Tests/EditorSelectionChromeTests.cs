@@ -424,6 +424,66 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
         Assert.NotEqual(images[1].Region(start, 20, dpi), images[2].Region(start, 20, dpi));
     });
 
+    [Theory]
+    // 100 % and 150 %, and 4K captures fitted at half and a quarter DIP per pixel, where a 3-pixel
+    // arrow's 12-pixel head shrinks to 6 and 3 DIP: smaller than the ring around its tip.
+    [InlineData(1.0, 640, 360, 1.0)]
+    [InlineData(1.5, 640, 360, 1 / 1.5)]
+    [InlineData(1.0, 3840, 2160, 0.5)]
+    [InlineData(1.0, 3840, 2160, 0.25)]
+    [InlineData(1.5, 3840, 2160, 0.25)]
+    public void EndpointRingsPassBehindEveryArrowheadAtAnyImageScale(double dpi, int width, int height, double scale) => StaTestHost.Run(() =>
+    {
+        var host = new SurfaceHost(dpi, width, height, scale);
+        PolylineAnnotation arrow = PolylineAnnotation.CreateArrow(new(width * 0.3, height * 0.45), new(width * 0.6, height * 0.55), Ink, 3);
+        arrow.HeadAtStart = true;
+        host.Controller.Document.Add(arrow);
+        Pixels bare = host.Render();
+        host.Controller.SetSelected(arrow);
+        Pixels selected = host.Render();
+        Geometry[] heads = AnnotationRenderer.ArrowHeads(arrow).ToArray();
+        Assert.Equal(2, heads.Length);
+        Point origin = host.Surface.ToSurfacePoint(new PointD(0, 0));
+        foreach (Geometry head in heads)
+        {
+            // The head where the surface paints it, in DIP.
+            Geometry painted = head.Clone();
+            painted.Transform = new MatrixTransform(host.Scale, 0, 0, host.Scale, origin.X, origin.Y);
+            Rect area = painted.Bounds;
+            Point tip = arrow.Points.Select(point => host.Surface.ToSurfacePoint(point))
+                .MinBy(point => (point - new Point(area.X + (area.Width / 2), area.Y + (area.Height / 2))).Length);
+            int left = (int)Math.Floor(area.Left * dpi) - 1, top = (int)Math.Floor(area.Top * dpi) - 1;
+            int right = (int)Math.Ceiling(area.Right * dpi) + 1, bottom = (int)Math.Ceiling(area.Bottom * dpi) + 1;
+            int ink = 0, underRing = 0;
+            var changed = new List<string>();
+            for (int y = top; y <= bottom; y++)
+            for (int x = left; x <= right; x++)
+            {
+                // Only the pixels the head itself reaches: past its base the shaft runs on under the ring.
+                var square = new RectangleGeometry(new Rect(x / dpi, y / dpi, 1 / dpi, 1 / dpi));
+                if (painted.FillContainsWithDetail(square, 1e-4, ToleranceType.Absolute) == IntersectionDetail.Empty) continue;
+                if (!IsArrowInk(bare[x, y])) continue;
+                ink++;
+                // The ring's contrast pen reaches 6 DIP from the tip: its 4-DIP radius and half its 4-DIP width.
+                if ((new Point((x + .5) / dpi, (y + .5) / dpi) - tip).Length <= 6) underRing++;
+                if (!IsArrowInk(selected[x, y])) changed.Add($"({x},{y}) {bare[x, y]}->{selected[x, y]}");
+            }
+            Assert.True(ink > 0, $"The head at {area} must show at {scale} DIP per pixel.");
+            Assert.True(underRing > 0, $"The ring must reach the head at {area}, or nothing here is under it.");
+            Assert.True(changed.Count == 0,
+                $"{changed.Count} of the head's {ink} pixels at {area} were covered by its ring: {string.Join(", ", changed.Take(8))}");
+        }
+        // The rings themselves still show around both tips.
+        foreach (PointD tip in arrow.Points)
+        {
+            Point centre = host.Surface.ToSurfacePoint(tip);
+            Assert.Contains(selected.Disk(centre, 6, dpi), p => !IsArrowInk(selected[p.X, p.Y]) && selected[p.X, p.Y] != bare[p.X, p.Y]);
+        }
+        if (scale == 0.25 && dpi == 1.5) selected.SaveIfRequested("arrow-selected-4k-quarter-150.png");
+    });
+
+    private static bool IsArrowInk(Color color) => color.R > color.G + 60 && color.R > color.B + 60;
+
     private static PointD Handle(SurfaceHost host, ResizeHandle handle) =>
         Assert.Single(host.Controller.GetSelectionHandles(host.Scale), item => item.Handle == handle).Position;
 

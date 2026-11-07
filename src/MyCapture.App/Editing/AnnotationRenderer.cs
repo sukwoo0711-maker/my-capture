@@ -347,8 +347,25 @@ internal sealed class AnnotationRenderer
         }
     }
 
+    /// <summary>
+    /// The filled heads <see cref="DrawPolyline"/> paints for <paramref name="polyline"/>, in image
+    /// pixels: the area its selection rings pass behind. Unlike the heads painted, their edges are
+    /// stroked, so the selection can widen them into a margin around the heads.
+    /// </summary>
+    internal static IEnumerable<Geometry> ArrowHeads(PolylineAnnotation polyline)
+    {
+        IReadOnlyList<PointD> points = polyline.Points;
+        if (points.Count < 2) yield break;
+        double headLength = polyline.StrokeThickness * polyline.HeadSizeFactor;
+        if (polyline.HeadAtEnd && BuildArrowHead(new ArrowHeadKey(points[^2], points[^1], headLength), stroked: true) is { } end) yield return end;
+        if (polyline.HeadAtStart && BuildArrowHead(new ArrowHeadKey(points[1], points[0], headLength), stroked: true) is { } start) yield return start;
+    }
+
     /// <summary>The filled head at <c>To</c>, or <see langword="null"/> for a zero-length segment.</summary>
-    private static PathGeometry? BuildArrowHead(ArrowHeadKey key)
+    /// <param name="stroked">
+    /// Whether its edges are stroked. Painting only fills a head; widening it needs the edges.
+    /// </param>
+    private static PathGeometry? BuildArrowHead(ArrowHeadKey key, bool stroked = false)
     {
         PointD from = key.From;
         PointD to = key.To;
@@ -373,8 +390,8 @@ internal sealed class AnnotationRenderer
         var right = new Point(baseCenter.X - (px * headWidth / 2), baseCenter.Y - (py * headWidth / 2));
 
         var figure = new PathFigure { StartPoint = ToPoint(to), IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new LineSegment(left, isStroked: false));
-        figure.Segments.Add(new LineSegment(right, isStroked: false));
+        figure.Segments.Add(new LineSegment(left, stroked));
+        figure.Segments.Add(new LineSegment(right, stroked));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         geometry.Freeze();
