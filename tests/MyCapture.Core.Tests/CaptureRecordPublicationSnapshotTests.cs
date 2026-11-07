@@ -504,6 +504,43 @@ public sealed class CaptureRecordPublicationSnapshotTests(ITestOutputHelper outp
                 $"{name}: the writer allocated {allocated:N0} bytes to serialize a {length:N0}-byte index.");
     }
 
+    [Fact]
+    public async Task Writer_StartsSmallMetadataInASmallBuffer_AndKeepsTheStringWriterBytes()
+    {
+        // The writer's new thread starts with an empty array pool, so SerializeToUtf8Bytes allocated
+        // its 16 KB first buffer every job, for about 1 KB of metadata.
+        using var workspace = new TempWorkspace();
+        CaptureQueue queue = NewQueue(workspace);
+        CaptureRecord record = AddRecord(queue);
+        Fill(record);
+        string?[] texts =
+        [
+            null,
+            // 100 characters, every one escaped: the most OCR text the small first buffer takes.
+            string.Concat(Enumerable.Repeat("가\"\r\n", 25)),
+            string.Concat(Enumerable.Repeat("가나다 \"인용\" \\ \r\n", 2_000)),
+        ];
+        var observed = new List<(long Allocated, int Length)>();
+        queue.MetaSerializedForTest = (allocated, length) => { lock (observed) observed.Add((allocated, length)); };
+        // The first round builds the serializer's metadata for CaptureRecord; the second is measured.
+        for (int round = 0; round < 2; round++)
+        {
+            foreach (string? text in texts)
+            {
+                record.OcrText = text;
+                using (CaptureWriteReservation reservation = await queue.ReservePublicationAsync())
+                    await queue.PublishRecordAsync(record, reservation);
+                AssertMetaMatchesStringWriter(queue, record);
+            }
+        }
+
+        foreach (var (allocated, length) in observed)
+            output.WriteLine($"metadata of {length:N0} bytes: {allocated:N0} bytes allocated");
+        Assert.Equal(2 * texts.Length, observed.Count);
+        foreach (var (allocated, length) in observed.Skip(texts.Length).Take(2))
+            Assert.True(allocated < 16 * 1024, $"Metadata of {length:N0} bytes allocated {allocated:N0} bytes on the writer.");
+    }
+
     private static void AssertIndexMatchesStringWriter(CaptureQueue queue, TempWorkspace workspace)
     {
         Assert.Equal(Encoding.UTF8.GetBytes(queue.SerializeIndexForTest()), File.ReadAllBytes(workspace.Paths.IndexFile));

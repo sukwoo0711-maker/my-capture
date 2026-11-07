@@ -71,18 +71,17 @@ public sealed partial class CaptureQueue
 
     private static readonly JsonSerializerOptions MetaSerializerOptions = JsonDefaults.Readable;
 
-    // The writer settings JsonSerializer derives from SerializerOptions for SerializeToUtf8Bytes, so
-    // the index keeps its bytes (EveryEntryPoint_WritesTheBytesOfTheStringWriter holds this).
-    private static readonly JsonWriterOptions IndexWriterOptions = new()
-    {
-        Encoder = SerializerOptions.Encoder,
-        Indented = SerializerOptions.WriteIndented,
-        IndentCharacter = SerializerOptions.IndentCharacter,
-        IndentSize = SerializerOptions.IndentSize,
-        NewLine = SerializerOptions.NewLine,
-        MaxDepth = SerializerOptions.MaxDepth == 0 ? 64 : SerializerOptions.MaxDepth,
-        SkipValidation = true,
-    };
+    // The writer settings JsonSerializer derives from these options for SerializeToUtf8Bytes, so the
+    // index and the metadata keep their bytes (EveryEntryPoint_WritesTheBytesOfTheStringWriter holds this).
+    private static readonly JsonWriterOptions IndexWriterOptions = WriterOptions(SerializerOptions);
+
+    private static readonly JsonWriterOptions MetaWriterOptions = WriterOptions(MetaSerializerOptions);
+
+    // Up to this many OCR characters, escaped (six bytes each at most) with the writer's three-times
+    // look-ahead, the metadata fits a buffer of SmallMetaBytes.
+    private const int SmallMetaOcrChars = 100;
+
+    private const int SmallMetaBytes = 4 * 1024;
 
     private readonly AppPaths _paths;
     private readonly ILogger<CaptureQueue> _log;
@@ -102,6 +101,9 @@ public sealed partial class CaptureQueue
     /// allocated for it and the index length: the allocation contract of #221.
     /// </summary>
     internal Action<long, int>? IndexSerializedForTest { get; set; }
+
+    /// <summary>The same for each metadata file the writer serializes.</summary>
+    internal Action<long, int>? MetaSerializedForTest { get; set; }
     private readonly object _evictionLeaseGate = new();
     private readonly Dictionary<Guid, int> _evictionLeaseCounts = [];
     private int _evictionSuspensionCount;
@@ -667,8 +669,38 @@ public sealed partial class CaptureQueue
     {
         string path = GetFilePath(record, CaptureFileNames.Meta);
         CaptureRecord copy = PublicationCopy(record);
-        return new(path, () => JsonSerializer.SerializeToUtf8Bytes(copy, MetaSerializerOptions));
+        return new(path, () => SerializeMeta(copy));
     }
+
+    /// <summary>
+    /// On the writer thread. SerializeToUtf8Bytes rents its first buffer, 16 KB, from the array pool,
+    /// which starts empty on each job's new thread, so every job allocated it anew for about 1 KB of
+    /// metadata while a record has little or no OCR text (#221). The metadata starts in 4 KB then and
+    /// in 16 KB otherwise; the buffer grows as SerializeToUtf8Bytes's does, by doubling or to what the
+    /// writer asks for, and the bytes are copied out once, as it copies them.
+    /// </summary>
+    private byte[] SerializeMeta(CaptureRecord copy)
+    {
+        Action<long, int>? observe = MetaSerializedForTest;
+        long before = observe is null ? 0 : GC.GetAllocatedBytesForCurrentThread();
+        var buffer = new ArrayBufferWriter<byte>((copy.OcrText?.Length ?? 0) <= SmallMetaOcrChars ? SmallMetaBytes : 16 * 1024);
+        using (var writer = new Utf8JsonWriter(buffer, MetaWriterOptions))
+            JsonSerializer.Serialize(writer, copy, MetaSerializerOptions);
+        byte[] bytes = buffer.WrittenSpan.ToArray();
+        observe?.Invoke(GC.GetAllocatedBytesForCurrentThread() - before, bytes.Length);
+        return bytes;
+    }
+
+    private static JsonWriterOptions WriterOptions(JsonSerializerOptions options) => new()
+    {
+        Encoder = options.Encoder,
+        Indented = options.WriteIndented,
+        IndentCharacter = options.IndentCharacter,
+        IndentSize = options.IndentSize,
+        NewLine = options.NewLine,
+        MaxDepth = options.MaxDepth == 0 ? 64 : options.MaxDepth,
+        SkipValidation = true,
+    };
 
     // Under _writeGate on the owner context. A queued job only reads its copies, so jobs can share
     // the copy of a record that did not change between them.
