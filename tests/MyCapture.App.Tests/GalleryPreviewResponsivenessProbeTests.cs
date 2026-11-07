@@ -61,7 +61,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
             application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
             var rows = new List<string>
             {
-                "label,width,height,file_bytes,sample,phase,handler_ms,open_ms,longest_stall_ms,preview_on_primary,cursor_x,cursor_y",
+                "label,width,height,file_bytes,sample,phase,handler_ms,open_ms,longest_stall_ms,preview_on_primary,cursor_x,cursor_y,foreign_send_ops",
             };
             var summary = new List<object>();
             Rect32 primaryWork = PrimaryWorkArea();
@@ -77,10 +77,12 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                 window.UpdateLayout();
                 var previewButton = (Button)window.FindName("PreviewSelectedButton");
                 var clock = Stopwatch.StartNew();
+                using var foreign = new ForeignSendCounter(window.Dispatcher);
                 foreach ((CaptureRecord record, long fileBytes) in fixture.Images)
                 {
                     var handler = new List<double>();
                     var open = new List<double>();
+                    var foreignSend = new List<double>();
                     var stall = new List<double>();
                     var stallOpen = new List<double>();
                     int skipped = 0;
@@ -89,18 +91,18 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                     // ContentRendered while one is queued.
                     for (int sample = 0; sample < MaxSamples && handler.Count < Measured; sample++)
                     {
-                        (string phase, double handled, double opened, _) =
-                            Sample(window, fixture, previewButton, record, fileBytes, sample, watch: null, clock, primaryWork, label, rows);
+                        (string phase, double handled, double opened, _, long others) =
+                            Sample(window, fixture, previewButton, record, fileBytes, sample, watch: null, foreign, clock, primaryWork, label, rows);
                         if (phase == "skipped") skipped++;
                         if (phase != "measured") continue;
-                        handler.Add(handled); open.Add(opened);
+                        handler.Add(handled); open.Add(opened); foreignSend.Add(others);
                     }
                     using (var watch = new UiStallWatch(window.Dispatcher))
                     {
                         for (int sample = 0; sample < StallSamples; sample++)
                         {
-                            (string phase, _, double opened, double longest) =
-                                Sample(window, fixture, previewButton, record, fileBytes, sample, watch, clock, primaryWork, label, rows);
+                            (string phase, _, double opened, double longest, _) =
+                                Sample(window, fixture, previewButton, record, fileBytes, sample, watch, foreign, clock, primaryWork, label, rows);
                             if (phase != "stall") continue;
                             stall.Add(longest); stallOpen.Add(opened);
                         }
@@ -109,7 +111,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                     {
                         width = record.Width, height = record.Height, file_bytes = fileBytes, n = handler.Count,
                         skipped_off_primary = skipped,
-                        handler_ms = Stats(handler), open_ms = Stats(open),
+                        handler_ms = Stats(handler), open_ms = Stats(open), foreign_send_ops = Stats(foreignSend),
                         longest_stall_ms = Stats(stall), open_ms_with_stall_watch = Stats(stallOpen),
                     });
                 }
@@ -137,6 +139,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                     "handler_ms and open_ms: the click handler's own time and the time to ContentRendered, from samples with no stall watch (phase measured).",
                     "longest_stall_ms: the longest wait of a Send-priority beat posted about every 1 ms from another thread, or the handler time if longer, from separate samples (phase stall). The beat is a posted message, which holds Input-priority work such as ContentRendered, so open_ms_with_stall_watch is not an opening time.",
                     "The library window sits inside the primary monitor's work area (SystemParameters.WorkArea), so the preview, centred on it, opens there whatever monitor the pointer is on. A sample whose preview window rectangle (GetWindowRect) is not inside the primary monitor's work area is recorded as skipped and left out. cursor_x/cursor_y: the pointer read with GetCursorPos; the probe never moves it.",
+                    "foreign_send_ops: Send-priority operations other threads posted to the library's dispatcher between the click and ContentRendered (Dispatcher.Hooks.OperationPosted). A UI Automation client's calls arrive this way (ElementUtil.Invoke), and work at a lower priority waits behind them, so a sample with hundreds of them measured the client as well. The count includes the preview's own completion when it resumes from the pool at Send priority (one per opening), and in stall samples the stall watch's beats.",
                     "The PNG files are synthetic screenshot-like images; the OS file cache is warm after the first sample. n=20 measured per size and run; p50 and p90 interpolate linearly between ranks.",
                 },
             }, new JsonSerializerOptions { WriteIndented = true }));
@@ -151,19 +154,21 @@ public sealed class GalleryPreviewResponsivenessProbeTests
     }
 
     // One preview opening from a settled library; its row says how the sample counts.
-    private static (string Phase, double Handled, double Opened, double Longest) Sample(GalleryWindow window, ProbeFixture fixture,
-        Button button, CaptureRecord record, long fileBytes, int sample, UiStallWatch? watch, Stopwatch clock, Rect32 primaryWork,
-        string label, List<string> rows)
+    private static (string Phase, double Handled, double Opened, double Longest, long ForeignSend) Sample(GalleryWindow window,
+        ProbeFixture fixture, Button button, CaptureRecord record, long fileBytes, int sample, UiStallWatch? watch,
+        ForeignSendCounter foreign, Stopwatch clock, Rect32 primaryWork, string label, List<string> rows)
     {
         Settle(window);
         fixture.Model.Select(record.Id);
         Settle(window);
         (int cursorX, int cursorY) = Cursor();
+        foreign.Reset();
         (double handled, double opened, double longest, bool onPrimary) = Open(window, button, record.Id, watch, clock, primaryWork);
+        long others = foreign.Count;
         string phase = !onPrimary ? "skipped" : watch is not null ? "stall" : sample < Warmups ? "warmup" : "measured";
         rows.Add(string.Join(',', label, record.Width, record.Height, fileBytes, sample, phase,
-            Ms(handled), Ms(opened), Ms(longest), onPrimary ? 1 : 0, cursorX, cursorY));
-        return (phase, handled, opened, longest);
+            Ms(handled), Ms(opened), Ms(longest), onPrimary ? 1 : 0, cursorX, cursorY, others));
+        return (phase, handled, opened, longest, others);
     }
 
     private static (double Handled, double Opened, double Longest, bool OnPrimary) Open(GalleryWindow window, Button button, Guid id,
@@ -347,6 +352,31 @@ public sealed class GalleryPreviewResponsivenessProbeTests
             _stop = true;
             _thread.Join(TimeSpan.FromSeconds(5));
         }
+    }
+
+    /// <summary>Counts the Send-priority operations other threads post to a dispatcher since the last reset.</summary>
+    private sealed class ForeignSendCounter : IDisposable
+    {
+        private readonly Dispatcher _ui;
+        private long _count;
+
+        internal ForeignSendCounter(Dispatcher ui)
+        {
+            _ui = ui;
+            _ui.Hooks.OperationPosted += OnPosted;
+        }
+
+        internal long Count => Interlocked.Read(ref _count);
+
+        internal void Reset() => Interlocked.Exchange(ref _count, 0);
+
+        // Raised on the thread that posted the operation.
+        private void OnPosted(object? sender, DispatcherHookEventArgs e)
+        {
+            if (e.Operation.Priority == DispatcherPriority.Send && !_ui.CheckAccess()) Interlocked.Increment(ref _count);
+        }
+
+        public void Dispose() => _ui.Hooks.OperationPosted -= OnPosted;
     }
 
     private sealed class ProbeFixture : IDisposable
