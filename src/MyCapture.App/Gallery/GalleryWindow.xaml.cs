@@ -960,7 +960,12 @@ internal sealed partial class GalleryWindow : Window
     internal Action<IDataObject>? WriteCopyForTest { get; set; }
 
     /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
-    private async Task<bool> CopyRenderedAsync(GalleryItemViewModel tile)
+    // At Send priority, as the preview (ShowPreview): the decode resumes on this thread before the clipboard
+    // write starts, and at Normal priority a UI Automation client's calls could hold that resume for seconds.
+    private Task<bool> CopyRenderedAsync(GalleryItemViewModel tile) =>
+        Dispatcher.InvokeAsync(() => CopyRenderedCoreAsync(tile), DispatcherPriority.Send).Task.Unwrap();
+
+    private async Task<bool> CopyRenderedCoreAsync(GalleryItemViewModel tile)
     {
         if (!tile.IsImage)
         {

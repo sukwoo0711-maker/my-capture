@@ -115,8 +115,11 @@ internal sealed partial class GalleryWindow
             _queue.GetFilePath(record, CaptureFileNames.Original), _videoPlayer);
         if (_decodingPreview) return;
         _decodingPreview = true;
-        // Started inside a dispatcher operation, so every continuation returns to the window's thread.
-        _ = Dispatcher.InvokeAsync(DecodeWaitingPreviewsAsync).Task.Unwrap();
+        // Started inside a dispatcher operation, so every continuation returns to the window's thread at that
+        // operation's priority. Send, because UI Automation clients call into WPF at Send priority
+        // (ElementUtil.Invoke): while one reads the library a call is nearly always waiting, and the opening
+        // waited behind them at Normal priority, 175 ms behind 367 calls and seconds in a burst (#221).
+        _ = Dispatcher.InvokeAsync(DecodeWaitingPreviewsAsync, DispatcherPriority.Send).Task.Unwrap();
     }
 
     private async Task DecodeWaitingPreviewsAsync()

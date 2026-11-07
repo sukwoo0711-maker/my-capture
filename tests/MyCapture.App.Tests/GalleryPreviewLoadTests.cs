@@ -28,6 +28,7 @@ namespace MyCapture.App.Tests;
 /// needs: the file's pixels and size, no late image after the selection, the request, the capture
 /// or the window changed, one full-size decode at a time, and no image or file kept afterwards.
 /// The library's copy decodes off the UI thread too, and a late copy never replaces a newer one.
+/// Neither waits behind the Send-priority calls of a UI Automation client.
 /// </summary>
 public sealed class GalleryPreviewLoadTests
 {
@@ -320,13 +321,106 @@ public sealed class GalleryPreviewLoadTests
             finally { application.Shutdown(); }
         }, typeof(GalleryPreviewLoadTests));
 
+    [Fact]
+    public Task PreviewAndCopyFinish_WhileSendPriorityCallsKeepComing() =>
+        SettingsThemePreviewTests.RunIsolated(nameof(PreviewAndCopyFinish_WhileSendPriorityCallsKeepComing), () =>
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            application.Resources["BoolToVisibility"] = new BoolToVisibilityConverter();
+            application.Resources["PinLabel"] = new PinLabelConverter();
+            application.Resources["IsHeaderRow"] = new IsHeaderRowConverter();
+            try
+            {
+                using var fixture = new Fixture();
+                GalleryWindow window = fixture.Window;
+                window.Show();
+                window.UpdateLayout();
+                var previewDecoder = new GatedDecoder(window.DecodePreviewForTest);
+                window.DecodePreviewForTest = previewDecoder.Decode;
+                var copyDecoder = new GatedCopyDecoder(window.DecodeCopyForTest);
+                window.DecodeCopyForTest = copyDecoder.Decode;
+                var copied = new List<BitmapSource>();
+                window.WriteCopyForTest = data => { lock (copied) copied.Add((BitmapSource)data.GetData(DataFormats.Bitmap)); };
+                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+
+                // A UI Automation client reaches WPF through Send-priority calls (ElementUtil.Invoke), and while it
+                // reads the library one is nearly always waiting. Work at a lower priority then waits until the
+                // client stops: the opening waited 175 ms behind 367 such calls, and seconds in a burst. Here a
+                // Send call that posts the next one keeps one waiting from before the request until it finished.
+                (bool Finished, int Calls, long Ms) WhileSendCallsKeepComing(Action request, Action step, Func<bool> finished)
+                {
+                    var frame = new DispatcherFrame();
+                    var stream = Stopwatch.StartNew();
+                    int calls = 0;
+                    bool done = false;
+                    void Call()
+                    {
+                        calls++;
+                        step();
+                        done = finished();
+                        if (done || stream.Elapsed > TimeSpan.FromSeconds(10)) frame.Continue = false;
+                        else window.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(Call));
+                    }
+                    window.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(Call));
+                    request();
+                    Dispatcher.PushFrame(frame);
+                    return (done, calls, stream.ElapsedMilliseconds);
+                }
+
+                // The preview starts its decode and opens the image while the calls keep coming.
+                bool previewReleased = false;
+                var preview = WhileSendCallsKeepComing(
+                    () => Request(window, fixture.Model, previewButton, fixture.Wide),
+                    () =>
+                    {
+                        if (previewReleased || previewDecoder.Started.Count != 1) return;
+                        previewDecoder.Release();
+                        previewReleased = true;
+                    },
+                    () => window.OwnedWindows.Count == 1);
+                Assert.True(preview.Finished,
+                    $"The preview did not open in {preview.Ms} ms while {preview.Calls:N0} Send calls kept coming (decode started: {previewReleased}).");
+                PumpUntil(window, () => !window.IsLoadingPreviewForTest, "preview after the calls");
+                AssertShowsFile(window, fixture, fixture.Wide);
+                ClosePreview(window);
+
+                // The copy starts its decode and puts the image on the clipboard while the calls keep coming.
+                string tall = fixture.RenderedPath(fixture.Tall);
+                Task<bool>? copying = null;
+                bool copyReleased = false;
+                var copy = WhileSendCallsKeepComing(
+                    () => copying = Copy(window, fixture, fixture.Tall),
+                    () =>
+                    {
+                        if (copyReleased || copyDecoder.Count(tall) != 1) return;
+                        copyDecoder.Release(tall);
+                        copyReleased = true;
+                    },
+                    () => copying!.IsCompleted);
+                Assert.True(copy.Finished,
+                    $"The copy did not finish in {copy.Ms} ms while {copy.Calls:N0} Send calls kept coming (decode started: {copyReleased}).");
+                Assert.True(copying!.Result);
+                lock (copied) AssertCopiedFile(Assert.Single(copied), fixture.Tall);
+            }
+            finally { application.Shutdown(); }
+        }, typeof(GalleryPreviewLoadTests));
+
     private static Task<bool> Copy(GalleryWindow window, Fixture fixture, CaptureRecord record)
     {
         GalleryItemViewModel tile = fixture.Model.FindTile(record.Id)!;
         MethodInfo copy = typeof(GalleryWindow).GetMethod("CopyRenderedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var timer = Stopwatch.StartNew();
-        // As a click or a key does, the copy starts in a dispatcher operation, so it resumes on this thread.
-        Task<bool> copying = window.Dispatcher.Invoke(() => (Task<bool>)copy.Invoke(window, [tile])!);
+        // As a click or a key handler asks for it: on the window's thread, under the Normal-priority context
+        // the dispatcher gives its input processing.
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(window.Dispatcher, DispatcherPriority.Normal));
+        Task<bool> copying;
+        try { copying = (Task<bool>)copy.Invoke(window, [tile])!; }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
         // The copy only starts its decode; a gated decode would otherwise hang it here.
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"The copy took {timer.ElapsedMilliseconds} ms to return.");
         return copying;
