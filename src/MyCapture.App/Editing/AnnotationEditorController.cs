@@ -226,6 +226,7 @@ internal sealed class AnnotationEditorController
             _editingText = value;
             // A new or finished edit has not shown any live text yet.
             _liveTextShown = false;
+            LiveTextScroll = null;
         }
     }
 
@@ -269,6 +270,21 @@ internal sealed class AnnotationEditorController
     /// throughout, which costs only its layout.
     /// </summary>
     internal const int LiveOutlineLimit = 256;
+
+    /// <summary>
+    /// How far the live box has scrolled a caption taller than the canvas, for the surface to draw
+    /// its plate and outline where the box shows the glyphs; <see langword="null"/> while the box
+    /// shows all of it.
+    /// </summary>
+    internal LiveCaptionScroll? LiveTextScroll { get; private set; }
+
+    /// <returns>Whether that differs from what the surface last drew under the box.</returns>
+    internal bool UpdateLiveTextScroll(LiveCaptionScroll? scroll)
+    {
+        if (EditingText is null || Nullable.Equals(scroll, LiveTextScroll)) return false;
+        LiveTextScroll = scroll;
+        return true;
+    }
 
     /// <summary>
     /// The caption being edited as its live text box reads (<see cref="UpdateLiveText"/>), in the
@@ -1955,6 +1971,13 @@ internal readonly record struct TextLayout(RectD Rect, double FontSize, bool Aut
         text.Rect = layout.Rect;
     }
 }
+
+/// <summary>
+/// How the live box shows a caption taller than the canvas, in image pixels in the caption's own
+/// (unrotated) frame: its text moved up by <paramref name="Offset"/>, seen through the band that
+/// starts <paramref name="Top"/> below the caption's top and is <paramref name="Height"/> tall.
+/// </summary>
+internal readonly record struct LiveCaptionScroll(double Offset, double Top, double Height);
 
 /// <summary>
 /// Records an add for an item that was already inserted into the document during a live

@@ -382,7 +382,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
         // base capture in annotation pixel space that blur layers sample. A caption being typed
         // keeps its committed plate and outline under the live box, which draws its glyphs.
-        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap, _controller.LiveTextForPaint());
+        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap,
+            _controller.LiveTextForPaint(), _controller.LiveTextScroll);
         SourceWindowTitleRenderer.Draw(dc, SourceWindowTitle, _cropRegion.Width, _cropRegion.Height);
 
         dc.Pop();

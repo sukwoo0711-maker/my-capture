@@ -1431,6 +1431,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             _caretOutlineStale = true;
             if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
                 UpdateLiveTextViewport(textBox);
+            SyncLiveTextScroll(textBox);
         };
         // A caret move over laid-out text places the outline at once; after a text change, the
         // layout pass that lays the text out again places it.
@@ -1572,6 +1573,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The plate and outline under the box follow the same text and layout, including text
         // an IME is still composing (it is part of box.Text).
         if (_controller.UpdateLiveText(content, fit)) _surface.InvalidateVisual();
+        SyncLiveTextScroll(box);
     }
 
     /// <summary>
@@ -1706,6 +1708,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
         box.Width = _liveTextWidth + (side == CaptionScrollBarSide.Overlay ? 0 : scrollWidth);
         Canvas.SetLeft(box, _liveTextLeft - (side == CaptionScrollBarSide.Left ? scrollWidth : 0));
+    }
+
+    /// <summary>
+    /// Tells the surface how far the live box has scrolled a caption taller than the canvas, so the
+    /// plate and outline under the box stay on the glyphs it shows and stay inside its text view.
+    /// </summary>
+    private void SyncLiveTextScroll(TextBox box)
+    {
+        if (!ReferenceEquals(_activeTextBox, box)) return;
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var presenter = host?.Template?.FindName("PART_ScrollContentPresenter", host) as ScrollContentPresenter;
+        LiveCaptionScroll? scroll = null;
+        if (host is { ScrollableHeight: > 0 } && presenter is not null)
+        {
+            double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+            // The first glyph's line starts at the caption's top when the box is not scrolled.
+            double top = presenter.TranslatePoint(default, box).Y - _liveTextInset.Y;
+            scroll = new LiveCaptionScroll(host.VerticalOffset / dipPerPixel, top / dipPerPixel, presenter.ActualHeight / dipPerPixel);
+        }
+
+        if (_controller.UpdateLiveTextScroll(scroll)) _surface.InvalidateVisual();
     }
 
     internal AnnotationDocument CreateCurrentImageSnapshot()

@@ -89,13 +89,18 @@ internal sealed class AnnotationRenderer
     /// draws them, without the glyph fill: the text box draws the glyphs, caret and IME
     /// composition on top, so the order stays plate, outline, glyphs.
     /// </param>
+    /// <param name="liveScroll">
+    /// How far the live box has scrolled <paramref name="liveText"/> when it is taller than the
+    /// canvas; its plate and outline then show only in the band the box shows, moved with its glyphs.
+    /// </param>
     internal void Render(
         DrawingContext dc,
         AnnotationDocument document,
         double pixelsPerDip,
         AnnotationItem? suppress = null,
         BitmapSource? blurSource = null,
-        TextAnnotation? liveText = null)
+        TextAnnotation? liveText = null,
+        LiveCaptionScroll? liveScroll = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         ArgumentNullException.ThrowIfNull(document);
@@ -109,7 +114,7 @@ internal sealed class AnnotationRenderer
         _pass++;
         try
         {
-            RenderItems(dc, document, pixelsPerDip, suppress, blurSource, liveText);
+            RenderItems(dc, document, pixelsPerDip, suppress, blurSource, liveText, liveScroll);
         }
         finally
         {
@@ -128,7 +133,8 @@ internal sealed class AnnotationRenderer
         double pixelsPerDip,
         AnnotationItem? suppress,
         BitmapSource? blurSource,
-        TextAnnotation? liveText)
+        TextAnnotation? liveText,
+        LiveCaptionScroll? liveScroll)
     {
         foreach (AnnotationItem documentItem in document.Items)
         {
@@ -167,7 +173,7 @@ internal sealed class AnnotationRenderer
                     DrawPen(dc, pen);
                     break;
                 case TextAnnotation text:
-                    DrawText(dc, text, pixelsPerDip, glyphs);
+                    DrawText(dc, text, pixelsPerDip, glyphs, glyphs ? null : liveScroll);
                     break;
                 case ImageAnnotation image:
                     DrawImage(dc, image);
@@ -468,7 +474,8 @@ internal sealed class AnnotationRenderer
     /// False for a caption being typed: only its plate and outline, which its live text box
     /// cannot draw. The box draws the glyph fill over them.
     /// </param>
-    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip, bool glyphs)
+    /// <param name="scroll">How the live box scrolls a caption being typed, if it does.</param>
+    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip, bool glyphs, LiveCaptionScroll? scroll = null)
     {
         Rect box = ToRect(text.Rect);
         TextCache cache = CacheFor<TextCache>(text);
@@ -494,6 +501,20 @@ internal sealed class AnnotationRenderer
         }
 
         FormattedText formatted = cache.Formatted;
+
+        if (scroll is { } view)
+        {
+            // Only the band the live box shows, wide enough for any outline and italic overhang,
+            // with the text moved up as far as the box has scrolled its glyphs.
+            double width = Math.Max(box.Width, formatted.WidthIncludingTrailingWhitespace);
+            var band = new RectangleGeometry(new Rect(
+                box.Left - text.FontSize, box.Top + view.Top, width + (2 * text.FontSize), Math.Max(0, view.Height)));
+            band.Freeze();
+            var moved = new TranslateTransform(0, -view.Offset);
+            moved.Freeze();
+            dc.PushClip(band);
+            dc.PushTransform(moved);
+        }
 
         Brush? plate = BrushOrNull(text.Background);
         if (plate is not null)
@@ -524,6 +545,12 @@ internal sealed class AnnotationRenderer
         if (glyphs)
         {
             dc.DrawDrawing(cache.Glyphs ??= RecordGlyphs(formatted, origin));
+        }
+
+        if (scroll is not null)
+        {
+            dc.Pop();
+            dc.Pop();
         }
 
         if (rotated)
