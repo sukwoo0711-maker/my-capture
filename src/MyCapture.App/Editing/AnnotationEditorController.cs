@@ -263,11 +263,13 @@ internal sealed class AnnotationEditorController
     }
 
     /// <summary>
-    /// The longest caption whose outline is drawn while it is typed. Outlining traces every glyph
-    /// of the caption again after each change (measured on 2026-11-07: about 11 ms for 256
-    /// characters, 66 ms for 1,024, 3.6 s for 100,000), so past this length a keystroke would wait
-    /// longer than a frame for it. A longer caption shows its outline once committed and its plate
-    /// throughout, which costs only its layout.
+    /// The longest caption whose outline is drawn while it is typed. A keystroke traces only the
+    /// glyphs it added or moved (see <see cref="GlyphOutlines"/>), but a change that moves every
+    /// glyph (a new font or size, typing at the start, a width that wraps every line again) traces
+    /// the whole caption (measured on 2026-11-07: about 11 ms for 256 characters, 66 ms for 1,024,
+    /// 3.6 s for 100,000), so past this length such a change would wait longer than a frame for it.
+    /// A longer caption shows its outline once committed and its plate throughout, which costs only
+    /// its layout.
     /// </summary>
     internal const int LiveOutlineLimit = 256;
 
