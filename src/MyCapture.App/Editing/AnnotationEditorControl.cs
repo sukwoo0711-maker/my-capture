@@ -1397,8 +1397,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             // the glyphs and typing already looks like the result.
             Background = Brushes.Transparent,
             Template = CaptionTextBoxTemplate.Value,
-            // The caret marks glyphs of the same colour, outlined like them when the outline is on.
-            CaretBrush = ink,
+            // White or black inside a ring of the caption's outline colour (CaretBrushes), so the
+            // caret shows over any picture under the clear box.
+            CaretBrush = CaretBrushes(annotation).Core,
             BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1427,9 +1428,19 @@ internal sealed partial class AnnotationEditorControl : Grid
         SizeChangedEventHandler resize = (_, _) => LayoutLiveTextBox(textBox);
         ScrollChangedEventHandler scroll = (_, e) =>
         {
+            _caretOutlineStale = true;
             if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
                 UpdateLiveTextViewport(textBox);
+            SyncLiveTextScroll(textBox);
         };
+        // A caret move over laid-out text places the outline at once; after a text change, the
+        // layout pass that lays the text out again places it.
+        RoutedEventHandler caretMoved = (_, _) =>
+        {
+            _caretOutlineStale = true;
+            UpdateCaretOutline(textBox);
+        };
+        EventHandler laidOut = (_, _) => UpdateCaretOutline(textBox);
         ScrollViewer? contentHost = null;
         bool connected = false;
         void ConnectViewport()
@@ -1437,6 +1448,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (connected) return;
             connected = true;
             _overlayCanvas.SizeChanged += resize;
+            textBox.SelectionChanged += caretMoved;
+            textBox.LayoutUpdated += laidOut;
             textBox.ApplyTemplate();
             contentHost = textBox.Template.FindName("PART_ContentHost", textBox) as ScrollViewer;
             if (contentHost is not null)
@@ -1446,6 +1459,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 contentHost.Template = CaptionScrollHostTemplate.Value;
                 contentHost.ApplyTemplate();
                 contentHost.ScrollChanged += scroll;
+                if (ReferenceEquals(_activeTextBox, textBox)) AttachCaretOutline(contentHost);
             }
             UpdateLiveTextViewport(textBox);
         }
@@ -1455,8 +1469,11 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (!connected) return;
             connected = false;
             _overlayCanvas.SizeChanged -= resize;
+            textBox.SelectionChanged -= caretMoved;
+            textBox.LayoutUpdated -= laidOut;
             if (contentHost is not null) contentHost.ScrollChanged -= scroll;
             contentHost = null;
+            if (ReferenceEquals(_activeTextBox, textBox)) DetachCaretOutline();
         };
         LayoutLiveTextBox(textBox);
         ConnectViewport();
@@ -1524,6 +1541,8 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         box.FontSize = Math.Max(1, editing.FontSize * dipPerPixel);
+        // New text, a new font size or a new width can move the caret without moving its index.
+        _caretOutlineStale = true;
         string content = box.Text ?? string.Empty;
         TextLayout fit = LiveTextLayout(editing, content);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
@@ -1554,20 +1573,21 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The plate and outline under the box follow the same text and layout, including text
         // an IME is still composing (it is part of box.Text).
         if (_controller.UpdateLiveText(content, fit)) _surface.InvalidateVisual();
+        SyncLiveTextScroll(box);
     }
 
     /// <summary>
-    /// Keeps the live box's glyphs and caret in the caption's colour when it changes while the
-    /// box stays open; the surface takes the outline and plate from the caption on its next paint.
+    /// Keeps the live box's glyphs in the caption's colour, and its caret in the colours that go
+    /// with it, when the caption changes while the box stays open; the surface takes the outline
+    /// and plate from the caption on its next paint.
     /// </summary>
     private void SyncLiveTextInk()
     {
         if (_activeTextBox is not { } box || _editingText is not { } editing) return;
+        SyncCaretInk();
         Color ink = editing.Foreground.ToColor();
         if (box.Foreground is SolidColorBrush { Color: var current } && current == ink) return;
-        SolidColorBrush brush = editing.Foreground.ToBrush();
-        box.Foreground = brush;
-        box.CaretBrush = brush;
+        box.Foreground = editing.Foreground.ToBrush();
     }
 
     private TextLayout LiveTextLayout(TextAnnotation text, string content) =>
@@ -1615,7 +1635,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// The live caption's scroll host: the text viewport between two bar slots, so the vertical bar
     /// can sit right of the caption, left of it, or over its right edge (see
     /// <see cref="ChooseCaptionScrollBarSide"/>) without changing the text view or its width. The
-    /// bar keeps the application's ScrollBar style. Sealed once, so any editor thread may use it.
+    /// bar keeps the application's ScrollBar style. Under the text view, a layer of the same bounds
+    /// holds the caret's outline. Sealed once, so any editor thread may use it.
     /// </summary>
     private static readonly Lazy<ControlTemplate> CaptionScrollHostTemplate = new(() =>
     {
@@ -1630,6 +1651,8 @@ internal sealed partial class AnnotationEditorControl : Grid
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Canvas x:Name="CaretOutlineLayer" Grid.Column="1" Margin="{TemplateBinding Padding}"
+                            IsHitTestVisible="False" />
                     <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="1"
                                             Margin="{TemplateBinding Padding}"
                                             CanContentScroll="{TemplateBinding CanContentScroll}"
@@ -1687,6 +1710,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         Canvas.SetLeft(box, _liveTextLeft - (side == CaptionScrollBarSide.Left ? scrollWidth : 0));
     }
 
+    /// <summary>
+    /// Tells the surface how far the live box has scrolled a caption taller than the canvas, so the
+    /// plate and outline under the box stay on the glyphs it shows and stay inside its text view.
+    /// </summary>
+    private void SyncLiveTextScroll(TextBox box)
+    {
+        if (!ReferenceEquals(_activeTextBox, box)) return;
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var presenter = host?.Template?.FindName("PART_ScrollContentPresenter", host) as ScrollContentPresenter;
+        LiveCaptionScroll? scroll = null;
+        if (host is { ScrollableHeight: > 0 } && presenter is not null)
+        {
+            double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+            // The first glyph's line starts at the caption's top when the box is not scrolled.
+            double top = presenter.TranslatePoint(default, box).Y - _liveTextInset.Y;
+            scroll = new LiveCaptionScroll(host.VerticalOffset / dipPerPixel, top / dipPerPixel, presenter.ActualHeight / dipPerPixel);
+        }
+
+        if (_controller.UpdateLiveTextScroll(scroll)) _surface.InvalidateVisual();
+    }
+
     internal AnnotationDocument CreateCurrentImageSnapshot()
     {
         Dispatcher.VerifyAccess();
@@ -1728,6 +1772,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
+        DetachCaretOutline();
         _overlayCanvas.Children.Remove(box);
 
         bool hadText = !string.IsNullOrEmpty(box.Text);

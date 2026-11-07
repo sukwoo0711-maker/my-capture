@@ -171,6 +171,48 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
     });
 
     [Theory]
+    [InlineData("Malgun Gothic", false, false)]
+    [InlineData("Malgun Gothic", true, true)]
+    [InlineData("Times New Roman", true, false)]
+    [InlineData("Segoe UI", false, true)]
+    public void ALongCaptionsFrameCoversItsGlyphsWithoutOutliningThem(string font, bool italic, bool wrap) => StaTestHost.Run(() =>
+    {
+        var text = new TextAnnotation
+        {
+            Text = string.Concat(Enumerable.Repeat("전체 내용 가나다😀 abcXYZ fjgy 0123\n", 10)) + "끝 f",
+            FontFamily = font,
+            Italic = italic,
+            FontSize = 48,
+            HasOutline = true,
+            OutlineStyle = TextOutlineStyle.Consistent,
+            AutoSize = !wrap,
+            Rect = new RectD(40, 30, 420, 60),
+        };
+        Assert.True(text.Text.Length > TextAnnotationLayout.ExactInkLimit);
+        text.Rect = TextAnnotationLayout.Measure(text);
+        RectD ink = TextAnnotationLayout.InkBounds(text);
+
+        // The frame takes the layout's black-box extents, not an outline of every glyph.
+        var outlined = (System.Collections.IDictionary)typeof(TextAnnotationLayout)
+            .GetField("GlyphBoundsCache", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+        Assert.False(outlined.Contains(TextAnnotationLayout.KeyOf(text, 1.0)));
+
+        // They cover every painted glyph and its outline, and stay within a third of an em beside it.
+        Rect painted = OutlinedGlyphs(text, 1).Bounds;
+        RectD box = text.Rect;
+        double left = Math.Min(box.Left, painted.Left), right = Math.Max(box.Right, painted.Right);
+        double top = Math.Min(box.Top, painted.Top), bottom = Math.Max(box.Bottom, painted.Bottom);
+        string detail = $"frame ink {ink}, painted {painted}, box {box}";
+        const double rounding = 0.001;
+        Assert.True(ink.Left <= left + rounding && ink.Right >= right - rounding, detail);
+        Assert.True(ink.Top <= top + rounding && ink.Bottom >= bottom - rounding, detail);
+        double third = text.FontSize / 3;
+        Assert.True(ink.Left >= left - third && ink.Right <= right + third, detail);
+        Assert.True(ink.Top >= top - third && ink.Bottom <= bottom + third, detail);
+        output.WriteLine($"{font} italic={italic} wrap={wrap}: slack left {left - ink.Left:0.00} right {ink.Right - right:0.00} top {top - ink.Top:0.00} bottom {ink.Bottom - bottom:0.00} DIP");
+    });
+
+    [Theory]
     [InlineData(1)]
     [InlineData(1.25)]
     [InlineData(1.5)]
@@ -309,6 +351,72 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
     });
 
     [Theory]
+    // A 4K capture fitted at a quarter DIP per pixel: a 64-pixel arrow spans 16 DIP on screen.
+    [InlineData(1.0, 3840, 2160, 0.25, true, 64.0, 0.0)]
+    [InlineData(1.5, 3840, 2160, 0.25, true, 64.0, 0.0)]
+    // A 45-degree line 22 DIP long, at 100 % and in the fitted 4K capture.
+    [InlineData(1.0, 640, 360, 1.0, false, 15.556349186104045, 15.556349186104045)]
+    [InlineData(1.0, 3840, 2160, 0.25, false, 62.22539674441618, 62.22539674441618)]
+    public void AShortSelectedLineStillMovesOnTheSecondDragAndKeepsBothEnds(
+        double dpi, int width, int height, double scale, bool arrow, double dx, double dy) => StaTestHost.Run(() =>
+    {
+        var host = new SurfaceHost(dpi, width, height, scale);
+        var from = new PointD(width / 2.0, height / 2.0);
+        PolylineAnnotation line = arrow
+            ? PolylineAnnotation.CreateArrow(from, from.Offset(dx, dy), Ink, 3)
+            : PolylineAnnotation.CreateLine(from, from.Offset(dx, dy), Ink, 3);
+        host.Controller.Document.Add(line);
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        PointD Along(double dip) => new(line.Points[0].X + dx / length * dip / scale, line.Points[0].Y + dy / length * dip / scale);
+        double screenLength = length * scale;
+        // Each end handle reaches eight DIP along both axes, so between them they cover the whole body.
+        Assert.True(Math.Abs(dx) * scale <= 16 && Math.Abs(dy) * scale <= 16);
+
+        for (int drag = 1; drag <= 2; drag++)
+        {
+            PointD[] before = [.. line.Points];
+            PointD middle = Along(screenLength / 2);
+            if (drag == 2)
+            {
+                Assert.Same(line, Assert.Single(host.Controller.SelectedItems));
+                Assert.NotEqual(ResizeHandle.None, host.Controller.HandleAt(middle, host.Controller.HandleTolerance));
+            }
+            PointerIntent intent = host.Controller.ResolvePointerIntent(middle);
+            Assert.Equal(PointerAction.Move, intent.Action);
+            Assert.Same(line, intent.Target);
+            Assert.Equal(EditorCursorKind.Move, intent.Cursor);
+            var step = new PointD(30 / scale, 12 / scale);
+            host.Controller.PointerDown(middle);
+            host.Controller.PointerMove(middle.Offset(step.X, step.Y));
+            host.Controller.PointerUp(middle.Offset(step.X, step.Y));
+            AssertPoint(before[0].Offset(step.X, step.Y), line.Points[0]);
+            AssertPoint(before[1].Offset(step.X, step.Y), line.Points[1]);
+        }
+        Assert.Equal(2, host.Undo.UndoCount);
+
+        // The middle eight DIP move the line; either side of it, each end is still taken by its handle.
+        Assert.Equal(PointerAction.Move, host.Controller.ResolvePointerIntent(Along(screenLength / 2 - 3.9)).Action);
+        Assert.Equal(PointerAction.Move, host.Controller.ResolvePointerIntent(Along(screenLength / 2 + 3.9)).Action);
+        foreach ((ResizeHandle handle, PointD press) in new[]
+        {
+            (ResizeHandle.LineStart, line.Points[0]), (ResizeHandle.LineStart, Along(screenLength / 2 - 4.1)),
+            (ResizeHandle.LineEnd, line.Points[1]), (ResizeHandle.LineEnd, Along(screenLength / 2 + 4.1)),
+        })
+        {
+            PointerIntent end = host.Controller.ResolvePointerIntent(press);
+            Assert.Equal(PointerAction.Resize, end.Action);
+            Assert.Equal(handle, end.Handle);
+        }
+        PointD[] moved = [.. line.Points];
+        PointD target = line.Points[1].Offset(20 / scale, 20 / scale);
+        host.Controller.PointerDown(line.Points[1]);
+        host.Controller.PointerMove(target);
+        host.Controller.PointerUp(target);
+        AssertPoint(moved[0], line.Points[0]);
+        AssertPoint(target, line.Points[1]);
+    });
+
+    [Theory]
     [InlineData(1)]
     [InlineData(1.25)]
     [InlineData(1.5)]
@@ -357,6 +465,66 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
         Assert.NotEqual(images[0].Region(end, 20, dpi), images[2].Region(end, 20, dpi));
         Assert.NotEqual(images[1].Region(start, 20, dpi), images[2].Region(start, 20, dpi));
     });
+
+    [Theory]
+    // 100 % and 150 %, and 4K captures fitted at half and a quarter DIP per pixel, where a 3-pixel
+    // arrow's 12-pixel head shrinks to 6 and 3 DIP: smaller than the ring around its tip.
+    [InlineData(1.0, 640, 360, 1.0)]
+    [InlineData(1.5, 640, 360, 1 / 1.5)]
+    [InlineData(1.0, 3840, 2160, 0.5)]
+    [InlineData(1.0, 3840, 2160, 0.25)]
+    [InlineData(1.5, 3840, 2160, 0.25)]
+    public void EndpointRingsPassBehindEveryArrowheadAtAnyImageScale(double dpi, int width, int height, double scale) => StaTestHost.Run(() =>
+    {
+        var host = new SurfaceHost(dpi, width, height, scale);
+        PolylineAnnotation arrow = PolylineAnnotation.CreateArrow(new(width * 0.3, height * 0.45), new(width * 0.6, height * 0.55), Ink, 3);
+        arrow.HeadAtStart = true;
+        host.Controller.Document.Add(arrow);
+        Pixels bare = host.Render();
+        host.Controller.SetSelected(arrow);
+        Pixels selected = host.Render();
+        Geometry[] heads = AnnotationRenderer.ArrowHeads(arrow).ToArray();
+        Assert.Equal(2, heads.Length);
+        Point origin = host.Surface.ToSurfacePoint(new PointD(0, 0));
+        foreach (Geometry head in heads)
+        {
+            // The head where the surface paints it, in DIP.
+            Geometry painted = head.Clone();
+            painted.Transform = new MatrixTransform(host.Scale, 0, 0, host.Scale, origin.X, origin.Y);
+            Rect area = painted.Bounds;
+            Point tip = arrow.Points.Select(point => host.Surface.ToSurfacePoint(point))
+                .MinBy(point => (point - new Point(area.X + (area.Width / 2), area.Y + (area.Height / 2))).Length);
+            int left = (int)Math.Floor(area.Left * dpi) - 1, top = (int)Math.Floor(area.Top * dpi) - 1;
+            int right = (int)Math.Ceiling(area.Right * dpi) + 1, bottom = (int)Math.Ceiling(area.Bottom * dpi) + 1;
+            int ink = 0, underRing = 0;
+            var changed = new List<string>();
+            for (int y = top; y <= bottom; y++)
+            for (int x = left; x <= right; x++)
+            {
+                // Only the pixels the head itself reaches: past its base the shaft runs on under the ring.
+                var square = new RectangleGeometry(new Rect(x / dpi, y / dpi, 1 / dpi, 1 / dpi));
+                if (painted.FillContainsWithDetail(square, 1e-4, ToleranceType.Absolute) == IntersectionDetail.Empty) continue;
+                if (!IsArrowInk(bare[x, y])) continue;
+                ink++;
+                // The ring's contrast pen reaches 6 DIP from the tip: its 4-DIP radius and half its 4-DIP width.
+                if ((new Point((x + .5) / dpi, (y + .5) / dpi) - tip).Length <= 6) underRing++;
+                if (!IsArrowInk(selected[x, y])) changed.Add($"({x},{y}) {bare[x, y]}->{selected[x, y]}");
+            }
+            Assert.True(ink > 0, $"The head at {area} must show at {scale} DIP per pixel.");
+            Assert.True(underRing > 0, $"The ring must reach the head at {area}, or nothing here is under it.");
+            Assert.True(changed.Count == 0,
+                $"{changed.Count} of the head's {ink} pixels at {area} were covered by its ring: {string.Join(", ", changed.Take(8))}");
+        }
+        // The rings themselves still show around both tips.
+        foreach (PointD tip in arrow.Points)
+        {
+            Point centre = host.Surface.ToSurfacePoint(tip);
+            Assert.Contains(selected.Disk(centre, 6, dpi), p => !IsArrowInk(selected[p.X, p.Y]) && selected[p.X, p.Y] != bare[p.X, p.Y]);
+        }
+        if (scale == 0.25 && dpi == 1.5) selected.SaveIfRequested("arrow-selected-4k-quarter-150.png");
+    });
+
+    private static bool IsArrowInk(Color color) => color.R > color.G + 60 && color.R > color.B + 60;
 
     private static PointD Handle(SurfaceHost host, ResizeHandle handle) =>
         Assert.Single(host.Controller.GetSelectionHandles(host.Scale), item => item.Handle == handle).Position;
@@ -421,10 +589,13 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
         internal double Scale => Surface.DipPerPixel;
         private readonly double _dpi;
 
-        internal SurfaceHost(double dpi)
+        /// <param name="scale">
+        /// DIP per capture pixel the surface is sized to fit (a fitted large capture); by default the
+        /// capture shows at 100 % of <paramref name="dpi"/>.
+        /// </param>
+        internal SurfaceHost(double dpi, int width = 640, int height = 360, double? scale = null)
         {
             _dpi = dpi;
-            const int width = 640, height = 360;
             byte[] background = new byte[width * height * 4];
             for (int i = 0; i < background.Length; i += 4)
             {
@@ -440,13 +611,14 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
             Surface = new AnnotationEditorSurface(new FrozenFrame(bitmap, area, null, 0), area, Controller,
                 new AnnotationRenderer(new AnnotationImageStore()));
             VisualTreeHelper.SetRootDpi(Surface, new DpiScale(dpi, dpi));
-            var size = new Size(width / dpi + 32, height / dpi + 32);
+            double fit = scale ?? 1 / dpi;
+            var size = new Size(width * fit + 32, height * fit + 32);
             Surface.Measure(size);
             Surface.Arrange(new Rect(size));
             Surface.UpdateLayout();
             Controller.DipPerPixel = Scale;
             Controller.HitTolerance = 6 / Scale;
-            Assert.Equal(1 / dpi, Scale, 7);
+            Assert.Equal(fit, Scale, 7);
         }
 
         internal TextAnnotation Caption(string content)

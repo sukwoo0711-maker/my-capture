@@ -34,6 +34,32 @@ internal static class PointerIntentGeometry
         return new RectD(bounds.Center.X - width / 2, bounds.Center.Y - height / 2, width, height);
     }
 
+    /// <summary>
+    /// The length of a selected two-point line's body, centred on its midpoint, that always moves
+    /// the line: the same eight DIP <see cref="SelectionFrame"/> keeps between handle hit areas.
+    /// </summary>
+    internal const double LineMoveZoneDip = 8;
+
+    /// <summary>
+    /// Whether <paramref name="point"/> lies on the middle <see cref="LineMoveZoneDip"/> of
+    /// <paramref name="line"/>'s body, between its endpoints. Each endpoint handle reaches eight DIP
+    /// along both axes, so on a line no longer than 16 DIP each way the two would otherwise meet
+    /// and every press would stretch an end. On longer lines the handles end before this zone.
+    /// </summary>
+    internal static bool InLineMoveZone(PolylineAnnotation line, PointD point, double dipPerPixel, double hitTolerance)
+    {
+        if (line.Points.Count != 2) return false;
+        PointD start = line.Points[0], end = line.Points[1];
+        double dx = end.X - start.X, dy = end.Y - start.Y;
+        double length = Math.Sqrt((dx * dx) + (dy * dy));
+        if (!(length > 0)) return false;
+        double scale = double.IsFinite(dipPerPixel) && dipPerPixel > 0 ? dipPerPixel : 1;
+        double along = (((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / length;
+        return along >= 0 && along <= length
+            && Math.Abs(along - (length / 2)) <= LineMoveZoneDip / 2 / scale
+            && line.DistanceTo(point) <= hitTolerance;
+    }
+
     internal static IReadOnlyList<SelectionHandle> SelectionHandles(AnnotationItem item, double dipPerPixel)
     {
         if (item is PolylineAnnotation { Points.Count: 2 } line)

@@ -200,7 +200,9 @@ public sealed class EditorLiveCaptionLookTests(ITestOutputHelper output) : Korea
         Assert.True(Count(RenderSurface(host, surface), area, color => color.R > 235 && color.G > 235 && color.B > 235) > 40,
             "A dark caption's outline turns light at once.");
         Assert.Equal(Color.FromRgb(20, 20, 20), Assert.IsType<SolidColorBrush>(box.Foreground).Color);
-        Assert.Equal(Color.FromRgb(20, 20, 20), Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+        // Its caret turns black inside a light ring with it.
+        Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+        Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(EditorTextEntryFrameTests.CaretRing(box).Fill).Color);
         Assert.Same(box, Field<TextBox>(host.Editor, "_activeTextBox"));
     });
 
@@ -229,6 +231,114 @@ public sealed class EditorLiveCaptionLookTests(ITestOutputHelper output) : Korea
         Assert.Equal(longest + "끝", caption.Text);
         Assert.True(caption.HasOutline);
         Assert.Null(controller.LiveTextForPaint());
+    });
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void AScrolledCaptionKeepsItsOutlineOnTheGlyphsTheBoxShows(double scale) => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(640, 360, Image));
+        UseDisplayScale(host, scale);
+        AnnotationEditorController controller = Controller(host.Editor);
+        controller.DefaultFontSize = 40;
+        Invoke(host.Editor, "PlaceTextBox", new PointD(60, 20));
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        // Taller than the canvas and short enough to keep its outline while typing; no two
+        // neighbouring lines alike, so an outline a line off would not match.
+        box.Text = string.Join("\n", Enumerable.Range(1, 14).Select(line => new string('가', 1 + (line % 4)) + new string('H', line % 3)));
+        Assert.True(box.Text.Length <= AnnotationEditorController.LiveOutlineLimit);
+        box.CaretIndex = 0;
+        host.Window.UpdateLayout();
+        var scroll = Assert.IsType<ScrollViewer>(box.Template.FindName("PART_ContentHost", box));
+        Assert.True(scroll.ScrollableHeight > 60, $"The fixture must overflow the canvas ({scroll.ScrollableHeight:0.0} DIP).");
+        Assert.Equal(0, Assert.NotNull(controller.LiveTextScroll).Offset);
+
+        // Forty DIP: a whole number of device pixels at both scales, and less than a line.
+        const double offset = 40;
+        scroll.ScrollToVerticalOffset(offset);
+        host.Window.UpdateLayout();
+        Assert.Equal(offset, scroll.VerticalOffset, 3);
+        var surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
+        LiveCaptionScroll live = Assert.NotNull(controller.LiveTextScroll);
+        Assert.Equal(offset / surface.DipPerPixel, live.Offset, 3);
+
+        var view = new Viewport(host, scale);
+        (int caretLeft, int caretRight) = view.CaretColumns(box);
+        var presenter = Assert.IsType<ScrollContentPresenter>(scroll.Template.FindName("PART_ScrollContentPresenter", scroll));
+        Rect shownText = presenter.TransformToAncestor(view.Root).TransformBounds(new Rect(presenter.RenderSize));
+        Pixels shown = view.Render();
+        Invoke(host.Editor, "CommitActiveText");
+        var caption = Assert.IsType<TextAnnotation>(Assert.Single(controller.Document.Items));
+        controller.SetSelected(null);
+        host.Window.UpdateLayout();
+        Pixels committed = view.Render();
+
+        // Where the box shows text over the picture, it shows the committed caption moved up by
+        // the scroll: the glyphs from the box, the outline from the surface.
+        int shift = (int)Math.Round(offset * scale);
+        Int32Rect picture = view.DeviceRect(new RectD(0, 0, 640, 360));
+        Int32Rect area = view.DeviceRect(caption.Rect);
+        int top = Math.Max((int)Math.Ceiling(shownText.Top * scale) + 1, Math.Max(area.Y, picture.Y));
+        int bottom = Math.Min((int)Math.Floor(shownText.Bottom * scale) - 1, picture.Y + picture.Height - shift - 1);
+        int compared = 0, matched = 0, outline = 0;
+        for (int y = top; y < bottom; y++)
+        for (int x = area.X; x < area.X + area.Width; x++)
+        {
+            if (x >= caretLeft && x <= caretRight) continue;
+            Color expected = committed[x, y + shift];
+            compared++;
+            if (shown.HasNear(x, y, expected, 40)) matched++;
+            if (IsOutline(expected)) outline++;
+        }
+
+        output.WriteLine($"{scale * 100}%: rows {top}-{bottom} compared={compared} matched={matched} outline={outline}");
+        Assert.True(compared > 2000, $"The fixture must compare a visible band ({compared} pixels).");
+        Assert.True(outline > 40, $"The band must hold outline ({outline} pixels).");
+        Assert.True(matched >= compared * 0.98, $"Only {matched} of {compared} scrolled pixels match the committed caption.");
+    });
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void TheCaretOfAWhiteCaptionShowsOverAWhitePicture(double scale) => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(640, 360, 0xFF));
+        UseDisplayScale(host, scale);
+        AnnotationEditorController controller = Controller(host.Editor);
+        controller.DefaultFontSize = 40;
+        controller.StrokeColor = ColorRgba.White;
+        Invoke(host.Editor, "PlaceTextBox", new PointD(60, 50));
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        // After a space, so no glyph covers the caret.
+        box.Text = "자막 ";
+        box.CaretIndex = box.Text.Length;
+        host.Window.UpdateLayout();
+        TextAnnotation live = Assert.IsType<TextAnnotation>(controller.LiveTextForPaint());
+        Assert.Equal(ColorRgba.White, live.Foreground);
+        Assert.True(live.HasOutline);
+        // A white caret inside a black ring: white like the glyphs, outlined like them.
+        Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+
+        var view = new Viewport(host, scale);
+        Rect caret = box.GetRectFromCharacterIndex(box.CaretIndex);
+        Rect inRoot = box.TransformToAncestor(view.Root).TransformBounds(caret);
+        (int left, int right) = view.CaretColumns(box);
+        int top = (int)Math.Ceiling(inRoot.Top * scale) + 1, bottom = (int)Math.Floor(inRoot.Bottom * scale) - 1;
+        Pixels pixels = view.Render();
+        int dark = 0;
+        for (int y = top; y < bottom; y++)
+        for (int x = left; x <= right; x++)
+            if (IsOutline(pixels[x, y])) dark++;
+
+        // The caret box shows no caret off screen; its ring, a caret width and a DIP either side,
+        // is what marks the insertion point here.
+        int rows = bottom - top;
+        output.WriteLine($"{scale * 100}%: rows={rows} dark={dark} columns {left}-{right}");
+        Assert.True(rows > 20, $"The caret must span the line ({rows} rows).");
+        Assert.True(dark >= rows * 2, $"Only {dark} dark pixels mark a caret {rows} rows tall over the white picture.");
+        // Between the ring and the box's frame, the picture stays white: the dark pixels are the ring's.
+        Assert.Equal(0, Count(pixels, new Int32Rect(right + 1, top, (int)Math.Floor(3 * scale), rows), IsOutline));
     });
 
     [Theory]
