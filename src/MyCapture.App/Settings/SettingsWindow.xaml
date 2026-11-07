@@ -878,7 +878,9 @@
                             <StackPanel>
                                 <StackPanel Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
                                     <!-- The fold's title names the choice, so no label repeats it. The list and its guide
-                                         share one row, as the capture page's "After capture" list does. -->
+                                         share one row, as the capture page's "After capture" list does, with the same
+                                         minimum width: 320 passed the list's column in the compact English window and
+                                         ran under the guide button. -->
                                     <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -888,7 +890,7 @@
                                         <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
                                                   AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
                                                   AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
-                                                  MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                                  MinWidth="250" HorizontalAlignment="Left" Margin="0,4,0,0">
                                             <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
                                             <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
                                         </ComboBox>
