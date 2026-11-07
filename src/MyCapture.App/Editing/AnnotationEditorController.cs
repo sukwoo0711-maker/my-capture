@@ -1276,7 +1276,11 @@ internal sealed class AnnotationEditorController
         {
             // Shift also constrains endpoint drags, including when held before the press.
             bool endpointConstraint = shift && !control && _selected is PolylineAnnotation { Points.Count: 2 };
-            ResizeHandle handle = toggle && !endpointConstraint ? ResizeHandle.None : HandleAt(point, HandleTolerance);
+            // The middle of a short line's body gives way to the item under it (the line itself,
+            // unless something is drawn over it), so the line can still be moved once selected.
+            bool lineBody = !toggle && _selection.Count == 1 && _selected is PolylineAnnotation { Points.Count: 2 } selectedLine
+                && PointerIntentGeometry.InLineMoveZone(selectedLine, point, DipPerPixel, HitTolerance);
+            ResizeHandle handle = (toggle && !endpointConstraint) || lineBody ? ResizeHandle.None : HandleAt(point, HandleTolerance);
             if (handle != ResizeHandle.None)
                 return new(PointerAction.Resize, _selected, handle,
                     PointerIntentGeometry.ResizeCursor(_selected!, handle));

@@ -309,6 +309,72 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
     });
 
     [Theory]
+    // A 4K capture fitted at a quarter DIP per pixel: a 64-pixel arrow spans 16 DIP on screen.
+    [InlineData(1.0, 3840, 2160, 0.25, true, 64.0, 0.0)]
+    [InlineData(1.5, 3840, 2160, 0.25, true, 64.0, 0.0)]
+    // A 45-degree line 22 DIP long, at 100 % and in the fitted 4K capture.
+    [InlineData(1.0, 640, 360, 1.0, false, 15.556349186104045, 15.556349186104045)]
+    [InlineData(1.0, 3840, 2160, 0.25, false, 62.22539674441618, 62.22539674441618)]
+    public void AShortSelectedLineStillMovesOnTheSecondDragAndKeepsBothEnds(
+        double dpi, int width, int height, double scale, bool arrow, double dx, double dy) => StaTestHost.Run(() =>
+    {
+        var host = new SurfaceHost(dpi, width, height, scale);
+        var from = new PointD(width / 2.0, height / 2.0);
+        PolylineAnnotation line = arrow
+            ? PolylineAnnotation.CreateArrow(from, from.Offset(dx, dy), Ink, 3)
+            : PolylineAnnotation.CreateLine(from, from.Offset(dx, dy), Ink, 3);
+        host.Controller.Document.Add(line);
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        PointD Along(double dip) => new(line.Points[0].X + dx / length * dip / scale, line.Points[0].Y + dy / length * dip / scale);
+        double screenLength = length * scale;
+        // Each end handle reaches eight DIP along both axes, so between them they cover the whole body.
+        Assert.True(Math.Abs(dx) * scale <= 16 && Math.Abs(dy) * scale <= 16);
+
+        for (int drag = 1; drag <= 2; drag++)
+        {
+            PointD[] before = [.. line.Points];
+            PointD middle = Along(screenLength / 2);
+            if (drag == 2)
+            {
+                Assert.Same(line, Assert.Single(host.Controller.SelectedItems));
+                Assert.NotEqual(ResizeHandle.None, host.Controller.HandleAt(middle, host.Controller.HandleTolerance));
+            }
+            PointerIntent intent = host.Controller.ResolvePointerIntent(middle);
+            Assert.Equal(PointerAction.Move, intent.Action);
+            Assert.Same(line, intent.Target);
+            Assert.Equal(EditorCursorKind.Move, intent.Cursor);
+            var step = new PointD(30 / scale, 12 / scale);
+            host.Controller.PointerDown(middle);
+            host.Controller.PointerMove(middle.Offset(step.X, step.Y));
+            host.Controller.PointerUp(middle.Offset(step.X, step.Y));
+            AssertPoint(before[0].Offset(step.X, step.Y), line.Points[0]);
+            AssertPoint(before[1].Offset(step.X, step.Y), line.Points[1]);
+        }
+        Assert.Equal(2, host.Undo.UndoCount);
+
+        // The middle eight DIP move the line; either side of it, each end is still taken by its handle.
+        Assert.Equal(PointerAction.Move, host.Controller.ResolvePointerIntent(Along(screenLength / 2 - 3.9)).Action);
+        Assert.Equal(PointerAction.Move, host.Controller.ResolvePointerIntent(Along(screenLength / 2 + 3.9)).Action);
+        foreach ((ResizeHandle handle, PointD press) in new[]
+        {
+            (ResizeHandle.LineStart, line.Points[0]), (ResizeHandle.LineStart, Along(screenLength / 2 - 4.1)),
+            (ResizeHandle.LineEnd, line.Points[1]), (ResizeHandle.LineEnd, Along(screenLength / 2 + 4.1)),
+        })
+        {
+            PointerIntent end = host.Controller.ResolvePointerIntent(press);
+            Assert.Equal(PointerAction.Resize, end.Action);
+            Assert.Equal(handle, end.Handle);
+        }
+        PointD[] moved = [.. line.Points];
+        PointD target = line.Points[1].Offset(20 / scale, 20 / scale);
+        host.Controller.PointerDown(line.Points[1]);
+        host.Controller.PointerMove(target);
+        host.Controller.PointerUp(target);
+        AssertPoint(moved[0], line.Points[0]);
+        AssertPoint(target, line.Points[1]);
+    });
+
+    [Theory]
     [InlineData(1)]
     [InlineData(1.25)]
     [InlineData(1.5)]
@@ -421,10 +487,13 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
         internal double Scale => Surface.DipPerPixel;
         private readonly double _dpi;
 
-        internal SurfaceHost(double dpi)
+        /// <param name="scale">
+        /// DIP per capture pixel the surface is sized to fit (a fitted large capture); by default the
+        /// capture shows at 100 % of <paramref name="dpi"/>.
+        /// </param>
+        internal SurfaceHost(double dpi, int width = 640, int height = 360, double? scale = null)
         {
             _dpi = dpi;
-            const int width = 640, height = 360;
             byte[] background = new byte[width * height * 4];
             for (int i = 0; i < background.Length; i += 4)
             {
@@ -440,13 +509,14 @@ public sealed class EditorSelectionChromeTests(ITestOutputHelper output) : Korea
             Surface = new AnnotationEditorSurface(new FrozenFrame(bitmap, area, null, 0), area, Controller,
                 new AnnotationRenderer(new AnnotationImageStore()));
             VisualTreeHelper.SetRootDpi(Surface, new DpiScale(dpi, dpi));
-            var size = new Size(width / dpi + 32, height / dpi + 32);
+            double fit = scale ?? 1 / dpi;
+            var size = new Size(width * fit + 32, height * fit + 32);
             Surface.Measure(size);
             Surface.Arrange(new Rect(size));
             Surface.UpdateLayout();
             Controller.DipPerPixel = Scale;
             Controller.HitTolerance = 6 / Scale;
-            Assert.Equal(1 / dpi, Scale, 7);
+            Assert.Equal(fit, Scale, 7);
         }
 
         internal TextAnnotation Caption(string content)
