@@ -517,9 +517,8 @@ internal sealed class AnnotationRenderer
         {
             cache.Outline ??= Frozen(formatted.BuildGeometry(origin));
             bool consistent = text.OutlineStyle == TextOutlineStyle.Consistent;
-            ColorRgba outline = Contrasting(text.Foreground, consistent);
             double thickness = consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12);
-            dc.DrawGeometry(null, OutlinePen(outline, thickness), cache.Outline);
+            dc.DrawGeometry(null, OutlinePen(OutlineColor(text), thickness), cache.Outline);
         }
 
         if (glyphs)
@@ -679,6 +678,13 @@ internal sealed class AnnotationRenderer
     }
 
     private static Point ToPoint(PointD p) => new(p.X, p.Y);
+
+    /// <summary>
+    /// The colour <paramref name="text"/>'s glyph outline is drawn in when it has one: black or
+    /// white against its fill. A caption being typed outlines its caret in it too.
+    /// </summary>
+    internal static ColorRgba OutlineColor(TextAnnotation text) =>
+        Contrasting(text.Foreground, text.OutlineStyle == TextOutlineStyle.Consistent);
 
     /// <summary>
     /// A near-black or near-white outline that contrasts with the fill colour.

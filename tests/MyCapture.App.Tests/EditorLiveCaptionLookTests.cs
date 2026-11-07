@@ -200,7 +200,9 @@ public sealed class EditorLiveCaptionLookTests(ITestOutputHelper output) : Korea
         Assert.True(Count(RenderSurface(host, surface), area, color => color.R > 235 && color.G > 235 && color.B > 235) > 40,
             "A dark caption's outline turns light at once.");
         Assert.Equal(Color.FromRgb(20, 20, 20), Assert.IsType<SolidColorBrush>(box.Foreground).Color);
-        Assert.Equal(Color.FromRgb(20, 20, 20), Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+        // Its caret turns black inside a light ring with it.
+        Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+        Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(EditorTextEntryFrameTests.CaretRing(box).Fill).Color);
         Assert.Same(box, Field<TextBox>(host.Editor, "_activeTextBox"));
     });
 
@@ -229,6 +231,49 @@ public sealed class EditorLiveCaptionLookTests(ITestOutputHelper output) : Korea
         Assert.Equal(longest + "끝", caption.Text);
         Assert.True(caption.HasOutline);
         Assert.Null(controller.LiveTextForPaint());
+    });
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void TheCaretOfAWhiteCaptionShowsOverAWhitePicture(double scale) => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(640, 360, 0xFF));
+        UseDisplayScale(host, scale);
+        AnnotationEditorController controller = Controller(host.Editor);
+        controller.DefaultFontSize = 40;
+        controller.StrokeColor = ColorRgba.White;
+        Invoke(host.Editor, "PlaceTextBox", new PointD(60, 50));
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        // After a space, so no glyph covers the caret.
+        box.Text = "자막 ";
+        box.CaretIndex = box.Text.Length;
+        host.Window.UpdateLayout();
+        TextAnnotation live = Assert.IsType<TextAnnotation>(controller.LiveTextForPaint());
+        Assert.Equal(ColorRgba.White, live.Foreground);
+        Assert.True(live.HasOutline);
+        // A white caret inside a black ring: white like the glyphs, outlined like them.
+        Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(box.CaretBrush).Color);
+
+        var view = new Viewport(host, scale);
+        Rect caret = box.GetRectFromCharacterIndex(box.CaretIndex);
+        Rect inRoot = box.TransformToAncestor(view.Root).TransformBounds(caret);
+        (int left, int right) = view.CaretColumns(box);
+        int top = (int)Math.Ceiling(inRoot.Top * scale) + 1, bottom = (int)Math.Floor(inRoot.Bottom * scale) - 1;
+        Pixels pixels = view.Render();
+        int dark = 0;
+        for (int y = top; y < bottom; y++)
+        for (int x = left; x <= right; x++)
+            if (IsOutline(pixels[x, y])) dark++;
+
+        // The caret box shows no caret off screen; its ring, a caret width and a DIP either side,
+        // is what marks the insertion point here.
+        int rows = bottom - top;
+        output.WriteLine($"{scale * 100}%: rows={rows} dark={dark} columns {left}-{right}");
+        Assert.True(rows > 20, $"The caret must span the line ({rows} rows).");
+        Assert.True(dark >= rows * 2, $"Only {dark} dark pixels mark a caret {rows} rows tall over the white picture.");
+        // Between the ring and the box's frame, the picture stays white: the dark pixels are the ring's.
+        Assert.Equal(0, Count(pixels, new Int32Rect(right + 1, top, (int)Math.Floor(3 * scale), rows), IsOutline));
     });
 
     [Theory]
