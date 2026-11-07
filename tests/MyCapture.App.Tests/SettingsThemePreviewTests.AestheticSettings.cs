@@ -133,13 +133,12 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(UIElement.OpacityProperty, shown.Property);
         Assert.Equal(1d, Convert.ToDouble(shown.Value, System.Globalization.CultureInfo.InvariantCulture));
 
-        // An offscreen window does not always take keyboard focus; when it does, the ring shows.
-        if (toggle.Focus() && toggle.IsKeyboardFocused)
-        {
-            Drain(window);
-            Assert.Equal(1, ring.Opacity);
-            SaveAlignmentEvidence(window, $"section-header-focus-{locale}", BoundsIn(toggle, window));
-        }
+        // Keyboard focus shows the ring. A header that cannot take focus fails here instead of passing unchecked.
+        Assert.True(toggle.Focus(), $"{locale}: the section header did not take keyboard focus.");
+        Assert.True(toggle.IsKeyboardFocused, $"{locale}: the section header is not keyboard focused.");
+        Drain(window);
+        Assert.Equal(1, ring.Opacity);
+        SaveAlignmentEvidence(window, $"section-header-focus-{locale}", BoundsIn(toggle, window));
     }
 
     private static void VerifyAboutSections(SettingsWindow window, TabControl tabs, string locale)

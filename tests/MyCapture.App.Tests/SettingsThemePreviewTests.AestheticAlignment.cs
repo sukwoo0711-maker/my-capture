@@ -260,8 +260,9 @@ public sealed partial class SettingsThemePreviewTests
                     SaveAlignmentEvidence(help, "help-results-" + (query == "F2" ? "f2" : query == "Ctrl+C" ? "ctrl-c" : "video"),
                         BoundsIn(view.ResultsView, help));
                     Assert.True(gaps.Count > 1, $"{query}: expected several results.");
-                    Assert.True(gaps.Max() - gaps.Min() <= 1,
-                        $"{query}: the gaps between a result's name and its category are {string.Join(", ", gaps.Select(gap => gap.ToString("0.#")))}.");
+                    // Every row keeps the category's 1 DIP margin under the name, not merely the same gap.
+                    Assert.True(gaps.All(gap => Math.Abs(gap - 1) <= 0.5),
+                        $"{query}: the gaps between a result's name and its category are {string.Join(", ", gaps.Select(gap => gap.ToString("0.##")))}; each must be 1.");
                     // The tutorial button stands beside the name and the category, over neither.
                     foreach ((Rect button, double textRight) in tutorials)
                         Assert.True(button.Left >= textRight - 0.5,

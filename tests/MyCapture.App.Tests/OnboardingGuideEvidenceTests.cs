@@ -102,12 +102,9 @@ public sealed class OnboardingGuideEvidenceTests
         foreach ((PracticeStep? step, bool noLibraryKey) in scenes)
         {
             var clipboard = new OnboardingGuideTests.FakeClipboard();
+            // A person who cleared the library shortcut that a new installation assigns.
             HotkeySettings? keys = noLibraryKey ? NewInstallDefaults.Create().Hotkeys : null;
-            if (noLibraryKey)
-            {
-                keys!.OpenLibrary = Hotkey.None;
-                Assert.Equal(Hotkey.None, keys.OpenLibrary);
-            }
+            if (noLibraryKey) keys!.OpenLibrary = Hotkey.None;
             WelcomeWindow guide = OnboardingGuideTests.Create(clipboard,
                 new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor,
                     ShowCoreShortcutsConsent = step is null }, keys);
@@ -126,6 +123,11 @@ public sealed class OnboardingGuideEvidenceTests
                 if (noLibraryKey)
                 {
                     Check(!guide.KeyShown, label + ": an unassigned library shortcut must not be shown");
+                    string[] shown = OnboardingGuideTests.ShownWords(guide);
+                    string libraryChord = CoreShortcuts.OpenLibrary.ToString();
+                    Check(shown.Contains(guide.InstructionText), label + ": the instruction must be among the shown text");
+                    Check(!shown.Any(word => word.Contains(libraryChord, StringComparison.Ordinal)),
+                        label + ": no shown text or keycap may name " + libraryChord);
                     Check(guide.TryNowButton.IsVisible, label + ": the library button must remain visible without a key");
                     Check(guide.InstructionText == UiText.Get("Journey.C1.Body"), label + ": use the library-button instruction");
                 }
