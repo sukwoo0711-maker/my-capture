@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
 using MyCapture.Core.Themes;
@@ -70,6 +71,76 @@ public sealed partial class PinTextSelectionViewTests
             SaveTableEvidence(image, $"scrollbars-{theme}-{contrast}-{darkCode}");
             if (!darkCode)
                 Assert.Equal(Assert.IsType<SolidColorBrush>(view.Background).Color, Pixel(image, 392, 232));
+        }
+        finally
+        {
+            ThemeService.SystemHighContrastOverrideForTest = previousContrast;
+            ThemeService.Apply(previous);
+        }
+    });
+
+    /// <summary>
+    /// While the view is open the app theme and a Windows contrast theme change: the light scroll
+    /// bar palette is added, removed and changed to match each, through the real refresh paths.
+    /// </summary>
+    [Fact]
+    public void ScrollBarPaletteFollowsThemeAndContrastChangesWhileOpen() => StaTestHost.Run(() =>
+    {
+        AppTheme previous = ThemeService.Current;
+        bool? previousContrast = ThemeService.SystemHighContrastOverrideForTest;
+        try
+        {
+            ThemeService.SystemHighContrastOverrideForTest = false;
+            ThemeService.Apply(AppTheme.Midnight);
+            ResourceDictionary resources = SystemHighContrastThemeTests.LoadTheme();
+            ThemeService.ApplyResources(AppTheme.Midnight, resources, systemHighContrast: false);
+            string text = string.Join("\r\n", Enumerable.Range(0, 30).Select(row => string.Join('\t', Enumerable.Repeat($"Row {row} extended column", 15))));
+            var view = new PinTextSelectionView(PinContent.FromText(ClipboardTextRenderer.Render(text, true), text, true));
+            var host = new Grid { Resources = resources };
+            host.Children.Add(view);
+            LayoutTable(host, new Size(400, 240));
+            AssertPalette(AppTheme.Daylight, "Midnight");
+
+            Theme(AppTheme.Daylight);
+            AssertPalette(null, "Daylight");
+            Theme(AppTheme.Glass);
+            AssertPalette(AppTheme.GlassLight, "Glass");
+            Theme(AppTheme.Midnight);
+            AssertPalette(AppTheme.Daylight, "Midnight again");
+
+            Contrast(true);
+            AssertPalette(null, "Windows contrast theme on");
+            Contrast(false);
+            AssertPalette(AppTheme.Daylight, "Windows contrast theme off");
+
+            void Theme(AppTheme theme)
+            {
+                ThemeService.Apply(theme);
+                ThemeService.ApplyResources(theme, resources, systemHighContrast: false);
+                host.UpdateLayout();
+            }
+
+            void Contrast(bool on)
+            {
+                ThemeService.SystemHighContrastOverrideForTest = on;
+                DispatcherOperation refresh = ThemeService.ScheduleSystemThemeRefresh(view.Dispatcher, resources, () => on);
+                view.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                Assert.Equal(DispatcherOperationStatus.Completed, refresh.Status);
+                host.UpdateLayout();
+            }
+
+            void AssertPalette(AppTheme? palette, string step)
+            {
+                Assert.True((palette is not null) == view.Resources.Contains(typeof(ScrollBar)), $"{step}: replacement present {view.Resources.Contains(typeof(ScrollBar))}");
+                ScrollBar[] bars = Descendants<ScrollBar>(view).Where(bar => bar.Visibility == Visibility.Visible).ToArray();
+                Assert.Equal(2, bars.Length);
+                foreach (ScrollBar bar in bars)
+                {
+                    Color expected = palette is { } light ? PaletteColor(light, "Surface.Base")
+                        : Assert.IsType<SolidColorBrush>(resources["Surface.Base"]).Color;
+                    Assert.True(expected == Assert.IsType<SolidColorBrush>(bar.Background).Color, $"{step}: bar {bar.Orientation} {bar.Background}, expected {expected}");
+                }
+            }
         }
         finally
         {

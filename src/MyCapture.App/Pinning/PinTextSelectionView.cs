@@ -25,8 +25,19 @@ internal sealed class PinTextSelectionView : Grid
     private readonly int[] _characterEnds = [];
     private readonly PinTableSelection? _table;
     private readonly PinTableCellLayout? _tableLayout;
-    private (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical)? _tableSnapKey;
+    private (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical, double Zoom)? _tableSnapKey;
     private readonly TextBlock? _tableLimit;
+    private readonly Color _background;
+    private (AppTheme Palette, Style Basis)? _scrollBarPalette;
+    // Every theme application replaces the palette brushes, Surface.Base among them, and a Windows
+    // contrast theme turning on or off re-applies the palette; the view then decides again whether
+    // its scroll bars need the light palette.
+    private static readonly DependencyProperty PaletteProperty = DependencyProperty.Register(
+        "Palette", typeof(object), typeof(PinTextSelectionView),
+        new PropertyMetadata(null, static (owner, _) => ((PinTextSelectionView)owner).ConfigureScrollBars()));
+    private static readonly DependencyProperty FocusRingWidthProperty = DependencyProperty.Register(
+        "FocusRingWidth", typeof(object), typeof(PinTextSelectionView),
+        new PropertyMetadata(null, static (owner, e) => ((PinTextSelectionView)owner).OnFocusRingWidthChanged(e.NewValue)));
     private readonly DispatcherTimer? _dragScrollTimer;
     private int _anchorRow;
     private int _anchorColumn;
@@ -43,12 +54,15 @@ internal sealed class PinTextSelectionView : Grid
         _original = content.OriginalText ?? throw new ArgumentException("The pin has no original text.", nameof(content));
         _isCode = content.TextStyle == PinTextStyle.Code;
         Color background = SampleBackground(content.Image);
+        _background = background;
         var backgroundBrush = new SolidColorBrush(background);
         backgroundBrush.Freeze();
         Brush foreground = Luminance(background) > 0.179 ? Brushes.Black : Brushes.White;
         Background = backgroundBrush;
-        ConfigureScrollBars(background);
-        Loaded += (_, _) => ConfigureScrollBars(background);
+        ConfigureScrollBars();
+        // Loaded also covers a parent whose implicit scroll bar style differs from the application's.
+        Loaded += (_, _) => ConfigureScrollBars();
+        SetResourceReference(PaletteProperty, "Surface.Base");
         ClipToBounds = true;
         AutomationProperties.SetName(this, UiText.Get("Pin_SelectText"));
         CommandManager.AddPreviewCanExecuteHandler(this, OnPreviewCanExecute);
@@ -122,8 +136,10 @@ internal sealed class PinTextSelectionView : Grid
             };
             _dragScrollTimer.Tick += (_, _) => ExtendSelectionTo(_dragPoint);
             Unloaded += (_, _) => StopDragSelection();
-            // The cells' one-device-pixel lines need a redraw after a pass that moved them off
-            // their pixel phase: the first open, scrolling and newly realised rows or columns.
+            SetResourceReference(FocusRingWidthProperty, "Focus.RingWidth");
+            // The view places the cells, whose one-device-pixel lines depend on their pixel phase,
+            // after a pass that moved them or drew unplaced ones: the first open, scrolling, zoom
+            // and newly realised or recycled rows and columns.
             LayoutUpdated += OnTableLayoutUpdated;
             Loaded += (_, _) =>
             {
@@ -166,11 +182,10 @@ internal sealed class PinTextSelectionView : Grid
                 Padding = new Thickness(0),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                SelectionBrush = SystemColors.HighlightBrush,
-                SelectionTextBrush = SystemColors.HighlightTextBrush,
                 SelectionOpacity = 1,
                 IsUndoEnabled = false,
             };
+            FollowSystemSelectionColors(MarkdownBox);
             AutomationProperties.SetName(MarkdownBox, UiText.Get("Pin_SelectText"));
             BindPinContextMenu(MarkdownBox);
             Children.Add(MarkdownBox);
@@ -194,11 +209,10 @@ internal sealed class PinTextSelectionView : Grid
                     : _original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                SelectionBrush = SystemColors.HighlightBrush,
-                SelectionTextBrush = SystemColors.HighlightTextBrush,
                 SelectionOpacity = 1,
                 IsUndoEnabled = false,
             };
+            FollowSystemSelectionColors(TextBox);
             // The picture's lines are exactly LineHeight tall, with the baseline placed in
             // proportion; a TextBox otherwise stacks a line from the font's own ascent and its
             // text sat 2 DIP (4 DIP at zoom 2) above the picture's glyphs.
@@ -278,30 +292,54 @@ internal sealed class PinTextSelectionView : Grid
         }
     }
 
+    // LayoutUpdated follows every layout pass on the dispatcher, so the check costs no allocation:
+    // the grid's position is summed from visual offsets and the cells are walked only after the
+    // grid moved, scrolled or zoomed, or a cell rendered without a position.
     private void OnTableLayoutUpdated(object? sender, EventArgs e)
     {
         if (TableGrid is null || _tableLayout is null) return;
         var scroll = TableGrid.Template?.FindName("DG_ScrollViewer", TableGrid) as ScrollViewer;
         Point origin = PinTableCell.RootOrigin(TableGrid, out DpiScale dpi);
-        (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical) key =
-            (origin, dpi.DpiScaleX, dpi.DpiScaleY, scroll?.HorizontalOffset ?? 0, scroll?.VerticalOffset ?? 0);
-        // Without the template's scroll viewer a scroll cannot be told apart, so check every cell.
-        bool moved = scroll is null || key != _tableSnapKey;
+        (Point Origin, double DpiX, double DpiY, double Horizontal, double Vertical, double Zoom) key =
+            (origin, dpi.DpiScaleX, dpi.DpiScaleY, scroll?.HorizontalOffset ?? 0, scroll?.VerticalOffset ?? 0, _zoom);
+        // Without the template's scroll viewer a scroll cannot be told apart, so place every cell.
+        if (scroll is not null && key == _tableSnapKey && !_tableLayout.Pending) return;
         _tableSnapKey = key;
-        _tableLayout.Resnap(TableGrid, moved);
+        _tableLayout.Place(TableGrid, origin);
     }
 
-    private void ConfigureScrollBars(Color background)
+    private void OnFocusRingWidthChanged(object? value)
+    {
+        if (_tableLayout is null) return;
+        _tableLayout.FocusWidth = value is double width && double.IsFinite(width) && width > 0 ? width : 2;
+        if (TableGrid?.IsKeyboardFocusWithin == true && Keyboard.FocusedElement is DataGridCell { Content: PinTableCell cell })
+            cell.InvalidateVisual();
+    }
+
+    // A light pin in a dark app theme keeps light scroll bars: the shared style's palette brushes
+    // are replaced, inside the bars' style only, by the matching light theme's. Changing the app
+    // theme or a Windows contrast theme decides again and adds or removes the replacement.
+    private void ConfigureScrollBars()
     {
         AppTheme theme = ThemeService.EffectiveTheme;
-        if (ThemeService.IsSystemHighContrast || theme == AppTheme.HighContrast ||
-            AppThemeNames.IsLight(theme) || Luminance(background) <= 0.179) return;
-        // Resolve outside our own resources on subsequent Loaded calls as well.
-        Style? basis = (Parent as FrameworkElement)?.TryFindResource(typeof(ScrollBar)) as Style
-            ?? Application.Current?.TryFindResource(typeof(ScrollBar)) as Style;
-        if (basis is null) return;
+        bool light = !ThemeService.IsSystemHighContrast && theme != AppTheme.HighContrast
+            && !AppThemeNames.IsLight(theme) && Luminance(_background) > 0.179;
+        // Resolve outside our own resources, which hold the replacement.
+        Style? basis = light
+            ? (Parent as FrameworkElement)?.TryFindResource(typeof(ScrollBar)) as Style
+                ?? Application.Current?.TryFindResource(typeof(ScrollBar)) as Style
+            : null;
+        if (basis is null)
+        {
+            if (_scrollBarPalette is null) return;
+            _scrollBarPalette = null;
+            Resources.Remove(typeof(ScrollBar));
+            return;
+        }
+        AppTheme palette = AppThemeNames.UsesBackdrop(theme) ? AppTheme.GlassLight : AppTheme.Daylight;
+        if (_scrollBarPalette is { } current && current.Palette == palette && ReferenceEquals(current.Basis, basis)) return;
         var style = new Style(typeof(ScrollBar), basis);
-        var colors = ThemeCatalog.ColorsFor(AppThemeNames.UsesBackdrop(theme) ? AppTheme.GlassLight : AppTheme.Daylight);
+        var colors = ThemeCatalog.ColorsFor(palette);
         foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary" })
         {
             ThemeColor color = colors[key];
@@ -309,7 +347,15 @@ internal sealed class PinTextSelectionView : Grid
             brush.Freeze();
             style.Resources[key] = brush;
         }
+        _scrollBarPalette = (palette, basis);
         Resources[typeof(ScrollBar)] = style;
+    }
+
+    // Resource references follow Windows colour and contrast theme changes while the view is open.
+    private static void FollowSystemSelectionColors(TextBoxBase box)
+    {
+        box.SetResourceReference(TextBoxBase.SelectionBrushProperty, SystemColors.HighlightBrushKey);
+        box.SetResourceReference(TextBoxBase.SelectionTextBrushProperty, SystemColors.HighlightTextBrushKey);
     }
 
     internal bool TryScroll(int delta)
