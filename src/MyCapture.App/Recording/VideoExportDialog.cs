@@ -57,7 +57,11 @@ internal sealed class VideoExportDialog : Window
     private readonly TextBlock _frameRateCap = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     private readonly ComboBox _speed = OptionList();
     private readonly ComboBox _shareTarget = OptionList(compactSelection: true);
-    private readonly TextBlock _estimate = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
+    private readonly TextBlock _estimate = new() { TextWrapping = TextWrapping.Wrap };
+    // Hidden twins in the summary's cell: its pending line and the widest measured line the
+    // current settings can bring (see ReserveGuidance), so the summary keeps its height as a
+    // sample arrives or its estimate segments refine it.
+    private readonly TextBlock[] _estimateReserves = [Reserve(), Reserve()];
     private readonly Image _preview = new() { Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
     // The MP4 frame's card, shaped like the GIF sample's (GifPreviewPanel).
     private readonly Border _previewCard = new() { Margin = new Thickness(0, 12, 0, 4), Padding = new Thickness(12) };
@@ -68,8 +72,12 @@ internal sealed class VideoExportDialog : Window
     private readonly Slider _samplePosition = new() { Minimum = 0, Maximum = 100, Value = GifPreviewSampling.CentrePosition * 100, SmallChange = 5, LargeChange = 10, TickFrequency = 5, IsSnapToTickEnabled = true };
     private readonly Grid _adviceRow = new() { Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
     private readonly TextBlock _advice = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    // Hidden twins of every headline the current settings can lead to, in the advice's cell.
+    private readonly TextBlock[] _adviceReserves = [.. Enumerable.Range(0, 3 + GifSharePolicy.Presets.Count).Select(_ => Reserve())];
+    // The two actions share their cell; the hidden one keeps the column as wide as the wider, so
+    // the advice wraps at one width whichever action it offers.
     private readonly Button _applyAdvice;
-    private readonly TextBlock _applyAdviceText;
+    private readonly Button _switchToMp4;
     private readonly StackPanel _mp4 = new();
     private readonly StackPanel _gif = new();
     private readonly StackPanel _settings = new();
@@ -114,8 +122,9 @@ internal sealed class VideoExportDialog : Window
         MinHeight = 400;
         // The window takes its form's height, up to the work area less a margin; a taller form
         // scrolls. A fixed 610 or 860 left an empty band above the status line. Rows that arrive
-        // later (the MP4 frame, the GIF advice) hold their place from the start, so the window does
-        // not grow under the pointer once it is open; switching the format or exporting refits it.
+        // later (the MP4 frame, the GIF sample, its advice and measured summary) hold their place
+        // from the start, so the window does not grow under the pointer once it is open; changing
+        // a setting, switching the format or exporting refits it.
         MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - WorkAreaMargin);
         SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -196,24 +205,29 @@ internal sealed class VideoExportDialog : Window
         AutomationProperties.SetName(_samplePosition, UiText.Get("GifPreview_SamplePosition"));
         _samplePositionRow.Visibility = SpanMs > GifPreviewSampling.MaximumSourceMs ? Visibility.Visible : Visibility.Collapsed;
         _gif.Children.Add(_samplePositionRow);
-        _samplePanel = new GifPreviewPanel(RenderOriginalAsync);
+        _samplePanel = new GifPreviewPanel(RenderOriginalAsync, _document.SourceDurationMs);
         _gif.Children.Add(_samplePanel);
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _advice.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetLiveSetting(_advice, AutomationLiveSetting.Polite);
         _adviceRow.Children.Add(_advice);
-        _applyAdvice = MediaExportVisuals.Button(this, UiText.Get("GifPreview_ApplyAdvice"));
-        _applyAdviceText = ((StackPanel)_applyAdvice.Content).Children.OfType<TextBlock>().Single();
-        _applyAdvice.Margin = new Thickness(12, 0, 0, 0);
-        Grid.SetColumn(_applyAdvice, 1);
-        _adviceRow.Children.Add(_applyAdvice);
+        foreach (TextBlock reserve in _adviceReserves)
+        {
+            reserve.VerticalAlignment = VerticalAlignment.Center;
+            _adviceRow.Children.Add(reserve);
+        }
+        _applyAdvice = AdviceAction("GifPreview_ApplyAdvice");
+        _switchToMp4 = AdviceAction("GifPreview_SwitchToMp4");
         _gif.Children.Add(_adviceRow);
         _settings.Children.Add(_gif);
 
         _estimate.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetLiveSetting(_estimate, AutomationLiveSetting.Polite);
-        _settings.Children.Add(_estimate);
+        var estimateCell = new Grid { Margin = new Thickness(0, 14, 0, 0) };
+        estimateCell.Children.Add(_estimate);
+        foreach (TextBlock reserve in _estimateReserves) estimateCell.Children.Add(reserve);
+        _settings.Children.Add(estimateCell);
         AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
         _settings.Children.Add(BuildSourcePreviewCard());
 
@@ -263,6 +277,7 @@ internal sealed class VideoExportDialog : Window
         };
         UpdateSamplePositionLabel();
         _applyAdvice.Click += (_, _) => ApplyRecommendation();
+        _switchToMp4.Click += (_, _) => ApplyRecommendation();
         _export.Click += async (_, _) => await ExportAsync();
         _progressRow.CancelButton.Click += (_, _) => CancelExport();
         _openFolder.Click += (_, _) => OpenFolder();
@@ -297,6 +312,37 @@ internal sealed class VideoExportDialog : Window
         SourceInitialized += (_, _) => FitMaximumToMonitor();
         SizeChanged += (_, e) => { if (e.HeightChanged) KeepInsideWorkArea(); };
         Changed();
+
+        Button AdviceAction(string key)
+        {
+            Button action = MediaExportVisuals.Button(this, UiText.Get(key));
+            action.Margin = new Thickness(12, 0, 0, 0);
+            action.HorizontalAlignment = HorizontalAlignment.Right;
+            action.Visibility = Visibility.Hidden;
+            Grid.SetColumn(action, 1);
+            _adviceRow.Children.Add(action);
+            return action;
+        }
+    }
+
+    private static TextBlock Reserve() => new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Hidden };
+
+    /// <summary>Stands in for the monitor lookups, so a test can move the dialog between work areas.</summary>
+    internal Func<MonitorInfo>? MonitorForTest { get; set; }
+
+    // The monitor whose work area the height cap was last fitted to.
+    private MonitorInfo? _fittedMonitor;
+
+    protected override void OnLocationChanged(EventArgs e)
+    {
+        base.OnLocationChanged(e);
+        RefitToOwnMonitor(always: false);
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        RefitToOwnMonitor(always: true);
     }
 
     /// <summary>
@@ -308,9 +354,31 @@ internal sealed class VideoExportDialog : Window
         IntPtr handle = Owner is { } owner ? new WindowInteropHelper(owner).Handle : IntPtr.Zero;
         if (handle == IntPtr.Zero) handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
-        MonitorInfo monitor = MonitorEnumerator.GetFromWindow(handle);
+        FitMaximumTo(MonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromWindow(handle));
+    }
+
+    private void FitMaximumTo(MonitorInfo monitor)
+    {
         double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
         MaxHeight = Math.Max(MinHeight, monitor.WorkArea.Height / scale - WorkAreaMargin);
+        _fittedMonitor = monitor;
+    }
+
+    /// <summary>
+    /// Moved onto another monitor, or given a new DPI, the dialog refits its height cap to its own
+    /// monitor's work area, so a cap taken from a taller monitor cannot leave it past this one's
+    /// bottom, and then keeps inside that work area as it does when it grows.
+    /// </summary>
+    private void RefitToOwnMonitor(bool always)
+    {
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+        MonitorInfo monitor = MonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromWindow(handle);
+        if (!always && monitor == _fittedMonitor) return;
+        FitMaximumTo(monitor);
+        // The window shrinks to a lower cap at the next layout pass; place it for that height now.
+        // A higher cap lets it grow later, and SizeChanged then keeps it inside.
+        KeepInsideWorkArea(monitor, Math.Min(ActualHeight, MaxHeight));
     }
 
     /// <summary>
@@ -322,9 +390,14 @@ internal sealed class VideoExportDialog : Window
         if (WindowState != WindowState.Normal) return;
         IntPtr handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero) return;
-        MonitorInfo monitor = MonitorEnumerator.GetFromWindow(handle);
+        KeepInsideWorkArea(MonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromWindow(handle), ActualHeight);
+    }
+
+    private void KeepInsideWorkArea(MonitorInfo monitor, double height)
+    {
+        if (WindowState != WindowState.Normal) return;
         double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
-        double top = TopWithinWorkArea(Top, ActualHeight, monitor.WorkArea.Top / scale, monitor.WorkArea.Bottom / scale);
+        double top = TopWithinWorkArea(Top, height, monitor.WorkArea.Top / scale, monitor.WorkArea.Bottom / scale);
         if (Math.Abs(top - Top) > 0.5) Top = top;
     }
 
@@ -629,10 +702,16 @@ internal sealed class VideoExportDialog : Window
 
     private void UpdateSamplePositionLabel()
     {
-        (int width, int height) = AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, SelectedQuality.LongEdge);
-        GifSampleWindow window = GifPreviewSampling.Plan(_document, SelectedSpeed, _samplePosition.Value / 100, EffectiveFrameRate, width, height);
+        GifSampleWindow window = PlannedSample();
         _samplePositionLabel.Text = UiText.Format("GifPreview_SamplePositionValue", window.StartMs / 1000);
         _samplePositionRow.Visibility = window.CoversWholeRange ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>The sample the current settings render, as <see cref="RenderSampleAsync"/> plans it.</summary>
+    private GifSampleWindow PlannedSample()
+    {
+        (int width, int height) = AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, SelectedQuality.LongEdge);
+        return GifPreviewSampling.Plan(_document, SelectedSpeed, _samplePosition.Value / 100, EffectiveFrameRate, width, height);
     }
 
     internal void StartSample()
@@ -808,6 +887,7 @@ internal sealed class VideoExportDialog : Window
             DisplayedFrameCount = 0;
             long bytes = EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, span, TargetReductionPercent);
             KoreanWordWrap.Show(_estimate, UiText.Format("MediaExport_Mp4Summary", FormatSize(bytes), FormatClock(span), _recording.Width, _recording.Height));
+            foreach (TextBlock reserve in _estimateReserves) KoreanWordWrap.Show(reserve, string.Empty);
             _adviceRow.Visibility = Visibility.Collapsed;
             MarkRecommended(null);
             return;
@@ -834,7 +914,9 @@ internal sealed class VideoExportDialog : Window
             _estimate.ToolTip = null;
         }
         double effective = EffectiveFrameRate;
-        KoreanWordWrap.Show(_estimate, KoreanWordWrap.Strip(_estimate.Text) + (UiText.Format("GifExport_FrameRateSummary", effective * speed)));
+        string frameRate = UiText.Format("GifExport_FrameRateSummary", effective * speed);
+        KoreanWordWrap.Show(_estimate, KoreanWordWrap.Strip(_estimate.Text) + frameRate);
+        ReserveGuidance(quality, speed, layers, scheduled, playbackSeconds, frameRate);
         double sourceRate = _recording.Fps > 0 ? _recording.Fps : 10;
         KoreanWordWrap.Show(_frameRateCap, effective >= quality.FramesPerSecond ? string.Empty
             : sourceRate <= 50 / speed
@@ -843,9 +925,10 @@ internal sealed class VideoExportDialog : Window
         _frameRateCap.Visibility = KoreanWordWrap.Strip(_frameRateCap.Text).Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // The advice row keeps its place while the sample is measured, so the line arriving does
-        // not push the footer down under the pointer.
+        // not push the footer down under the pointer; its twins alone hold the height meanwhile.
         if (_measurements.Count == 0)
         {
+            KoreanWordWrap.Show(_advice, string.Empty);
             _adviceRow.Visibility = Visibility.Hidden;
             MarkRecommended(null);
             return;
@@ -905,13 +988,59 @@ internal sealed class VideoExportDialog : Window
         _advice.ToolTip = string.Join(Environment.NewLine, detail);
         AutomationProperties.SetHelpText(_advice, (string)_advice.ToolTip);
         _adviceRow.Visibility = Visibility.Visible;
-        string action = UiText.Get(recommendation.Kind == GifRecommendationKind.UseMp4 ? "GifPreview_SwitchToMp4" : "GifPreview_ApplyAdvice");
-        _applyAdviceText.Text = action;
-        AutomationProperties.SetName(_applyAdvice, action);
-        _applyAdvice.ToolTip = action;
-        // Hidden, not collapsed: the row keeps the button's height whichever advice it shows.
-        _applyAdvice.Visibility = recommendation.Kind == GifRecommendationKind.CurrentFits ? Visibility.Hidden : Visibility.Visible;
+        // Hidden, not collapsed: the row keeps the buttons' height and width whichever advice it shows.
+        _applyAdvice.Visibility = recommendation.Kind == GifRecommendationKind.SwitchPreset ? Visibility.Visible : Visibility.Hidden;
+        _switchToMp4.Visibility = recommendation.Kind == GifRecommendationKind.UseMp4 ? Visibility.Visible : Visibility.Hidden;
         MarkRecommended(recommendation.Kind == GifRecommendationKind.UseMp4 ? null : recommendation.Quality);
+    }
+
+    /// <summary>
+    /// Holds the summary's and the advice's places for whatever a sample can bring under the
+    /// current settings, so neither wraps anew when the sample or its estimate segments arrive.
+    /// The summary takes the height of its pending line and of its measured one, exact when the
+    /// sample is the whole range, which the settings decide; the advice takes that of its tallest
+    /// headline. Sizes are written in 4s, the widest digit of Pretendard, with the digits of the
+    /// most bytes the frames can take; the frame count with those of the scheduled count, which
+    /// merged frames only lower.
+    /// </summary>
+    private void ReserveGuidance(GifExportQuality quality, double speed, List<(double StartMs, double EndMs)> layers,
+        int scheduled, double playbackSeconds, string frameRate)
+    {
+        double span = SpanMs;
+        (int width, int height) = AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, quality.LongEdge);
+        string size = WidestSize(MostGifBytes(scheduled, width, height));
+        long frames = WidestCount(scheduled);
+        KoreanWordWrap.Show(_estimateReserves[0], UiText.Format("MediaExport_GifSummaryPending", scheduled, playbackSeconds) + frameRate);
+        KoreanWordWrap.Show(_estimateReserves[1], (PlannedSample().CoversWholeRange
+            ? UiText.Format("GifPreview_Exact", size, frames, playbackSeconds)
+            : UiText.Format("GifExport_SizeEstimate", size, frames, playbackSeconds, UiText.Format("GifPreview_SizeRange", size, size))) + frameRate);
+
+        // Another preset's range is scaled from a measured one, so its bound takes the largest
+        // size and the fastest rate among the presets and what has been measured. A switch is
+        // only advised to a preset whose upper estimate fits the destination's limit (see
+        // GifSharePolicy.Recommend), so with a limit the range is at most that.
+        GifShareTarget target = SelectedShareTarget;
+        double rate = _measurements.Keys.Append(quality).Append(GifExportQuality.Standard)
+            .Max(preset => GifExportQuality.EffectiveFrameRate(preset.FramesPerSecond, _recording.Fps, speed));
+        (int largestWidth, int largestHeight) = AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, AnimatedGifExporter.MaximumLongEdge);
+        double most = MostGifBytes(GifPreviewSampling.EstimateFrameCount(span, rate, layers, speed), largestWidth, largestHeight);
+        string largest = WidestSize(target.Bytes is long cap ? Math.Min(cap, most) : most);
+        string range = UiText.Format("GifPreview_SizeRange", largest, largest);
+        string limit = target.Bytes is long bytes ? FormatSize(bytes) : string.Empty;
+        string faster = GifSharePolicy.SuggestSpeed(span, speed) is double suggested
+            ? " · " + UiText.Format("MediaExport_AdviceSpeedShort", suggested)
+            : string.Empty;
+        // The headlines UpdateGuidance writes, in the same order as its cases. A switch never
+        // names the current preset: that one is advised as it is.
+        string[] headlines =
+        [
+            UiText.Get("MediaExport_AdviceMp4FramesShort"),
+            target.Bytes is null ? string.Empty : UiText.Format("MediaExport_AdviceMp4Short", limit),
+            (target.Bytes is null ? UiText.Get("MediaExport_AdviceCurrentNoLimitShort") : UiText.Format("MediaExport_AdviceCurrentShort", limit)) + faster,
+            .. GifSharePolicy.Presets.Select(preset => preset == quality ? string.Empty
+                : UiText.Format("MediaExport_AdviceSwitchShort", QualityText(preset), range) + faster),
+        ];
+        for (int index = 0; index < _adviceReserves.Length; index++) KoreanWordWrap.Show(_adviceReserves[index], headlines[index]);
     }
 
     private void MarkRecommended(GifExportQuality? quality)
@@ -950,6 +1079,28 @@ internal sealed class VideoExportDialog : Window
     internal static string FormatSize(long bytes) => bytes >= 1_000_000
         ? UiText.Format("MediaExport_SizeMb", bytes / 1_000_000d)
         : UiText.Format("MediaExport_SizeKb", Math.Max(1, bytes / 1_000d));
+
+    /// <summary>
+    /// The most bytes a GIF of <paramref name="frames"/> full images of this size can take. LZW
+    /// codes are at most 12 bits, so an image takes at most about 1.5 bytes a pixel and its color
+    /// table; four bytes a pixel stay above that with the estimate's margins and its scaling from
+    /// another preset.
+    /// </summary>
+    internal static double MostGifBytes(int frames, int width, int height) => 4d * frames * width * height;
+
+    /// <summary>
+    /// The widest size <see cref="FormatSize"/> writes for at most <paramref name="bytes"/>: MB
+    /// with as many digits as that, two at least, which is wider than any KB, every digit a 4.
+    /// </summary>
+    internal static string WidestSize(double bytes)
+    {
+        int digits = Math.Max(2, Math.Floor(Math.Max(0, bytes) / 1_000_000).ToString("0", CultureInfo.InvariantCulture).Length);
+        return UiText.Format("MediaExport_SizeMb", double.Parse(new string('4', digits) + ".4", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>A count with as many digits as <paramref name="count"/>, every one a 4.</summary>
+    internal static long WidestCount(int count) =>
+        long.Parse(new string('4', Math.Max(1, count).ToString(CultureInfo.InvariantCulture).Length), CultureInfo.InvariantCulture);
 
     /// <summary>The kept range's length in the editor's time format, as the summary line shows it.</summary>
     internal static string FormatClock(double milliseconds) => VideoTimecode.Format(milliseconds);
