@@ -185,10 +185,11 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline), in the
-    // shipped UI font (the bundled Pretendard) and its Ideal text formatting.
-    [InlineData("ko-KR", new[] { 855, 814, 767, 702, 682, 605 })]
-    [InlineData("en-US", new[] { 867, 831, 795, 733, 706, 625 })]
+    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline) and both output
+    // commands (save to file, pin) as bordered secondary buttons, in the shipped UI font (the bundled
+    // Pretendard) and its Ideal text formatting. The pin's outline adds 2 DIP while its name shows.
+    [InlineData("ko-KR", new[] { 857, 816, 769, 704, 682, 605 })]
+    [InlineData("en-US", new[] { 869, 833, 797, 735, 706, 625 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var dpiContext = TestDpiContext.At96Dpi();

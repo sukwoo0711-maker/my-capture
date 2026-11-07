@@ -627,6 +627,37 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         Assert.Contains(saved.Id, evicted);
     });
 
+    [Fact]
+    public void APracticeCaptureIsSavedAndCopiedButNotCountedTowardTheStoreRating() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell(mode: AfterCaptureAction.ClipboardOnly);
+        shell.Wait(shell.Select(shell.PracticeSelection()));
+        shell.RunIdleTurns();
+        Assert.IsType<CaptureRecord>(shell.CurrentRecord);
+        Assert.Equal(1, shell.CopyCalls);
+        Assert.Equal(0, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        Assert.False(shell.Settings.StoreRating.LastCaptureFailed);
+
+        // A capture outside the practice window counts as before.
+        shell.ReleaseEditSession();
+        shell.Wait(shell.Select());
+        shell.RunIdleTurns();
+        Assert.Equal(2, shell.CopyCalls);
+        Assert.Equal(1, shell.Settings.StoreRating.SuccessfulCaptureCount);
+    });
+
+    [Fact]
+    public void APracticeCaptureThatFailsStillHoldsBackTheStoreRating() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell(mode: AfterCaptureAction.ClipboardOnly);
+        shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("synthetic library save failure");
+        shell.Wait(shell.Select(shell.PracticeSelection()));
+        shell.RunIdleTurns();
+        Assert.Null(shell.CurrentRecord);
+        Assert.Equal(0, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+    });
+
     [Theory]
     [InlineData(AfterCaptureAction.Editor)]
     [InlineData(AfterCaptureAction.ClipboardOnly)]
@@ -798,7 +829,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 
     private sealed class NoRequester : IStoreRatingRequester
     {
-        public Task<string> RequestRateAndReviewAsync() => Task.FromResult("not requested in tests");
+        public Task<string> RequestRateAndReviewAsync(Window? owner) => Task.FromResult("not requested in tests");
     }
 
     /// <summary>
@@ -807,7 +838,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     /// lies on a test display at -32000; nothing is activated, no hotkey is registered, and the automatic copy
     /// never touches the clipboard.
     /// </summary>
-    private sealed class Shell : IDisposable
+    internal sealed class Shell : IDisposable
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
         private readonly App _app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
@@ -821,9 +852,11 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         private readonly Func<IReadOnlyList<MonitorInfo>> _previousMonitors = CaptureFlight.ReadMonitors;
         private readonly Func<Window, bool> _previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
         private CaptureOverlayCoordinator? _coordinator;
+        private readonly Action<string>? _previousTimeline = MyCapture.App.Diagnostics.ReceiptTimeline.Mark;
 
         internal Shell(QueueSettings? queue = null, AfterCaptureAction mode = AfterCaptureAction.QuickAccess, bool motion = false,
-            TimeSpan? copyWait = null)
+            TimeSpan? copyWait = null, Action<Action>? ratingDeferWrite = null, TimeProvider? ratingClock = null,
+            Action<AppSettings>? ratingSave = null, Microsoft.Extensions.Logging.ILogger? ratingLog = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             typeof(System.Windows.Threading.DispatcherObject).GetField("_dispatcher", Flags)!.SetValue(_app, Dispatcher.CurrentDispatcher);
@@ -843,8 +876,17 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             Persistence = new CapturePersistenceService(Queue, Paths, () => Settings.Queue, NullLogger<CapturePersistenceService>.Instance);
             var commit = new CaptureCommitService(Persistence, () => Settings, () => Paths, NullLogger<CaptureCommitService>.Instance,
                 (_, _) => { CopyCalls++; return CopyResult ?? Task.FromResult(true); });
-            var storeRating = new StoreRatingCoordinator(() => Settings, _ => { }, write => write(), () => true, new NoRequester(),
-                NullLogger.Instance, isPackaged: true);
+            StoreRating = new StoreRatingCoordinator(() => Settings, settings =>
+                {
+                    ratingSave?.Invoke(settings);
+                    SavedRatings.Add(settings.StoreRating.RequestAttemptedUtc);
+                    SavedRatingShowings.Add((settings.StoreRating.InvitationShownCount, settings.StoreRating.InvitationShownUtc));
+                },
+                ratingDeferWrite ?? (write => write()), () => true, new CountingRequester(RatingOwners), ratingLog ?? NullLogger.Instance,
+                isPackaged: true, clock: ratingClock,
+                isUserActive: () => true, showInvitation: () => { WindowInvitations++; return true; },
+                isInvitationVisible: Predicate("IsStoreInvitationVisible"), isCardBusy: Predicate("IsStoreRatingDeferredOnCard"));
+            Set("_engagementNotices", EngagementNotices);
             Set("_queue", Queue);
             Set("_settings", Settings);
             Set("_persistence", Persistence);
@@ -852,7 +894,14 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             Set("_capturePaths", Paths);
             Set("_services", _services);
             Set("_receiptKeyboard", _router);
-            Set("_storeRating", storeRating);
+            Set("_storeRating", StoreRating);
+            MyCapture.App.Diagnostics.ReceiptTimeline.Mark = stage =>
+            {
+                _previousTimeline?.Invoke(stage);
+                if (stage == "card-show" && Card is { } card)
+                    card.IsVisibleChanged += (_, _) => { if (card.IsVisible) CardFirstVisible?.Invoke(card); };
+                if (stage == "card-shown" && Card is { } shown) CardFirstShown?.Invoke(shown);
+            };
             _app.CaptureNoticeForTest = (title, message) => Notices.Add((title, message));
 
             // A desktop-sized frame on the test display; the selection lies well inside it.
@@ -874,6 +923,28 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal CaptureSelectionCompletedEventArgs Selection { get; }
         internal Task<bool>? CopyResult { get; set; }
         internal int CopyCalls { get; private set; }
+        internal StoreRatingCoordinator StoreRating { get; }
+        internal List<Window?> RatingOwners { get; } = [];
+        internal List<DateTimeOffset?> SavedRatings { get; } = [];
+        internal List<(int Count, DateTimeOffset? ShownUtc)> SavedRatingShowings { get; } = [];
+        internal Dictionary<Window, IEngagementNotice> EngagementNotices { get; } = [];
+        internal int WindowInvitations { get; private set; }
+        internal Action<QuickAccessWindow>? CardFirstVisible { get; set; }
+        internal Action<QuickAccessWindow>? CardFirstShown { get; set; }
+        internal bool IsRatingInvitationVisible => Predicate("IsStoreInvitationVisible")();
+        internal void SetBusy(string field, bool busy) => Set(field, busy);
+
+        private Func<bool> Predicate(string method) =>
+            (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), _app, typeof(App).GetMethod(method, Flags)!);
+
+        private sealed class CountingRequester(List<Window?> owners) : IStoreRatingRequester
+        {
+            public Task<string> RequestRateAndReviewAsync(Window? owner)
+            {
+                owners.Add(owner);
+                return Task.FromResult("test review completed");
+            }
+        }
         internal List<(string Title, string Message)> Notices { get; } = [];
         internal QuickAccessWindow? Card => (QuickAccessWindow?)Get("_quickAccess");
         internal object? CardFirstState => Get("_quickAccessFirst");
@@ -893,8 +964,28 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
                 ? new CaptureSelectionCompletedEventArgs(Frame, Region, Selection.SelectedBitmap, Selection.SourceTitle, recordForRepeat: false) { TextCapture = true }
                 : Selection])!;
 
+        internal Task Select(CaptureSelectionCompletedEventArgs selection) =>
+            (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
+
+        internal Task SelectSeparate() => SelectSeparate(Selection);
+
+        /// <summary>The editor-preserving path: a capture taken while another editor stays open.</summary>
+        internal Task SelectSeparate(CaptureSelectionCompletedEventArgs selection) =>
+            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [selection])!;
+
+        /// <summary>The same capture, taken for a step of the practice window.</summary>
+        internal CaptureSelectionCompletedEventArgs PracticeSelection() =>
+            new(Frame, Region, Selection.SelectedBitmap, Selection.SourceTitle, recordForRepeat: false)
+            {
+                PracticeTarget = new PracticeCaptureTarget(Guid.NewGuid(), Guid.NewGuid()),
+            };
+
         /// <summary>The App's DismissQuickAccessForCapture, as each capture command runs it first.</summary>
         internal void Dismiss() => typeof(App).GetMethod("DismissQuickAccessForCapture", Flags)!.Invoke(_app, null);
+
+        /// <summary>What exit runs before it waits for pending settings saves (OnExit and the exit preparation).</summary>
+        internal void QueueSettingsSavesForExit() =>
+            typeof(App).GetMethod("QueuePendingSettingsSavesForExit", Flags)!.Invoke(_app, null);
 
         /// <summary>The region capture command (the hotkey's handler).</summary>
         internal void RequestRegionCapture() => typeof(App).GetMethod("HandleCaptureRequested", Flags)!.Invoke(_app, null);
@@ -984,6 +1075,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             CaptureFlight.ReadLayeredSupport = _previousLayered;
             CaptureFlight.ReadMonitors = _previousMonitors;
             CaptureFlightDecoration.ApplyCaptureExclusion = _previousExclusion;
+            MyCapture.App.Diagnostics.ReceiptTimeline.Mark = _previousTimeline;
             SynchronizationContext.SetSynchronizationContext(_previous);
             if (Directory.Exists(_root)) TestRecycleBin.DeleteDirectory(_root, recursive: true);
         }

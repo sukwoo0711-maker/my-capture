@@ -1,8 +1,13 @@
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Serialization;
@@ -598,6 +603,267 @@ public sealed class VideoLibraryServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("com")]
+    [InlineData("timeout")]
+    [InlineData("io")]
+    public async Task TransientLiveValidationFailure_KeepsFinishedRecordingUntilStartupPublishesIt(string fault)
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            Exception injected = fault switch
+            {
+                // MF_E_TOPO_CODEC_NOT_FOUND: the decoder could not be created this time.
+                "com" => new COMException("The video decoder is unavailable.", unchecked((int)0xC00D5212)),
+                "timeout" => new TimeoutException("The video decoder did not answer in time."),
+                // ERROR_SHARING_VIOLATION: an indexer or a virus scan holds the file for a moment.
+                _ => new IOException("The recording is in use.", unchecked((int)0x80070020)),
+            };
+            library.CaptureCompletionProbeForTest = (_, _) => throw injected;
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            Guid id = capture.Record.Id;
+            string pending = Path.Combine(queue.GetDirectory(capture.Record), CaptureFileNames.VideoPending);
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+            byte[] encoded = SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath));
+
+            Exception thrown = await Assert.ThrowsAnyAsync<Exception>(
+                () => library.CompleteCaptureAsync(capture, result));
+            capture.Dispose();
+
+            // The failure keeps its own type instead of reading as a damaged recording, and
+            // disposal leaves the finished MP4 and its discovery sidecar exactly where they were.
+            Assert.Same(injected, thrown);
+            Assert.True(capture.IsRetainedForRecovery);
+            Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath)));
+            Assert.True(File.Exists(pending));
+            Assert.Empty(bin.Moved);
+            Assert.Empty(queue.Records);
+            Assert.True(library.IsBusy(id));
+
+            AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task PublishReadyWriteFailure_KeepsValidatedRecordingUntilStartupPublishesIt()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            Guid id = capture.Record.Id;
+            string directory = queue.GetDirectory(capture.Record);
+            string pending = Path.Combine(directory, CaptureFileNames.VideoPending);
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+            byte[] encoded = SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath));
+
+            Exception thrown;
+            // The real decoder accepts the clip; Windows then refuses to create the publish-ready
+            // sidecar beside it, as a changed folder permission would.
+            using (new DeniedFileCreation(directory))
+            {
+                thrown = await Assert.ThrowsAnyAsync<Exception>(
+                    () => library.CompleteCaptureAsync(capture, result));
+                capture.Dispose();
+            }
+
+            Assert.True(thrown is UnauthorizedAccessException or IOException, thrown.ToString());
+            Assert.True(capture.IsRetainedForRecovery);
+            Assert.False(File.Exists(Path.Combine(directory, PublishReadyMarker)));
+            Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath)));
+            Assert.True(File.Exists(pending));
+            Assert.Empty(bin.Moved);
+            Assert.True(library.IsBusy(id));
+
+            AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task FailureAfterPublishReady_KeepsRecordingUntilStartupPublishesIt()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            Guid id = capture.Record.Id;
+            string directory = queue.GetDirectory(capture.Record);
+            string pending = Path.Combine(directory, CaptureFileNames.VideoPending);
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+            byte[] encoded = SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath));
+
+            // A reader without delete sharing (an indexer or a virus scan) blocks the rename that
+            // publishes source.mp4 after the durable publish-ready sidecar already exists.
+            using (new FileStream(capture.StagingOutputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                _ = await Assert.ThrowsAnyAsync<IOException>(
+                    () => library.CompleteCaptureAsync(capture, result));
+                capture.Dispose();
+            }
+
+            Assert.True(capture.IsRetainedForRecovery);
+            Assert.True(File.Exists(Path.Combine(directory, PublishReadyMarker)));
+            Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoSource)));
+            Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath)));
+            Assert.True(File.Exists(pending));
+            Assert.Empty(bin.Moved);
+            Assert.True(library.IsBusy(id));
+
+            AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("not-mp4")]
+    [InlineData("decoder-rejected")]
+    public async Task ConclusivelyDamagedEncoderOutput_IsStillRemovedLikeStartupRecovery(string damage)
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            string directory = queue.GetDirectory(capture.Record);
+            var result = new RecordingResult(capture.StagingOutputPath, 1000, 10, 10, 160, 90);
+            switch (damage)
+            {
+                case "empty":
+                    File.WriteAllBytes(capture.StagingOutputPath, []);
+                    break;
+                case "not-mp4":
+                    File.WriteAllBytes(
+                        capture.StagingOutputPath,
+                        Enumerable.Repeat((byte)0xA5, 2_048).ToArray());
+                    break;
+                default:
+                    result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+                    // The decoder's own verdict on the media, as for a truncated tail.
+                    library.CaptureCompletionProbeForTest = (_, _) =>
+                        throw new InvalidDataException("The decoded video ends before its container duration.");
+                    break;
+            }
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => library.CompleteCaptureAsync(capture, result));
+            capture.Dispose();
+
+            Assert.False(capture.IsRetainedForRecovery);
+            Assert.Empty(queue.Records);
+            Assert.False(File.Exists(capture.StagingOutputPath));
+            Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoPending)));
+            Assert.False(Directory.Exists(directory));
+            Assert.Contains(capture.StagingOutputPath, bin.Moved);
+            Assert.False(library.IsBusy(capture.Record.Id));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task CancelledRecording_IsStillRemovedAndCannotBeCompletedAfterwards()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            string directory = queue.GetDirectory(capture.Record);
+            // Even a playable file is discarded when the user cancels before completion.
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 3);
+
+            capture.Dispose();
+
+            Assert.False(capture.IsRetainedForRecovery);
+            Assert.False(File.Exists(capture.StagingOutputPath));
+            Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoPending)));
+            Assert.Contains(capture.StagingOutputPath, bin.Moved);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => library.CompleteCaptureAsync(capture, result));
+            Assert.Empty(queue.Records);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task RetainedCompletionFailure_IsExplainedAsKeptForRecoveryOnTheNextStart()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            library.CaptureCompletionProbeForTest = (_, _) =>
+                throw new COMException("The video decoder is unavailable.", unchecked((int)0xC00D5212));
+            VideoCaptureWriteSession retained = library.BeginCapture(expectedFrameRate: 10);
+            RecordingResult result = EncodeClip(retained.StagingOutputPath, 160, 90, 10, 3);
+            Exception thrown = await Assert.ThrowsAnyAsync<Exception>(
+                () => library.CompleteCaptureAsync(retained, result));
+            retained.Dispose();
+
+            foreach (string language in new[] { "ko-KR", "en-US" })
+            {
+                using IDisposable scope = UiText.UseLanguage(language);
+                Exception shown = RegionRecordingCoordinator.DescribeCompletionFailure(retained, thrown);
+
+                Assert.Equal(UiText.Get("Text_C5AC44062ACA").TrimEnd(), ThemedDialog.RecoveryMessage(shown));
+                Assert.Same(thrown, shown.InnerException);
+            }
+
+            // A clip proven unusable is already gone, so the dialog explains the original failure.
+            VideoCaptureWriteSession rejected = library.BeginCapture(expectedFrameRate: 10);
+            File.WriteAllBytes(rejected.StagingOutputPath, []);
+            Exception damaged = await Assert.ThrowsAsync<InvalidDataException>(
+                () => library.CompleteCaptureAsync(
+                    rejected,
+                    new RecordingResult(rejected.StagingOutputPath, 1000, 10, 10, 160, 90)));
+            rejected.Dispose();
+
+            Assert.Same(damaged, RegionRecordingCoordinator.DescribeCompletionFailure(rejected, damaged));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
     [Fact]
     public async Task RollbackWithNoPreviousRender_RetainsJournalWhenNewTargetCannotBeDeleted()
     {
@@ -949,11 +1215,112 @@ public sealed class VideoLibraryServiceTests
         return record;
     }
 
+    private const string PublishReadyMarker = ".video-publish-ready.json";
+
     private static CaptureQueue NewQueue(AppPaths paths)
     {
         var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
         queue.Load();
         return queue;
+    }
+
+    private static VideoLibraryService NewLibrary(CaptureQueue queue, AppPaths paths, FakeRecycleBin bin) =>
+        new(queue, paths, NullLogger<VideoLibraryService>.Instance, recoverableRemovalForTest: bin.Remove);
+
+    /// <summary>A restart with the normal decoder publishes the kept file as the same recording.</summary>
+    private static void AssertRestartPublishes(AppPaths paths, FakeRecycleBin bin, Guid id, byte[] encoded)
+    {
+        CaptureQueue restartQueue = NewQueue(paths);
+        VideoLibraryService restarted = NewLibrary(restartQueue, paths, bin);
+
+        CaptureRecord recovered = Assert.Single(restartQueue.Records);
+        Assert.Equal(id, recovered.Id);
+        Assert.Equal(160, recovered.Width);
+        Assert.Equal(90, recovered.Height);
+        Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(restarted.SourcePath(recovered))));
+        Assert.False(restarted.IsBusy(recovered.Id));
+        string directory = restartQueue.GetDirectory(recovered);
+        Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoWriting)));
+        Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoPending)));
+        Assert.False(File.Exists(Path.Combine(directory, PublishReadyMarker)));
+        // Startup removes only its own sidecars, never the recording itself.
+        Assert.DoesNotContain(bin.Moved, path => path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(id, Assert.Single(NewQueue(paths).Records).Id);
+    }
+
+    /// <summary>
+    /// Stands in for the Recycle Bin: every removal moves into the fixture and is recorded, so a
+    /// test can count the moves and nothing reaches the user's Recycle Bin.
+    /// </summary>
+    private sealed class FakeRecycleBin
+    {
+        private readonly string _folder;
+
+        internal FakeRecycleBin(string root)
+        {
+            _folder = Path.Combine(root, "fake-recycle-bin");
+            Directory.CreateDirectory(_folder);
+        }
+
+        internal List<string> Moved { get; } = [];
+
+        internal void Remove(string path)
+        {
+            string target = Path.Combine(_folder, $"{Moved.Count:D3}-{Path.GetFileName(path)}");
+            if (Directory.Exists(path))
+            {
+                Directory.Move(path, target);
+            }
+            else
+            {
+                File.Move(path, target);
+            }
+
+            Moved.Add(path);
+        }
+    }
+
+    /// <summary>
+    /// Denies the current user creating files in one directory until disposed, the way
+    /// ImageExportDestinationTests denies a remembered save folder.
+    /// </summary>
+    private sealed class DeniedFileCreation : IDisposable
+    {
+        private readonly DirectoryInfo _directory;
+        private readonly string _originalAccess;
+
+        internal DeniedFileCreation(string directory)
+        {
+            _directory = new DirectoryInfo(directory);
+            // Windows may add the auto-inherited DACL flag on its first ACL write. Take the
+            // restoration baseline after that normalization, without changing any rules.
+            var normalized = new DirectorySecurity();
+            normalized.SetSecurityDescriptorSddlForm(
+                _directory.GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.Access),
+                AccessControlSections.Access);
+            _directory.SetAccessControl(normalized);
+            _originalAccess = _directory.GetAccessControl()
+                .GetSecurityDescriptorSddlForm(AccessControlSections.Access);
+            DirectorySecurity denied = _directory.GetAccessControl();
+            using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+            SecurityIdentifier user = identity.User
+                ?? throw new InvalidOperationException("The test identity is unavailable.");
+            denied.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.CreateFiles, AccessControlType.Deny));
+            _directory.SetAccessControl(denied);
+        }
+
+        public void Dispose()
+        {
+            _directory.Refresh();
+            if (!_directory.Exists)
+            {
+                return;
+            }
+
+            var restored = new DirectorySecurity();
+            restored.SetSecurityDescriptorSddlForm(_originalAccess, AccessControlSections.Access);
+            _directory.SetAccessControl(restored);
+        }
     }
 
     private static RecordingResult EncodeClip(

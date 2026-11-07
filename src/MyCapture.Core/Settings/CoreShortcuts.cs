@@ -46,10 +46,14 @@ public static class CoreShortcuts
         settings.CoreShortcutsAsked = true;
     }
 
-    /// <summary>Records an answer while preserving all shortcut assignments and preferences.</summary>
+    /// <summary>
+    /// Records the answer "practise with current keys": every shortcut assignment stays, and the
+    /// core shortcuts do not take priority over other programs.
+    /// </summary>
     public static void Decline(HotkeySettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.ForceCoreShortcuts = false;
         settings.CoreShortcutsAsked = true;
     }
 

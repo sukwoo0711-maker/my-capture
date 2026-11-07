@@ -26,7 +26,7 @@ internal sealed partial class OcrResultWindow
     {
         _editIndicator = new WrapPanel { Visibility = Visibility.Collapsed };
         _editCount = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        _editCount.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
+        _editCount.SetResourceReference(TextBlock.ForegroundProperty, "Text.Success");
         _editIndicator.Children.Add(_editCount);
         var revert = MakeButton(UiText.Get("Ocr_RevertEdits"), UiText.Get("Ocr_RevertEdits"));
         revert.SetResourceReference(StyleProperty, "Button.Ghost");

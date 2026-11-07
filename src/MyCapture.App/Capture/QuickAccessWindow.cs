@@ -18,7 +18,7 @@ using MyCapture.Platform.Shell;
 namespace MyCapture.App.Capture;
 
 /// <summary>A keyboard-accessible capture receipt. Optional actions never delay durable capture.</summary>
-internal sealed class QuickAccessWindow : Window
+internal sealed partial class QuickAccessWindow : Window
 {
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 2, BorderThickness = new Thickness(0) };
@@ -98,6 +98,22 @@ internal sealed class QuickAccessWindow : Window
     private static readonly TimeSpan SuccessTintHold = TimeSpan.FromMilliseconds(150);
     private static readonly Duration SuccessTintFade = new(TimeSpan.FromMilliseconds(500));
     private const double StatusLineHeight = 16;
+
+    /// <summary>
+    /// The clear band a layered card keeps around its surface for the surface's Shadow.Card: the band
+    /// of a notification card. At the former 8 DIP the shadow was still cut off at the window edge.
+    /// </summary>
+    internal const double ShadowBand = ThemedShellPresenter.ShadowMargin;
+
+    /// <summary>The shadow band the gaps of <see cref="Position"/> were set for.</summary>
+    internal const double PlacementBand = 8;
+
+    // The surface across its width besides the content: the panel's two 8-DIP margins and the
+    // two 1-DIP border sides.
+    private const double SurfaceChrome = 18;
+
+    private double WindowChrome => SurfaceChrome + (AllowsTransparency ? 2 * ShadowBand : 0);
+
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
@@ -174,7 +190,7 @@ internal sealed class QuickAccessWindow : Window
         _captureActions = captureActions;
         Title = UiText.Get("QuickAccess.Title");
         // Fits a 1366 x 768 work area at 150% scaling.
-        Width = QuickAccessActionPanel.MinimumDefaultTextWidth + 34;
+        Width = QuickAccessActionPanel.MinimumDefaultTextWidth + SurfaceChrome + (2 * ShadowBand);
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         _keyboardRouter = keyboardRouter;
         _previewDpi = targetMonitor is null ? VisualTreeHelper.GetDpi(this)
@@ -191,7 +207,7 @@ internal sealed class QuickAccessWindow : Window
         if (!AllowsTransparency)
         {
             ModernWindowChrome.SetEnabled(this, false);
-            Width -= 16; // Remove only the two 8-DIP shadow margins; keep the content width.
+            Width -= 2 * ShadowBand; // Remove only the two shadow bands; keep the content width.
         }
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
@@ -240,6 +256,13 @@ internal sealed class QuickAccessWindow : Window
         {
             Content = Glyph("Icon.Pause"), Focusable = false, ToolTip = UiText.Get("QuickAccess.KeepName"),
         };
+        // Off, the icon keeps Glyph's Text.Primary like the card's other commands; on, it takes the
+        // selection ink, since the on-state fill is Text.SelectionBackground, the colour of Text.Primary.
+        var keepIcon = (SymbolIcon)_keep.Content;
+        RoutedEventHandler keepInk = (_, _) => keepIcon.SetResourceReference(SymbolIcon.StrokeProperty,
+            _keep.IsChecked == true ? "Text.SelectionForeground" : "Text.Primary");
+        _keep.Checked += keepInk;
+        _keep.Unchecked += keepInk;
         CommandButtonPresentation.Apply(_keep, compact: true);
         _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 36;
         _keep.Padding = new Thickness(2, 0, 2, 0); _keep.Margin = new Thickness(0);
@@ -352,7 +375,7 @@ internal sealed class QuickAccessWindow : Window
         else if (captureActions is null && copiedToClipboard == false)
         {
             // Retried with C once the capture is saved.
-            ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired);
+            ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired, captureResult: true);
         }
         else
         {
@@ -365,9 +388,12 @@ internal sealed class QuickAccessWindow : Window
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _progressReveal.Tick += (_, _) => RevealProgress();
         _remaining.Margin = new Thickness(0, 6, 0, 0);
+        panel.Children.Add(BuildRatingInvitation());
         panel.Children.Add(_remaining);
-        var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
-            CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
+        // The corners of a notification card: the host's window corners (none on Windows 10).
+        var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? ShadowBand : 0),
+            CornerRadius = AllowsTransparency ? ThemedShellPresenter.CardCorner : new CornerRadius(0),
+            BorderThickness = new Thickness(1) };
         surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
@@ -625,7 +651,7 @@ internal sealed class QuickAccessWindow : Window
         if (_preview?.Source is not BitmapSource image || _previewSurface is null) return;
         // WPF image dimensions are DIPs and can carry arbitrary bitmap DPI metadata.
         // Limit the displayed physical pixels to twice the original pixel dimensions.
-        double available = Math.Max(0, Width - (AllowsTransparency ? 34 : 18));
+        double available = Math.Max(0, Width - WindowChrome);
         _preview.Width = Math.Min(Math.Min(QuickAccessActionPanel.MinimumDefaultTextWidth, available),
             image.PixelWidth * 2.0 / _previewDpi.DpiScaleX);
         _preview.Height = Math.Min(180, image.PixelHeight * 2.0 / _previewDpi.DpiScaleY);
@@ -764,7 +790,8 @@ internal sealed class QuickAccessWindow : Window
         _placementMonitor = monitor;
         _previewDpi = new DpiScale(monitor.ScaleFactor, monitor.ScaleFactor);
         ConstrainToWorkArea(monitor);
-        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion);
+        Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion,
+            AllowsTransparency ? ShadowBand - PlacementBand : 0);
         PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
             new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
                 position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
@@ -773,7 +800,7 @@ internal sealed class QuickAccessWindow : Window
     /// <summary>The action row owns the minimum width; a smaller work area takes precedence.</summary>
     internal void ConstrainToWorkArea(MonitorInfo? monitor)
     {
-        double minimum = QuickAccessActionPanel.MinimumDefaultTextWidth + (AllowsTransparency ? 34 : 18);
+        double minimum = QuickAccessActionPanel.MinimumDefaultTextWidth + WindowChrome;
         double workWidth = monitor is null ? double.PositiveInfinity : monitor.WorkArea.Width / monitor.ScaleFactor;
         MinWidth = Math.Min(minimum, workWidth);
         MaxWidth = workWidth;
@@ -782,18 +809,27 @@ internal sealed class QuickAccessWindow : Window
         ReflowPreview();
     }
 
-    internal static Rect Position(RectD work, double scale, double width, double height, RectD? capturedRegion = null)
+    /// <summary>
+    /// The card's window bounds in DIP. The gaps are those of a window with an 8-DIP shadow band
+    /// (<see cref="PlacementBand"/>); <paramref name="extraBand"/> is how much wider the window's band
+    /// is on each side, and the window starts that much further out so the visible card keeps its
+    /// place. The default is the layered card's; an opaque card has no band and passes 0. The window
+    /// stays inside the work area, so only where it meets the work area's edge does the visible card
+    /// sit up to <paramref name="extraBand"/> further in.
+    /// </summary>
+    internal static Rect Position(RectD work, double scale, double width, double height, RectD? capturedRegion = null,
+        double extraBand = ShadowBand - PlacementBand)
     {
         double left = work.Left / scale, top = work.Top / scale, right = work.Right / scale, bottom = work.Bottom / scale;
         width = Math.Min(width, right - left);
         height = Math.Min(height, bottom - top);
-        double x = right - width - 12, y = bottom - height - 12;
+        double x = right - width - 12 + extraBand, y = bottom - height - 12 + extraBand;
         if (capturedRegion is { } region && (region.Width < work.Width || region.Height < work.Height))
         {
-            x = region.Right / scale + 8;
-            y = region.Bottom / scale + 8;
-            if (x + width > right - 4) x = region.Right / scale - width;
-            if (y + height > bottom - 4) y = region.Bottom / scale - height - 8;
+            x = region.Right / scale + 8 - extraBand;
+            y = region.Bottom / scale + 8 - extraBand;
+            if (x + width > right - 4 + extraBand) x = region.Right / scale - width + extraBand;
+            if (y + height > bottom - 4 + extraBand) y = region.Bottom / scale - height - 8 + extraBand;
         }
         return new Rect(Math.Clamp(x, left, Math.Max(left, right - width)), Math.Clamp(y, top, Math.Max(top, bottom - height)), width, height);
     }
@@ -801,7 +837,7 @@ internal sealed class QuickAccessWindow : Window
     internal void Advance(TimeSpan time, bool interacting)
     {
         // A failure keeps the card until the user closes it or a retry succeeds.
-        if (IsKept || interacting || IsHeldForFailure) return;
+        if (IsKept || interacting || IsHeldForFailure || _ratingRequestRunning) return;
         // The countdown runs from the moment the card shows, but a card still waiting for its saved
         // capture or for the copy's result stays at the end of it until they arrive (BindCapture,
         // ReportInitialCopy), which leave at least the hold after a result.
@@ -838,7 +874,7 @@ internal sealed class QuickAccessWindow : Window
         _copyPending = false;
         // A success also refills the countdown to at least the hold after a result (ShowStatus).
         if (copied) ShowActionResult("Copy", UiText.Get("QuickAccess.Copied"), FeedbackKind.Confirmation);
-        else ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired);
+        else ShowActionResult("Copy", FailureText("Copy"), FeedbackKind.ActionRequired, captureResult: true);
     }
 
     /// <summary>
@@ -857,7 +893,7 @@ internal sealed class QuickAccessWindow : Window
         AutomationProperties.SetName(_detail, detail);
         _detail.Visibility = string.IsNullOrWhiteSpace(detail) ? Visibility.Collapsed : Visibility.Visible;
         ShowActionResult(CaptureFailureAction, title, FeedbackKind.ActionRequired,
-            spoken: string.IsNullOrWhiteSpace(detail) ? title : title + " " + detail);
+            spoken: string.IsNullOrWhiteSpace(detail) ? title : title + " " + detail, captureResult: true);
     }
 
     private void KeepAtLeastTheHoldAfterResult()
@@ -992,9 +1028,15 @@ internal sealed class QuickAccessWindow : Window
         ShowActionResult(action, message, kind, button);
     }
 
-    private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null, string? spoken = null)
+    /// <param name="captureResult">The result of the capture's own save or copy, not of an action on the card.</param>
+    private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null, string? spoken = null,
+        bool captureResult = false)
     {
         bool failed = FeedbackTiming.StaysUntilDismissed(kind);
+        // An error never shows next to the rating invitation: any failure the card holds, the capture's
+        // own or an action's, takes the invitation off this card. Only the capture's own failure gives
+        // its showing back (QuickAccessWindow.StoreRating.cs).
+        if (failed) HideRatingInvitationForFailure(captureFailed: captureResult);
         bool resolved = false;
         if (failed || kind == FeedbackKind.Confirmation)
             resolved = _failures.RemoveAll(failure => failure.Action == action) > 0;
@@ -1031,7 +1073,7 @@ internal sealed class QuickAccessWindow : Window
 
     private void TintStatusText()
     {
-        if (TryFindResource("State.Success") is not SolidColorBrush success
+        if (TryFindResource("Text.Success") is not SolidColorBrush success
             || TryFindResource("Text.Primary") is not SolidColorBrush rest) return;
         var tint = new SolidColorBrush(success.Color);
         var fade = new ColorAnimation(success.Color, rest.Color, SuccessTintFade)

@@ -13,7 +13,21 @@ namespace MyCapture.App.Tests;
 
 internal static class OcrWholeSpinExperimentEvidence
 {
-    internal const string CorpusSha256 = "EA2B700F8564651CB70DC375B48F9ED996C5186BE15D54A474A96E6FA90F06C8";
+    // The corpus is drawn with the host's Malgun Gothic, Segoe UI and Consolas, so another Windows
+    // build renders other pixels: Windows 11 26200 generated 6EB6D995…, not the Windows 10 19045
+    // corpus below. A host pins the corpus it generated, still exactly, with this variable.
+    internal const string CorpusShaVariable = "MYCAPTURE_OCR_CORPUS_SHA256";
+    private const string Windows10CorpusSha256 = "EA2B700F8564651CB70DC375B48F9ED996C5186BE15D54A474A96E6FA90F06C8";
+    internal static string CorpusSha256 { get; } = PinnedCorpusSha256();
+
+    private static string PinnedCorpusSha256()
+    {
+        string? pinned = Environment.GetEnvironmentVariable(CorpusShaVariable);
+        if (pinned is null) return Windows10CorpusSha256;
+        if (pinned.Length != 64 || !pinned.All(Uri.IsHexDigit) || pinned != pinned.ToUpperInvariant())
+            throw new InvalidOperationException(CorpusShaVariable + " must be 64 uppercase hexadecimal digits.");
+        return pinned;
+    }
     internal sealed record FileReceipt(string Role, string Path, long Bytes, string Sha256);
     internal sealed record SessionReceipt(string Detector, string Classifier, string Recognizer, string Dictionary,
         int IntraThreads, int InterThreads, string ExecutionMode, string Optimization,

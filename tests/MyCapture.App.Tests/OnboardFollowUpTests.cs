@@ -68,8 +68,8 @@ public sealed class QuickAccessCardLabelTests
         {
             card.IsKept = true;
             Border host = QuickAccessDetachedFixture.Layout(card);
-            // Opaque capture-excluded cards omit the two 8-DIP shadow margins.
-            Assert.Equal(card.AllowsTransparency ? 344 : 328, host.ActualWidth);
+            // Opaque capture-excluded cards omit the two 12-DIP shadow bands.
+            Assert.Equal(card.AllowsTransparency ? 352 : 328, host.ActualWidth);
             foreach (Button button in card.ActionButtonsForTest)
                 button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
             var restingSizes = new Dictionary<Button, Size>();
@@ -173,7 +173,7 @@ public sealed class AppFailureGuidanceTests
         string unhandled = ThemedDialog.UnhandledMessage(new InvalidOperationException("The tray icon has not been initialized."));
         Assert.StartsWith(UiText.Get("Dialog.Unexpected"), unhandled, StringComparison.Ordinal);
         Assert.Contains("다시 실행하십시오", unhandled, StringComparison.Ordinal);
-        Assert.Contains("자세히", unhandled, StringComparison.Ordinal);
+        Assert.Contains(UiText.Get("Support_ReportError"), unhandled, StringComparison.Ordinal);
         Assert.DoesNotContain("tray icon", unhandled, StringComparison.Ordinal);
         Assert.Equal(UiText.Get("Dialog.Storage") + "\n\n" + UiText.Get("Onboard_ErrorNextStep"),
             ThemedDialog.UnhandledMessage(new IOException("private-path")));

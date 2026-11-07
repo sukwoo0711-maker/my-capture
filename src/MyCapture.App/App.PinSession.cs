@@ -42,6 +42,7 @@ public partial class App
         if (!e.Cancel)
         {
             _pinSession?.SaveNow();
+            MarkUnexpectedExitNoticeForFinalExit();
         }
     }
 

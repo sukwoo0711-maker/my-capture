@@ -346,17 +346,15 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(6, actions.Length);
+        // Three jobs (build and tests, x86, Recycle Bin canary), each with the same three actions.
+        Assert.Equal(9, actions.Length);
         Assert.Equal(
-            new[]
+            Enumerable.Repeat(new[]
             {
                 "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                 "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
                 "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-                "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
-                "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-            },
+            }, 3).SelectMany(job => job).ToArray(),
             actions.Select(action => action.Trim()["uses:".Length..]
                 .Split([' ', '#'], StringSplitOptions.RemoveEmptyEntries)[0]).ToArray());
         foreach (string action in actions)
@@ -374,7 +372,7 @@ public sealed class ReleaseVersionContractTests
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("timeout-minutes: 50", workflow, StringComparison.Ordinal);
+        Assert.Contains("timeout-minutes: 60", workflow, StringComparison.Ordinal);
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.Contains("package-ecosystem: nuget", dependabot, StringComparison.Ordinal);

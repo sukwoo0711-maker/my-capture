@@ -58,7 +58,8 @@ public sealed class EditorObscureEvidenceTests
         window.UpdateLayout();
         window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
         window.UpdateLayout();
-        var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+        Size extent = window is ContextMenu ? PopupSnapshot.ExtentOf(window) : window.RenderSize;
+        var bitmap = new RenderTargetBitmap((int)extent.Width, (int)extent.Height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(window);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

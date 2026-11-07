@@ -47,7 +47,7 @@ public sealed class QuickAccessActionLabelTests
             QuickAccessLabelFixture.RealIcons(card, host);
             QuickAccessLabelFixture.Relayout(host, card.Width, dpi);
             // The card keeps its width; only the actions inside it change.
-            Assert.Equal(card.AllowsTransparency ? 344 : 328, host.ActualWidth);
+            Assert.Equal(card.AllowsTransparency ? 352 : 328, host.ActualWidth);
 
             var panel = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<QuickAccessActionPanel>());
             double available = ((FrameworkElement)panel.Parent).ActualWidth;
@@ -159,7 +159,7 @@ public sealed class QuickAccessActionLabelTests
             QuickAccessLabelFixture.RealIcons(card, host);
             QuickAccessLabelFixture.Relayout(host, card.Width, dpi);
             var panel = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<QuickAccessActionPanel>());
-            Assert.Equal(card.AllowsTransparency ? 344 : 328, card.MinWidth);
+            Assert.Equal(card.AllowsTransparency ? 352 : 328, card.MinWidth);
             Assert.Equal(card.MinWidth, card.Width);
             Assert.Equal(QuickAccessActionPanel.MinimumDefaultTextWidth, ((FrameworkElement)panel.Parent).ActualWidth);
             Assert.True(panel.NamesShown);

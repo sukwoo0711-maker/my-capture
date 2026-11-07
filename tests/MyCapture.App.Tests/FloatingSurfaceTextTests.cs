@@ -49,6 +49,72 @@ public sealed class FloatingSurfaceTextTests
         }
     });
 
+    /// <summary>
+    /// The pin's bottom message ("Copied", a failure, translation progress) is interface text: it
+    /// takes the UI font and text settings of the hover bar above it. The pin window itself keeps
+    /// the system font, so its selection views keep the fonts their pictures were drawn with.
+    /// </summary>
+    [Fact]
+    public void PinMessageUsesTheUiFontAndItsTextSettings() => StaTestHost.Run(() =>
+    {
+        var image = System.Windows.Media.Imaging.BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, new byte[8 * 8 * 4], 8 * 4);
+        image.Freeze();
+        var pin = new PinWindow(PinContent.FromImage(image), new MyCapture.Core.Pin.PinViewState(320, 180, 1, 1, .1), -10000, -10000)
+        {
+            ShowActivated = false,
+        };
+        try
+        {
+            FrameworkElement message = pin.FeedbackSurfaceForTest;
+            Assert.Equal("Font.Ui", ResourceKey(message, Control.FontFamilyProperty));
+            Assert.Equal(ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(message));
+            Assert.Equal(ThemeFonts.Rendering, TextOptions.GetTextRenderingMode(message));
+            Assert.Equal(ThemeFonts.Hinting, TextOptions.GetTextHintingMode(message));
+            Assert.Equal(System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag, message.Language.IetfLanguageTag, ignoreCase: true);
+            Assert.False(Typography.GetContextualAlternates(message), "The pin message draws text as typed");
+            Assert.Null(ResourceKey(pin, Control.FontFamilyProperty));
+        }
+        finally { pin.Close(); }
+    });
+
+    /// <summary>
+    /// The pin's message is a floating surface like the hover bar above it, so it carries the
+    /// same one-DIP Border.Subtle outline. The outline takes its DIP from the padding, so the
+    /// message keeps its size and its text stays where it was, in DIPs; at fractional scales the
+    /// border's device-pixel rounding can still move them by a pixel.
+    /// </summary>
+    [Fact]
+    public void PinMessageHasTheHoverBarOutline() => StaTestHost.Run(() =>
+    {
+        var image = System.Windows.Media.Imaging.BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, new byte[8 * 8 * 4], 8 * 4);
+        image.Freeze();
+        var pin = new PinWindow(PinContent.FromImage(image), new MyCapture.Core.Pin.PinViewState(320, 180, 1, 1, .1), -10000, -10000)
+        {
+            ShowActivated = false,
+        };
+        var bar = new PinHoverBar();
+        try
+        {
+            Border message = Assert.IsType<Border>(pin.FeedbackSurfaceForTest);
+            Border surface = Assert.IsType<Border>(bar.Content);
+            Assert.Equal(new Thickness(1), surface.BorderThickness);
+            Assert.Equal(surface.BorderThickness, message.BorderThickness);
+            Assert.Equal("Border.Subtle", ResourceKey(surface, Border.BorderBrushProperty));
+            Color subtle = Application.Current?.Resources["Border.Subtle"] is SolidColorBrush token
+                ? token.Color
+                : Color.FromRgb(0x2B, 0x3A, 0x50);
+            Assert.Equal(subtle, Assert.IsType<SolidColorBrush>(message.BorderBrush).Color);
+            Assert.Equal(new Thickness(10, 5, 10, 5), new Thickness(
+                message.Padding.Left + message.BorderThickness.Left, message.Padding.Top + message.BorderThickness.Top,
+                message.Padding.Right + message.BorderThickness.Right, message.Padding.Bottom + message.BorderThickness.Bottom));
+        }
+        finally
+        {
+            bar.Close();
+            pin.Close();
+        }
+    });
+
     [Fact]
     public void MenusUseTheUiFontAndItsTextSettings() => StaTestHost.Run(() =>
     {

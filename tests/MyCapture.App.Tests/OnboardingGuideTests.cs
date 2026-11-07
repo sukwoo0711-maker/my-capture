@@ -240,8 +240,9 @@ public sealed class OnboardingGuideTests
     public void UnassignedShortcutsUseButtonAndTrayInstructionsInBothLanguages(string culture) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage(culture);
+        // A person who cleared the keys a new installation assigns.
         HotkeySettings defaults = NewInstallDefaults.Create().Hotkeys;
-        Assert.Equal(Hotkey.None, defaults.OpenLibrary);
+        defaults.OpenLibrary = Hotkey.None;
         defaults.Capture = Hotkey.None; defaults.PasteToScreen = Hotkey.None;
         var guide = Create(new(), keys: defaults);
         try
@@ -255,8 +256,10 @@ public sealed class OnboardingGuideTests
             AdvanceTo(guide, WelcomeStep.Library);
             Assert.False(guide.KeyShown);
             Assert.Equal(UiText.Get("Journey.C1.Body"), guide.InstructionText);
+            AssertNamesNoLibraryKey(ShownWords(guide), guide.InstructionText);
             guide.UpdateShortcutAvailability(true, true, true);
             Assert.False(guide.KeyShown);
+            AssertNamesNoLibraryKey(ShownWords(guide), guide.InstructionText);
         }
         finally { guide.Close(); }
     });
@@ -569,13 +572,38 @@ public sealed class OnboardingGuideTests
     private static DependencyObject FooterOf(WelcomeWindow guide) =>
         LogicalTreeHelper.GetParent(LogicalTreeHelper.GetParent(guide.TryNowButton));
 
+    /// <summary>
+    /// The text and accessible names of everything the page shows. Keycaps are named after their
+    /// chord, so a shown key is found even though its caps hold one key each.
+    /// </summary>
+    internal static string[] ShownWords(WelcomeWindow guide) => Descendants(guide)
+        .Where(node => IsShown(node, guide))
+        .SelectMany(node => new[] { node is TextBlock text ? KoreanWordWrap.Strip(text.Text) : null, AutomationProperties.GetName(node) })
+        .OfType<string>().Where(word => word.Length > 0).ToArray();
+
+    /// <summary>The page shows its instruction, and nothing in it names the library chord new installations assign.</summary>
+    private static void AssertNamesNoLibraryKey(string[] shown, string instruction)
+    {
+        Assert.Contains(instruction, shown);
+        string chord = CoreShortcuts.OpenLibrary.ToString();
+        Assert.DoesNotContain(shown, word => word.Contains(chord, StringComparison.Ordinal));
+    }
+
+    private static bool IsShown(DependencyObject node, WelcomeWindow guide)
+    {
+        for (DependencyObject? current = node; current is not null && !ReferenceEquals(current, guide); current = LogicalTreeHelper.GetParent(current))
+            if (current is UIElement { Visibility: not Visibility.Visible }) return false;
+        return true;
+    }
+
     internal static WelcomeWindow Create(FakeClipboard clipboard, WelcomeOptions? options = null, HotkeySettings? keys = null) =>
         new(keys ?? Keys, AfterCaptureAction.Editor, ocrEnvironment: null, options: options is null
             ? new WelcomeOptions { Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = true, MediaFactory = () => new FakeMedia() }
             : new WelcomeOptions
             {
                 Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = options.ReducedMotion ?? true, MediaFactory = options.MediaFactory ?? (() => new FakeMedia()),
-                Replay = options.Replay, ShowCoreShortcutsConsent = options.ShowCoreShortcutsConsent, FeaturePractice = options.FeaturePractice, StartAtSignIn = options.StartAtSignIn, UseAccurateOcr = options.UseAccurateOcr, TextScale = options.TextScale,
+                Replay = options.Replay, ShowCoreShortcutsConsent = options.ShowCoreShortcutsConsent, CoreShortcutsNotice = options.CoreShortcutsNotice,
+                FeaturePractice = options.FeaturePractice, StartAtSignIn = options.StartAtSignIn, UseAccurateOcr = options.UseAccurateOcr, TextScale = options.TextScale,
                 MonitorProvider = options.MonitorProvider, HintDelay = options.HintDelay,
             }) { WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
 

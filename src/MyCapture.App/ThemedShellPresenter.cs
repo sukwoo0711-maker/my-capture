@@ -194,8 +194,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     internal Window CreateCaptureReceipt(string message, Action openLibrary, string? tip = null, Action? pin = null, string? actionTooltip = null)
     {
+        // The title and the tip start at the hint's left edge, as the text of every other card does.
         var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
-            Height = double.NaN, Padding = new Thickness(12), ToolTip = actionTooltip ?? UiText.Get("QuickAccess.Library") };
+            Height = double.NaN, Padding = new Thickness(12), HorizontalContentAlignment = HorizontalAlignment.Left,
+            ToolTip = actionTooltip ?? UiText.Get("QuickAccess.Library") };
         AutomationProperties.SetName(action, message);
         AutomationProperties.SetAutomationId(action, "MyCapture.Receipt.Open");
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
@@ -205,7 +207,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         content.Children.Add(action);
         if (tip is not null && pin is not null)
         {
-            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = TypeScale.Caption };
+            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = TypeScale.Caption,
+                HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(12, 4, 12, 4) };
             tipButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
             AutomationProperties.SetName(tipButton, tip);
             AutomationProperties.SetAutomationId(tipButton, "MyCapture.Receipt.Pin");
@@ -354,8 +357,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
             if (entry.Action is null && entry.Children is { Count: > 0 } children)
             {
-                // The shared MenuItem template draws a flat command row with no submenu popup,
-                // so a branch carries its own template that opens its children beside it.
+                // A branch carries its own template: its popup opens beside the row with its first
+                // child level with it, in the menu's chrome (its 1-DIP subtle edge and Shadow.Card,
+                // with the clear band the popup window keeps for the shadow).
                 var branch = new MenuItem { Header = entry.Label, MinHeight = 36, Template = CreateSubmenuTemplate() };
                 AutomationProperties.SetName(branch, entry.Label);
                 AppendEntries(branch.Items, children, root);
@@ -451,43 +455,58 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// A branch row in the shared menu look, with a chevron and a popup that lists its children to
     /// the right. WPF opens it on hover, click or the right arrow key.
     /// </summary>
-    /// <remarks>Parsed per menu: a template belongs to the dispatcher that first uses it.</remarks>
+    /// <remarks>
+    /// Parsed per menu: a template belongs to the dispatcher that first uses it. Its states are the
+    /// shared row's: the hover and open layers fade in over the rest chrome and the focus ring shows
+    /// keyboard focus. The branch used to change only its chrome colour, with no fade and no focus
+    /// ring, so the arrow keys reached it without the ring every other row shows.
+    /// </remarks>
     internal static ControlTemplate CreateSubmenuTemplate() => (ControlTemplate)System.Windows.Markup.XamlReader.Parse("""
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                         xmlns:themes="clr-namespace:MyCapture.App.Themes;assembly=MyCapture"
                          TargetType="{x:Type MenuItem}">
             <Grid>
-                <Border x:Name="Chrome" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
-                        CornerRadius="{DynamicResource Radius.Sm}" SnapsToDevicePixels="True">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="20" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ContentPresenter Grid.Column="1" Margin="8,0,22,0" ContentSource="Header"
-                                          RecognizesAccessKey="True" VerticalAlignment="Center" />
-                        <Path Grid.Column="2" Data="M0,0 L4.5,4.5 L0,9" Stroke="{TemplateBinding Foreground}"
-                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                              VerticalAlignment="Center" Margin="0,0,4,0" />
-                    </Grid>
-                </Border>
+                <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                        CornerRadius="{DynamicResource Radius.Sm}" SnapsToDevicePixels="True" />
+                <Border x:Name="HoverLayer" Style="{DynamicResource StateLayer.Hover}"
+                        BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" />
+                <Border x:Name="PressedLayer" Style="{DynamicResource StateLayer.Pressed}"
+                        BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" />
+                <Grid Margin="{TemplateBinding Padding}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ContentPresenter Grid.Column="1" Margin="8,0,22,0" ContentSource="Header"
+                                      RecognizesAccessKey="True" VerticalAlignment="Center" />
+                    <Path Grid.Column="2" Data="M0,0 L4.5,4.5 L0,9" Stroke="{TemplateBinding Foreground}"
+                          StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          VerticalAlignment="Center" Margin="0,0,4,0" />
+                </Grid>
+                <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                        BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}"
+                        IsHitTestVisible="False" Opacity="0" />
                 <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="4" VerticalOffset="-6"
                        AllowsTransparency="True" Focusable="False" PopupAnimation="None"
                        IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
-                    <Border Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Strong}"
+                    <Border Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Subtle}"
                             BorderThickness="1" CornerRadius="{DynamicResource Radius.Md}" Padding="5" MinWidth="220"
-                            SnapsToDevicePixels="True">
+                            Margin="12" Effect="{DynamicResource Shadow.Card}" SnapsToDevicePixels="True">
                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
                     </Border>
                 </Popup>
             </Grid>
             <ControlTemplate.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                </Trigger>
                 <Trigger Property="IsHighlighted" Value="True">
-                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
+                    <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                 </Trigger>
                 <Trigger Property="IsSubmenuOpen" Value="True">
-                    <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Pressed}" />
+                    <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Opacity" Value="0.46" />
@@ -540,7 +559,18 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         // The implicit window style turns the modern chrome on, which paints Surface.Base over
         // the transparent background and makes the shadow margin an opaque frame.
         ModernWindowChrome.SetEnabled(window, false);
+        // Placed on a monitor at another scale, the card is laid out again under the same width,
+        // and what the scale change left alone returned sizes rounded at the old scale: the
+        // buttons' row came out a fraction narrower than its buttons and Close wrapped under the card.
+        window.DpiChanged += (_, _) => InvalidateMeasureTree(surface);
         return window;
+    }
+
+    private static void InvalidateMeasureTree(DependencyObject element)
+    {
+        if (element is UIElement child) child.InvalidateMeasure();
+        for (int index = 0, count = VisualTreeHelper.GetChildrenCount(element); index < count; index++)
+            InvalidateMeasureTree(VisualTreeHelper.GetChild(element, index));
     }
 
     /// <summary>

@@ -35,7 +35,7 @@ public sealed partial class GalleryViewModel
 
     private void RefreshTags()
     {
-        var counts = CaptureOrganization.CountTags(_controller.Records.Select(record => record.Tags)).ToList();
+        var counts = CaptureOrganization.CountTags(PresentRecords.Select(record => record.Tags)).ToList();
         // Keep an emptied active filter available to clear after the last matching capture is edited.
         if (_selectedTag is not null && !counts.Any(tag => string.Equals(tag.Name, _selectedTag, StringComparison.OrdinalIgnoreCase)))
             counts.Add(new CaptureTagCount(_selectedTag, 0));

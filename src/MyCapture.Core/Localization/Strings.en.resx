@@ -40,7 +40,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_01EC445E93F5" xml:space="preserve">
-    <value>F  Frame</value>
+    <value>Frame</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0226F79FE6FB" xml:space="preserve">
@@ -937,7 +937,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_541F62E38579" xml:space="preserve">
-    <value>T  Text</value>
+    <value>Text</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_542965B456C7" xml:space="preserve">
@@ -1980,7 +1980,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_AD80E1DD716A" xml:space="preserve">
-    <value>T  Text {0}</value>
+    <value>Text {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_AD823133F009" xml:space="preserve">
@@ -2818,7 +2818,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
   </data>
   <data name="Text_F085C7366DEB" xml:space="preserve">
-    <value>F  Frame {0}</value>
+    <value>Frame {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_F09A6C5A6A10" xml:space="preserve">
@@ -3071,6 +3071,8 @@ Actual reduction {2}% · {3}</value></data>
   <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>Restored {0} {0:plural:item|items} to the library · {1} {1:plural:remains|remain} in the Recycle Bin.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>Could not save the deletion. Check the library and try again.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>{0} removed {0:plural:item still has|items still have} files awaiting cleanup. No disk space recovery is confirmed for {0:plural:it|those items}.</value></data>
+  <data name="LibrarySelection_Moving" xml:space="preserve"><value>Moving {0} {0:plural:item|items} to the Recycle Bin…</value></data>
+  <data name="LibrarySelection_MovingProgress" xml:space="preserve"><value>Moving {0} of {1} {1:plural:item|items} to the Recycle Bin…</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>Recycle Bin unavailable</value></data>
   <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>{0} {0:plural:item|items} cannot be moved to the Recycle Bin. The Recycle Bin may be turned off, or the items may be on a removable or network drive or larger than the Recycle Bin. Delete {0:plural:this item|these items} permanently? Permanently deleted items cannot be restored.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>Delete permanently</value></data>
@@ -3145,7 +3147,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_SizeOriginalHelp" xml:space="preserve"><value>Encodes at the standard bitrate. Resolution and frame rate stay unchanged.</value></data>
   <data name="MediaExport_SizePresetHelp" xml:space="preserve"><value>Lowers the bitrate by about {0}%. Resolution and frame rate stay unchanged; quality may decrease.</value></data>
   <data name="MediaExport_Advanced" xml:space="preserve"><value>Advanced</value></data>
-  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>Estimated size about {0} · {1} · {2}×{3}</value></data>
+  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>Estimated size about {0} · {1} · {2} × {3}</value></data>
   <data name="MediaExport_GifSummary" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="MediaExport_SizeMb" xml:space="preserve"><value>{0:0.0} MB</value></data>
   <data name="MediaExport_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
@@ -3207,6 +3209,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Video.MarkIn" xml:space="preserve"><value>Start</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>End</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>Layers</value></data>
+  <data name="Video.NoLayers" xml:space="preserve"><value>No layers</value></data>
   <data name="VideoEditorUx_LayerInterval" xml:space="preserve">
     <value>{0}–{1}</value>
   </data>
@@ -3255,6 +3258,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings_Search" xml:space="preserve"><value>Search settings</value></data>
   <data name="Settings_SearchHint" xml:space="preserve"><value>Search names and help · Esc: clear search</value></data>
   <data name="Settings_SearchEmpty" xml:space="preserve"><value>No matching settings</value></data>
+  <data name="Settings_SearchNoMatch" xml:space="preserve"><value>No settings match your search.</value></data>
+  <data name="Settings_SearchNoMatchQuery" xml:space="preserve"><value>Search term: {0}</value></data>
   <data name="Settings_ResetConfirm" xml:space="preserve"><value>Reset all settings to their defaults?</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported</value></data>
@@ -3269,8 +3274,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Recording_SizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 pixels.</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>Last region</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>Free</value></data>
-  <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
-  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Recording_Fixed720" xml:space="preserve"><value>1280 × 720</value></data>
+  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920 × 1080</value></data>
   <data name="Ocr_Accuracy" xml:space="preserve"><value>Recognition accuracy</value></data>
   <data name="Ocr_QualityFast" xml:space="preserve"><value>Fast</value></data>
   <data name="Ocr_QualityBalanced" xml:space="preserve"><value>Balanced</value></data>
@@ -3615,8 +3620,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Crop.Ratio" xml:space="preserve"><value>Aspect ratio</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>Free</value></data>
   <data name="Crop.Original" xml:space="preserve"><value>Original</value></data>
-  <data name="Crop.Width" xml:space="preserve"><value>Width (px)</value></data>
-  <data name="Crop.Height" xml:space="preserve"><value>Height (px)</value></data>
+  <data name="Crop.Width" xml:space="preserve"><value>Width</value></data>
+  <data name="Crop.Height" xml:space="preserve"><value>Height</value></data>
   <data name="Crop.Apply" xml:space="preserve"><value>Apply</value></data>
   <data name="Crop.Applied" xml:space="preserve"><value>Crop applied</value></data>
   <data name="Crop.Cancelled" xml:space="preserve"><value>Pending crop canceled</value></data>
@@ -3717,7 +3722,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Folder410.Oldest" xml:space="preserve"><value>Oldest first</value></data>
   <data name="Folder410.ByName" xml:space="preserve"><value>Name</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
-  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>
+  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>Drag captures here or select this folder for new captures.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>MyCapture is turned off in the Windows startup apps. Turn it on in Settings &gt; Apps &gt; Startup.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>An organization policy manages this startup setting.</value></data>
@@ -3758,6 +3763,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Check that the Microsoft Store app is installed.</value></data>
   <data name="StoreRating_InviteMessage" xml:space="preserve"><value>Would you like to rate MyCapture in Microsoft Store?</value></data>
   <data name="StoreRating_InviteAction" xml:space="preserve"><value>Rate</value></data>
+  <data name="StoreRating_InviteCloseName" xml:space="preserve"><value>Close rating invitation</value></data>
   <data name="PrtScGuide_SettingsPath" xml:space="preserve"><value>Windows Settings &gt; Accessibility &gt; Keyboard</value></data>
   <data name="PrtScGuide_SettingsPath_Windows10" xml:space="preserve"><value>Windows Settings &gt; Ease of Access &gt; Keyboard</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen key conflict</value></data>
@@ -4059,7 +4065,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>Video editor</value></data>
   <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>Video editor window</value></data>
   <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>Video editor</value></data>
-  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1}×{2} · {3} fps</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>Video {0} · {1} × {2} · {3} fps</value></data>
   <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>Video editing commands</value></data>
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
@@ -4141,6 +4147,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_PrivacyModel" xml:space="preserve"><value>Accurate downloads text recognition models (about {0} MB) from ModelScope. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_PrivacyUpdates" xml:space="preserve"><value>With automatic checks on, MyCapture looks up new version information once a day.</value></data>
+  <data name="About_HelpHeading" xml:space="preserve"><value>Help</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
   <data name="Support_Title" xml:space="preserve"><value>Contact support</value></data>
@@ -4161,6 +4168,28 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Support_Unpackaged" xml:space="preserve"><value>Unpackaged</value></data>
   <data name="Support_DisplayScale" xml:space="preserve"><value>Display scale: {0:0.##}%</value></data>
   <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture support</value></data>
+  <data name="Support_ReportError" xml:space="preserve"><value>Report error</value></data>
+  <data name="Support_ErrorSummary" xml:space="preserve"><value>Error summary</value></data>
+  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>Review the summary and edit it before sending.</value></data>
+  <data name="Support_ErrorIssueTitle" xml:space="preserve"><value>MyCapture error report: {0}</value></data>
+  <data name="Support_ErrorKind" xml:space="preserve"><value>Error kind</value></data>
+  <data name="Support_ErrorTime" xml:space="preserve"><value>Time</value></data>
+  <data name="Support_RecordedVersion" xml:space="preserve"><value>Recorded version</value></data>
+  <data name="Support_ErrorOperation" xml:space="preserve"><value>Operation</value></data>
+  <data name="Support_ErrorException" xml:space="preserve"><value>Exception</value></data>
+  <data name="Support_ErrorCause" xml:space="preserve"><value>Cause</value></data>
+  <data name="Support_ErrorLocation" xml:space="preserve"><value>Location</value></data>
+  <data name="Support_StackSignature" xml:space="preserve"><value>Stack signature</value></data>
+  <data name="Support_RecentErrors" xml:space="preserve"><value>Recent errors</value></data>
+  <data name="Support_RecentLog" xml:space="preserve"><value>Recent log lines</value></data>
+  <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>Unhandled error</value></data>
+  <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>Unexpected exit</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>The GitHub issue page is open. Some content was shortened to fit its length limit. Copy the full text or save a diagnostics bundle to keep everything.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>Diagnostics bundle saved, folder opened</value></data>
+  <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>The diagnostics bundle was saved, but its folder could not be opened.</value></data>
+  <data name="Support_BundleFailed" xml:space="preserve"><value>The diagnostics bundle could not be saved. Choose another location and try again.</value></data>
+  <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>MyCapture closed unexpectedly last time</value></data>
+  <data name="Support_ExitNoticeBody" xml:space="preserve"><value>Select Report error to review and edit the report first. Records contain no captures, file paths, window titles, or entered text. Nothing is sent until you choose to send it.</value></data>
   <data name="About_ReportProblemHelp" xml:space="preserve"><value>Review diagnostics and write a message.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>Diagnostics copied. Paste them into the report page.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Describe the problem on the report page.</value></data>
@@ -4712,7 +4741,7 @@ Turn off: {0}</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, copy the text under Details, select Report a problem, and attach it.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, select Report error, review what will be sent, and send it.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details, select Report a problem, and attach it.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#} MB</value></data>
@@ -4884,6 +4913,7 @@ Turn off: {0}</value></data>
   <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>Date</value></data>
   <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>File name</value></data>
   <data name="Library.Tags.Title" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Tags.EmptyHint" xml:space="preserve"><value>Tags you add appear here.</value></data>
   <data name="Library.Tags.Edit" xml:space="preserve"><value>Edit tags</value></data>
   <data name="Library.Tags.More" xml:space="preserve"><value>Show more</value></data>
   <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>Tags for {0} selected captures</value></data>
@@ -5162,16 +5192,17 @@ Turn off: {0}</value></data>
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>Cannot start until the update or import finishes.</value></data>
   <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>Not started because the app is closing.</value></data>
   <data name="CoreShortcuts.Title" xml:space="preserve"><value>Core shortcuts</value></data>
-  <data name="CoreShortcuts.Body" xml:space="preserve"><value>Assign these shortcuts to MyCapture's core features.
-
-Ctrl+Shift+C  Region capture
-Ctrl+Shift+X  Start/stop region recording
-Ctrl+Shift+Z  Open library
-F3  Pin the edited image, selection or clipboard
-
-MyCapture handles these keys first, even if another program already uses them. While MyCapture is running, the same shortcuts in other programs, such as F3 search in File Explorer and Ctrl+Shift+Z redo in editors, will not work.
-
-Overwrite these shortcuts? You can change this later in Settings → Shortcuts.</value></data>
+  <data name="CoreShortcuts.Body" xml:space="preserve"><value>Assign these shortcuts to MyCapture's core features.</value></data>
+  <data name="CoreShortcuts.NoticeTitle" xml:space="preserve"><value>Core shortcuts</value></data>
+  <data name="CoreShortcuts.NoticeBody" xml:space="preserve"><value>These shortcuts are assigned to MyCapture's core features.</value></data>
+  <data name="CoreShortcuts.Capture" xml:space="preserve"><value>Region capture</value></data>
+  <data name="CoreShortcuts.RecordRegion" xml:space="preserve"><value>Start/stop region recording</value></data>
+  <data name="CoreShortcuts.OpenLibrary" xml:space="preserve"><value>Open library</value></data>
+  <data name="CoreShortcuts.PasteToScreen" xml:space="preserve"><value>Pin the edited image, selection or clipboard</value></data>
+  <data name="CoreShortcuts.Takeover" xml:space="preserve"><value>MyCapture handles these keys first, even if another program already uses them. While MyCapture is running, the same shortcuts in other programs, such as F3 search in File Explorer and Ctrl+Shift+Z redo in editors, will not work.</value></data>
+  <data name="CoreShortcuts.Question" xml:space="preserve"><value>Overwrite these shortcuts? You can change this later in Settings → Shortcuts.</value></data>
+  <data name="CoreShortcuts.NoticeChange" xml:space="preserve"><value>You can change them in Settings → Shortcuts.</value></data>
+  <data name="CoreShortcuts.OpenSettings" xml:space="preserve"><value>Shortcut settings</value></data>
   <data name="CoreShortcuts.Overwrite" xml:space="preserve"><value>Overwrite</value></data>
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
@@ -5573,7 +5604,7 @@ Install the model?</value></data>
   <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
-  <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1}s</value></data>
+  <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="Pin_TranslationDocumentView" xml:space="preserve">
     <value>Show translation as text</value>
   </data>

@@ -1,11 +1,18 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using Microsoft.Win32;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App;
 
@@ -13,12 +20,42 @@ internal interface ISupportActions
 {
     void CopyText(string text);
     bool TryOpenUri(string uri);
+    string? ChooseBundlePath(Window owner) => SupportActions.ChooseDiagnosticsBundlePath(owner);
+    void SaveBundle(string path, SupportSubmission submission) =>
+        DiagnosticBundle.Write(path, submission.Body, ErrorReporting.FileLog, ErrorReporting.Exits);
+    bool TryShowInFolder(string path) => SupportActions.ShowInFolder(path);
 }
 
 internal sealed class SupportActions : ISupportActions
 {
     public void CopyText(string text) => ClipboardWriter.SetText(text);
     public bool TryOpenUri(string uri) => SupportDiagnostics.TryOpenUri(uri);
+
+    internal static string? ChooseDiagnosticsBundlePath(Window owner)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = UiText.Get("About_DiagnosticsBundle"),
+            Filter = UiText.Get("About_DiagnosticsBundleFilter"),
+            DefaultExt = ".zip", AddExtension = true, OverwritePrompt = true,
+            FileName = $"MyCapture-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+        };
+        return dialog.ShowDialog(owner) == true ? dialog.FileName : null;
+    }
+
+    internal static bool ShowInFolder(string path)
+    {
+        try
+        {
+            string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            ProcessStartInfo? start = SourceDocument.CreateOpenFolderStartInfo(path, explorer, selectFile: true);
+            if (start is null) return false;
+            using Process? process = Process.Start(start);
+            return process is not null;
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        { return false; }
+    }
 }
 
 /// <summary>Explicit, previewable contact details; creating the window performs no external action.</summary>
@@ -28,18 +65,25 @@ internal sealed class SupportWindow : Window
     private readonly Func<Window, SupportDiagnosticSnapshot> _snapshot;
     private readonly TextBlock _status;
     private readonly TextBlock _accounts;
+    private readonly ErrorReport? _report;
+    private double? _workAreaHeight;
     internal TextBox DiagnosticsBox { get; }
     internal TextBox MessageBox { get; }
+    internal TextBox? ErrorSummaryBox { get; }
+    internal Button BundleButton { get; }
     internal Button StoreReviewButton { get; }
     internal Button CloseButton { get; }
     internal string StatusText => KoreanWordWrap.Strip(_status.Text);
 
-    internal SupportWindow(ISupportActions? actions = null, Func<Window, SupportDiagnosticSnapshot>? snapshot = null)
+    internal SupportWindow(ISupportActions? actions = null, Func<Window, SupportDiagnosticSnapshot>? snapshot = null,
+        ErrorReport? report = null)
     {
         _actions = actions ?? new SupportActions();
         _snapshot = snapshot ?? SupportDiagnosticSnapshot.Capture;
-        Title = UiText.Get("Support_Title");
-        Width = 680; Height = 680; MinWidth = 480; MinHeight = 540;
+        _report = report;
+        Title = UiText.Get(report is null ? "Support_Title" : "Support_ReportError");
+        Width = 680; MinWidth = 480; SizeToContent = SizeToContent.Height;
+        ApplyHeightLimits(SystemParameters.WorkArea.Height);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         StandardWindowTheme.Apply(this);
         SetResourceReference(BackgroundProperty, "Surface.Raised");
@@ -54,6 +98,19 @@ internal sealed class SupportWindow : Window
         MessageBox = CreateTextInput("Support_Message", 136);
         MessageBox.MaxLength = 20000;
         content.Children.Add(MessageBox);
+        if (report is not null)
+        {
+            content.Children.Add(Label("Support_ErrorSummary"));
+            ErrorSummaryBox = CreateTextInput("Support_ErrorSummary", 200);
+            ErrorSummaryBox.MaxLength = 20000;
+            ErrorSummaryBox.Text = report.FormatSummary();
+            content.Children.Add(ErrorSummaryBox);
+            var hint = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Caption,
+                Margin = new Thickness(0, 0, 0, 16) };
+            hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+            KoreanWordWrap.Show(hint, UiText.Get("Support_ErrorSummaryHint"));
+            content.Children.Add(hint);
+        }
         _accounts = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 0, 16) };
         _accounts.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         content.Children.Add(_accounts);
@@ -63,6 +120,9 @@ internal sealed class SupportWindow : Window
         var actionsRow = new WrapPanel();
         actionsRow.Children.Add(ActionButton("Support_Copy", CopyDiagnostics));
         actionsRow.Children.Add(ActionButton("Support_GitHub", OpenGitHub));
+        // Both modes offer the bundle: it keeps the typed text in full when the GitHub page has to shorten it.
+        BundleButton = ActionButton("About_DiagnosticsBundle", () => _ = SaveBundleAsync());
+        actionsRow.Children.Add(BundleButton);
         StoreReviewButton = ActionButton("Support_StoreReview", OpenStoreReview);
         actionsRow.Children.Add(StoreReviewButton);
         content.Children.Add(actionsRow);
@@ -74,21 +134,55 @@ internal sealed class SupportWindow : Window
         Content = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { e.Handled = true; Close(); } };
         RefreshDiagnostics();
+        SourceInitialized += (_, _) => RefreshHeightLimits();
+        // A monitor with the same DPI but another height raises no DPI change, only a move.
+        LocationChanged += (_, _) => RefreshHeightLimits();
         Loaded += (_, _) => RefreshDiagnostics(); // The HWND now identifies the current monitor's DPI.
     }
 
-    private void RefreshDiagnostics()
+    /// <summary>Reads the monitor a window is on. Tests give monitors of their own.</summary>
+    internal Func<nint, MonitorInfo> ReadMonitor { get; set; } = MonitorEnumerator.GetFromWindow;
+
+    internal void RefreshDiagnostics()
     {
         SupportDiagnosticSnapshot value = _snapshot(this);
         DiagnosticsBox.Text = SupportReport.Format(value);
-        StoreReviewButton.Visibility = value.Packaged ? Visibility.Visible : Visibility.Collapsed;
-        KoreanWordWrap.Show(_accounts, UiText.Get(value.Packaged ? "Support_Accounts" : "Support_GitHubAccount"));
+        bool storeReview = value.Packaged && _report is null;
+        StoreReviewButton.Visibility = storeReview ? Visibility.Visible : Visibility.Collapsed;
+        KoreanWordWrap.Show(_accounts, UiText.Get(storeReview ? "Support_Accounts" : "Support_GitHubAccount"));
     }
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
+        RefreshHeightLimits();
         RefreshDiagnostics();
+    }
+
+    internal static (double MinHeight, double MaxHeight) HeightLimits(double workAreaHeightDip)
+    {
+        double maximum = Math.Max(1, (double.IsFinite(workAreaHeightDip) ? workAreaHeightDip : 580) - 40);
+        return (Math.Min(540, maximum), maximum);
+    }
+
+    private void ApplyHeightLimits(double workAreaHeightDip)
+    {
+        // A move within one monitor keeps its work area, so most moves end here.
+        if (_workAreaHeight is { } applied && applied.Equals(workAreaHeightDip)) return;
+        _workAreaHeight = workAreaHeightDip;
+        (double minimum, double maximum) = HeightLimits(workAreaHeightDip);
+        // Set first the bound that moves away from the other, so the pair never conflicts on the way.
+        if (minimum <= MaxHeight) { MinHeight = minimum; MaxHeight = maximum; }
+        else { MaxHeight = maximum; MinHeight = minimum; }
+    }
+
+    private void RefreshHeightLimits()
+    {
+        nint handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0) { ApplyHeightLimits(SystemParameters.WorkArea.Height); return; }
+        MonitorInfo monitor = ReadMonitor(handle);
+        double scale = double.IsFinite(monitor.ScaleFactor) && monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
+        ApplyHeightLimits(monitor.WorkArea.Height / scale);
     }
 
     private static TextBlock Label(string key) => new()
@@ -123,7 +217,7 @@ internal sealed class SupportWindow : Window
         try
         {
             RefreshDiagnostics();
-            _actions.CopyText(SupportReport.Body(DiagnosticsBox.Text, MessageBox.Text));
+            _actions.CopyText(Submission().Body);
             SetStatus("Support_Copied");
         }
         catch (Exception error) when (error is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
@@ -133,8 +227,33 @@ internal sealed class SupportWindow : Window
     internal void OpenGitHub()
     {
         RefreshDiagnostics();
-        SetStatus(_actions.TryOpenUri(SupportReport.IssueUrl(DiagnosticsBox.Text, MessageBox.Text))
-            ? "Support_GitHubOpened" : "Support_OpenFailed");
+        string url = SupportReport.IssueUrl(Submission(), out bool trimmed);
+        SetStatus(_actions.TryOpenUri(url)
+            ? trimmed ? "Support_GitHubOpenedTrimmed" : "Support_GitHubOpened" : "Support_OpenFailed");
+    }
+
+    internal SupportSubmission Submission() =>
+        new(DiagnosticsBox.Text, MessageBox.Text, ErrorSummaryBox?.Text ?? string.Empty, _report);
+
+    internal async Task SaveBundleAsync()
+    {
+        if (!BundleButton.IsEnabled || BundleButton.Visibility != Visibility.Visible) return;
+        BundleButton.IsEnabled = false;
+        try
+        {
+            string? path = _actions.ChooseBundlePath(this);
+            if (path is null) return;
+            RefreshDiagnostics();
+            SupportSubmission submission = Submission();
+            await Task.Run(() => _actions.SaveBundle(path, submission));
+            SetStatus(_actions.TryShowInFolder(path) ? "Support_BundleSaved" : "Support_BundleSavedFolderFailed");
+        }
+        catch (Exception)
+        {
+            // The preview stays intact so another destination or a retry keeps the person's edits.
+            SetStatus("Support_BundleFailed");
+        }
+        finally { BundleButton.IsEnabled = true; }
     }
 
     internal void OpenStoreReview()
@@ -150,5 +269,9 @@ internal sealed class SupportWindow : Window
         _status.Visibility = Visibility.Visible;
     }
 
-    internal static void ShowSupport() => new SupportWindow().Show();
+    /// <summary>Puts a new support window on screen. Tests show it off screen without activating it.</summary>
+    internal static Action<SupportWindow> ShowWindow { get; set; } = static window => window.Show();
+
+    internal static void ShowSupport() => ShowWindow(new SupportWindow());
+    internal static void ShowErrorReport(ErrorReport report) => ShowWindow(new SupportWindow(report: report));
 }

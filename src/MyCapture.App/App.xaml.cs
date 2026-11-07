@@ -101,6 +101,8 @@ public partial class App : Application
         // Before any window: a tooltip's default show duration would otherwise stop every
         // DispatcherTimer while it is open, self-tests included.
         MyCapture.App.Threading.ToolTipTimerGuard.Install();
+        // Before any window: keep text-box capture from outliving a left-button gesture.
+        TextBoxCaptureGuard.Install();
 
         // Windows 10 22H2 is the supported x64 baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
@@ -193,6 +195,7 @@ public partial class App : Application
                     ObserveLaunchWindow(window);
                     ObserveIdleMemoryWindow(window);
                     ObserveEditorPrewarmWindow(window);
+                    OfferDeferredUnexpectedExitNotice(window);
                 }
             }));
 
@@ -200,6 +203,8 @@ public partial class App : Application
         {
             _services = BuildServiceProvider();
             _fileLog = _services.GetRequiredService<RollingFileLog>();
+            ErrorReporting.FileLog = _fileLog;
+            ErrorReporting.Exits = new UnexpectedExitLog(UnexpectedExitLog.FolderFor(_services.GetRequiredService<AppPaths>()));
             _launchTiming.Attach(_fileLog.Append);
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
@@ -223,7 +228,11 @@ public partial class App : Application
         }
 
         if (s_residentProbe is { } probe) _ = RunResidentProbeAsync(probe);
-        else _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+        else
+        {
+            _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+            _ = OfferUnexpectedExitAfterLaunchAsync(quietLaunch);
+        }
     }
 
     /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
@@ -280,6 +289,7 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        _pins.PinCreated += OnPinCreatedForStoreRating;
         // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
         // (+20 MB idle, +80 MB after a capture in the 4.11.0 gate) for users who never pin Markdown.
         // The first Markdown pin pays its layout cost instead.
@@ -345,6 +355,8 @@ public partial class App : Application
                 _ocrModelPreparation.CancelForQuality(_settings!.Ocr.Quality);
                 _settingsWindow?.RefreshOcrQuality();
             }, new OcrAccuracyModel(_services.GetRequiredService<OcrModelStore>(), new WindowsOcrDownloadEnvironment())));
+        // Text copied from the OCR window counts toward the Store rating invitation; a refused copy blocks it.
+        _ocrPresenter.TextCopied += copied => _storeRating?.RecordCapture(copied);
         _ocrPresenter.PinRequested += (_, request) =>
         {
             request.Completion = OpenOcrPinAsync();
@@ -472,6 +484,7 @@ public partial class App : Application
             _services.GetRequiredService<ILoggerFactory>(),
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.RecordingSaved = saved => _storeRating?.RecordCapture(saved);
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.FrameCaptureService = _videoFrameCapture;
         _recorder.ShowFrameInLibrary = id => EnsureGalleryWindow()?.OpenCapture(id, edit: false);
@@ -823,6 +836,7 @@ public partial class App : Application
             // Fail soft: a corrupt clipboard payload or a WPF decode failure must not crash
             // the tray. Report it and stay resident.
             _log?.LogError(ex, "Paste-to-screen failed");
+            _storeRating?.RecordCapture(succeeded: false);
             _tray?.ShowBalloon(
                 UiText.Get("Text_CE57D5CA2394"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
@@ -863,10 +877,20 @@ public partial class App : Application
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
+    /// <summary>
+    /// Queues every settings save still waiting at exit, so the wait for pending saves that follows covers
+    /// it: the editor preferences' timer and the Store rating's idle writes.
+    /// </summary>
+    private void QueuePendingSettingsSavesForExit()
+    {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        _storeRating?.FlushDeferredWrites();
+    }
+
     /// <summary>Drains preference saves off the dispatcher after exit preparation.</summary>
     private async Task FlushPreferenceSavesForExitAsync()
     {
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !await Task.Run(() => store.WaitForPendingSaves(TimeSpan.FromSeconds(3))))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
@@ -1326,9 +1350,13 @@ public partial class App : Application
         // The normal path keeps its 4.10.0 notice; only a capture over a preserved window
         // (whose editor belongs to an older image) points to capturing again.
         bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord, opensCaptureEditor: true);
-        // Region, window, full-screen and scrolling captures all complete here. Only a durable,
-        // copied result counts toward the Store rating request; a save or copy failure resets it.
-        _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
+        // Region, window, full-screen and scrolling captures all complete here. Only a durable, copied
+        // result counts toward the Store rating invitation, and not one the practice window asked for; a
+        // capture taken as a pin is counted by its new pin. A save or copy failure blocks the invitation.
+        bool delivered = _currentRecord is not null && copiedToClipboard;
+        RecordStoreRatingCapture(delivered,
+            practice: e.PracticeTarget is not null, pinRequested: e.PinRequested);
+        ResolveStoreRatingCapture(first, delivered);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
         if (e.PinRequested && _currentRecord is { } pinRecord && _commit is not null)
@@ -1359,12 +1387,14 @@ public partial class App : Application
             // Hold the receipt until the deferred presentation owns its own lease.
             IDisposable? pendingReceipt = _queue?.AcquireEvictionLease(receipt.Id);
             bool copied = copiedToClipboard;
+            bool practice = e.PracticeTarget is not null;
             _ = QuickAccessWindow.Schedule(Dispatcher, new Action(() =>
             {
                 try
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor, copied);
+                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess)
+                        ShowQuickAccess(receipt, selected, region, monitor, copied, practice: practice);
                     else
                     {
                         if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
@@ -1475,8 +1505,9 @@ public partial class App : Application
         }
     }
 
+    /// <param name="practice">A capture the practice window asked for: its card never carries the rating invitation.</param>
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
+        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1486,15 +1517,18 @@ public partial class App : Application
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, image) ? lifted : null;
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
+        QuickAccessWindow? card = null;
+        // Decided before the card is built, so an invitation is on the card from its first appearance.
+        var invitation = OfferStoreRatingOnCard(practice);
         try
         {
-            QuickAccessWindow? card = null;
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
             card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
                 actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
+            if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) =>
             {
@@ -1509,6 +1543,7 @@ public partial class App : Application
             flight?.Land(card);
             ReceiptTimeline.Mark?.Invoke("card-show");
             card.Show();
+            if (invitation is not null) _storeRating?.NoteCardOfferShown(invitation);
             ReceiptTimeline.Mark?.Invoke("card-shown");
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
@@ -1516,6 +1551,8 @@ public partial class App : Application
         {
             flight?.Finish();
             lease.Dispose();
+            // An invitation on a card that never showed is not counted.
+            if (invitation is not null && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer(invitation, card);
             _log?.LogWarning(ex, "Could not show the optional capture receipt");
         }
     }
@@ -1560,7 +1597,18 @@ public partial class App : Application
             () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
             actions.ExportAsync,
             _textCapture is { } textCapture
-                ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
+                ? async () =>
+                {
+                    TextCaptureOutcome outcome;
+                    try { outcome = await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None); }
+                    catch
+                    {
+                        _storeRating?.RecordCapture(succeeded: false);
+                        throw;
+                    }
+                    RecordStoreRatingTextCopy(outcome.Status);
+                    return outcome;
+                }
                 : null);
     }
 
@@ -1935,6 +1983,7 @@ public partial class App : Application
     private async void OnPinOcrRequested(object? sender, System.Windows.Media.Imaging.BitmapSource image)
     {
         bool copied = false;
+        bool refused = false;
         try
         {
             if (_ocrService is not null)
@@ -1942,18 +1991,26 @@ public partial class App : Application
                 copied = await PinTextCopyService.CopyAsync(
                     image,
                     _ocrService,
-                    ClipboardImageService.CopyTextAsync,
+                    async text =>
+                    {
+                        bool done = await ClipboardImageService.CopyTextAsync(text);
+                        refused = !done;
+                        return done;
+                    },
                     _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings());
             }
         }
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "Could not copy text from pinned image");
+            refused = true;
         }
         finally
         {
             if (sender is PinWindow pin) pin.ReportOriginalTextCopyResult(copied);
         }
+        // Copied text counts toward the Store rating invitation and an error blocks it; a pin without text records nothing.
+        if (copied || refused) _storeRating?.RecordCapture(succeeded: copied);
     }
 
     /// <summary>Flips the tray to Busy during recognition and restores the prior state after.</summary>
@@ -2709,6 +2766,7 @@ public partial class App : Application
         _log?.LogCritical(e.ExceptionObject as Exception,
             "Unhandled exception off the dispatcher thread (terminating: {IsTerminating})", e.IsTerminating);
         _fileLog?.Flush(TimeSpan.FromSeconds(2));
+        if (e.IsTerminating) RecordUnexpectedExit(e.ExceptionObject as Exception);
     }
 
     /// <summary>A faulted task nobody awaited. Recorded only; the runtime's own handling is unchanged.</summary>
@@ -2717,6 +2775,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        MarkUnexpectedExitNoticeForFinalExit();
         _memoryReclamationStopped = true;
         CancelIdleMemoryReclamation();
         _launchStatus?.Complete();
@@ -2732,7 +2791,8 @@ public partial class App : Application
         _quickAccess?.Close();
         _flightSpareRelease?.Stop();
         _flightSpare?.Release();
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        // A rating showing or its restoration still waiting for the idle UI is saved too.
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
@@ -2826,6 +2886,9 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        // Media Foundation stays started from its first use to here (#243). After the services that
+        // record and export: one still finishing keeps its lease, and its release shuts MF down.
+        MyCapture.Platform.Recording.MediaFoundationPlatform.Shutdown();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
         _launchFallbackLog?.Dispose();

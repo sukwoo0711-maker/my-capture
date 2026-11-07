@@ -157,6 +157,8 @@ public static class ThemeCatalog
         ["Text.Muted"] = ThemeColor.Rgb(0x9A, 0xA5, 0xB5),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
+        ["Text.Warning"] = ThemeColor.Rgb(0xF5, 0xB9, 0x42),
+        ["Text.Success"] = ThemeColor.Rgb(0x45, 0xD6, 0xA2),
         ["Accent.Default"] = ThemeColor.Rgb(0x7C, 0x6C, 0xFF),
         ["Accent.Hover"] = ThemeColor.Rgb(0x97, 0x89, 0xFF),
         ["Accent.Pressed"] = ThemeColor.Rgb(0x7A, 0x68, 0xEE),
@@ -213,6 +215,11 @@ public static class ThemeCatalog
         ["Text.Muted"] = ThemeColor.Rgb(0x49, 0x55, 0x66),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
+        // Words need 4.5:1 on the surfaces that carry them; State.Warning/State.Success reach only
+        // 2.9-4.1:1 there, so status words take darker hues. The dark and high-contrast palettes keep
+        // their State hue for words because it already passes.
+        ["Text.Warning"] = ThemeColor.Rgb(0x8B, 0x61, 0x0E),
+        ["Text.Success"] = ThemeColor.Rgb(0x17, 0x77, 0x54),
         ["Accent.Default"] = ThemeColor.Rgb(0x7C, 0x6C, 0xFF),
         ["Accent.Hover"] = ThemeColor.Rgb(0x97, 0x89, 0xFF),
         ["Accent.Pressed"] = ThemeColor.Rgb(0x7A, 0x68, 0xEE),
@@ -265,6 +272,8 @@ public static class ThemeCatalog
         ["Text.Muted"] = ThemeColor.Rgb(0xB3, 0xB3, 0xB3),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x00, 0x00, 0x00),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
+        ["Text.Warning"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
+        ["Text.Success"] = ThemeColor.Rgb(0x00, 0xE6, 0x76),
         ["Accent.Default"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
         ["Accent.Hover"] = ThemeColor.Rgb(0xFF, 0xE0, 0x4D),
         ["Accent.Pressed"] = ThemeColor.Rgb(0xC9, 0xA6, 0x00),

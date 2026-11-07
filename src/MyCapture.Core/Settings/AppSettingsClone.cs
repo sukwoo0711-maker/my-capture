@@ -202,6 +202,8 @@ public static class AppSettingsClone
         LastCaptureFailed = s.LastCaptureFailed,
         RequestAttemptedUtc = s.RequestAttemptedUtc,
         InvitationShownUtc = s.InvitationShownUtc,
+        InvitationShownCount = s.InvitationShownCount,
+        InvitationDismissedUtc = s.InvitationDismissedUtc,
     };
 
     private static StoreUpdateState Clone(StoreUpdateState s) => new()

@@ -389,7 +389,8 @@ public sealed partial class SettingsThemePreviewTests
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
-            Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
+            // No heading row repeats the folder's location header, so every row holds compact cards.
+            Assert.All(vm.Rows, row => Assert.True(row.IsCompact));
             AssertInsideClient(compactTile, client, label);
             Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
             Button compactMore = Descendants(compactTile).OfType<Button>()

@@ -151,6 +151,28 @@ public sealed class GlobalHotkeyReconfigureTests
     }
 
     [Fact]
+    public void NewInstall_F3AlreadyTaken_IsClaimedBeforeTheOtherProgram()
+    {
+        RunSta(() =>
+        {
+            Hotkey f3 = new(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([f3]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+
+            service.Initialize(NewInstallDefaults.Create().Hotkeys);
+
+            Assert.Empty(service.Failures);
+            Assert.Equal(GlobalHotkeyCommand.PasteToScreen, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(f3, Assert.Single(hotkeyOverride.Held).Value);
+            Assert.Contains(GlobalHotkeyCommand.PasteToScreen, service.RegisteredCommands);
+            Assert.Contains(GlobalHotkeyCommand.CaptureRegion, service.RegisteredCommands);
+            Assert.Contains(GlobalHotkeyCommand.HideAllPins, service.RegisteredCommands);
+        });
+    }
+
+    [Fact]
     public void NewInstall_F3AlreadyTaken_ReportsPasteToScreenInStartupFailures()
     {
         RunSta(() =>
@@ -159,8 +181,12 @@ public sealed class GlobalHotkeyReconfigureTests
             var registrar = new FakeRegistrar([f3]);
             using var window = new NativeMessageWindow();
             using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance);
+            // A new installation handles its core keys first; with that turned off in Settings → Shortcuts,
+            // a key another program holds is reported at startup instead.
+            HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
+            keys.ForceCoreShortcuts = false;
 
-            service.Initialize(NewInstallDefaults.Create().Hotkeys);
+            service.Initialize(keys);
 
             HotkeyRegistrationFailure failure = Assert.Single(service.Failures);
             Assert.Equal(GlobalHotkeyCommand.PasteToScreen, failure.Command);

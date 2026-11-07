@@ -116,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
             menu.ClearValue(ContextMenu.PlacementTargetProperty);
 
-            // Delete: the card leaves while its capture moves away; the view waits for both.
+            // Delete: the card leaves while its capture moves away; the grid closes up once it has faded.
             window.ConfirmDelete = (_, _) => true;
             Guid deleted = library.Records[1].Id, follower = library.Records[2].Id, leader = library.Records[0].Id;
             ListBoxItem leaving = FeelCard(window, deleted);
@@ -181,7 +181,7 @@ public sealed partial class SettingsThemePreviewTests
             Guid deleted = library.Records[1].Id;
             ListBoxItem leaving = FeelCard(window, deleted);
 
-            // Today's delete: nothing animates, the view is rebuilt as soon as the move ends.
+            // Without motion nothing animates: the card disappears at once and the result follows the move.
             Task delete = StartUiTask(window, () => window.DeleteCapturesAsync([deleted]));
             Assert.False(leaving.HasAnimatedProperties);
             Assert.Same(Transform.Identity, leaving.RenderTransform);
@@ -198,6 +198,82 @@ public sealed partial class SettingsThemePreviewTests
         }
         finally
         {
+            window.CloseForExit();
+        }
+    }
+
+    /// <summary>
+    /// A delete of many captures used to leave blank cards on screen until the last one reached the
+    /// Recycle Bin. The cards leave the view at once, and the status line counts the move while the
+    /// Recycle Bin works. The move is held part-way, as a slow Recycle Bin holds it, with motion on and off.
+    /// </summary>
+    [Fact]
+    public Task LibraryDelete_CardsLeaveAtOnce_AndTheStatusLineCountsTheMove() =>
+        RunIsolated(nameof(LibraryDelete_CardsLeaveAtOnce_AndTheStatusLineCountsTheMove), () =>
+        {
+            using var language = UiText.UseLanguage("ko-KR");
+            Application application = CreateLibraryApplication();
+            bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
+            try
+            {
+                foreach (bool motion in new[] { true, false })
+                {
+                    FluidMotion.AnimationsEnabledOverrideForTest = motion;
+                    VerifyLargeDeleteLeavesAtOnce(motion);
+                }
+            }
+            finally
+            {
+                FluidMotion.AnimationsEnabledOverrideForTest = previous;
+                application.Shutdown();
+            }
+        });
+
+    private static void VerifyLargeDeleteLeavesAtOnce(bool motion)
+    {
+        EvidenceLibrary library = CreateEvidenceLibrary(12, motion ? "mc-library-bulk-" : "mc-library-bulk-still-");
+        GalleryWindow window = library.Window;
+        string label = motion ? "bulk" : "bulk still";
+        try
+        {
+            window.Show();
+            SettleFeelLibrary(window);
+            var status = (TextBlock)window.FindName("LibraryActionStatus");
+            window.ConfirmDelete = (_, _) => true;
+            window.DeleteProgressDelay = TimeSpan.Zero;
+            Guid[] deleted = library.Records.Take(8).Select(record => record.Id).ToArray();
+            bool Shown(ListBoxItem card) => deleted.Contains(((GalleryItemViewModel)card.DataContext).Id);
+
+            library.Trash.HoldAfter(2);
+            Task delete = StartUiTask(window, () => window.DeleteCapturesAsync(deleted));
+            PumpLibraryUntil(window, () => library.Trash.IsHolding
+                && KoreanWordWrap.Strip(status.Text) == "8개 중 2개를 휴지통으로 옮기는 중…", $"{label}: counting");
+            PumpLibraryUntil(window, () => !window.RealizedCards().Any(Shown), $"{label}: cards left");
+            // The move is still running: the index has not changed, and the line is progress.
+            Assert.False(delete.IsCompleted);
+            Assert.Equal(12, library.Queue.Count);
+            Assert.Equal(FeedbackKind.Progress, window.ActionStatusKindForTest);
+            Assert.Equal(4, window.RealizedCards().Count());
+
+            library.Trash.ReleaseHold();
+            PumpLibraryUntil(window, () => delete.IsCompleted, $"{label}: delete");
+            Assert.True(delete.IsCompletedSuccessfully, delete.Exception?.ToString());
+            Assert.Equal("8개를 휴지통으로 옮김", KoreanWordWrap.Strip(status.Text));
+            Assert.NotEqual(FeedbackKind.Progress, window.ActionStatusKindForTest);
+            Assert.Equal(4, library.Queue.Count);
+            Assert.Equal(UiText.Get("LibraryUndo_Action"), window.StatusActionLabelForTest);
+            Assert.DoesNotContain(window.RealizedCards(), Shown);
+            PumpLibraryUntil(window, () => !GalleryDeleteMotion.IsMoving(status)
+                && !window.RealizedCards().Any(GalleryDeleteMotion.IsMoving), $"{label}: settled");
+
+            // Undo brings all eight back with one restore of the batch.
+            PumpUiTask(window, async () => { await window.InvokeStatusActionForTest(); return true; });
+            PumpLibraryUntil(window, () => KoreanWordWrap.Strip(status.Text) == "라이브러리에 8개 복원됨", $"{label}: undo");
+            Assert.Equal(12, library.Queue.Count);
+        }
+        finally
+        {
+            library.Trash.ReleaseHold();
             window.CloseForExit();
         }
     }

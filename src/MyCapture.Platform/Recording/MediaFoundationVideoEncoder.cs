@@ -30,9 +30,6 @@ namespace MyCapture.Platform.Recording;
 /// </remarks>
 public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 {
-    private const uint MF_VERSION = 0x0002_0070; // MF_SDK_VERSION << 16 | MF_API_VERSION
-    private const uint MFSTARTUP_LITE = 1;
-
     private static readonly Guid MFMediaType_Video = new("73646976-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_H264 = new("34363248-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_RGB32 = new("00000016-0000-0010-8000-00AA00389B71");
@@ -59,7 +56,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 
     private readonly ILogger _log;
     private readonly VideoEncoderOptions _options;
-    private readonly bool _startedMf;
+    private MediaFoundationLifetime.Lease? _platform;
 
     private IMFSinkWriter? _writer;
     private int _streamIndex;
@@ -92,8 +89,9 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
                 nameof(options));
         }
 
-        Check(MFStartup(MF_VERSION, MFSTARTUP_LITE), nameof(MFStartup));
-        _startedMf = true;
+        // The platform stays started from the first use to app exit (#243); the lease only keeps
+        // it from shutting down at exit while this encoder still holds Media Foundation objects.
+        _platform = MediaFoundationPlatform.Acquire();
 
         try
         {
@@ -101,7 +99,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
         }
         catch
         {
-            SafeShutdown();
+            ReleaseMediaFoundation();
             throw;
         }
     }
@@ -547,7 +545,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
         Check(type.SetUINT64(ref k, packed), "IMFMediaType.SetUINT64(ratio)");
     }
 
-    private void SafeShutdown()
+    private void ReleaseMediaFoundation()
     {
         if (_writer is not null)
         {
@@ -555,10 +553,9 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
             _writer = null;
         }
 
-        if (_startedMf)
-        {
-            _ = MFShutdown();
-        }
+        // Last, so the platform outlives the writer and the transforms it owns.
+        _platform?.Dispose();
+        _platform = null;
     }
 
     public void Dispose()
@@ -581,7 +578,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
             _log.LogWarning(ex, "Sink writer finalise during dispose failed");
         }
 
-        SafeShutdown();
+        ReleaseMediaFoundation();
     }
 
     private static void Check(int hr, string what)
@@ -594,12 +591,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
     }
 
     // ----- Media Foundation flat exports -----
-
-    [DllImport("mfplat.dll")]
-    private static extern int MFStartup(uint version, uint flags);
-
-    [DllImport("mfplat.dll")]
-    private static extern int MFShutdown();
+    // MFStartup and MFShutdown belong to MediaFoundationPlatform alone.
 
     [DllImport("mfplat.dll")]
     private static extern int MFCreateAttributes(out IMFAttributes attributes, uint initialSize);

@@ -1,12 +1,14 @@
+using System.Diagnostics;
 using System.IO;
 using MyCapture.Platform.Shell;
 using System.Text.Json;
 using System.Security.Cryptography;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-public sealed class WindowsRecycleBinTests
+public sealed class WindowsRecycleBinTests(ITestOutputHelper output)
 {
     [Fact]
     public void ShellComFailure_PreservesNativeCauseWithinIOExceptionContract()
@@ -135,6 +137,92 @@ public sealed class WindowsRecycleBinTests
         Assert.Contains("restore:namespace-unavailable", File.ReadAllText(Path.Combine(root, "stages.txt")));
         string metadata = Path.Combine(Path.GetDirectoryName(receipt.RecycledPath)!, "$I" + Path.GetFileName(receipt.RecycledPath)[2..]);
         File.WriteAllText(Path.Combine(root, "shell-final-state.json"), JsonSerializer.Serialize(new { MetadataExists = File.Exists(metadata), PayloadExists = File.Exists(receipt.RecycledPath) }));
+    }
+
+    /// <summary>
+    /// A library delete of many captures moves them with one Shell operation, and Undo brings them
+    /// back with one Recycle Bin restore. One operation per capture cost about 0.2 s to move and about
+    /// a second to restore each. Both ways run here on the same number of owned directories, the
+    /// timings go to the test output and timings.txt, and every directory comes back intact.
+    /// MYCAPTURE_RECYCLE_CANARY_COUNT sets how many directories each way moves (20 by default).
+    /// </summary>
+    [RecycleBinCanaryFact]
+    public void OwnedDirectories_MoveAndRestoreTogether_FasterThanOneAtATime()
+    {
+        int count = int.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_RECYCLE_CANARY_COUNT"), out int requested)
+            && requested is >= 2 and <= 500 ? requested : 20;
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-trash-batch-").FullName;
+        var contents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string[] Create(string kind) => Enumerable.Range(0, count).Select(index =>
+        {
+            string path = Path.Combine(root, $"{kind}-{index:D2}");
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, "canary.txt"), contents[path] = $"{kind} capture {index}");
+            return path;
+        }).ToArray();
+        string[] alone = Create("alone"), together = Create("together");
+        var trash = new WindowsRecycleBin();
+        var identities = alone.Concat(together).ToDictionary(path => path, trash.GetIdentity, StringComparer.OrdinalIgnoreCase);
+        var stages = new List<string>();
+        trash.DiagnosticStageForTest = stage => { lock (stages) stages.Add(stage); };
+        string[] TakeStages() { lock (stages) { string[] taken = stages.ToArray(); stages.Clear(); return taken; } }
+
+        // A move or restore of one directory that throws is kept for the assertions while the rest go
+        // on, so that every directory that moved comes back.
+        var aloneReceipts = new List<RecycledPathReceipt>(count);
+        var aloneFailures = new List<Exception>();
+        var clock = Stopwatch.StartNew();
+        foreach (string path in alone)
+        {
+            try { aloneReceipts.Add(trash.RecycleDirectory(path)); }
+            catch (Exception ex) { aloneFailures.Add(ex); }
+        }
+        TimeSpan moveAlone = clock.Elapsed;
+        TakeStages();
+        var progress = new List<int>();
+        clock.Restart();
+        IReadOnlyList<RecycleOutcome> outcomes = trash.RecycleDirectories(together, moved => { lock (progress) progress.Add(moved); });
+        TimeSpan moveTogether = clock.Elapsed;
+        string[] moveStages = TakeStages();
+        bool movedAway = alone.Concat(together).All(path => !Directory.Exists(path));
+
+        // Everything comes back before any assertion, so a failure leaves nothing in the Recycle Bin.
+        clock.Restart();
+        foreach (RecycledPathReceipt receipt in aloneReceipts)
+        {
+            try { trash.RestoreDirectory(receipt); }
+            catch (Exception ex) { aloneFailures.Add(ex); }
+        }
+        TimeSpan restoreAlone = clock.Elapsed;
+        TakeStages();
+        RecycledPathReceipt[] togetherReceipts = outcomes.Where(outcome => outcome.Receipt is not null).Select(outcome => outcome.Receipt!).ToArray();
+        clock.Restart();
+        IReadOnlyList<Exception?> failures = trash.RestoreDirectories(togetherReceipts);
+        TimeSpan restoreTogether = clock.Elapsed;
+        string[] restoreStages = TakeStages();
+
+        string report = $"{count} directories: move one at a time {moveAlone.TotalSeconds:F2} s, together {moveTogether.TotalSeconds:F2} s; "
+            + $"restore one at a time {restoreAlone.TotalSeconds:F2} s, together {restoreTogether.TotalSeconds:F2} s";
+        output.WriteLine(report);
+        File.WriteAllText(Path.Combine(root, "timings.txt"), report);
+        Assert.True(aloneFailures.Count == 0, string.Join(Environment.NewLine, aloneFailures));
+        Assert.All(outcomes, outcome => Assert.Null(outcome.Failure));
+        Assert.Equal(count, togetherReceipts.Length);
+        Assert.True(movedAway);
+        Assert.Equal(count, progress[^1]);
+        Assert.Equal(1, moveStages.Count(stage => stage == "recycle-batch:performed"));
+        Assert.DoesNotContain("recycle:queued", moveStages); // no item fell back to its own operation
+        Assert.All(failures, failure => Assert.Null(failure));
+        Assert.Equal(1, restoreStages.Count(stage => stage == "restore-batch:undelete-end"));
+        Assert.DoesNotContain("restore:undelete-start", restoreStages);
+        foreach (string path in alone.Concat(together))
+        {
+            Assert.Equal(identities[path], trash.GetIdentity(path));
+            Assert.Equal(contents[path], File.ReadAllText(Path.Combine(path, "canary.txt")));
+        }
+        Assert.All(aloneReceipts.Concat(togetherReceipts), receipt => Assert.False(Directory.Exists(receipt.RecycledPath)));
+        Assert.True(moveTogether < moveAlone, report);
+        Assert.True(restoreTogether < restoreAlone, report);
     }
 }
 

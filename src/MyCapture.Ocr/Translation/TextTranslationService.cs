@@ -194,8 +194,11 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         ISentenceTranslator engine = _engine ??= LoadEngine();
         var segments = new List<string>[sources.Count];
         for (int index = 0; index < sources.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             segments[index] = [.. TranslationSegmenter.Split(sources[index] ?? "", engine.CountTokens,
                 MaxSegmentTokens, MarianTranslator.MaxSourceTokens)];
+        }
 
         if (_cache.Count > CacheLimit) _cache.Clear();
         var pending = segments.SelectMany(block => block).Where(segment => !_cache.ContainsKey(segment))
@@ -219,6 +222,7 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
             var invented = new List<string>();
             foreach (string segment in segments[index])
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 (string repaired, _) = ProtectedTokens.Repair(segment, _cache[segment]);
                 ProtectedTokenCheck check = ProtectedTokens.Check(segment, repaired);
                 texts.Add(repaired);

@@ -84,8 +84,15 @@ public partial class App
     internal static void ApplyResidentProbeSettings(AppSettings settings)
     {
         settings.General.IsFirstRun = false;
+        // The release perf gate measures the same path as 5.1.0, which never showed the invitation in the probe.
+        StoreRatingPolicy.MarkAttempted(settings.StoreRating, DateTimeOffset.UtcNow);
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
+        // Defensive only. A new installation handles its core keys before other programs, but the
+        // probe registers no global shortcuts at all (InitializeShell skips _hotkeys.Initialize while
+        // s_residentProbe is set), so no keyboard hook is installed either way. Priority stays off so
+        // the measured settings still match the previous release if the probe ever registers them.
+        settings.Hotkeys.ForceCoreShortcuts = false;
         settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
@@ -168,6 +175,8 @@ public partial class App
             CaptureOverlayView.SuppressKeyPanelForProbe = false;
         }
 
+        // A step that finished over its release budget (the library delete) fails the run as well.
+        if (exitCode == 0 && recorder.Failed) exitCode = 1;
         try { recorder.Write(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { exitCode = 2; }
         recorder.Dispose();
@@ -213,6 +222,11 @@ public partial class App
                 await recorder.SettleAsync("pins-10 closed", probe.SettleSeconds,
                     () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
                 await recorder.AuditAsync("pins-10 closed");
+                break;
+            case ResidentProbeLibraryDelete.Scenario:
+                await ProbeLibraryDeleteAsync(probe, recorder);
+                await recorder.SettleAsync(ResidentProbeLibraryDelete.Scenario + " closed", probe.SettleSeconds);
+                await recorder.AuditAsync(ResidentProbeLibraryDelete.Scenario + " closed");
                 break;
             case "soak":
                 await ProbeSoakAsync(probe, recorder);

@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
@@ -109,15 +110,20 @@ internal sealed partial class GalleryWindow
     private async void ConfirmDeleteMany(IEnumerable<Guid> ids, bool entireLibrary) =>
         await DeleteCapturesAsync(ids, entireLibrary);
 
+    /// <summary>How long a delete runs before the status line starts counting its move. Tests shorten it.</summary>
+    internal TimeSpan DeleteProgressDelay { get; set; } = TimeSpan.FromMilliseconds(500);
+
     /// <summary>
     /// Moves the captures to the Recycle Bin as one batch and reports the result on the status
-    /// line with Undo. The view is rebuilt before the result appears, so no blank tile is left.
+    /// line with Undo. The deleted cards leave the view at once, while their files are still
+    /// moving, and a move that takes a while is counted on the status line, so a large delete
+    /// never sits on screen as blank cards.
     /// </summary>
     /// <remarks>
-    /// With Windows animation effects on, the deleted cards on screen fade and shrink while the
-    /// move runs (it never waits for them), the view is rebuilt once both have finished, the
-    /// remaining cards slide into the gap and the result rises into the status line
-    /// (<see cref="GalleryDeleteMotion"/>). With them off the view is rebuilt as soon as the move ends.
+    /// With Windows animation effects on, the deleted cards on screen fade and shrink, the grid
+    /// closes up as soon as they have faded (it never waits for the move), the remaining cards
+    /// slide into the gap, and the result rises into the status line when the move ends
+    /// (<see cref="GalleryDeleteMotion"/>). With them off the cards disappear at once.
     /// </remarks>
     internal async Task DeleteCapturesAsync(IEnumerable<Guid> ids, bool entireLibrary = false)
     {
@@ -128,8 +134,25 @@ internal sealed partial class GalleryWindow
         bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
         string? status = null;
         Guid? undo = null;
-        bool motion = false;
+        bool motion = false, leaving = false, closedUp = false;
         GalleryCardExit exit = GalleryCardExit.None;
+        RecycleProgressLine? progress = null;
+
+        // The deleted cards finish leaving before the grid closes up behind them.
+        async Task CloseUpAsync()
+        {
+            if (closedUp) return;
+            closedUp = true;
+            await exit.Completion;
+            GalleryCardLayout? before = motion ? CaptureCardLayout() : null;
+            _viewModel.Refresh();
+            exit.Reset();
+            if (before is not null) PlayReflow(before);
+            // The focused card may be gone: focus returns to the grid's entry card instead of the window.
+            // After the reflow was planned, so scrolling a card into view cannot change what moved.
+            RestoreGridFocus(hadGridFocus);
+        }
+
         try
         {
             if (!(ConfirmDelete ?? ConfirmDeleteWithDialog)(targets.Length, entireLibrary)) return;
@@ -137,11 +160,18 @@ internal sealed partial class GalleryWindow
             motion = DeleteMotionEnabled;
             if (motion) exit = BeginDeleteExit(targets);
             foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
+            _viewModel.SetLeaving(targets);
+            leaving = true;
+            progress = new RecycleProgressLine(this, targets.Length, DeleteProgressDelay);
             Func<Guid, bool> canRemove = id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id);
             Guid batch = Guid.NewGuid();
-            CaptureBatchRemovalResult result;
-            using (_controller.Recovery?.BeginBatch(batch))
-                result = await _queue.RemoveManyAsync(targets, canRemove);
+            Task<CaptureBatchRemovalResult> move;
+            // The batch tag and the progress reports flow into the removal worker with the call.
+            using (_controller.Recovery?.BeginBatch(batch, progress.Report))
+                move = _queue.RemoveManyAsync(targets, canRemove);
+            await CloseUpAsync();
+            CaptureBatchRemovalResult result = await move;
+            progress.End();
             IReadOnlyList<Guid> unavailable = result.RecycleUnavailableIds;
             CaptureBatchRemovalResult? permanent = await LibraryPermanentDeletion.ResolveAsync(unavailable,
                 count => LibraryPermanentDeletion.Confirm(this, count),
@@ -162,18 +192,19 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
-            // The deleted cards finish leaving before the grid closes up behind them.
-            await exit.Completion;
-            GalleryCardLayout? before = motion ? CaptureCardLayout() : null;
+            progress?.End();
+            await CloseUpAsync();
             _deleteInProgress = false;
-            _viewModel.Refresh();
-            exit.Reset();
+            if (leaving)
+            {
+                // A capture the delete kept (still being saved, or refused by Windows) shows again,
+                // and the removed ones leave the tile cache, which releases their pictures. The rows
+                // already show neither, so the cards that are sliding into the gap keep moving.
+                _viewModel.ClearLeaving(targets);
+                _viewModel.Refresh();
+            }
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             RaiseCaptureChanged();
-            if (before is not null) PlayReflow(before);
-            // The focused card may be gone: focus returns to the grid's entry card instead of the window.
-            // After the reflow was planned, so scrolling a card into view cannot change what moved.
-            RestoreGridFocus(hadGridFocus);
         }
 
         if (status is null) return;
@@ -187,6 +218,67 @@ internal sealed partial class GalleryWindow
         }
 
         if (motion) RiseActionStatus();
+    }
+
+    /// <summary>
+    /// The status line while a delete moves its captures: "124개를 휴지통으로 옮기는 중…", then
+    /// "124개 중 37개를 휴지통으로 옮기는 중…". It appears only once the move has run for
+    /// <see cref="DeleteProgressDelay"/>, so a quick delete shows just its result. The removal worker
+    /// reports from its own thread; the window shows the latest count, one update at a time.
+    /// </summary>
+    private sealed class RecycleProgressLine
+    {
+        private readonly GalleryWindow _window;
+        private readonly int _total;
+        private readonly DispatcherTimer _delay;
+        private int _moved, _posted;
+        private bool _shown, _ended;
+
+        internal RecycleProgressLine(GalleryWindow window, int total, TimeSpan delay)
+        {
+            _window = window;
+            _total = total;
+            _delay = new DispatcherTimer(DispatcherPriority.Normal, window.Dispatcher) { Interval = delay };
+            _delay.Tick += (_, _) =>
+            {
+                _delay.Stop();
+                _shown = true;
+                Show();
+            };
+            _delay.Start();
+        }
+
+        /// <summary>How many of the captures are in the Recycle Bin; called on the removal worker.</summary>
+        internal void Report(int moved)
+        {
+            Volatile.Write(ref _moved, moved);
+            if (Interlocked.Exchange(ref _posted, 1) == 0)
+                _window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(OnReported));
+        }
+
+        private void OnReported()
+        {
+            // A full fence before reading the count: a report that found this post still pending
+            // stored its count first, so the line can never stay one report behind.
+            Interlocked.Exchange(ref _posted, 0);
+            if (_shown) Show();
+        }
+
+        private void Show()
+        {
+            if (_ended) return;
+            int moved = Math.Min(Volatile.Read(ref _moved), _total);
+            _window.ShowActionStatus(moved > 0
+                ? UiText.Format("LibrarySelection_MovingProgress", moved, _total)
+                : UiText.Format("LibrarySelection_Moving", _total));
+        }
+
+        /// <summary>The result takes the line from here on.</summary>
+        internal void End()
+        {
+            _ended = true;
+            _delay.Stop();
+        }
     }
 
     /// <summary>
