@@ -256,10 +256,13 @@ internal sealed partial class QuickAccessWindow : Window
         {
             Content = Glyph("Icon.Pause"), Focusable = false, ToolTip = UiText.Get("QuickAccess.KeepName"),
         };
-        // The icon takes the toggle's ink, as every toggle's content does, so it switches to the
-        // selection ink on the on-state fill instead of keeping Text.Primary on a Text.Primary fill.
-        ((SymbolIcon)_keep.Content).SetBinding(SymbolIcon.StrokeProperty,
-            new System.Windows.Data.Binding(nameof(Foreground)) { Source = _keep });
+        // Off, the icon keeps Glyph's Text.Primary like the card's other commands; on, it takes the
+        // selection ink, since the on-state fill is Text.SelectionBackground, the colour of Text.Primary.
+        var keepIcon = (SymbolIcon)_keep.Content;
+        RoutedEventHandler keepInk = (_, _) => keepIcon.SetResourceReference(SymbolIcon.StrokeProperty,
+            _keep.IsChecked == true ? "Text.SelectionForeground" : "Text.Primary");
+        _keep.Checked += keepInk;
+        _keep.Unchecked += keepInk;
         CommandButtonPresentation.Apply(_keep, compact: true);
         _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 36;
         _keep.Padding = new Thickness(2, 0, 2, 0); _keep.Margin = new Thickness(0);
