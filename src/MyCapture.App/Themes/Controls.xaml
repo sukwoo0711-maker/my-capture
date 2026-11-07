@@ -599,6 +599,16 @@
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
+                        <!-- On and focused, Border.Focus is the fill's own colour (Text.Primary in the app
+                             palettes) or close to it (WindowText on Highlight in a contrast theme), so the
+                             ring takes the fill's ink. Place and size stay; after the focus trigger, so it wins. -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True" />
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource Text.SelectionForeground}" />
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.48" />
                         </Trigger>
@@ -608,8 +618,60 @@
         </Setter>
     </Style>
     <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
+    <!-- A disclosure header keeps the look from before the ink fill: the neutral selected tile with
+         its primary-text edge, under primary text. Its chevron already shows that it is open. -->
+    <Style x:Key="ToggleButton.Disclosure" TargetType="{x:Type ToggleButton}" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.Md}" />
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border x:Name="CheckedLayer"
+                                Style="{StaticResource StateLayer.Selected}"
+                                BorderThickness="2" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
+                                CornerRadius="{DynamicResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
-    <!-- Optional dialog settings use the same toggle chrome and live palette as the controls below. -->
+    <!-- Optional dialog settings open under the disclosure toggle and use the live palette of the controls below. -->
     <Style x:Key="Expander.Options" TargetType="Expander">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Template">
@@ -617,6 +679,7 @@
                 <ControlTemplate TargetType="Expander">
                     <StackPanel>
                         <ToggleButton x:Name="HeaderToggle" HorizontalAlignment="Left" Padding="6"
+                                      Style="{StaticResource ToggleButton.Disclosure}"
                                       IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
                             <StackPanel Orientation="Horizontal">

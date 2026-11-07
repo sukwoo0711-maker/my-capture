@@ -29,6 +29,43 @@ public sealed class SystemHighContrastThemeTests
         [SystemColorRole.HotTrack] = Color.FromRgb(0x80, 0x80, 0xFF),
     };
 
+    // The other Windows 11 contrast themes, for contracts that must hold in each of them.
+    internal static readonly IReadOnlyDictionary<SystemColorRole, Color> Dusk = new Dictionary<SystemColorRole, Color>
+    {
+        [SystemColorRole.Window] = Color.FromRgb(0x2D, 0x32, 0x36),
+        [SystemColorRole.WindowText] = Color.FromRgb(0xFF, 0xFF, 0xFF),
+        [SystemColorRole.ButtonFace] = Color.FromRgb(0x2D, 0x32, 0x36),
+        [SystemColorRole.ButtonText] = Color.FromRgb(0xB6, 0xF6, 0xF0),
+        [SystemColorRole.Highlight] = Color.FromRgb(0xA1, 0xBF, 0xDE),
+        [SystemColorRole.HighlightText] = Color.FromRgb(0x21, 0x2D, 0x3B),
+        [SystemColorRole.GrayText] = Color.FromRgb(0xA6, 0xA6, 0xA6),
+        [SystemColorRole.HotTrack] = Color.FromRgb(0x70, 0xEB, 0xDE),
+    };
+
+    internal static readonly IReadOnlyDictionary<SystemColorRole, Color> Desert = new Dictionary<SystemColorRole, Color>
+    {
+        [SystemColorRole.Window] = Color.FromRgb(0xFF, 0xFA, 0xEF),
+        [SystemColorRole.WindowText] = Color.FromRgb(0x3D, 0x3D, 0x3D),
+        [SystemColorRole.ButtonFace] = Color.FromRgb(0xFF, 0xFA, 0xEF),
+        [SystemColorRole.ButtonText] = Color.FromRgb(0x20, 0x20, 0x20),
+        [SystemColorRole.Highlight] = Color.FromRgb(0x90, 0x39, 0x09),
+        [SystemColorRole.HighlightText] = Color.FromRgb(0xFF, 0xF5, 0xE3),
+        [SystemColorRole.GrayText] = Color.FromRgb(0x67, 0x67, 0x67),
+        [SystemColorRole.HotTrack] = Color.FromRgb(0x1C, 0x5E, 0x75),
+    };
+
+    internal static readonly IReadOnlyDictionary<SystemColorRole, Color> Aquatic = new Dictionary<SystemColorRole, Color>
+    {
+        [SystemColorRole.Window] = Color.FromRgb(0x20, 0x20, 0x20),
+        [SystemColorRole.WindowText] = Color.FromRgb(0xFF, 0xFF, 0xFF),
+        [SystemColorRole.ButtonFace] = Color.FromRgb(0x20, 0x20, 0x20),
+        [SystemColorRole.ButtonText] = Color.FromRgb(0xFF, 0xFF, 0xFF),
+        [SystemColorRole.Highlight] = Color.FromRgb(0x8E, 0xE3, 0xF0),
+        [SystemColorRole.HighlightText] = Color.FromRgb(0x26, 0x3B, 0x50),
+        [SystemColorRole.GrayText] = Color.FromRgb(0xA6, 0xA6, 0xA6),
+        [SystemColorRole.HotTrack] = Color.FromRgb(0x75, 0xE9, 0xFC),
+    };
+
     [Theory]
     [InlineData(AppTheme.Glass)]
     [InlineData(AppTheme.Daylight)]
