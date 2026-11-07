@@ -1,4 +1,5 @@
 using MyCapture.App.Themes;
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 using System.Windows;
@@ -244,9 +245,38 @@ internal static class ClipboardTextRenderer
     private static int[] MeasureColumnWidths(TablePreview preview) =>
         MeasureColumnWidths(preview.Rows, preview.ColumnCount, fitColumns: true);
 
+    /// <summary>
+    /// A table cell's one-line text. A value with line breaks (a quoted spreadsheet cell) shows
+    /// them as spaces, so a one-line cell does not hide everything after its first line, or show
+    /// nothing for a value that starts with one, and a value that does not fit ends with an
+    /// ellipsis. The value itself, which copying uses, keeps its line breaks.
+    /// </summary>
     internal static FormattedText CreateTableCellText(string value, double columnWidth) =>
-        CreateFormattedText(value, TableFontSize, Math.Max(1, columnWidth - (TableHorizontalPadding * 2)),
+        CreateFormattedText(SingleLine(value), TableFontSize, Math.Max(1, columnWidth - (TableHorizontalPadding * 2)),
             TableRowHeight - (TableVerticalPadding * 2), singleLine: true);
+
+    // Every character WPF's line formatting breaks at; CRLF becomes one space.
+    private static readonly SearchValues<char> LineBreaks = SearchValues.Create("\r\n\u000B\u000C\u0085\u2028\u2029");
+
+    internal static string SingleLine(string value)
+    {
+        int first = value.AsSpan().IndexOfAny(LineBreaks);
+        if (first < 0) return value;
+        var line = new StringBuilder(value.Length);
+        line.Append(value, 0, first);
+        for (int index = first; index < value.Length; index++)
+        {
+            char current = value[index];
+            if (!LineBreaks.Contains(current))
+            {
+                line.Append(current);
+                continue;
+            }
+            if (current == '\r' && index + 1 < value.Length && value[index + 1] == '\n') index++;
+            line.Append(' ');
+        }
+        return line.ToString();
+    }
 
     internal static int[] MeasureColumnWidths(IReadOnlyList<IReadOnlyList<string>> rows, int columnCount,
         bool fitColumns, Dictionary<string, int>? measured = null)
@@ -415,7 +445,11 @@ internal static class ClipboardTextRenderer
             inspectedCharacters++;
         }
 
-        if (rows.Count < MaxTableRows)
+        // A line break that ends the text closes the last row, as a spreadsheet range copy ends
+        // with CRLF; it does not start an empty one. PinTableSelection, which the selection view
+        // shows, reads the text the same way, so the picture and the view have the same rows.
+        bool endsWithLineBreak = index == sourceText.Length && index > 0 && sourceText[index - 1] is '\r' or '\n';
+        if (rows.Count < MaxTableRows && !endsWithLineBreak)
         {
             if (index < sourceText.Length && logicalColumn < MaxTableColumns)
             {
