@@ -109,7 +109,7 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 
 - 캡처 선택 화면이 더 빨리 뜨고 키보드·마우스 입력을 더 빨리 받습니다. 닫은 뒤 남는 메모리도 줄었습니다.
 - 여러 캡처를 휴지통으로 옮기고 되돌리는 시간이 줄었습니다. 라이브러리 미리 보기·복사·저장의 화면 대기도 줄였습니다.
-- 스크롤 캡처의 반복 무늬 처리를 개선했습니다. 녹화 검증이 잠시 실패해도 완성된 영상과 복구 정보를 보존하며, 녹화 도움말이 영상에 찍히지 않습니다.
+- 스크롤 캡처의 반복 무늬 처리를 개선했습니다. 녹화 검증이 잠시 실패해도 완성된 영상과 복구 정보를 보존하며, 녹화 도움말이 영상에 찍히지 않습니다. 녹화 영역의 고정 크기가 버튼을 놓을 때 바뀌던 문제를 고쳤습니다.
 - 글상자 입력 중에도 외곽선을 표시하고, 밝거나 어두운 바탕에서 입력 위치가 보이도록 고쳤습니다.
 - VS Code에서 복사한 Markdown 문서를 핀으로 표시합니다. Mermaid 도표도 보입니다.
 - 정확 모드의 표 인식과 긴 문장 번역을 고치고, 문자 인식 대기 중 CPU 사용량을 줄였습니다.
@@ -221,7 +221,7 @@ Limit: 1,500 characters. Covers changes since the Store version, 5.1.0. Enter th
 
 - The capture selector appears and accepts keyboard and mouse input sooner, with less memory left in use after it closes.
 - Moving captures to the Recycle Bin and restoring them is faster. Library previews, copying and saving cause less waiting.
-- Improved scrolling capture on repeated patterns. Completed recordings and recovery data survive temporary validation failures. Recording tooltips stay out of the video.
+- Improved scrolling capture on repeated patterns. Completed recordings and recovery data survive temporary validation failures. Recording tooltips stay out of the video. A fixed recording size no longer changes when you release the mouse button.
 - Text boxes show outlines while you type, with a caret visible on light and dark backgrounds.
 - Markdown copied from VS Code opens as a document pin, including Mermaid diagrams.
 - Improved Accurate table recognition, fixed long-text translation and reduced CPU use while OCR is idle.
