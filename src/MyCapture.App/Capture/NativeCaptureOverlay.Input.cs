@@ -73,6 +73,7 @@ internal sealed partial class NativeCaptureOverlay
 
     internal void AttachModeBar(CaptureModeBar bar)
     {
+        if (ReferenceEquals(_modeBar, bar)) return;
         DetachModeBar();
         _modeBar = bar;
         bar.ApplyPalette(_palette);
