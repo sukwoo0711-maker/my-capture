@@ -930,12 +930,20 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         // readout still reaches into that corner. The actual chip must win over the selection.
         pointer = new PointD(native.ScreenBounds.Width - 12 - panelWidth - 80, 600);
         native.Chrome!.Update(pointer, native.SelectionRectangle);
-        // The 190 x 36 readout starts 20 physical pixels below/right of this pointer.
+        // The DIB stamp's 190 x 36 readout starts 20 physical pixels below/right of this pointer. The retained
+        // size chip sits at the selection's corner like the WPF selector, so read its actual bounds.
         // The selection crowds the left corner; its soft preference must never cover the chip.
-        Rect readout = new(pointer.X + 20, 620, 190, 36);
+        Rect readout = dib ? new(pointer.X + 20, 620, 190, 36) : RetainedChipBounds(native);
         Rect panel = Assert.IsType<Rect>(native.KeyPanelBoundsForTest);
         Assert.False(panel.IntersectsWith(readout));
     });
+
+    private static Rect RetainedChipBounds(NativeCaptureOverlay native)
+    {
+        RectD chip = native.Chrome!.SizeChipBoundsForTest;
+        Assert.True(chip.Width > 0 && chip.Height > 0);
+        return new Rect(chip.Left - native.ScreenBounds.Left, chip.Top - native.ScreenBounds.Top, chip.Width, chip.Height);
+    }
 
     [Fact]
     public void NativeF1OnAVisibleSelectorDefersPanelWindowCreationPastTheKeyHandler() => StaTestHost.Run(() =>
