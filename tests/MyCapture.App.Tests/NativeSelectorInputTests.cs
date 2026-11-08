@@ -294,6 +294,7 @@ public sealed class NativeSelectorInputTests
         bitmap.Freeze();
         var overlay = new NativeCaptureOverlay(Bounds, false, false)
         {
+            PlaceCursor = _ => false,
             ReadCursor = () => new PointD(-400, -100), ReadMonitors = () => [Monitor],
         };
         overlay.AttachFrame(new FrozenFrame(bitmap, Bounds, null, 0));

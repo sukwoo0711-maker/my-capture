@@ -343,6 +343,7 @@ internal sealed class RegionRecordingCoordinator
         native.RecordingSelection = true;
         native.OffersOtherActions = preparation.OffersOtherActions;
         native.PresetSize = preparation.PresetSize;
+        native.ShowSelectionGrid = preparation.ShowSelectionGrid;
         native.GeometrySelectionCompleted = OnNativeGeometrySelected;
         native.ActionRequested += OnSelectionActionRequested;
         native.InputReady += OnNativeInputReady;

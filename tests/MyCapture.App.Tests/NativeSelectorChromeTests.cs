@@ -130,6 +130,7 @@ public sealed class NativeSelectorChromeTests
         using var owner = new NativeCaptureOverlay(Bounds, false, false)
         {
             ChromeStrategy = NativeSelectorChromeStrategy.Parallel,
+            PlaceCursor = _ => false,
             ReadMonitors = () => throw new InvalidOperationException("Test chrome failure"),
         };
         Assert.Throws<InvalidOperationException>(() => owner.AttachFrame(new FrozenFrame(bitmap, Bounds, null, 0)));
@@ -293,6 +294,7 @@ public sealed class NativeSelectorChromeTests
         var owner = new NativeCaptureOverlay(Bounds, false, true)
         {
             ChromeStrategy = strategy,
+            PlaceCursor = _ => false,
             ReadCursor = () => new PointD(100, 120),
             ReadMonitors = () => [new MonitorInfo("test", Bounds, Bounds, 96, true)],
         };

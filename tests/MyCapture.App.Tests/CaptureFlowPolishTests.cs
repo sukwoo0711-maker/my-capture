@@ -103,17 +103,20 @@ public sealed partial class CaptureFlowPolishTests
     });
 
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(1.25)]
-    [InlineData(1.5)]
-    public void DragDrawsTheStartPointChipWithTheSizeReadoutsCorners(double scale) => StaTestHost.Run(() =>
+    [InlineData(1.0, false)]
+    [InlineData(1.25, false)]
+    [InlineData(1.5, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.25, true)]
+    [InlineData(1.5, true)]
+    public void DragDrawsTheStartPointChipWithTheSizeReadoutsCorners(double scale, bool native) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame desktop = CaptureCueEvidenceTests.Desktop();
         foreach ((PointD start, PointD end) in new[] { (new PointD(300, 250), new PointD(520, 430)), (new PointD(1279, 719), new PointD(1000, 500)) })
         {
             PointD pointer = start;
-            var view = new CaptureOverlayView(desktop, showMagnifier: false)
+            var view = new AnchorSelector(native, desktop, scale)
             {
                 ReadCursor = () => pointer,
                 PlaceCursor = _ => false,
@@ -121,16 +124,17 @@ public sealed partial class CaptureFlowPolishTests
             };
             try
             {
-                CaptureCueEvidenceTests.UsePalette(view, CaptureGuidePalette.Create(AppTheme.Daylight, customColor: null, systemHighContrast: false));
+                view.UsePalette(CaptureGuidePalette.Create(AppTheme.Daylight, customColor: null, systemHighContrast: false));
                 view.InitializePointer();
                 view.SimulatePointerDown();
                 pointer = end;
                 view.SimulatePointerMove();
                 view.FlushFeedbackForTest();
                 // The first frame settles the scale; the chips are drawn again at it.
-                _ = CaptureCueEvidenceTests.Render(view, scale);
+                _ = view.RenderFrame(scale);
                 view.FlushFeedbackForTest();
-                Save(CaptureCueEvidenceTests.Render(view, scale), $"selector-drag-{start.X:0}-{Percent(scale)}.png");
+                Save(view.RenderFrame(scale), native ? $"selector-drag-native-{start.X:0}-{Percent(scale)}.png"
+                    : $"selector-drag-{start.X:0}-{Percent(scale)}.png");
                 Rect chip = view.AnchorChipBoundsForTest ?? throw new InvalidOperationException("The drag drew no start-point chip.");
                 Rect readout = view.DeferredGuideReadout ?? throw new InvalidOperationException("The drag drew no size read-out.");
                 RectangleGeometry drawn = Assert.Single(Rounded(Visual(view, "_anchorVisual")));
@@ -145,13 +149,17 @@ public sealed partial class CaptureFlowPolishTests
     });
 
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(1.25)]
-    [InlineData(1.5)]
-    [InlineData(2.0)]
-    public void MagnifierImageTurnsItsTopCornersWithThePanel(double scale) => StaTestHost.Run(() =>
+    [InlineData(1.0, false)]
+    [InlineData(1.25, false)]
+    [InlineData(1.5, false)]
+    [InlineData(2.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.25, true)]
+    [InlineData(1.5, true)]
+    [InlineData(2.0, true)]
+    public void MagnifierImageTurnsItsTopCornersWithThePanel(double scale, bool native) => StaTestHost.Run(() =>
     {
-        var view = new CaptureOverlayView(SolidFrame(Colors.Magenta), showSelectionGrid: false)
+        var view = new MagnifierSelector(native, SolidFrame(Colors.Magenta), scale, RenderView)
         {
             ReadCursor = () => new PointD(320, 180),
             SimulatedPointerInside = true,
@@ -160,10 +168,10 @@ public sealed partial class CaptureFlowPolishTests
         {
             view.InitializePointer();
             view.FlushFeedbackForTest();
-            _ = RenderView(view, scale);
+            _ = view.RenderFrame(scale);
             view.FlushFeedbackForTest();
-            RenderTargetBitmap frame = RenderView(view, scale);
-            Save(frame, $"magnifier-{Percent(scale)}.png");
+            RenderTargetBitmap frame = view.RenderFrame(scale);
+            Save(frame, native ? $"magnifier-native-{Percent(scale)}.png" : $"magnifier-{Percent(scale)}.png");
             var pixels = new Pixels(frame);
             Rect image = view.MagnifierImageBoundsForTest ?? throw new InvalidOperationException("No magnifier was drawn.");
             int left = (int)Math.Round(image.Left * scale), top = (int)Math.Round(image.Top * scale);
@@ -459,6 +467,8 @@ public sealed partial class CaptureFlowPolishTests
 
     private static DrawingVisual Visual(CaptureOverlayView view, string field) =>
         (DrawingVisual)typeof(CaptureOverlayView).GetField(field, PrivateInstance)!.GetValue(view)!;
+
+    private static DrawingVisual Visual(AnchorSelector view, string field) => view.Visual(field);
 
     private static IEnumerable<RectangleGeometry> Rounded(DrawingVisual visual) =>
         Leaves(visual.Drawing).OfType<GeometryDrawing>().Select(drawing => drawing.Geometry)

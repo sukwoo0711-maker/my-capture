@@ -758,6 +758,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.DetectWindows = AutoDetectWindows();
         native.OffersOtherActions = SelectorActionRequested is not null;
         native.CanRepeatLastRegion = CanRepeatLastRegion;
+        native.ShowSelectionGrid = presentation.ShowSelectionGrid;
         if (presentation.PracticeTarget is { } practice) _practiceSelectors[native] = practice;
         native.ShowStartGuide = ClaimStartGuide();
         native.ClaimKeyPanel = ClaimKeyPanel;

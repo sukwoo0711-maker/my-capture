@@ -40,6 +40,7 @@ public sealed class NativeSelectorCoordinatorTests
         {
             coordinator.Start(false, false, false, textCapture: text);
             NativeCaptureOverlay overlay = Assert.IsType<NativeCaptureOverlay>(coordinator.NativeOverlayForProbe);
+            overlay.PlaceCursor = _ => false;
             Assert.Equal(text, overlay.TextCaptureMode);
             Assert.True(overlay.TextCaptureAvailable);
             Assert.False(overlay.IsVisible);
