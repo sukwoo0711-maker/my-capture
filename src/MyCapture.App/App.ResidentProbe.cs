@@ -27,6 +27,22 @@ public partial class App
 {
     private static ResidentProbeOptions? s_residentProbe;
 
+    private void ApplySelectorVariants(IReadOnlySet<string> variants)
+    {
+        bool native = ResidentProbeOptions.UsesNativeSelector(variants);
+        NativeSelectorChromeStrategy strategy = ResidentProbeOptions.GetSelectorChromeStrategy(variants);
+        if (_overlay is not null)
+        {
+            _overlay.UseNativeDibSelector = native;
+            _overlay.NativeChromeStrategy = strategy;
+        }
+        if (_recorder is not null)
+        {
+            _recorder.UseNativeDibSelector = native;
+            _recorder.NativeChromeStrategy = strategy;
+        }
+    }
+
     private static readonly FieldInfo ProbeActiveOverlay =
         typeof(CaptureOverlayCoordinator).GetField("_activeOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -119,13 +135,6 @@ public partial class App
         }
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
-        if (_overlay is not null)
-        {
-            _overlay.UseNativeDibSelector = probe.Has("selector-native-dib");
-            _overlay.NativeChromeStrategy = probe.Has("selector-chrome-fresh") ? NativeSelectorChromeStrategy.Fresh
-                : probe.Has("selector-chrome-parallel") ? NativeSelectorChromeStrategy.Parallel
-                : probe.Has("selector-chrome-dib") ? NativeSelectorChromeStrategy.Dib : NativeSelectorChromeStrategy.Retained;
-        }
         PresentationDismissals.UseLegacySettleForProbe = probe.Has("legacy-capture-settle");
         CaptureFlight.UseLegacyBoundsForProbe = probe.Has("legacy-flight-bounds");
         // Diagnostic variant: no lifted capture flies into the card (CaptureFlight declines without layered windows).

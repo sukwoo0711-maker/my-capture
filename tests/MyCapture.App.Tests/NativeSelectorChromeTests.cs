@@ -239,15 +239,17 @@ public sealed class NativeSelectorChromeTests
     });
 
     [Theory]
-    [InlineData("selector-chrome-fresh")]
-    [InlineData("selector-chrome-parallel")]
-    [InlineData("selector-chrome-dib")]
-    public void ChromeVariantsRequireNativeAndOneStrategy(string strategy)
+    [InlineData("selector-chrome-fresh", (int)NativeSelectorChromeStrategy.Fresh)]
+    [InlineData("selector-chrome-parallel", (int)NativeSelectorChromeStrategy.Parallel)]
+    [InlineData("selector-chrome-dib", (int)NativeSelectorChromeStrategy.Dib)]
+    public void ChromeVariantsRequireNativeAndOneStrategy(string strategy, int expected)
     {
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", strategy]));
         var selected = ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-native-dib," + strategy]);
         Assert.Equal(2, selected.Count);
         Assert.Contains(strategy, selected);
+        Assert.True(ResidentProbeOptions.UsesNativeSelector(selected));
+        Assert.Equal((NativeSelectorChromeStrategy)expected, ResidentProbeOptions.GetSelectorChromeStrategy(selected));
         string other = strategy == "selector-chrome-fresh" ? "selector-chrome-dib" : "selector-chrome-fresh";
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-native-dib," + strategy + "," + other]));
     }

@@ -89,13 +89,16 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
     internal event EventHandler? Closed;
+    internal event EventHandler? InputReady;
+    /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
+    internal Action<RectD>? GeometrySelectionCompleted { get; set; }
     internal event Action<Exception>? Failed;
 
-    internal void Prepare()
+    internal void Prepare(Func<IntPtr, bool>? applyExclusion = null)
     {
         _dispatcher.VerifyAccess();
         ObjectDisposedException.ThrowIf(_closed, this);
-        CaptureExcluded = CaptureWindowExclusion.TryApply(Handle);
+        CaptureExcluded = applyExclusion?.Invoke(Handle) ?? CaptureWindowExclusion.TryApply(Handle);
         if (RequireCaptureExclusion && !CaptureExcluded) throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
         _prepared = true;
     }
@@ -166,9 +169,18 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _startup = new NativeSelectorStartup(_dispatcher, () =>
         {
             if (_closed || !IsVisible) return;
-            IsReady = true;
-            SelectorTimeline.Mark?.Invoke("native-input-ready");
-            RefreshHover();
+            try
+            {
+                IsReady = true;
+                SelectorTimeline.Mark?.Invoke("native-input-ready");
+                RefreshHover();
+                InputReady?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                try { Failed?.Invoke(error); }
+                finally { Close(); }
+            }
         }, ShowChrome);
     }
 
@@ -311,13 +323,20 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             CompleteSelection(new RectD(_selection.X, _selection.Y, _selection.Width, _selection.Height));
     }
 
+    internal void ConfirmSelectionAsPin()
+    {
+        if (TextCaptureMode || RecordingSelection) return;
+        if (_selection.Width >= 2 && _selection.Height >= 2)
+            CompleteSelection(new RectD(_selection.X, _selection.Y, _selection.Width, _selection.Height), pinRequested: true);
+    }
+
     internal void CompleteMonitor()
     {
         CaptureGuideArea area = CaptureModeBarLayout.ChooseArea(ReadMonitors(), ReadCursor(), _bounds);
         CompleteSelection(area.Bounds, wholeMonitor: true);
     }
 
-    internal void CompleteSelection(RectD region, bool wholeMonitor = false)
+    internal void CompleteSelection(RectD region, bool wholeMonitor = false, bool pinRequested = false)
     {
         _dispatcher.VerifyAccess();
         if (_closed || _completing || _copyingColor || Frame is not { } frame) return;
@@ -326,6 +345,12 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _completing = true;
         try
         {
+            if (GeometrySelectionCompleted is { } geometryCompleted)
+            {
+                Hide();
+                geometryCompleted(new RectD(_bounds.Left + region.Left, _bounds.Top + region.Top, region.Width, region.Height));
+                return;
+            }
             var crop = ScreenCaptureEngine.Crop(frame, region);
             var screen = new RectD(_bounds.Left + region.Left, _bounds.Top + region.Top, region.Width, region.Height);
             IReadOnlyList<WindowCandidate> windows = _sourceDetails is { IsCompletedSuccessfully: true } complete ? complete.Result : SourceWindows;
@@ -334,7 +359,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 ? ResolvePending(task, screen, _selectedWindow, wholeMonitor) : null;
             Hide();
             SelectionCompleted?.Invoke(this, new CaptureSelectionCompletedEventArgs(frame, region, crop, source.Title,
-                sourcePageUrl: source.PageUrl) { SourceDetails = source.Details, PendingSource = pending, TextCapture = TextCaptureMode });
+                sourcePageUrl: source.PageUrl) { SourceDetails = source.Details, PendingSource = pending, TextCapture = TextCaptureMode,
+                    PinRequested = pinRequested });
         }
         finally { Close(); }
     }

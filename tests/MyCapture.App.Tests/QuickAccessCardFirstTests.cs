@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
@@ -25,6 +26,7 @@ using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
 using MyCapture.Tests;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
@@ -39,7 +41,7 @@ namespace MyCapture.App.Tests;
 /// still shows while a held copy runs; <see cref="TheCardWaitsForTheCopySoAPasteRightAfterItPastesThisCapture"/>
 /// holds the copy within the wait.
 /// </remarks>
-public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
+public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : KoreanCaptionTest
 {
     // ---- The card on its own -------------------------------------------------------------------
 
@@ -248,13 +250,18 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 
     // ---- The App's capture flow ------------------------------------------------------------------
 
-    [Fact]
-    public void TheCardShowsRightAfterTheSelectorAndBindsTheCaptureOnceSaved() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheCardShowsRightAfterTheSelectorAndBindsTheCaptureOnceSaved(bool native) => StaTestHost.Run(() =>
     {
         using var shell = new Shell();
+        shell.RecordCaptureFailures();
+        try
+        {
         var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         shell.CopyResult = copy.Task;
-        Task handler = shell.Select();
+        Task handler = shell.SelectThroughSelector(native);
         shell.RunSendTurn();
 
         // On screen before anything is saved or copied, with the captured image and the tip.
@@ -294,6 +301,14 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         // No second card follows once saved and copied.
         shell.RunIdleTurns();
         Assert.Same(card, shell.Card);
+        output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(TheCardShowsRightAfterTheSelectorAndBindsTheCaptureOnceSaved)} native={native}");
+        }
+        catch (Exception error)
+        {
+            output.WriteLine($"Body failure before fixture cleanup: {nameof(TheCardShowsRightAfterTheSelectorAndBindsTheCaptureOnceSaved)} native={native}\n{error}");
+            output.WriteLine(shell.CaptureFailureDetails());
+            throw;
+        }
     });
 
     [Fact]
@@ -556,11 +571,13 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         }
     });
 
-    [Fact]
-    public void ACaptureCommandWhileTheCaptureIsSavedIsRefusedAndKeepsItsCard() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACaptureCommandWhileTheCaptureIsSavedIsRefusedAndKeepsItsCard(bool native) => StaTestHost.Run(() =>
     {
         using var shell = new Shell();
-        using CaptureOverlayCoordinator coordinator = shell.UseCoordinator();
+        using CaptureOverlayCoordinator coordinator = shell.UseCoordinator(native);
         QuickAccessWindow? atCommand = null;
         bool refusedWithItsCard = false;
         shell.Persistence.BeforeRecordMetadataCommit = _ =>
@@ -571,8 +588,9 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             refusedWithItsCard = atCommand is { IsOpen: true, IsPending: true } && ReferenceEquals(shell.Card, atCommand)
                 && !coordinator.IsSelecting;
         };
-        Assert.True(coordinator.StartWithSelection(shell.Frame, shell.Region, "Source - App", recordForRepeat: false));
-        shell.Wait(coordinator.LastTransitionForTest);
+        Task handler = shell.SelectThroughSelector(native);
+        Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
+        shell.Wait(handler);
 
         Assert.True(refusedWithItsCard);
         QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
@@ -586,6 +604,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         Assert.False(card.IsVisible);
         Assert.Null(shell.Card);
         Assert.Null(shell.LatestReceipt);
+        output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(ACaptureCommandWhileTheCaptureIsSavedIsRefusedAndKeepsItsCard)} native={native}");
     });
 
     [Fact]
@@ -627,11 +646,16 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         Assert.Contains(saved.Id, evicted);
     });
 
-    [Fact]
-    public void APracticeCaptureIsSavedAndCopiedButNotCountedTowardTheStoreRating() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APracticeCaptureIsSavedAndCopiedButNotCountedTowardTheStoreRating(bool native) => StaTestHost.Run(() =>
     {
         using var shell = new Shell(mode: AfterCaptureAction.ClipboardOnly);
-        shell.Wait(shell.Select(shell.PracticeSelection()));
+        shell.RecordCaptureFailures();
+        try
+        {
+        shell.Wait(shell.SelectThroughSelector(native, shell.PracticeSelection().PracticeTarget));
         shell.RunIdleTurns();
         Assert.IsType<CaptureRecord>(shell.CurrentRecord);
         Assert.Equal(1, shell.CopyCalls);
@@ -640,22 +664,33 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
 
         // A capture outside the practice window counts as before.
         shell.ReleaseEditSession();
-        shell.Wait(shell.Select());
+        shell.Wait(shell.SelectThroughSelector(native));
         shell.RunIdleTurns();
         Assert.Equal(2, shell.CopyCalls);
         Assert.Equal(1, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(APracticeCaptureIsSavedAndCopiedButNotCountedTowardTheStoreRating)} native={native}");
+        }
+        catch (Exception error)
+        {
+            output.WriteLine($"Body failure before fixture cleanup: {nameof(APracticeCaptureIsSavedAndCopiedButNotCountedTowardTheStoreRating)} native={native}\n{error}");
+            output.WriteLine(shell.CaptureFailureDetails());
+            throw;
+        }
     });
 
-    [Fact]
-    public void APracticeCaptureThatFailsStillHoldsBackTheStoreRating() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APracticeCaptureThatFailsStillHoldsBackTheStoreRating(bool native) => StaTestHost.Run(() =>
     {
         using var shell = new Shell(mode: AfterCaptureAction.ClipboardOnly);
         shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("synthetic library save failure");
-        shell.Wait(shell.Select(shell.PracticeSelection()));
+        shell.Wait(shell.SelectThroughSelector(native, shell.PracticeSelection().PracticeTarget));
         shell.RunIdleTurns();
         Assert.Null(shell.CurrentRecord);
         Assert.Equal(0, shell.Settings.StoreRating.SuccessfulCaptureCount);
         Assert.True(shell.Settings.StoreRating.LastCaptureFailed);
+        output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(APracticeCaptureThatFailsStillHoldsBackTheStoreRating)} native={native}");
     });
 
     [Theory]
@@ -920,7 +955,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal AppSettings Settings { get; } = new();
         internal FrozenFrame Frame { get; }
         internal RectD Region { get; } = new(100, 60, 64, 48);
-        internal CaptureSelectionCompletedEventArgs Selection { get; }
+        internal CaptureSelectionCompletedEventArgs Selection { get; private set; }
         internal Task<bool>? CopyResult { get; set; }
         internal int CopyCalls { get; private set; }
         internal StoreRatingCoordinator StoreRating { get; }
@@ -946,6 +981,21 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
             }
         }
         internal List<(string Title, string Message)> Notices { get; } = [];
+        private readonly List<Exception> _captureFailures = [];
+        internal void RecordCaptureFailures() => Set("_log", new CaptureFailureLogger(_captureFailures));
+        internal string CaptureFailureDetails() =>
+            $"Capture state: queue={Queue.Count}; cardFailed={Card?.HasCaptureFailed}; cardStatus={Card?.StatusForTest.Text}\n"
+            + string.Join("\n", Notices.Select(notice => $"Notice: {notice.Title}: {notice.Message}"))
+            + "\n" + string.Join("\n", _captureFailures.Select(error => error.ToString()));
+        private sealed class CaptureFailureLogger(List<Exception> errors) : ILogger<App>
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel level) => true;
+            public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState, Exception?, string> formatter)
+            {
+                if (error is not null) errors.Add(error);
+            }
+        }
         internal QuickAccessWindow? Card => (QuickAccessWindow?)Get("_quickAccess");
         internal object? CardFirstState => Get("_quickAccessFirst");
         internal CaptureFlight? Flight => (CaptureFlight?)Get("_captureFlight");
@@ -997,17 +1047,37 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         /// <summary>
         /// The real coordinator around the handler, as App.InitializeShell wires it; the recovery editor never opens here.
         /// </summary>
-        internal CaptureOverlayCoordinator UseCoordinator()
+        internal CaptureOverlayCoordinator UseCoordinator(bool? native = null)
         {
+            // Keep cards and editors on their fixture display; only the shown selector needs a real paint surface.
+            var selectorFrame = new FrozenFrame(Frame.Bitmap, new RectD(0, 0, Frame.PixelWidth, Frame.PixelHeight), null, 0);
             _coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
-                new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance)
+                new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance,
+                _ => selectorFrame, () => selectorFrame.ScreenBounds, _ => [])
             {
-                SelectionPersistRequested = selection => (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!,
+                SelectionPersistRequested = selection =>
+                {
+                    Selection = selection;
+                    return (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
+                },
                 OpenEditorAfterCapture = () => false,
+                ReadWindowSources = null,
+                ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()),
             };
+            if (native is { } renderer) _coordinator.UseNativeDibSelector = renderer;
             _coordinator.OverlayClosed += (_, _) => ReleaseEditSession();
             Set("_overlay", _coordinator);
             return _coordinator;
+        }
+
+        internal Task SelectThroughSelector(bool native, PracticeCaptureTarget? practiceTarget = null)
+        {
+            CaptureOverlayCoordinator coordinator = _coordinator ?? UseCoordinator(native);
+            Assert.Equal(native, coordinator.UseNativeDibSelector);
+            coordinator.Start(false, false, false, practiceTarget: practiceTarget);
+            Wait(coordinator.LastPreparationForTest);
+            new CoordinatorSelector(coordinator, native).CompleteSelection(Region);
+            return coordinator.LastTransitionForTest;
         }
 
         /// <summary>Runs what is already posted at Send priority (the lift, then the card), nothing below it.</summary>

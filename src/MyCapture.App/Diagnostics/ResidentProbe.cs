@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -60,7 +61,7 @@ internal sealed class ResidentProbeOptions
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "no-flight-spare", "no-copy-wait",
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
-         "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib",
+         "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
          "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib"];
 
     /// <summary>
@@ -95,6 +96,14 @@ internal sealed class ResidentProbeOptions
     internal IReadOnlySet<string> Variants { get; private init; } = new HashSet<string>();
 
     internal bool Has(string variant) => Variants.Contains(variant);
+
+    /// <summary>The native selector is the product default; WPF remains an explicit diagnostic route.</summary>
+    internal static bool UsesNativeSelector(IReadOnlySet<string> variants) => !variants.Contains("selector-wpf");
+
+    internal static NativeSelectorChromeStrategy GetSelectorChromeStrategy(IReadOnlySet<string> variants) =>
+        variants.Contains("selector-chrome-fresh") ? NativeSelectorChromeStrategy.Fresh
+        : variants.Contains("selector-chrome-parallel") ? NativeSelectorChromeStrategy.Parallel
+        : variants.Contains("selector-chrome-dib") ? NativeSelectorChromeStrategy.Dib : NativeSelectorChromeStrategy.Retained;
 
     internal string Output { get; }
 
@@ -165,6 +174,8 @@ internal sealed class ResidentProbeOptions
             }
         }
         int chromeVariants = variants.Count(variant => variant.StartsWith("selector-chrome-", StringComparison.OrdinalIgnoreCase));
+        if (variants.Contains("selector-wpf") && (variants.Contains("selector-native-dib") || chromeVariants != 0))
+            throw new ArgumentException("Choose selector-wpf or a native selector variant, not both.");
         if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
             throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
         return variants;
