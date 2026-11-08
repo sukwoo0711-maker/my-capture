@@ -103,6 +103,20 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
+### 이 버전의 새로운 기능 (5.3.0)
+
+입력 한도는 1,500자입니다. Store의 5.1.0에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
+
+- 캡처 선택 화면이 더 빨리 뜨고 키보드·마우스 입력을 더 빨리 받습니다. 닫은 뒤 남는 메모리도 줄었습니다.
+- 여러 캡처를 휴지통으로 옮기고 되돌리는 시간이 줄었습니다. 라이브러리 미리 보기·복사·저장의 화면 대기도 줄였습니다.
+- 스크롤 캡처의 반복 무늬 처리를 개선했습니다. 녹화 검증이 잠시 실패해도 완성된 영상과 복구 정보를 보존하며, 녹화 도움말이 영상에 찍히지 않습니다.
+- 글상자 입력 중에도 외곽선을 표시하고, 밝거나 어두운 바탕에서 입력 위치가 보이도록 고쳤습니다.
+- VS Code에서 복사한 Markdown 문서를 핀으로 표시합니다. Mermaid 도표도 보입니다.
+- 정확 모드의 표 인식과 긴 문장 번역을 고치고, 문자 인식 대기 중 CPU 사용량을 줄였습니다.
+- 오류 창에서 보고할 내용을 골라 보냅니다. 예기치 않은 종료는 다음 실행 때 알립니다.
+- 새로 설치하면 핵심 단축키를 지정하고 첫 실행 때 알립니다.
+- 화면의 정렬·잘림·포커스 표시와 입력란 바깥 클릭을 고쳤습니다.
+
 ### 이 버전의 새로운 기능 (5.1.0)
 
 입력 한도는 1,500자입니다. Store에는 5.0.0이 게시되어 있습니다. 그래서 5.1.0 줄 아래에 5.0.1에서 바뀐 점을 둡니다. 5.0.1을 Store에 먼저 냈다면 마지막 줄은 지웁니다.
@@ -200,6 +214,20 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
+
+### What's new in this version (5.3.0)
+
+Limit: 1,500 characters. Covers changes since the Store version, 5.1.0. Enter the lines below in the Store.
+
+- The capture selector appears and accepts keyboard and mouse input sooner, with less memory left in use after it closes.
+- Moving captures to the Recycle Bin and restoring them is faster. Library previews, copying and saving cause less waiting.
+- Improved scrolling capture on repeated patterns. Completed recordings and recovery data survive temporary validation failures. Recording tooltips stay out of the video.
+- Text boxes show outlines while you type, with a caret visible on light and dark backgrounds.
+- Markdown copied from VS Code opens as a document pin, including Mermaid diagrams.
+- Improved Accurate table recognition, fixed long-text translation and reduced CPU use while OCR is idle.
+- Choose what to send from the error dialog. The app notifies you of unexpected exits at the next launch.
+- New installations assign the core shortcuts and explain them at first launch.
+- Fixed alignment, clipping, focus indicators and clicks outside text fields.
 
 ### What's new in this version (5.1.0)
 
