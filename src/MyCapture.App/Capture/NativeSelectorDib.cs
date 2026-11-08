@@ -15,6 +15,7 @@ internal sealed class NativeSelectorDib : IDisposable
     private IntPtr _previous;
     private bool _initialized;
     private IReadOnlyList<NativeSelectorStamp> _stamps = [];
+    private NativeSelectorStamp? _anchorStamp;
     internal IntPtr Bitmap { get; private set; }
     internal IntPtr Dc { get; private set; }
     internal IntPtr Bits { get; private set; }
@@ -25,6 +26,7 @@ internal sealed class NativeSelectorDib : IDisposable
     internal Int32Rect Reveal { get; private set; }
     internal bool IsDisposed { get; private set; }
     internal long PixelsUpdated { get; private set; }
+    internal int InitializeCount => _initialized ? 1 : 0;
 
     internal NativeSelectorDib(BitmapSource source, SolidColorBrush dimmer, bool deferPixels = false)
     {
@@ -94,8 +96,28 @@ internal sealed class NativeSelectorDib : IDisposable
 
     private unsafe void CompositeStamps(Int32Rect dirty)
     {
-        foreach (NativeSelectorStamp stamp in _stamps)
-        {
+        for (int index = 0; index < _stamps.Count; index++) CompositeStamp(dirty, _stamps[index]);
+        if (_anchorStamp is { } anchor) CompositeStamp(dirty, anchor);
+    }
+
+    internal IReadOnlyList<Int32Rect> SetAnchorStamp(NativeSelectorStamp? stamp)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        if (ReferenceEquals(_anchorStamp, stamp)) return [];
+        stamp?.Validate();
+        Int32Rect previous = _anchorStamp?.Bounds ?? Int32Rect.Empty;
+        _anchorStamp = stamp;
+        Int32Rect next = stamp?.Bounds ?? Int32Rect.Empty;
+        Int32Rect[] dirty = new[] { previous, next }
+            .Select(rect => NativeSelectorDirtyRegions.Clip(rect, Width, Height))
+            .Where(rect => rect.Width > 0 && rect.Height > 0).Distinct().ToArray();
+        _ = NativeSelectorInterop.GdiFlush();
+        foreach (Int32Rect region in dirty) { Update(region); CompositeStamps(region); }
+        return dirty;
+    }
+
+    private unsafe void CompositeStamp(Int32Rect dirty, NativeSelectorStamp stamp)
+    {
             Int32Rect box = stamp.Bounds;
             int left = Math.Max(dirty.X, box.X), top = Math.Max(dirty.Y, box.Y);
             int right = Math.Min(dirty.X + dirty.Width, box.X + box.Width);
@@ -113,7 +135,6 @@ internal sealed class NativeSelectorDib : IDisposable
                     destination[x * 4 + 3] = 255;
                 }
             }
-        }
     }
 
     private unsafe void Update(Int32Rect region, bool initializing = false)
@@ -154,6 +175,7 @@ internal sealed class NativeSelectorDib : IDisposable
         Bitmap = Dc = Bits = _previous = IntPtr.Zero;
         _source = null;
         _stamps = [];
+        _anchorStamp = null;
     }
 }
 

@@ -35,12 +35,13 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     private Int32Rect _selection;
     private Task<IReadOnlyList<WindowCandidate>>? _sourceDetails;
 
-    internal NativeCaptureOverlay(RectD bounds, bool abortOnFocusLoss, bool showMagnifier)
+    internal NativeCaptureOverlay(RectD bounds, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true)
     {
         _bounds = bounds.ToPixelBounds();
         if (_bounds.IsEmpty) throw new ArgumentException("A non-empty desktop is required.", nameof(bounds));
         _abortOnFocusLoss = abortOnFocusLoss;
         _showMagnifier = showMagnifier;
+        ShowSelectionGrid = showSelectionGrid;
         _palette = CaptureGuidePalette.Resolve();
         try
         {
@@ -69,6 +70,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     internal NativeSelectorChrome? Chrome => _chrome;
     internal RectD ScreenBounds => _bounds;
     internal Int32Rect SelectionRectangle => _selection;
+    internal PointD? SelectionAnchor => _dragging && !_closed ? _anchor : null;
     internal CaptureGuideArea ChromeArea
     {
         get
@@ -85,7 +87,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     internal IntPtr SelectionPen => _borderPen;
     internal int DibAllocations { get; private set; }
     internal int LiveOwnedNativeHandles => (Handle != IntPtr.Zero ? 1 : 0) + (_borderPen != IntPtr.Zero ? 1 : 0)
-        + (_dib?.Bitmap != IntPtr.Zero && _dib is not null ? 1 : 0) + (_dib?.Dc != IntPtr.Zero && _dib is not null ? 1 : 0);
+        + (_dib?.Bitmap != IntPtr.Zero && _dib is not null ? 1 : 0) + (_dib?.Dc != IntPtr.Zero && _dib is not null ? 1 : 0)
+        + (_visualFeedback?.LiveHandles ?? 0);
     internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
     internal event EventHandler? Closed;
@@ -166,6 +169,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _startup = new NativeSelectorStartup(_dispatcher, () =>
         {
             if (_closed || !IsVisible) return;
+            PreparePointerFeedback();
             IsReady = true;
             SelectorTimeline.Mark?.Invoke("native-input-ready");
             RefreshHover();
@@ -185,6 +189,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _showing = true;
         try
         {
+            _ = ReadEffectivePointer();
+            PrepareVisualFeedback();
             var chrome = _chrome ?? CreateChrome();
             if (_closed || !IsVisible) { chrome.Dispose(); return; }
             _chrome = chrome;
@@ -231,6 +237,16 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         }
     }
 
+    internal void SetAnchorChromeStamp(NativeSelectorStamp? stamp)
+    {
+        if (_closed || _dib is null) return;
+        foreach (Int32Rect dirty in _dib.SetAnchorStamp(stamp))
+        {
+            var rectangle = new NativeSelectorInterop.Rect(dirty.X, dirty.Y, dirty.Width, dirty.Height);
+            _ = NativeSelectorInterop.InvalidateRect(Handle, ref rectangle, false);
+        }
+    }
+
     internal bool Activate()
     {
         if (!IsVisible || _closed) return false;
@@ -264,7 +280,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             ClearHover();
         }
         ResetRefitCycle();
-        SetSelection(SelectionRatios.FitDrag(_anchor, Clamp(bitmapPoint), FrameBounds, Ratio, RecordingSelection).ToPixelBounds());
+        SetSelection((CaptureOverlayView.ResolvePresetSelection(_anchor, PresetSize, FrameBounds)
+            ?? SelectionRatios.FitDrag(_anchor, Clamp(bitmapPoint), FrameBounds, ActiveRatio, RecordingSelection)).ToPixelBounds());
     }
 
     internal void EndSelection(PointD bitmapPoint)
@@ -272,6 +289,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         if (_closed || !_dragging) return;
         MoveSelection(bitmapPoint);
         _dragging = false;
+        UpdateVisualFeedback();
+        SetAnchorChromeStamp(null);
+        _chrome?.Update(ReadCursor(), _selection);
         if (_hoverRegion is { } hover && !_dragBeyondClick && IsWindowClick(Clamp(bitmapPoint)))
         {
             _selectedWindow = _hoverWindow;
@@ -281,7 +301,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             CompleteSelection(hover, monitor);
             return;
         }
-        if (CaptureOverlayView.ResolveCompletedDrag(_anchor, Clamp(bitmapPoint), FrameBounds, Ratio, RecordingSelection) is { } region)
+        if ((CaptureOverlayView.ResolvePresetSelection(_anchor, PresetSize, FrameBounds)
+            ?? CaptureOverlayView.ResolveCompletedDrag(_anchor, Clamp(bitmapPoint), FrameBounds, ActiveRatio, RecordingSelection)) is { Width: >= 2, Height: >= 2 } region)
             CompleteSelection(region);
     }
 
@@ -296,13 +317,15 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     private void UpdateReveal()
     {
         if (_dib is null) return;
+        UpdateShownHover();
         Int32Rect region = RevealedRegion;
         foreach (Int32Rect dirty in _dib.SetReveal(region))
         {
             var rectangle = new NativeSelectorInterop.Rect(dirty.X, dirty.Y, dirty.Width, dirty.Height);
             _ = NativeSelectorInterop.InvalidateRect(Handle, ref rectangle, false);
         }
-        _chrome?.Update(ReadCursor(), region);
+        _chrome?.Update(EffectivePointer, region);
+        UpdateVisualFeedback();
     }
 
     internal void ConfirmCurrent()
@@ -370,10 +393,12 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _dispatcher.VerifyAccess();
         if (_closed) return;
         _closed = true;
+        _precisionPointer?.Reset();
         _startup?.Dispose();
         _startup = null;
         _toastTimer?.Stop();
         _toastTimer = null;
+        StopHoverFrames();
         _dragging = false;
         IsReady = false;
         if (NativeSelectorInterop.GetCapture() == Handle && Handle != IntPtr.Zero) _ = NativeSelectorInterop.ReleaseCapture();
@@ -405,6 +430,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                     _dibPreparation = null;
                     _dib?.Dispose();
                     _dib = null;
+                    _visualFeedback?.Dispose();
+                    _visualFeedback = null;
                     if (_borderPen != IntPtr.Zero) _ = NativeSelectorInterop.DeleteObject(_borderPen);
                     _ = NativeSelectorInterop.GdiFlush();
                     _borderPen = IntPtr.Zero;
@@ -452,6 +479,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         switch (message)
         {
+            case 0x0113 when (nuint)wParam == HoverTimerId: // WM_TIMER: retained hover feedback.
+                OnHoverFrame();
+                return IntPtr.Zero;
             case 0x0014: return new IntPtr(1); // WM_ERASEBKGND: every invalid pixel is copied in WM_PAINT.
             case 0x000F:
                 Paint(hwnd);
@@ -461,7 +491,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 _ = NativeSelectorInterop.SetCapture(hwnd);
                 return IntPtr.Zero;
             case 0x0200:
-                if (_dragging) MoveSelection(Pointer());
+                PointD pointer = Pointer();
+                if (_dragging) MoveSelection(pointer);
                 else RefreshHover();
                 return IntPtr.Zero;
             case 0x0204: // WM_RBUTTONDOWN
@@ -481,8 +512,12 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 }
                 return IntPtr.Zero;
             case 0x0100:
+                if (wParam.ToInt32() is 0x10 or 0xA0 or 0xA1) { _ = Pointer(); _chrome?.Update(EffectivePointer, _selection); }
                 if (HandleKey(System.Windows.Input.KeyInterop.KeyFromVirtualKey(wParam.ToInt32()), System.Windows.Input.Keyboard.Modifiers))
                     return IntPtr.Zero;
+                break;
+            case 0x0101:
+                if (wParam.ToInt32() is 0x10 or 0xA0 or 0xA1) { _ = Pointer(); _chrome?.Update(EffectivePointer, _selection); }
                 break;
             case 0x0006:
                 if ((wParam.ToInt64() & 0xffff) == 0) CheckFocusLater();
@@ -507,8 +542,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
 
     private PointD Pointer()
     {
-        PointD screen = ReadCursor();
-        return new PointD(screen.X - _bounds.Left, screen.Y - _bounds.Top);
+        return ReadEffectivePointer();
     }
 
     private void Paint(IntPtr hwnd)
@@ -519,18 +553,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             if (_closed || _dib is null || dc == IntPtr.Zero) return;
             NativeSelectorInterop.Rect r = paint.Rectangle;
             if (!_submitted) SelectorTimeline.Mark?.Invoke("native-first-paint-start");
-            if (!NativeSelectorInterop.BitBlt(dc, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
-                _dib.Dc, r.Left, r.Top, 0x00CC0020)) throw new Win32Exception(Marshal.GetLastWin32Error());
-            Int32Rect revealed = RevealedRegion;
-            if (revealed.Width > 0 && revealed.Height > 0)
-            {
-                IntPtr oldPen = NativeSelectorInterop.SelectObject(dc, _borderPen);
-                IntPtr oldBrush = NativeSelectorInterop.SelectObject(dc, NativeSelectorInterop.GetStockObject(5));
-                _ = NativeSelectorInterop.Rectangle(dc, revealed.X, revealed.Y, revealed.X + revealed.Width, revealed.Y + revealed.Height);
-                _ = NativeSelectorInterop.SelectObject(dc, oldBrush);
-                _ = NativeSelectorInterop.SelectObject(dc, oldPen);
-            }
-            if (!NativeSelectorInterop.GdiFlush()) throw new Win32Exception(Marshal.GetLastWin32Error());
+            PaintTo(dc, r);
             if (!_submitted && r.Left <= 0 && r.Top <= 0 && r.Right >= _dib.Width && r.Bottom >= _dib.Height)
             {
                 _submitted = true;
@@ -538,5 +561,25 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             }
         }
         finally { _ = NativeSelectorInterop.EndPaint(hwnd, ref paint); }
+    }
+
+    internal void PaintTo(IntPtr dc) => PaintTo(dc, new NativeSelectorInterop.Rect(0, 0, (int)_bounds.Width, (int)_bounds.Height));
+
+    internal void PaintTo(IntPtr dc, NativeSelectorInterop.Rect r)
+    {
+        if (_closed || _dib is null || dc == IntPtr.Zero) return;
+        if (!NativeSelectorInterop.BitBlt(dc, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
+            _dib.Dc, r.Left, r.Top, 0x00CC0020)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        Int32Rect revealed = RevealedRegion;
+        if (revealed.Width > 0 && revealed.Height > 0)
+        {
+            IntPtr oldPen = NativeSelectorInterop.SelectObject(dc, _borderPen);
+            IntPtr oldBrush = NativeSelectorInterop.SelectObject(dc, NativeSelectorInterop.GetStockObject(5));
+            _ = NativeSelectorInterop.Rectangle(dc, revealed.X, revealed.Y, revealed.X + revealed.Width, revealed.Y + revealed.Height);
+            _ = NativeSelectorInterop.SelectObject(dc, oldBrush);
+            _ = NativeSelectorInterop.SelectObject(dc, oldPen);
+        }
+        _visualFeedback?.Paint(dc);
+        if (!NativeSelectorInterop.GdiFlush()) throw new Win32Exception(Marshal.GetLastWin32Error());
     }
 }

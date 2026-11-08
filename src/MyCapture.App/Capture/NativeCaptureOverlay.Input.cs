@@ -57,7 +57,8 @@ internal sealed partial class NativeCaptureOverlay
         ? new RectD(_selection.X, _selection.Y, _selection.Width, _selection.Height) : null;
     private RectD FrameBounds => new(0, 0, _bounds.Width, _bounds.Height);
     private bool RatioAvailable => Mode != CaptureSelectorMode.Color && PresetSize is null;
-    internal string Readout => CaptureOverlayView.FormatReadout(_selection.Width, _selection.Height, Ratio);
+    internal SelectionRatio ActiveRatio => RatioAvailable ? Ratio : SelectionRatio.Free;
+    internal string Readout => CaptureOverlayView.FormatReadout(_selection.Width, _selection.Height, ActiveRatio);
     internal string? ToastMessage { get; private set; }
     internal TimeSpan? ToastInterval => _toastTimer?.IsEnabled == true ? _toastTimer.Interval : null;
 
@@ -290,7 +291,7 @@ internal sealed partial class NativeCaptureOverlay
         _chrome?.Update(ReadCursor(), _selection);
     }
 
-    private Int32Rect RevealedRegion => Selection is not null ? _selection : _hoverRegion is { } hover
+    private Int32Rect RevealedRegion => Selection is not null ? _selection : (_shownHover ?? _hoverRegion) is { } hover
         ? new Int32Rect((int)hover.Left, (int)hover.Top, (int)hover.Width, (int)hover.Height) : Int32Rect.Empty;
 
     internal void RefreshHover()

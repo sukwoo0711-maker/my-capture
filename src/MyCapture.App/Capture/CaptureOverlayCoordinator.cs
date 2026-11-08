@@ -604,7 +604,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (UseNativeDibSelector)
         {
-            ShowNativeOverlay(screenBounds, abortOnFocusLoss, showMagnifier, frame);
+            ShowNativeOverlay(screenBounds, abortOnFocusLoss, showMagnifier, frame, showSelectionGrid);
             return;
         }
         var overlay = frame is null
@@ -673,9 +673,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (overlay.IsVisible) _ = overlay.Activate();
     }
 
-    private void ShowNativeOverlay(RectD bounds, bool abortOnFocusLoss, bool showMagnifier, FrozenFrame? frame)
+    private void ShowNativeOverlay(RectD bounds, bool abortOnFocusLoss, bool showMagnifier, FrozenFrame? frame, bool showSelectionGrid)
     {
-        var native = new NativeCaptureOverlay(bounds, abortOnFocusLoss, showMagnifier)
+        var native = new NativeCaptureOverlay(bounds, abortOnFocusLoss, showMagnifier, showSelectionGrid)
         {
             ChromeStrategy = NativeChromeStrategy,
             RequireCaptureExclusion = RequiresCaptureExclusion?.Invoke() == true,

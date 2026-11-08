@@ -26,6 +26,7 @@ internal sealed class RatioSelector
         {
             _native = new NativeCaptureOverlay(frame.ScreenBounds, false, false)
             {
+                PlaceCursor = _ => false,
                 ReadCursor = pointer, ReadMonitors = () => monitors, RecordingSelection = recording,
             };
             _native.AttachFrame(frame);

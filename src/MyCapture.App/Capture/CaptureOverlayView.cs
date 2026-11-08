@@ -851,6 +851,16 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         return pixels.Width >= MinimumSelectionPixels && pixels.Height >= MinimumSelectionPixels ? pixels : null;
     }
 
+    /// <summary>A settings-fixed selection retains its exact physical size from preview through release.</summary>
+    internal static RectD? ResolvePresetSelection(PointD anchor, System.Drawing.Size? preset, RectD frameBounds)
+    {
+        if (preset is not { Width: > 0, Height: > 0 } size) return null;
+        // Like the existing fixed-size preview, odd presets remain exact. Even sizing applies to
+        // ratio-locked recording selections, whose existing fallback remains unchanged.
+        double width = Math.Min(size.Width, frameBounds.Width), height = Math.Min(size.Height, frameBounds.Height);
+        return new RectD(anchor.X, anchor.Y, width, height).ClampTo(frameBounds);
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         bool marked = _frame is not null && !_renderMarked && Diagnostics.SelectorTimeline.Mark is not null;
@@ -1599,7 +1609,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private static Rect Deflate(Rect rect, double inset) => new(rect.X + inset, rect.Y + inset,
         Math.Max(0, rect.Width - (inset * 2)), Math.Max(0, rect.Height - (inset * 2)));
 
-    private static StreamGeometry TabGeometry(Rect r, double radius, bool roundTop, bool roundBottom)
+    internal static StreamGeometry TabGeometry(Rect r, double radius, bool roundTop, bool roundBottom)
     {
         double limit = Math.Min(r.Width, r.Height) / 2;
         double top = roundTop ? Math.Min(radius, limit) : 0;
@@ -2169,14 +2179,12 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             }
 
             ResetRefitCycle();
-            if (PresetSize is { } preset && preset.Width > 0 && preset.Height > 0)
+            if (ResolvePresetSelection(_dragAnchor, PresetSize, FrameBounds) is { } fixedSelection)
             {
                 // Fixed size: the drag only moves the box's top-left corner. The stored
                 // size is honoured exactly (clamped to the frame) so every capture from
                 // the same preset has identical dimensions.
-                double width = Math.Min(preset.Width, FrameBounds.Width);
-                double height = Math.Min(preset.Height, FrameBounds.Height);
-                _selection = new RectD(_dragAnchor.X, _dragAnchor.Y, width, height).ClampTo(FrameBounds);
+                _selection = fixedSelection;
             }
             else
             {
@@ -2261,7 +2269,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
         else
         {
-            _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds, ActiveRatio, EvenSelection);
+            _selection = ResolvePresetSelection(_dragAnchor, PresetSize, FrameBounds)
+                ?? ResolveCompletedDrag(_dragAnchor, point, FrameBounds, ActiveRatio, EvenSelection);
         }
         _interaction = InteractionMode.None;
         if (releaseCapture) Mouse.Capture(null);

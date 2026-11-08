@@ -62,6 +62,8 @@ internal static class NativeSelectorInterop
     [DllImport("user32.dll")] internal static extern bool IsWindow(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")] internal static extern bool UpdateWindow(IntPtr hwnd);
+    [DllImport("user32.dll", SetLastError = true)] internal static extern nuint SetTimer(IntPtr hwnd, nuint id, uint interval, IntPtr callback);
+    [DllImport("user32.dll")] internal static extern bool KillTimer(IntPtr hwnd, nuint id);
     [DllImport("user32.dll")] internal static extern bool InvalidateRect(IntPtr hwnd, ref Rect rectangle, bool erase);
     [DllImport("user32.dll")] internal static extern IntPtr BeginPaint(IntPtr hwnd, out Paint paint);
     [DllImport("user32.dll")] internal static extern bool EndPaint(IntPtr hwnd, ref Paint paint);
@@ -86,6 +88,7 @@ internal static class NativeSelectorInterop
     [DllImport("gdi32.dll")] internal static extern IntPtr CreatePen(int style, int width, uint color);
     [DllImport("gdi32.dll")] internal static extern IntPtr GetStockObject(int item);
     [DllImport("gdi32.dll")] internal static extern bool Rectangle(IntPtr dc, int left, int top, int right, int bottom);
+    [DllImport("msimg32.dll", SetLastError = true)] internal static extern bool AlphaBlend(IntPtr dc, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint blend);
     [DllImport("dwmapi.dll")] internal static extern int DwmFlush();
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }

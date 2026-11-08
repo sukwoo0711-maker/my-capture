@@ -32,12 +32,14 @@ public sealed class WindowDetectGlideTests
     private static readonly PointD OnDesktop = new(300, 300);
     private static readonly TimeSpan Glide = CaptureOverlayView.HoverGlideLength;
 
-    [Fact]
-    public void TheHighlightGlidesWhileAClickStillTakesTheWindowUnderThePointer() => Run(motion: true, () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheHighlightGlidesWhileAClickStillTakesTheWindowUnderThePointer(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnNotes;
         TimeSpan now = TimeSpan.FromSeconds(10);
-        CaptureOverlayView view = GlidingView(() => pointer);
+        GlideSelector view = GlidingView(native, () => pointer);
         view.ReadClock = () => now;
         RegionSelectionEventArgs? confirmed = null;
         view.SelectionConfirmed += (_, e) => confirmed = e;
@@ -86,14 +88,16 @@ public sealed class WindowDetectGlideTests
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void ANewWindowDuringAGlideSnapsAndALandedGlideMatchesASnap() => Run(motion: true, () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ANewWindowDuringAGlideSnapsAndALandedGlideMatchesASnap(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnNotes;
         TimeSpan now = TimeSpan.FromSeconds(10);
-        CaptureOverlayView view = GlidingView(() => pointer);
+        GlideSelector view = GlidingView(native, () => pointer);
         view.ReadClock = () => now;
-        CaptureOverlayView snapped = GlidingView(() => OnChat);
+        GlideSelector snapped = GlidingView(native, () => OnChat);
         try
         {
             view.InitializePointer();
@@ -140,12 +144,14 @@ public sealed class WindowDetectGlideTests
         }
     });
 
-    [Fact]
-    public void AMoveOfAFewPixelsAndAWindowLargerThanAQuarterOfTheScreenSnap() => Run(motion: true, () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AMoveOfAFewPixelsAndAWindowLargerThanAQuarterOfTheScreenSnap(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnPanel;
         TimeSpan now = TimeSpan.FromSeconds(10);
-        CaptureOverlayView view = GlidingView(() => pointer, Panel);
+        GlideSelector view = GlidingView(native, () => pointer, Panel);
         view.ReadClock = () => now;
         try
         {
@@ -177,11 +183,13 @@ public sealed class WindowDetectGlideTests
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void WithoutMotionEveryHighlightSnaps() => Run(motion: false, () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithoutMotionEveryHighlightSnaps(bool native) => Run(motion: false, () =>
     {
         PointD pointer = OnNotes;
-        CaptureOverlayView view = GlidingView(() => pointer);
+        GlideSelector view = GlidingView(native, () => pointer);
         try
         {
             view.InitializePointer();
@@ -196,12 +204,14 @@ public sealed class WindowDetectGlideTests
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void AGlideDrivesFramesUntilItLandsWithoutRedrawingTheDesktop() => Run(motion: true, () =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AGlideDrivesFramesUntilItLandsWithoutRedrawingTheDesktop(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnNotes;
         TimeSpan now = TimeSpan.FromSeconds(10);
-        CaptureOverlayView view = GlidingView(() => pointer);
+        GlideSelector view = GlidingView(native, () => pointer);
         view.ReadClock = () => now;
         // Off screen and never activated: other sessions may be using this desktop.
         var host = new Window
@@ -253,26 +263,19 @@ public sealed class WindowDetectGlideTests
         finally { FluidMotion.AnimationsEnabledOverrideForTest = previous; }
     });
 
-    private static CaptureOverlayView GlidingView(Func<PointD> pointer, params WindowCandidate[] above)
-    {
-        CaptureOverlayView view = DetectingView(pointer);
-        view.WindowCandidates = [.. above, Notes, Chat, Desktop];
-        return view;
-    }
+    private static GlideSelector GlidingView(bool native, Func<PointD> pointer, params WindowCandidate[] above) =>
+        new(native, pointer, [.. above, Notes, Chat, Desktop]);
 
-    private static void Draw(CaptureOverlayView view)
-    {
-        view.InvalidateVisual();
-        view.Measure(new Size(640, 360));
-        view.Arrange(new Rect(0, 0, 640, 360));
-        view.UpdateLayout();
-    }
+    private static void Draw(GlideSelector view) => view.Draw();
 
-    private static Rect RevealClip(CaptureOverlayView view) =>
-        ((RectangleGeometry)Visual(view, "_revealVisual").Clip).Rect;
+    private static Rect RevealClip(GlideSelector view) => view.RevealClip;
 
-    private static object Field(CaptureOverlayView view, string name) =>
-        typeof(CaptureOverlayView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view)!;
+    private static object Field(GlideSelector view, string name) => view.Field(name);
+
+    private static SelectionVisualBounds Visual(GlideSelector view, string name) => name == "_selectionVisual"
+        ? new(view.SelectionContentBounds) : throw new ArgumentOutOfRangeException(nameof(name));
+
+    private readonly record struct SelectionVisualBounds(Rect ContentBounds);
 
     private static void WaitUntil(Func<bool> ready)
     {

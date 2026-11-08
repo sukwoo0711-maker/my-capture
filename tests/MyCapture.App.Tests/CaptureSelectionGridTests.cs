@@ -15,34 +15,39 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureSelectionGridTests
 {
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ReadyPreview_RendersSyntheticDesktop(bool enabled) => StaTestHost.Run(() =>
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void ReadyPreview_RendersSyntheticDesktop(bool enabled, bool native) => StaTestHost.Run(() =>
     {
         using var language = Core.Localization.UiText.UseLanguage("ko-KR");
         FrozenFrame frame = CreateFrame();
-        var view = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: enabled);
+        var view = new GridSelector(native, frame, showSelectionGrid: enabled);
         try
         {
             SetCursor(view, new PointD(360, 280));
             RenderTargetBitmap rendered = Render(view);
             Assert.Equal(900, rendered.PixelWidth);
             Assert.Equal(600, rendered.PixelHeight);
-            SaveEvidence(rendered, "ready-guides.png", enabled ? "MYCAPTURE_GRID_EVIDENCE" : "MYCAPTURE_GRID_OFF_EVIDENCE");
+            SaveEvidence(rendered, native ? "ready-guides-native.png" : "ready-guides.png", enabled ? "MYCAPTURE_GRID_EVIDENCE" : "MYCAPTURE_GRID_OFF_EVIDENCE");
         }
         finally { view.ReleaseResources(); }
     });
 
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(1.5)]
-    [InlineData(2.0)]
-    public void ReadyGuides_FollowCursorAcrossFullAxes_WithoutChangingFrame(double scale) => StaTestHost.Run(() =>
+    [InlineData(1.0, false)]
+    [InlineData(1.5, false)]
+    [InlineData(2.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.5, true)]
+    [InlineData(2.0, true)]
+    public void ReadyGuides_FollowCursorAcrossFullAxes_WithoutChangingFrame(double scale, bool native) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = CreateFrame();
         byte[] original = Pixels(frame.Bitmap);
-        var on = new CaptureOverlayView(frame, showMagnifier: false); // Default must show guides.
-        var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
+        var on = new GridSelector(native, frame, scale); // Default must show guides.
+        var off = new GridSelector(native, frame, scale, showSelectionGrid: false);
         try
         {
             foreach (PointD cursor in new[] { new PointD(360, 280), new PointD(625, 410) })
@@ -78,14 +83,17 @@ public sealed class CaptureSelectionGridTests
     });
 
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(1.5)]
-    [InlineData(2.0)]
-    public void DragAndCompletedSelection_HideLongGuides_AndKeepPointerAndAnchor(double scale) => StaTestHost.Run(() =>
+    [InlineData(1.0, false)]
+    [InlineData(1.5, false)]
+    [InlineData(2.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.5, true)]
+    [InlineData(2.0, true)]
+    public void DragAndCompletedSelection_HideLongGuides_AndKeepPointerAndAnchor(double scale, bool native) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = CreateFrame();
-        var on = new CaptureOverlayView(frame, showMagnifier: false);
-        var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
+        var on = new GridSelector(native, frame, scale);
+        var off = new GridSelector(native, frame, scale, showSelectionGrid: false);
         PointD start = new(180, 120);
         PointD end = new(720, 450);
         try
@@ -94,11 +102,11 @@ public sealed class CaptureSelectionGridTests
             SetCursor(off, start);
             _ = Render(on, scale);
             _ = Render(off, scale);
-            foreach (CaptureOverlayView view in new[] { on, off })
+            foreach (GridSelector view in new[] { on, off })
                 InvokeInput(view, "OnMouseLeftButtonDown", new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
                     { RoutedEvent = UIElement.MouseLeftButtonDownEvent });
             Assert.Equal(Pixels(Render(on, scale)), Pixels(Render(off, scale)));
-            foreach (CaptureOverlayView view in new[] { on, off })
+            foreach (GridSelector view in new[] { on, off })
             {
                 SetCursor(view, end);
                 InvokeInput(view, "OnMouseMove", new MouseEventArgs(Mouse.PrimaryDevice, 1)
@@ -114,45 +122,48 @@ public sealed class CaptureSelectionGridTests
                 ((SolidColorBrush)on.GuidePalette["CaptureGuide.CrosshairShadow"]).Color);
 
             // A completed or keyboard-set selection also has no long/interior grid lines.
-            foreach (CaptureOverlayView view in new[] { on, off })
-            {
-                FieldInfo interaction = typeof(CaptureOverlayView).GetField("_interaction", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                interaction.SetValue(view, Enum.Parse(interaction.FieldType, "None"));
-            }
+            foreach (GridSelector view in new[] { on, off }) view.StopDragging();
             Assert.Equal(Pixels(Render(on, scale)), Pixels(Render(off, scale)));
         }
         finally { on.ReleaseResources(); off.ReleaseResources(); }
     });
 
-    [Fact]
-    public void BeforePointerInitialization_NoGuideAppearsAtAnInventedPosition() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BeforePointerInitialization_NoGuideAppearsAtAnInventedPosition(bool native) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = CreateFrame();
-        var on = new CaptureOverlayView(frame, showMagnifier: false);
-        var off = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
+        var on = new GridSelector(native, frame);
+        var off = new GridSelector(native, frame, showSelectionGrid: false);
         try { Assert.Equal(Pixels(Render(on)), Pixels(Render(off))); }
         finally { on.ReleaseResources(); off.ReleaseResources(); }
     });
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void CompletedSelection_ExportsOriginalPixelsWithoutGrid(bool enabled) => StaTestHost.Run(() =>
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void CompletedSelection_ExportsOriginalPixelsWithoutGrid(bool enabled, bool native) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = CreateFrame();
         RectD region = new(180, 120, 540, 330);
-        var window = new CaptureOverlayWindow(frame, abortOnFocusLoss: false, showMagnifier: false,
+        var window = native ? null : new CaptureOverlayWindow(frame, abortOnFocusLoss: false, showMagnifier: false,
             showSelectionGrid: enabled);
-        var view = Assert.IsType<CaptureOverlayView>(window.Content);
+        var view = window is not null ? new GridSelector(Assert.IsType<CaptureOverlayView>(window.Content))
+            : new GridSelector(true, frame, showSelectionGrid: enabled);
         CaptureSelectionCompletedEventArgs? completed = null;
-        window.SelectionCompleted += (_, args) => completed = args;
+        if (window is not null) window.SelectionCompleted += (_, args) => completed = args;
+        else view.SelectionCompleted += (_, args) => completed = args;
         try
         {
             SetCursor(view, new PointD(360, 280));
             _ = Render(view); // Render ready-state guides before completing the capture.
             SetSelection(view, region);
             _ = Render(view);
-            window.CompleteSelection(region);
+            if (window is not null) window.CompleteSelection(region);
+            else view.CompleteSelection(region);
             Assert.NotNull(completed);
             Assert.Equal(region, completed.BitmapRegion);
             BitmapSource expected = ScreenCaptureEngine.Crop(frame, region);
@@ -160,7 +171,7 @@ public sealed class CaptureSelectionGridTests
             Assert.Equal(540, completed.SelectedBitmap.PixelWidth);
             Assert.Equal(330, completed.SelectedBitmap.PixelHeight);
         }
-        finally { window.Close(); }
+        finally { if (window is not null) window.Close(); else view.ReleaseResources(); }
     });
 
     [Theory]
@@ -192,6 +203,11 @@ public sealed class CaptureSelectionGridTests
         bitmap.CopyPixels(result, bitmap.PixelWidth * 4, 0);
         return result;
     }
+
+    private static void SetSelection(GridSelector view, RectD selection) => view.SetSelection(selection);
+    private static void SetCursor(GridSelector view, PointD cursor) => view.SetCursor(cursor);
+    private static void InvokeInput(GridSelector view, string method, InputEventArgs args) => view.InvokeInput(method, args);
+    private static RenderTargetBitmap Render(GridSelector view, double scale = 1) => view.Render(scale);
 
     private static void SetSelection(CaptureOverlayView view, RectD selection) =>
         typeof(CaptureOverlayView).GetField("_selection", BindingFlags.Instance | BindingFlags.NonPublic)!

@@ -13,6 +13,8 @@ public static class PhysicalWindowPositioner
     internal const uint DragMoveFlags =
         NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE;
 
+    internal const uint MoveAndResizeFlags = NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE;
+
     public static void PlaceTopmost(IntPtr hwnd, RectD screenBounds)
     {
         PlaceTopmost(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
@@ -32,6 +34,10 @@ public static class PhysicalWindowPositioner
     {
         Move(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
     }
+
+    /// <summary>Updates a passive window's pixel bounds across DPI changes without showing or restacking it.</summary>
+    public static void MoveAndResize(IntPtr hwnd, RectD screenBounds) =>
+        MoveAndResize(hwnd, screenBounds, Win32PhysicalWindowNativeApi.Instance);
 
     internal static void PlaceTopmost(
         IntPtr hwnd,
@@ -60,6 +66,9 @@ public static class PhysicalWindowPositioner
             compareSize: false,
             skipIfUnchanged: true);
     }
+
+    internal static void MoveAndResize(IntPtr hwnd, RectD screenBounds, IPhysicalWindowNativeApi nativeApi) =>
+        Place(hwnd, screenBounds, nativeApi, MoveAndResizeFlags, compareSize: true, skipIfUnchanged: true);
 
     private static void Place(
         IntPtr hwnd,
