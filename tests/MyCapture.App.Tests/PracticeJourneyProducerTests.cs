@@ -178,9 +178,11 @@ public sealed class PracticeJourneyProducerTests
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void CapturePreparationFailureReportsTheOriginalRequest(bool asynchronous) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void CapturePreparationFailureReportsTheOriginalRequest(bool asynchronous, bool native) => StaTestHost.Run(() =>
     {
         var session = new PracticeSession(); Guid request = session.BeginCapture();
         var signals = new List<PracticeEvent>();
@@ -189,7 +191,7 @@ public sealed class PracticeJourneyProducerTests
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance,
             _ => throw new InvalidOperationException("Synthetic frame failure"),
             () => asynchronous ? new RectD(-10000, -10000, 32, 20) : throw new InvalidOperationException("Synthetic bounds failure"),
-            _ => []) { ReadWindowSources = null, ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()) };
+            _ => []) { UseNativeDibSelector = native, ReadWindowSources = null, ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()) };
         try
         {
             void Start() => coordinator.Start(false, false, false, practiceTarget: new(session.Id, request));

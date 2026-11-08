@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
@@ -496,6 +497,8 @@ public sealed class CaptureModeBarTests
         {
             AutoDetectWindows = () => true,
             ClaimStartGuide = bookkeeping.Claim,
+            UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+                ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf"])),
             ApplyCaptureExclusion = _ => true,
         };
         MethodInfo show = typeof(CaptureOverlayCoordinator).GetMethod("ShowOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!;

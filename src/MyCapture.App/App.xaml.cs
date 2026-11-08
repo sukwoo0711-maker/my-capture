@@ -126,6 +126,7 @@ public partial class App : Application
         // The resident probe runs the whole resident app against an isolated data root beside any
         // normal instance; nothing it does may reach the user's clipboard.
         s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
+        IReadOnlySet<string> selectorVariants = s_residentProbe?.Variants ?? ResidentProbeOptions.ReadVariants(e.Args);
         if (s_residentProbe is not null)
             ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
         if (s_residentProbe?.LibraryFirstPage == true) ValidateLibraryFirstPageInput(s_residentProbe, e.Args);
@@ -211,7 +212,7 @@ public partial class App : Application
             _log.LogInformation("MyCapture starting up");
             if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
             if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-            InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
+            InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0, selectorVariants);
             if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellFinished = System.Diagnostics.Stopwatch.GetTimestamp();
             StartActivationListener();
             _residentReady.MarkReady();
@@ -241,7 +242,7 @@ public partial class App : Application
     /// <summary>First-instance switch that opens the settings window on launch.</summary>
     internal const string SettingsCommandLineSwitch = "--settings";
 
-    private void InitializeShell(bool quietLaunch, bool openSettings)
+    private void InitializeShell(bool quietLaunch, bool openSettings, IReadOnlySet<string> selectorVariants)
     {
         if (_services is null)
         {
@@ -506,6 +507,7 @@ public partial class App : Application
         };
         // Answers the record command while the previous recording is still being saved.
         _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));
+        ApplySelectorVariants(selectorVariants);
 
         // Add the icon first so registration failures have a non-modal place to be
         // reported. A tray utility must not interrupt logon with a message box merely

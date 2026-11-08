@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using Xunit;
@@ -10,9 +11,11 @@ namespace MyCapture.App.Tests;
 public sealed class NativeSelectorCoordinatorTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void OptInNativeSelectorRoutesImageAndDirectTextResults(bool text) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void DefaultAndExplicitNativeSelectorRouteImageAndDirectTextResults(bool text, bool explicitNative) => StaTestHost.Run(() =>
     {
         using var release = new ManualResetEventSlim();
         FrozenFrame frame = Frame();
@@ -21,7 +24,11 @@ public sealed class NativeSelectorCoordinatorTests
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance,
             _ => { release.Wait(); return frame; }, () => frame.ScreenBounds, _ => []);
-        coordinator.UseNativeDibSelector = true;
+        if (explicitNative)
+            coordinator.UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+                ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-native-dib"]));
+        Assert.True(coordinator.UseNativeDibSelector);
+        Assert.Equal(NativeSelectorChromeStrategy.Retained, coordinator.NativeChromeStrategy);
         coordinator.AutoDetectWindows = () => false;
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = null;
@@ -54,12 +61,14 @@ public sealed class NativeSelectorCoordinatorTests
     });
 
     [Fact]
-    public void OrdinaryCoordinatorStillDefaultsToWpfUntilParityIsComplete() => StaTestHost.Run(() =>
+    public void WpfVariantRestoresTheOriginalCoordinatorRenderer() => StaTestHost.Run(() =>
     {
         using var coordinator = new CaptureOverlayCoordinator(
             new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance);
+        coordinator.UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+            ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf"]));
         Assert.False(coordinator.UseNativeDibSelector);
     });
 }
