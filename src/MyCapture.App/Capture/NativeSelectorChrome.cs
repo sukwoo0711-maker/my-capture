@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
@@ -86,6 +87,7 @@ internal sealed class NativeSelectorChrome : IDisposable
     {
         ObjectDisposedException.ThrowIf(_closed, this);
         if (_owner is not null) throw new InvalidOperationException("Chrome already belongs to a selector.");
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-start");
         _owner = owner;
         _rendered = false;
         _showingWindows = false;
@@ -112,6 +114,7 @@ internal sealed class NativeSelectorChrome : IDisposable
         if (_guideWindow is { } guide)
             Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, Placement.Layout);
         Update(owner.ReadCursor(), Int32Rect.Empty);
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-complete");
     }
 
     private Window Create(FrameworkElement content, double width, double height, bool interactive)
@@ -189,9 +192,12 @@ internal sealed class NativeSelectorChrome : IDisposable
         foreach (Window window in _windows.ToArray())
         {
             if (_closed || _owner is null) return;
+            MarkWindow(window, "show-start");
             window.Show();
             if (_closed || _owner is null) return;
+            MarkWindow(window, "show-complete");
             Place(window, window.Left * _scale, window.Top * _scale, Placement.Show);
+            MarkWindow(window, "placed");
         }
         _owner?.FlushChromeStamps();
     }
@@ -199,12 +205,23 @@ internal sealed class NativeSelectorChrome : IDisposable
     private void OnRendered(object? sender, EventArgs args)
     {
         if (_closed || !_showingWindows || _owner is null || sender is not Window window) return;
-        if (_pendingFrames.Remove(window) && _pendingFrames.Count == 0)
+        if (!_pendingFrames.Remove(window)) return;
+        MarkWindow(window, "rendered");
+        if (_pendingFrames.Count == 0)
         {
             _rendered = true;
             _owner.FlushChromeStamps();
             _owner.ChromeReady();
         }
+    }
+
+    private void MarkWindow(Window window, string phase)
+    {
+        if (SelectorTimeline.Mark is not { } mark) return;
+        string name = ReferenceEquals(window, _barWindow) ? "bar"
+            : ReferenceEquals(window, _sizeWindow) ? "size"
+            : ReferenceEquals(window, _guideWindow) ? "guide" : "magnifier";
+        mark($"native-chrome-{name}-{phase}");
     }
 
     private void ToggleHelp()
