@@ -56,27 +56,34 @@ public sealed class CapturePixelFillTests
     });
 
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(1.25)]
-    [InlineData(1.5)]
-    [InlineData(1.75)]
-    [InlineData(2.0)]
-    [InlineData(2.5)]
-    [InlineData(3.0)]
-    public void MagnifierColourAndCoordinatesNeverOverlapAndStayInsideItsPanel(double scale) => StaTestHost.Run(() =>
+    [InlineData(1.0, false)]
+    [InlineData(1.25, false)]
+    [InlineData(1.5, false)]
+    [InlineData(1.75, false)]
+    [InlineData(2.0, false)]
+    [InlineData(2.5, false)]
+    [InlineData(3.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.25, true)]
+    [InlineData(1.5, true)]
+    [InlineData(1.75, true)]
+    [InlineData(2.0, true)]
+    [InlineData(2.5, true)]
+    [InlineData(3.0, true)]
+    public void MagnifierColourAndCoordinatesNeverOverlapAndStayInsideItsPanel(double scale, bool native) => StaTestHost.Run(() =>
     {
         // The image is 150 frame pixels and the values under it are DIP text, so at 200% the
         // 12 DIP colour and the 10 DIP coordinates overlapped inside a 75 DIP footer.
         foreach (PointD cursor in new PointD[] { new(120, 100), new(639, 359), new(333, 207) })
         {
-            var view = new CaptureOverlayView(NoiseFrame(), showSelectionGrid: false);
+            var view = new MagnifierSelector(native, NoiseFrame(), scale, Render);
             try
             {
                 view.ReadCursor = () => cursor;
-                SetMouseOver(view, true);
+                view.SetMouseOver(true);
                 view.InitializePointer();
-                Render(view, scale);
-                Drawing[] leaves = Leaves(Visual(view, "_magnifierVisual").Drawing).ToArray();
+                view.Render(scale);
+                Drawing[] leaves = Leaves(view.MagnifierDrawing).ToArray();
                 GlyphRunDrawing[] texts = leaves.OfType<GlyphRunDrawing>().ToArray();
                 Assert.Equal(2, texts.Length);
                 Rect colour = texts[0].Bounds, location = texts[1].Bounds;

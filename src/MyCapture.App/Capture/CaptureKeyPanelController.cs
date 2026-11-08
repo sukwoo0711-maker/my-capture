@@ -3,101 +3,167 @@ using System.Windows.Media;
 
 namespace MyCapture.App.Capture;
 
+internal readonly record struct CaptureKeyPanelPlacement(Rect WorkArea, Point Pointer, Rect? Highlight,
+    Rect? ModeBar, Rect? Magnifier, Rect? Readout, Rect? HoverTab, double Scale, double PixelX = 1, double PixelY = 1);
+
+/// <summary>Renderer geometry and ownership for the shared deferred panel.</summary>
+internal interface ICaptureKeyPanelHost
+{
+    bool ShouldShow { get; }
+    bool CanPresent { get; }
+    CaptureKeyPanelContext Context { get; }
+    FontFamily UiFont { get; }
+    FontFamily MonoFont { get; }
+    IReadOnlyDictionary<string, Brush> Palette { get; }
+    CaptureKeyPanelPlacement Placement { get; }
+    void Add(CaptureKeyPanel panel);
+    void Remove(CaptureKeyPanel panel);
+    void Place(CaptureKeyPanel? active, Rect? bounds, double scale);
+}
+
 /// <summary>Reached only for an explicitly requested or eligible panel, after the presented frame.</summary>
 internal sealed class CaptureKeyPanelController
 {
-    private readonly CaptureOverlayView _view;
+    private readonly ICaptureKeyPanelHost _host;
     private CaptureKeyPanel? _ready;
     private CaptureKeyPanel? _selection;
     private CaptureKeyPanel? _active;
-    private readonly ScaleTransform _scale = new();
-    private readonly TranslateTransform _offset = new();
     private bool _right;
 
-    private CaptureKeyPanelController(CaptureOverlayView view) => _view = view;
+    internal CaptureKeyPanelController(ICaptureKeyPanelHost host) => _host = host;
+    internal CaptureKeyPanel? Active => _active;
+    internal IEnumerable<CaptureKeyPanel> Panels
+    {
+        get
+        {
+            if (_ready is not null) yield return _ready;
+            if (_selection is not null) yield return _selection;
+        }
+    }
 
     internal static void Attach(CaptureOverlayView view)
     {
         Diagnostics.SelectorTimeline.Mark?.Invoke("key-panel-controller");
-        var controller = new CaptureKeyPanelController(view);
+        var controller = new CaptureKeyPanelController(new WpfHost(view));
         view.RegisterDeferredGuide(controller.Update, controller.ApplyPalette, controller.Release, () => controller._active);
         controller.Update();
     }
 
-    private void Update()
+    internal void Update()
     {
-        if (!_view.ShowKeyPanel || _view.DeferredGuideSuppressed)
+        if (!_host.ShouldShow)
         {
             if (_ready is not null) _ready.Visibility = Visibility.Hidden;
             if (_selection is not null) _selection.Visibility = Visibility.Hidden;
-            _view.KeyPanelBoundsForTest = null;
+            _host.Place(_active, null, 1);
             return;
         }
-        if (!_view.DeferredGuideHasFrame || _view.ActualWidth <= 0 || _view.ActualHeight <= 0) return;
+        if (!_host.CanPresent) return;
         if (_ready is null)
         {
             Diagnostics.SelectorTimeline.Mark?.Invoke("key-panel-construct");
-            var transform = new TransformGroup();
-            transform.Children.Add(_scale);
-            transform.Children.Add(_offset);
             _ready = Create();
             _selection = Create();
             CaptureKeyPanel Create()
             {
-                var panel = new CaptureKeyPanel(_view.DeferredGuideUiFont, _view.DeferredGuideMonoFont);
-                panel.ApplyPalette(_view.GuidePalette);
-                panel.RenderTransform = transform;
-                _view.AddDeferredGuide(panel);
+                var panel = new CaptureKeyPanel(_host.UiFont, _host.MonoFont);
+                panel.ApplyPalette(_host.Palette);
+                _host.Add(panel);
                 return panel;
             }
         }
+        CaptureKeyPanelContext context = _host.Context;
         Prepare(_ready, false);
         Prepare(_selection!, true);
-        bool selected = _view.DeferredGuideHasSelection;
+        bool selected = context.HasSelection;
         _active = selected ? _selection : _ready;
         (selected ? _ready : _selection)!.Visibility = Visibility.Hidden;
         void Prepare(CaptureKeyPanel panel, bool hasSelection)
         {
-            bool changed = panel.Configure(new CaptureKeyPanelContext(_view.ShowKeyPanel, _view.DeferredGuideCanDrag,
-                _view.DeferredGuideWindowDetection, hasSelection, _view.DeferredGuideRatioAvailable, _view.CopyColorText is not null,
-                _view.TextCaptureAvailable, _view.TextCaptureMode, _view.PinSelectionAvailable, _view.PasteToScreenHotkey));
+            bool changed = panel.Configure(context with { HasSelection = hasSelection });
             if (changed || !panel.IsMeasureValid)
             {
                 panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 panel.Arrange(new Rect(panel.DesiredSize));
             }
         }
-        CaptureGuideArea area = CaptureModeBarLayout.ChooseArea(_view.DeferredGuideMonitors,
-            _view.DeferredGuidePointer.Offset(_view.DeferredGuideScreenBounds.Left, _view.DeferredGuideScreenBounds.Top),
-            _view.DeferredGuideScreenBounds);
-        double dipX = _view.DeferredGuideDipPerPixelX, dipY = _view.DeferredGuideDipPerPixelY;
-        Rect work = CaptureModeBarLayout.ToDip(area.WorkArea, dipX, dipY);
-        double scale = CaptureModeBarLayout.ContentScale(area.Scale, dipX);
+        CaptureKeyPanelPlacement geometry = _host.Placement;
+        double scale = geometry.Scale;
         Size size = _active!.DesiredSize;
-        Rect placed = CaptureKeyPanelLayout.Place(work, new Size(size.Width * scale, size.Height * scale),
-            new Point(_view.DeferredGuidePointer.X * dipX, _view.DeferredGuidePointer.Y * dipY),
-            _view.DeferredGuideHighlight, _view.ModeBarBoundsForTest, _view.DeferredGuideMagnifier,
-            _view.DeferredGuideReadout, scale, ref _right, _view.DeferredGuideHoverTab);
+        Rect placed = CaptureKeyPanelLayout.Place(geometry.WorkArea, new Size(size.Width * scale, size.Height * scale),
+            geometry.Pointer, geometry.Highlight, geometry.ModeBar, geometry.Magnifier,
+            geometry.Readout, scale, ref _right, geometry.HoverTab);
         _active.Visibility = placed.IsEmpty ? Visibility.Hidden : Visibility.Visible;
-        _view.KeyPanelBoundsForTest = placed.IsEmpty ? null : placed;
-        if (placed.IsEmpty) return;
-        _scale.ScaleX = _scale.ScaleY = scale;
-        _offset.X = Math.Round(placed.X / _view.GuidePixelSizeX) * _view.GuidePixelSizeX;
-        _offset.Y = Math.Round(placed.Y / _view.GuidePixelSizeY) * _view.GuidePixelSizeY;
+        _host.Place(_active, placed.IsEmpty ? null : placed, scale);
     }
 
-    private void ApplyPalette()
+    internal void ApplyPalette()
     {
-        _ready?.ApplyPalette(_view.GuidePalette);
-        _selection?.ApplyPalette(_view.GuidePalette);
+        _ready?.ApplyPalette(_host.Palette);
+        _selection?.ApplyPalette(_host.Palette);
     }
 
-    private void Release()
+    internal void Release()
     {
-        if (_ready is not null) _view.RemoveDeferredGuide(_ready);
-        if (_selection is not null) _view.RemoveDeferredGuide(_selection);
+        if (_ready is not null) _host.Remove(_ready);
+        if (_selection is not null) _host.Remove(_selection);
         _ready?.ReleaseResources();
         _selection?.ReleaseResources();
         _active = _ready = _selection = null;
+    }
+
+    private sealed class WpfHost(CaptureOverlayView view) : ICaptureKeyPanelHost
+    {
+        private readonly ScaleTransform _scale = new();
+        private readonly TranslateTransform _offset = new();
+        private TransformGroup? _transform;
+
+        public bool ShouldShow => view.ShowKeyPanel && !view.DeferredGuideSuppressed;
+        public bool CanPresent => view.DeferredGuideHasFrame && view.ActualWidth > 0 && view.ActualHeight > 0;
+        public CaptureKeyPanelContext Context => new(view.ShowKeyPanel, view.DeferredGuideCanDrag,
+            view.DeferredGuideWindowDetection, view.DeferredGuideHasSelection, view.DeferredGuideRatioAvailable,
+            view.CopyColorText is not null, view.TextCaptureAvailable, view.TextCaptureMode,
+            view.PinSelectionAvailable, view.PasteToScreenHotkey);
+        public FontFamily UiFont => view.DeferredGuideUiFont;
+        public FontFamily MonoFont => view.DeferredGuideMonoFont;
+        public IReadOnlyDictionary<string, Brush> Palette => view.GuidePalette;
+        public CaptureKeyPanelPlacement Placement
+        {
+            get
+            {
+                CaptureGuideArea area = CaptureModeBarLayout.ChooseArea(view.DeferredGuideMonitors,
+                    view.DeferredGuidePointer.Offset(view.DeferredGuideScreenBounds.Left, view.DeferredGuideScreenBounds.Top),
+                    view.DeferredGuideScreenBounds);
+                double dipX = view.DeferredGuideDipPerPixelX, dipY = view.DeferredGuideDipPerPixelY;
+                return new(CaptureModeBarLayout.ToDip(area.WorkArea, dipX, dipY),
+                    new Point(view.DeferredGuidePointer.X * dipX, view.DeferredGuidePointer.Y * dipY),
+                    view.DeferredGuideHighlight, view.ModeBarBoundsForTest, view.DeferredGuideMagnifier,
+                    view.DeferredGuideReadout, view.DeferredGuideHoverTab,
+                    CaptureModeBarLayout.ContentScale(area.Scale, dipX), view.GuidePixelSizeX, view.GuidePixelSizeY);
+            }
+        }
+
+        public void Add(CaptureKeyPanel panel)
+        {
+            if (_transform is null)
+            {
+                _transform = new TransformGroup();
+                _transform.Children.Add(_scale);
+                _transform.Children.Add(_offset);
+            }
+            panel.RenderTransform = _transform;
+            view.AddDeferredGuide(panel);
+        }
+
+        public void Remove(CaptureKeyPanel panel) => view.RemoveDeferredGuide(panel);
+
+        public void Place(CaptureKeyPanel? active, Rect? bounds, double scale)
+        {
+            view.KeyPanelBoundsForTest = bounds;
+            if (bounds is not { } placed) return;
+            _scale.ScaleX = _scale.ScaleY = scale;
+            _offset.X = Math.Round(placed.X / view.GuidePixelSizeX) * view.GuidePixelSizeX;
+            _offset.Y = Math.Round(placed.Y / view.GuidePixelSizeY) * view.GuidePixelSizeY;
+        }
     }
 }

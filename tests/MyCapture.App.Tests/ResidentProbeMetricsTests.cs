@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using Xunit;
 
@@ -22,11 +23,50 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("selector-breakdown")]
     [InlineData("receipt-breakdown")]
     [InlineData("no-key-panel")]
+    [InlineData("selector-wpf")]
     public void AttributionVariantsAreExplicitAndIndependentlySelectable(string variant)
     {
         IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variant.ToUpperInvariant()]);
         Assert.Single(selected);
         Assert.Contains(variant, selected, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("no-flight,selector-native-dib")]
+    [InlineData("no-flight,selector-wpf")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-fresh")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-parallel")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-dib")]
+    [InlineData("no-flight,selector-breakdown")]
+    public void StageOneSelectorMeasurementVariantsAreAccepted(string variants)
+    {
+        IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
+        Assert.Equal(variants.Split(',').Length, selected.Count);
+        foreach (string variant in variants.Split(',')) Assert.Contains(variant, selected);
+    }
+
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("selector-native-dib", true)]
+    [InlineData("selector-wpf", false)]
+    [InlineData("SELECTOR-WPF", false)]
+    public void RendererVariantsSelectNativeByDefaultAndKeepWpfAvailable(string variants, bool native)
+    {
+        IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
+        Assert.Equal(native, ResidentProbeOptions.UsesNativeSelector(selected));
+        Assert.Equal(NativeSelectorChromeStrategy.Retained, ResidentProbeOptions.GetSelectorChromeStrategy(selected));
+    }
+
+    [Theory]
+    [InlineData("selector-native-dib")]
+    [InlineData("selector-chrome-fresh")]
+    [InlineData("selector-chrome-parallel")]
+    [InlineData("selector-chrome-dib")]
+    [InlineData("selector-native-dib,selector-chrome-fresh")]
+    public void WpfVariantRejectsContradictoryNativeRequests(string native)
+    {
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf," + native]));
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", native + ",SELECTOR-WPF"]));
     }
 
     [Fact]

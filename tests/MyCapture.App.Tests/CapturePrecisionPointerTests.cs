@@ -48,10 +48,12 @@ public sealed class CapturePrecisionPointerTests
         Assert.Equal(new PointD(-99, -99), pointer.Update(new(-95, -95), true, Bounds));
     }
 
-    [Fact]
-    public void View_UsesEffectivePhysicalPoint_AndStopsWarpingWhenInactiveOrCancelled() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void View_UsesEffectivePhysicalPoint_AndStopsWarpingWhenInactiveOrCancelled(bool native) => StaTestHost.Run(() =>
     {
-        var view = new CaptureOverlayView(Bounds, showMagnifier: false);
+        using var view = new PrecisionSelector(native, Bounds);
         PointD actual = new(-20, -30);
         int writes = 0;
         view.ReadCursor = () => actual;
@@ -72,6 +74,33 @@ public sealed class CapturePrecisionPointerTests
         actual = actual.Offset(10, 10);
         view.UpdatePointer(true, true);
         Assert.Equal(1, writes);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedCursorPlacementResetsPrecisionBeforeTheNextMotion(bool native) => StaTestHost.Run(() =>
+    {
+        using var view = new PrecisionSelector(native, Bounds);
+        PointD actual = new(10, 20);
+        bool succeeds = false;
+        int writes = 0;
+        view.ReadCursor = () => actual;
+        view.PlaceCursor = target => { writes++; if (succeeds) actual = target; return succeeds; };
+        Assert.Equal(new PointD(110, 120), view.UpdatePointer(true, true));
+        actual = new PointD(20, 30);
+        Assert.Equal(new PointD(120, 130), view.UpdatePointer(true, true));
+        Assert.Equal(new PointD(20, 30), actual);
+        Assert.Equal(1, writes);
+
+        succeeds = true;
+        actual = new PointD(30, 40);
+        Assert.Equal(new PointD(130, 140), view.UpdatePointer(true, true));
+        Assert.Equal(1, writes);
+        actual = new PointD(40, 50);
+        Assert.Equal(new PointD(132, 142), view.UpdatePointer(true, true));
+        Assert.Equal(new PointD(32, 42), actual);
+        Assert.Equal(2, writes);
     });
 
     [Fact]

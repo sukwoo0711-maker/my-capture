@@ -508,6 +508,13 @@ internal sealed class CaptureModeBar : Border
         menu.IsOpen = true;
     }
 
+    internal void DismissMenus()
+    {
+        if (_ratioMenu is { } ratio) ratio.IsOpen = false;
+        if (_delayMenu is { } delay) delay.IsOpen = false;
+        if (_moreMenu is { } more) more.IsOpen = false;
+    }
+
     private void OpenDelayMenu()
     {
         if (_delayMenu is { IsOpen: true }) return;

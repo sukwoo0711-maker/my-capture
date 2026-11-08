@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -22,6 +23,7 @@ using MyCapture.Core.Storage;
 using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.CaptureCueEvidenceTests;
 using Overlay = MyCapture.App.Tests.WindowDetectOverlayTests;
 
@@ -31,7 +33,7 @@ namespace MyCapture.App.Tests;
 /// The mode bar's capture/record switch and ⋯ menu hand the app's existing commands back instead of
 /// capturing, and the recording selector says "record" in the recording colour.
 /// </summary>
-public sealed class CaptureModeBarActionTests
+public sealed class CaptureModeBarActionTests(ITestOutputHelper output)
 {
     [Fact]
     public void RecordSwitchEndsTheSelectorAndAsksForTheRecordingSelector() => StaTestHost.Run(() =>
@@ -136,6 +138,8 @@ public sealed class CaptureModeBarActionTests
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance)
         {
+            UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+                ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf"])),
             AutoDetectWindows = () => true,
             ApplyCaptureExclusion = _ => true,
             CanRepeatLastRegion = () => false,
@@ -228,8 +232,10 @@ public sealed class CaptureModeBarActionTests
         finally { capture.ReleaseResources(); }
     });
 
-    [Fact]
-    public void RegionRecordingOpensTheRecordingSelector() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RegionRecordingOpensTheRecordingSelector(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-cue-");
         using var release = new ManualResetEventSlim();
@@ -239,10 +245,12 @@ public sealed class CaptureModeBarActionTests
         var coordinator = new RegionRecordingCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             paths, () => new RecordingSettings(), NullLoggerFactory.Instance, library)
         {
+            UseNativeDibSelector = native,
             SelectionDesktopBounds = () => new RectD(0, 0, 32, 20),
         };
-        CaptureOverlayWindow? overlay = null;
-        coordinator.ExcludeSelectionWindow = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        RecordingSelector? overlay = null;
+        coordinator.ExcludeSelectionWindow = _ => { overlay = new RecordingSelector(coordinator, native); return true; };
+        coordinator.ExcludeNativeSelectionWindow = _ => { overlay = new RecordingSelector(coordinator, native); return true; };
         coordinator.AcquireSelectionFrame = () =>
         {
             release.Wait(TimeSpan.FromSeconds(5));
@@ -257,7 +265,9 @@ public sealed class CaptureModeBarActionTests
             Assert.True(overlay.RecordingSelection);
             Assert.True(overlay.ShowModeBar);
             coordinator.CancelRegionSelection();
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(RegionRecordingOpensTheRecordingSelector)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally
         {
             release.Set();
@@ -267,8 +277,10 @@ public sealed class CaptureModeBarActionTests
         }
     });
 
-    [Fact]
-    public void RecordingToCaptureSwitchWaitsForClosedSelectorAndFinishedFramePreparation() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RecordingToCaptureSwitchWaitsForClosedSelectorAndFinishedFramePreparation(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-capture-switch-");
         using var acquiring = new ManualResetEventSlim();
@@ -279,21 +291,24 @@ public sealed class CaptureModeBarActionTests
         var coordinator = new RegionRecordingCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             paths, () => new RecordingSettings(), NullLoggerFactory.Instance, library)
         {
+            UseNativeDibSelector = native,
             SelectionDesktopBounds = () => new RectD(0, 0, 32, 20),
         };
-        CaptureOverlayWindow? overlay = null;
+        RecordingSelector? overlay = null;
         bool closed = false;
         var callbacks = new List<(bool Closed, bool Prepared, bool Active, object? Overlay, object? Preparation)>();
-        coordinator.ExcludeSelectionWindow = window =>
+        bool ExcludeSelector()
         {
-            overlay = (CaptureOverlayWindow)window;
-            overlay.Closed += (_, _) => closed = true;
+            overlay = new RecordingSelector(coordinator, native);
+            overlay.SubscribeClosed(() => closed = true);
             return true;
-        };
+        }
+        coordinator.ExcludeSelectionWindow = _ => ExcludeSelector();
+        coordinator.ExcludeNativeSelectionWindow = _ => ExcludeSelector();
         coordinator.CaptureSelectionRequested = () =>
         {
             callbacks.Add((closed, coordinator.LastSelectionPreparation.IsCompleted, coordinator.IsActive,
-                typeof(RegionRecordingCoordinator).GetField("_selectionOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator),
+                RecordingSelector.Current(coordinator),
                 typeof(RegionRecordingCoordinator).GetField("_selectionPreparation", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator)));
         };
         coordinator.AcquireSelectionFrame = () =>
@@ -310,9 +325,8 @@ public sealed class CaptureModeBarActionTests
             Overlay.PumpUntil(() => acquiring.IsSet);
             Assert.NotNull(overlay);
             Assert.False(overlay.IsVisible);
-            var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
-            Assert.True(view.ModeBarForTest!.RecordKindButton.IsChecked);
-            ((ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(view.ModeBarForTest.CaptureKindButton)).Select();
+            Assert.True(overlay.ModeBar.RecordKindButton.IsChecked);
+            ((ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(overlay.ModeBar.CaptureKindButton)).Select();
             Assert.True(closed);
             Overlay.Pump();
             Assert.Empty(callbacks);
@@ -328,7 +342,9 @@ public sealed class CaptureModeBarActionTests
             Assert.Null(callback.Overlay);
             Assert.Null(callback.Preparation);
             Assert.False(coordinator.IsActive);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(RecordingToCaptureSwitchWaitsForClosedSelectorAndFinishedFramePreparation)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally
         {
             release.Set();

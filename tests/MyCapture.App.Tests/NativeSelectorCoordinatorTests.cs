@@ -1,0 +1,75 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
+using MyCapture.Core.Primitives;
+using MyCapture.Platform.Capture;
+using Xunit;
+using static MyCapture.App.Tests.WindowDetectOverlayTests;
+
+namespace MyCapture.App.Tests;
+
+public sealed class NativeSelectorCoordinatorTests
+{
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void DefaultAndExplicitNativeSelectorRouteImageAndDirectTextResults(bool text, bool explicitNative) => StaTestHost.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        FrozenFrame frame = Frame();
+        using var coordinator = new CaptureOverlayCoordinator(
+            new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
+            NullLogger<CaptureOverlayCoordinator>.Instance,
+            _ => { release.Wait(); return frame; }, () => frame.ScreenBounds, _ => []);
+        if (explicitNative)
+            coordinator.UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+                ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-native-dib"]));
+        Assert.True(coordinator.UseNativeDibSelector);
+        Assert.Equal(NativeSelectorChromeStrategy.Retained, coordinator.NativeChromeStrategy);
+        coordinator.AutoDetectWindows = () => false;
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        coordinator.OpenEditorAfterCapture = () => false;
+        int images = 0, texts = 0;
+        coordinator.SelectionPersistRequested = _ => { images++; return Task.CompletedTask; };
+        coordinator.TextCaptureRequested = selection => { Assert.True(selection.TextCapture); texts++; };
+        try
+        {
+            coordinator.Start(false, false, false, textCapture: text);
+            NativeCaptureOverlay overlay = Assert.IsType<NativeCaptureOverlay>(coordinator.NativeOverlayForProbe);
+            overlay.PlaceCursor = _ => false;
+            Assert.Equal(text, overlay.TextCaptureMode);
+            Assert.True(overlay.TextCaptureAvailable);
+            Assert.False(overlay.IsVisible);
+            overlay.AttachFrame(frame);
+            overlay.BeginSelection(new PointD(10, 10));
+            overlay.EndSelection(new PointD(100, 80));
+            PumpUntil(() => text ? texts == 1 : images == 1);
+            Assert.Equal(text ? 0 : 1, images);
+            Assert.Equal(text ? 1 : 0, texts);
+            Assert.Equal(0, overlay.LiveOwnedNativeHandles);
+            Assert.Null(coordinator.NativeOverlayForProbe);
+        }
+        finally
+        {
+            coordinator.Cancel();
+            release.Set();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        }
+    });
+
+    [Fact]
+    public void WpfVariantRestoresTheOriginalCoordinatorRenderer() => StaTestHost.Run(() =>
+    {
+        using var coordinator = new CaptureOverlayCoordinator(
+            new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
+            NullLogger<CaptureOverlayCoordinator>.Instance);
+        coordinator.UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+            ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf"]));
+        Assert.False(coordinator.UseNativeDibSelector);
+    });
+}
