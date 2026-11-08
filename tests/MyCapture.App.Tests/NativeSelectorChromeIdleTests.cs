@@ -83,8 +83,10 @@ public sealed class NativeSelectorChromeIdleTests
     });
 
     [Theory]
-    [InlineData(1025.0, false)]
-    [InlineData(1025.0, true)]
+    // Windows clamps one window to the screen, so every retained window is enlarged; together they
+    // exceed MaxRetainedSurfaceBytes (16 MiB) on any screen of at least 1024 x 768.
+    [InlineData(2049.0, false)]
+    [InlineData(2049.0, true)]
     [InlineData(double.NaN, false)]
     [InlineData(double.NaN, true)]
     public void InvalidOrOversizedSurfaceIsReleasedOnReturnOrIdle(double size, bool resizeAfterReturn) => StaTestHost.Run(() =>
@@ -97,8 +99,11 @@ public sealed class NativeSelectorChromeIdleTests
             PumpUntil(() => owner.IsChromeReady);
             IntPtr[] handles = Handles(chrome);
             if (resizeAfterReturn) NativeSelectorChromeCache.Release(chrome);
-            chrome.Windows[0].Width = size;
-            chrome.Windows[0].Height = size;
+            foreach (Window window in chrome.Windows)
+            {
+                window.Width = size;
+                window.Height = size;
+            }
             if (resizeAfterReturn) NativeSelectorChromeCache.TrimForIdle();
             else NativeSelectorChromeCache.Release(chrome);
             Assert.Equal(0, NativeSelectorChromeCache.RetainedWindowCount);
@@ -145,7 +150,7 @@ public sealed class NativeSelectorChromeIdleTests
     [InlineData(1, -1, 1, 1)]
     [InlineData(1, 1, 0, 1)]
     [InlineData(1, 1, 1, -1)]
-    [InlineData(1025, 1025, 1, 1)]
+    [InlineData(2049, 2049, 1, 1)]
     [InlineData(double.MaxValue, 1, 2, 1)]
     public void InvalidSurfaceMeasurementCannotEnterTheBudget(double width, double height, double scaleX, double scaleY)
     {

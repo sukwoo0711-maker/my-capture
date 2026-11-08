@@ -15,12 +15,12 @@ internal sealed class KeyPanelSelector : IDisposable
     private readonly CaptureOverlayView? _wpf;
     private readonly NativeCaptureOverlay? _native;
 
-    internal KeyPanelSelector(bool native)
+    internal KeyPanelSelector(bool native, bool magnifier = false)
     {
         var frame = CaptureCueEvidenceTests.Desktop();
         if (native)
         {
-            _native = new NativeCaptureOverlay(frame.ScreenBounds, false, false)
+            _native = new NativeCaptureOverlay(frame.ScreenBounds, false, magnifier)
             {
                 ReadCursor = () => new PointD(300, 300),
                 ReadMonitors = () => CaptureCueEvidenceTests.Monitors,

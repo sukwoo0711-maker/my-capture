@@ -875,6 +875,41 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         }
     });
 
+    [Fact]
+    public void NativeChromeWithMagnifierAndKeyPanelStaysCachedForTheNextCapture() => StaTestHost.Run(() =>
+    {
+        // The product selector shows the magnifier, so a key panel makes at least five retained
+        // windows. The cache must keep that whole set; discarding it rebuilds every chrome window
+        // on the next capture.
+        var marks = new List<string>();
+        Action<string>? previous = MyCapture.App.Diagnostics.SelectorTimeline.Mark;
+        MyCapture.App.Diagnostics.SelectorTimeline.Mark = marks.Add;
+        NativeSelectorChromeCache.Trim();
+        try
+        {
+            using var first = new KeyPanelSelector(true, magnifier: true) { ShowKeyPanel = true };
+            first.Native!.Show();
+            Overlay.PumpUntil(() => first.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            var chrome = Assert.IsType<NativeSelectorChrome>(first.Native.Chrome);
+            int windows = chrome.Windows.Count;
+            Assert.True(windows >= 5, $"expected bar, size, guide, magnifier and key panel windows; found {windows}");
+            first.ReleaseResources();
+            Assert.Equal(windows, NativeSelectorChromeCache.RetainedWindowCount);
+
+            marks.Clear();
+            using var second = new KeyPanelSelector(true, magnifier: true) { ShowKeyPanel = true };
+            second.Native!.Show();
+            Overlay.PumpUntil(() => second.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            Assert.Same(chrome, second.Native.Chrome);
+            Assert.Contains("native-chrome-cache-hit", marks);
+        }
+        finally
+        {
+            NativeSelectorChromeCache.Trim();
+            MyCapture.App.Diagnostics.SelectorTimeline.Mark = previous;
+        }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -16,7 +16,9 @@ internal sealed class NativeSelectorChromeCache
     internal static TimeSpan Retention => TimeSpan.FromMinutes(2);
     internal static int RetainedWindowCount => _current?._hidden?.Windows.Count ?? 0;
     // A surface-size guard, not a measurement of WPF/native private memory or GPU allocations.
-    internal const long MaxRetainedSurfaceBytes = 4 * 1024 * 1024;
+    // Sized for the four session windows plus the deferred key panel and start guide at 250% scale.
+    internal const long MaxRetainedSurfaceBytes = 16 * 1024 * 1024;
+    internal const int MaxRetainedWindows = 8;
 
     private NativeSelectorChromeCache()
     {
@@ -82,7 +84,7 @@ internal sealed class NativeSelectorChromeCache
 
     private static bool CanRetainWithinBudget(NativeSelectorChrome chrome)
     {
-        if (!chrome.CanRetain || chrome.Windows.Count is < 1 or > 4) return false;
+        if (!chrome.CanRetain || chrome.Windows.Count < 1 || chrome.Windows.Count > MaxRetainedWindows) return false;
         long bytes = 0;
         foreach (var window in chrome.Windows)
         {
