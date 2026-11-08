@@ -112,14 +112,16 @@ public sealed class NativeSelectorChromeIdleTests
     });
 
     [Theory]
-    // Windows clamps one window to the screen, so every retained window is enlarged; together they
-    // exceed MaxRetainedSurfaceBytes (16 MiB) on any screen of at least 1024 x 768.
+    // One 2049 x 2049 window alone exceeds MaxRetainedSurfaceBytes (16 MiB). Windows clamps a window to
+    // the desktop's tracking size; on the 1024 x 768 CI desktop that kept all four windows within the
+    // budget, so the fixture raises the limit before it enlarges them.
     [InlineData(2049.0, false)]
     [InlineData(2049.0, true)]
     [InlineData(double.NaN, false)]
     [InlineData(double.NaN, true)]
     public void InvalidOrOversizedSurfaceIsReleasedOnReturnOrIdle(double size, bool resizeAfterReturn) => StaTestHost.Run(() =>
     {
+        var scopes = new List<WindowTrackSizeScope>();
         try
         {
             using var owner = Owner();
@@ -130,15 +132,28 @@ public sealed class NativeSelectorChromeIdleTests
             if (resizeAfterReturn) NativeSelectorChromeCache.Release(chrome);
             foreach (Window window in chrome.Windows)
             {
+                if (!double.IsNaN(size))
+                {
+                    DpiScale dpi = VisualTreeHelper.GetDpi(window);
+                    scopes.Add(WindowTrackSizeScope.ForExisting(window, new Size(size * dpi.DpiScaleX, size * dpi.DpiScaleY)));
+                }
                 window.Width = size;
                 window.Height = size;
+                // The oversized surface must be real; a clamped window keeps the set within the budget.
+                if (!double.IsNaN(size))
+                    Assert.True(window.Width >= size - 1 && window.Height >= size - 1,
+                        $"The desktop limit kept the window at {window.Width} x {window.Height}.");
             }
             if (resizeAfterReturn) NativeSelectorChromeCache.TrimForIdle();
             else NativeSelectorChromeCache.Release(chrome);
             Assert.Equal(0, NativeSelectorChromeCache.RetainedWindowCount);
             Assert.All(handles, handle => Assert.False(NativeSelectorInterop.IsWindow(handle)));
         }
-        finally { NativeSelectorChromeCache.Trim(); }
+        finally
+        {
+            scopes.ForEach(scope => scope.Dispose());
+            NativeSelectorChromeCache.Trim();
+        }
     });
 
     [Fact]

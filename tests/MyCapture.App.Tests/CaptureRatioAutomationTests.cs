@@ -105,7 +105,9 @@ public sealed class CaptureRatioAutomationTests
         finally { view.ReleaseResources(); }
     });
 
-    private static RatioSelector View(bool native) => new(native, Desktop(), () => new PointD(300, 300), false, Monitors);
+    // The native variant shows a real selector window, which must fit on the CI desktop.
+    private static RatioSelector View(bool native) => new(native, native ? ShownDesktop() : Desktop(),
+        () => new PointD(300, 300), false, native ? ShownMonitors : Monitors);
 
     private static void Show(RatioSelector view)
     {

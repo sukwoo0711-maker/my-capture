@@ -840,7 +840,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         NativeSelectorChromeCache.Trim();
         try
         {
-            using var first = new KeyPanelSelector(true) { ShowKeyPanel = true };
+            using var first = new KeyPanelSelector(true, shown: true) { ShowKeyPanel = true };
             Assert.Null(first.KeyPanelForTest);
             first.Native!.Show();
             Assert.Null(first.KeyPanelForTest);
@@ -858,7 +858,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             Assert.All(handles, handle => Assert.True(NativeSelectorInterop.IsWindow(handle)));
 
             marks.Clear();
-            using var second = new KeyPanelSelector(true) { ShowKeyPanel = true };
+            using var second = new KeyPanelSelector(true, shown: true) { ShowKeyPanel = true };
             Assert.Null(second.KeyPanelForTest);
             second.Native!.Show();
             Assert.Null(second.KeyPanelForTest);
@@ -887,7 +887,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         NativeSelectorChromeCache.Trim();
         try
         {
-            using var first = new KeyPanelSelector(true, magnifier: true) { ShowKeyPanel = true };
+            using var first = new KeyPanelSelector(true, magnifier: true, shown: true) { ShowKeyPanel = true };
             first.Native!.Show();
             Overlay.PumpUntil(() => first.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
             var chrome = Assert.IsType<NativeSelectorChrome>(first.Native.Chrome);
@@ -897,7 +897,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             Assert.Equal(windows, NativeSelectorChromeCache.RetainedWindowCount);
 
             marks.Clear();
-            using var second = new KeyPanelSelector(true, magnifier: true) { ShowKeyPanel = true };
+            using var second = new KeyPanelSelector(true, magnifier: true, shown: true) { ShowKeyPanel = true };
             second.Native!.Show();
             Overlay.PumpUntil(() => second.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
             Assert.Same(chrome, second.Native.Chrome);
@@ -954,7 +954,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         NativeSelectorChromeCache.Trim();
         try
         {
-            using var view = new KeyPanelSelector(true);
+            using var view = new KeyPanelSelector(true, shown: true);
             view.Native!.Show();
             Overlay.PumpUntil(() => view.Native.IsChromeReady && view.FirstFramePresentedForTest);
             var chrome = Assert.IsType<NativeSelectorChrome>(view.Native.Chrome);

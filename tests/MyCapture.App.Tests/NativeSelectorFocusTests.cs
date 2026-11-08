@@ -17,7 +17,8 @@ namespace MyCapture.App.Tests;
 
 public sealed class NativeSelectorFocusTests
 {
-    private static readonly RectD Bounds = new(0, 0, 1280, 720);
+    // A shown native selector window must fit on the CI desktop (CaptureCueEvidenceTests.ShownWidth).
+    private static readonly RectD Bounds = new(0, 0, CaptureCueEvidenceTests.ShownWidth, 720);
 
     [Theory]
     [InlineData(false)]
@@ -180,8 +181,9 @@ public sealed class NativeSelectorFocusTests
     private static NativeCaptureOverlay Owner()
     {
         NativeSelectorChromeCache.Trim();
-        BitmapSource bitmap = BitmapSource.Create(1280, 720, 96, 96, PixelFormats.Bgr32, null,
-            new byte[1280 * 720 * 4], 1280 * 4);
+        int width = (int)Bounds.Width, height = (int)Bounds.Height;
+        BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null,
+            new byte[width * height * 4], width * 4);
         bitmap.Freeze();
         var owner = new NativeCaptureOverlay(Bounds, false, true)
         {

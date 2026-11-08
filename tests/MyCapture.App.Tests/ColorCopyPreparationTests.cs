@@ -10,14 +10,17 @@ namespace MyCapture.App.Tests;
 public sealed class ColorCopyPreparationTests(ITestOutputHelper output)
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void PreparationCompletesOnTheShowTurnWithoutWaitingForMetadata(bool colorCopyAvailable) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void PreparationCompletesOnTheShowTurnWithoutWaitingForMetadata(bool native, bool colorCopyAvailable) => StaTestHost.Run(() =>
     {
         int ownerThread = Environment.CurrentManagedThreadId;
         int completedThread = 0;
         int reads = 0;
         int saved = 0;
+        int exclusions = 0;
         var metadata = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         var candidates = new WindowCandidateService(NullLogger<WindowCandidateService>.Instance);
@@ -30,14 +33,25 @@ public sealed class ColorCopyPreparationTests(ITestOutputHelper output)
             NullLogger<CaptureOverlayCoordinator>.Instance,
             _ => WindowDetectOverlayTests.Frame(),
             () => new RectD(0, 0, 640, 360));
+        coordinator.UseNativeDibSelector = native;
         coordinator.ReadWindowSources = null;
         coordinator.ReadPageUrls = _ => { reads++; return metadata.Task; };
         coordinator.CopyColorText = colorCopyAvailable ? _ => Task.FromResult(true) : null;
         coordinator.ColorCopied = _ => Assert.Fail("Opening the selector must not copy a color.");
+        // The hidden selector window is excluded from capture when it is created, after the page addresses
+        // were requested. The native selector applies the exclusion again on the show turn.
         coordinator.ApplyCaptureExclusion = window =>
         {
             Assert.Equal(1, reads);
-            overlay = (CaptureOverlayWindow)window;
+            overlay = Assert.IsType<CaptureOverlayWindow>(window);
+            exclusions++;
+            return true;
+        };
+        coordinator.ApplyNativeCaptureExclusion = handle =>
+        {
+            Assert.Equal(1, reads);
+            Assert.NotEqual(IntPtr.Zero, handle);
+            exclusions++;
             return true;
         };
         coordinator.OpenEditorAfterCapture = () => false;
@@ -50,14 +64,17 @@ public sealed class ColorCopyPreparationTests(ITestOutputHelper output)
             Task completion = coordinator.LastPreparationForTest.ContinueWith(_ =>
                 completedThread = Environment.CurrentManagedThreadId,
                 CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            WindowDetectOverlayTests.PumpUntil(() => overlay?.IsVisible == true);
+            WindowDetectOverlayTests.PumpUntil(() => native
+                ? coordinator.NativeOverlayForProbe is { IsVisible: true }
+                : overlay?.IsVisible == true);
+            Assert.True(exclusions > 0);
             Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
             Assert.True(completion.IsCompletedSuccessfully);
             Assert.Equal(ownerThread, completedThread);
             Assert.False(metadata.Task.IsCompleted);
             Assert.False(coordinator.LastSourceDetailsForTest.IsCompleted);
 
-            overlay!.CompleteSelection(new RectD(4, 4, 16, 10));
+            new CoordinatorSelector(coordinator, native).CompleteSelection(new RectD(4, 4, 16, 10));
             WindowDetectOverlayTests.PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
             Assert.Equal(1, saved);
             Assert.False(coordinator.IsActive);

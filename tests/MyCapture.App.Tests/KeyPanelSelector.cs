@@ -15,15 +15,18 @@ internal sealed class KeyPanelSelector : IDisposable
     private readonly CaptureOverlayView? _wpf;
     private readonly NativeCaptureOverlay? _native;
 
-    internal KeyPanelSelector(bool native, bool magnifier = false)
+    // shown: the fixture shows the real native window, which must fit on the CI desktop.
+    internal KeyPanelSelector(bool native, bool magnifier = false, bool shown = false)
     {
-        var frame = CaptureCueEvidenceTests.Desktop();
+        bool fit = native && shown;
+        var frame = fit ? CaptureCueEvidenceTests.ShownDesktop() : CaptureCueEvidenceTests.Desktop();
+        IReadOnlyList<MonitorInfo> monitors = fit ? CaptureCueEvidenceTests.ShownMonitors : CaptureCueEvidenceTests.Monitors;
         if (native)
         {
             _native = new NativeCaptureOverlay(frame.ScreenBounds, false, magnifier)
             {
                 ReadCursor = () => new PointD(300, 300),
-                ReadMonitors = () => CaptureCueEvidenceTests.Monitors,
+                ReadMonitors = () => monitors,
                 DetectWindows = true,
                 SourceWindows = [CaptureCueEvidenceTests.Browser, CaptureCueEvidenceTests.Notes,
                     CaptureCueEvidenceTests.Taskbar, CaptureCueEvidenceTests.Shell],

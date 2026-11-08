@@ -39,6 +39,13 @@ public sealed class CaptureCueEvidenceTests
     internal static readonly IReadOnlyList<MonitorInfo> Monitors =
         [new(@"\\.\DISPLAY1", new RectD(0, 0, Width, Height), new RectD(0, 0, Width, 672), 96, IsPrimary: true)];
 
+    // A shown native selector window must fit on the runner's screen. The CI desktop is 1024 x 768, and
+    // there a 1280-pixel native window never received a full first paint, so Show() reported that the
+    // first frame was not submitted. Fixtures that show one use this narrower desktop.
+    internal const int ShownWidth = 1024;
+    internal static readonly IReadOnlyList<MonitorInfo> ShownMonitors =
+        [new(@"\\.\DISPLAY1", new RectD(0, 0, ShownWidth, Height), new RectD(0, 0, ShownWidth, 672), 96, IsPrimary: true)];
+
     /// <summary>Every state the screenshot selector shows, as the evidence set names them.</summary>
     internal static readonly string[] States =
         ["first-open", "window-hover", "drag", "desktop-hover", "text-mode", "color-mode"];
@@ -140,6 +147,14 @@ public sealed class CaptureCueEvidenceTests
         encoder.Frames.Add(BitmapFrame.Create(image));
         using FileStream stream = File.Create(Path.Combine(directory, name));
         encoder.Save(stream);
+    }
+
+    /// <summary>The desktop below cropped to <see cref="ShownWidth"/>, for fixtures that show a native selector window.</summary>
+    internal static FrozenFrame ShownDesktop()
+    {
+        var cropped = new CroppedBitmap(Desktop().Bitmap, new Int32Rect(0, 0, ShownWidth, Height));
+        cropped.Freeze();
+        return new FrozenFrame(cropped, new RectD(0, 0, ShownWidth, Height), null, 0);
     }
 
     /// <summary>A 1280x720 desktop: wallpaper, a notes window, a browser in front of it and a taskbar.</summary>
