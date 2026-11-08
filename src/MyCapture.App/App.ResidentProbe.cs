@@ -493,6 +493,24 @@ public partial class App
         return selectorMs;
     }
 
+    /// <summary>Names the selector milestones reached and the state of every chrome window when chrome never became ready.</summary>
+    private string DescribeNativeChrome(List<ResidentProbeRecorder.Mark> marks)
+    {
+        var text = new System.Text.StringBuilder("Native chrome was not ready. Marks: ");
+        lock (marks) text.AppendJoin(", ", marks.Select(mark => mark.Name + "@" + mark.Milliseconds));
+        NativeCaptureOverlay? native = _overlay?.NativeOverlayForProbe;
+        text.Append(native is null ? ". Overlay: gone"
+            : $". Overlay visible={native.IsVisible} ready={native.IsReady} closed={native.IsClosed} bounds={native.ScreenBounds}");
+        if (native?.Chrome is { } chrome)
+        {
+            text.Append($". Chrome pending={chrome.PendingFrameCount} detached={chrome.IsDetached}");
+            foreach (System.Windows.Window window in chrome.Windows)
+                text.Append($". Window {window.Content?.GetType().Name ?? "(no content)"} visible={window.IsVisible} "
+                    + $"size={window.ActualWidth:0.#}x{window.ActualHeight:0.#} at {window.Left:0.#},{window.Top:0.#}");
+        }
+        return text.ToString();
+    }
+
     private async Task<double> ProbeNativeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
     {
         long dismissed = _overlay?.LastPresentationDismissalTick ?? long.MinValue;
@@ -510,7 +528,14 @@ public partial class App
             await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsReady: true }, 10_000, "native selector ready");
             // Keep observing chrome separately so the scripted immediate drag cannot close the
             // session before deferred chrome exists. InputReadyMs remains the earlier input turn.
-            await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsChromeReady: true }, 10_000, "native chrome ready");
+            try
+            {
+                await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsChromeReady: true }, 10_000, "native chrome ready");
+            }
+            catch (TimeoutException timeout)
+            {
+                throw new TimeoutException(DescribeNativeChrome(marks), timeout);
+            }
         }
         finally { SelectorTimeline.Mark = null; }
         ResidentProbeRecorder.Mark[] snapshot;

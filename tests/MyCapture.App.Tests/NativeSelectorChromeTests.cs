@@ -252,6 +252,37 @@ public sealed class NativeSelectorChromeTests
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-native-dib," + strategy + "," + other]));
     }
 
+    [Fact]
+    public void PointerFollowingChromeDoesNotRestackForAnUnchangedPointer() => StaTestHost.Run(() =>
+    {
+        // Restacking a topmost window makes Windows synthesize WM_MOUSEMOVE. When every mouse move
+        // restacked the size chip and magnifier, a resting pointer fed the selector mouse moves, WPF's
+        // input queue never emptied and ContentRendered (Input priority) never arrived on the desktop.
+        using var owner = Owner();
+        using var chrome = new NativeSelectorChrome(owner, true, false);
+        chrome.Show();
+        PumpUntil(() => owner.IsChromeReady);
+        int positionChanges = 0;
+        HwndSourceHook hook = (IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+        {
+            if (message == 0x0046) positionChanges++; // WM_WINDOWPOSCHANGING
+            return IntPtr.Zero;
+        };
+        HwndSource[] sources = Handles(chrome).Select(handle => HwndSource.FromHwnd(handle)!).ToArray();
+        foreach (HwndSource source in sources) source.AddHook(hook);
+        try
+        {
+            for (int i = 0; i < 20; i++) chrome.Update(new PointD(100, 120), Int32Rect.Empty);
+            Assert.Equal(0, positionChanges);
+            chrome.Update(new PointD(160, 180), Int32Rect.Empty);
+            Assert.True(positionChanges > 0, "The size chip and magnifier still follow a moving pointer.");
+        }
+        finally
+        {
+            foreach (HwndSource source in sources) source.RemoveHook(hook);
+        }
+    });
+
     private static NativeCaptureOverlay Owner(NativeSelectorChromeStrategy strategy = NativeSelectorChromeStrategy.Retained)
     {
         BitmapSource bitmap = BitmapSource.Create(640, 360, 96, 96, PixelFormats.Bgr32, null,

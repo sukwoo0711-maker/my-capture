@@ -74,6 +74,7 @@ internal sealed class NativeSelectorChrome : IDisposable
     internal bool AllCaptureExcluded { get; private set; }
     internal IReadOnlyList<Window> Windows => _windows;
     internal bool IsDetached => _owner is null;
+    internal int PendingFrameCount => _pendingFrames.Count;
     internal bool CanRetain => !_closed && !_invalid && _rendered && _static is null;
 
     internal bool CanReuse(NativeCaptureOverlay owner, bool magnifier) =>
@@ -107,9 +108,9 @@ internal sealed class NativeSelectorChrome : IDisposable
             CaptureWindowExclusion.DisableTransitions(window);
             _pendingFrames.Add(window);
         }
-        Place(_barWindow, _workArea.Left + (_workArea.Width - _barWindow.Width * _scale) / 2, _workArea.Top + 12 * _scale, false);
+        Place(_barWindow, _workArea.Left + (_workArea.Width - _barWindow.Width * _scale) / 2, _workArea.Top + 12 * _scale, Placement.Layout);
         if (_guideWindow is { } guide)
-            Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, false);
+            Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, Placement.Layout);
         Update(owner.ReadCursor(), Int32Rect.Empty);
     }
 
@@ -190,7 +191,7 @@ internal sealed class NativeSelectorChrome : IDisposable
             if (_closed || _owner is null) return;
             window.Show();
             if (_closed || _owner is null) return;
-            Place(window, window.Left * _scale, window.Top * _scale, true);
+            Place(window, window.Left * _scale, window.Top * _scale, Placement.Show);
         }
         _owner?.FlushChromeStamps();
     }
@@ -219,7 +220,7 @@ internal sealed class NativeSelectorChrome : IDisposable
         if (_closed || _owner is not { } owner) return;
         _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.Ratio);
         _guideText.Text = owner.ToastMessage ?? DefaultGuide;
-        if (_sizeWindow is { } size) Place(size, pointer.X + 20 * _scale, pointer.Y + 20 * _scale, size.IsVisible);
+        if (_sizeWindow is { } size) Place(size, pointer.X + 20 * _scale, pointer.Y + 20 * _scale, Follow(size));
         if (_static is not null)
             owner.SetChromeStamps(_static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible));
         if (_magnifier is not null && _magnifierWindow is not null && owner.Frame is { } frame)
@@ -232,18 +233,30 @@ internal sealed class NativeSelectorChrome : IDisposable
             if (sample.Format != PixelFormats.Bgr32) sample = new FormatConvertedBitmap(sample, PixelFormats.Bgr32, null, 0);
             sample.CopyPixels(_sample, 15 * 4, 0);
             _magnifier.WritePixels(new Int32Rect(0, 0, width, height), _sample, 15 * 4, 0);
-            Place(_magnifierWindow, pointer.X + 20 * _scale, pointer.Y + 64 * _scale, _magnifierWindow.IsVisible);
+            Place(_magnifierWindow, pointer.X + 20 * _scale, pointer.Y + 64 * _scale, Follow(_magnifierWindow));
         }
     }
 
-    private void Place(Window window, double x, double y, bool show)
+    private enum Placement { Layout, Show, Follow }
+
+    private static Placement Follow(Window window) => window.IsVisible ? Placement.Follow : Placement.Layout;
+
+    private void Place(Window window, double x, double y, Placement placement)
     {
         x = Math.Clamp(x, _workArea.Left, Math.Max(_workArea.Left, _workArea.Right - window.Width * _scale));
         y = Math.Clamp(y, _workArea.Top, Math.Max(_workArea.Top, _workArea.Bottom - window.Height * _scale));
         window.Left = x / _scale;
         window.Top = y / _scale;
-        if (show) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
-            new RectD(x, y, window.Width * _scale, window.Height * _scale));
+        if (placement == Placement.Layout) return;
+        IntPtr handle = new WindowInteropHelper(window).Handle;
+        var bounds = new RectD(x, y, window.Width * _scale, window.Height * _scale);
+        // Restacking a topmost window makes Windows synthesize a mouse move over the selector. When
+        // every WM_MOUSEMOVE restacked the size chip and magnifier, a resting pointer fed itself mouse
+        // moves (about 110 a second), WPF's input queue never emptied and Input-priority work such as
+        // ContentRendered starved. Owned chrome already stays above the background, so after the one
+        // topmost placement in Show, following the pointer only moves, and not at all when unchanged.
+        if (placement == Placement.Show) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(handle, bounds);
+        else PhysicalWindowPositioner.Move(handle, bounds);
     }
 
     internal void Hide()
