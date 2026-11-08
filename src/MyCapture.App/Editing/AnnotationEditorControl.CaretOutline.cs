@@ -80,6 +80,19 @@ internal sealed partial class AnnotationEditorControl
         if (_caretOutline is { } outline && !ReferenceEquals(outline.Fill, ring)) outline.Fill = ring;
     }
 
+    /// <summary>
+    /// Leaves the outline to the next layout pass after a caret or scroll change. Placing it at
+    /// once would ask the box for the caret's rectangle, and the box answers only after it lays
+    /// out the whole editor: inside the keystroke, with the text it just changed and the surface
+    /// paint the change asked for. The layer's arrange makes sure a pass follows a caret move that
+    /// changes nothing else.
+    /// </summary>
+    private void MarkCaretOutlineStale()
+    {
+        _caretOutlineStale = true;
+        if (_caretOutline is { } outline && VisualTreeHelper.GetParent(outline) is UIElement layer) layer.InvalidateArrange();
+    }
+
     /// <summary>Places the outline after a layout pass that followed a caret, text or scroll change.</summary>
     private void UpdateCaretOutline(TextBox box)
     {

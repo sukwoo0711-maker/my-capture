@@ -1428,18 +1428,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         SizeChangedEventHandler resize = (_, _) => LayoutLiveTextBox(textBox);
         ScrollChangedEventHandler scroll = (_, e) =>
         {
-            _caretOutlineStale = true;
+            MarkCaretOutlineStale();
             if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
                 UpdateLiveTextViewport(textBox);
             SyncLiveTextScroll(textBox);
         };
-        // A caret move over laid-out text places the outline at once; after a text change, the
-        // layout pass that lays the text out again places it.
-        RoutedEventHandler caretMoved = (_, _) =>
-        {
-            _caretOutlineStale = true;
-            UpdateCaretOutline(textBox);
-        };
+        // The layout pass places the outline, as it places the box's own caret; a caret move only
+        // marks it (see MarkCaretOutlineStale).
+        RoutedEventHandler caretMoved = (_, _) => MarkCaretOutlineStale();
         EventHandler laidOut = (_, _) => UpdateCaretOutline(textBox);
         ScrollViewer? contentHost = null;
         bool connected = false;
@@ -2548,24 +2544,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             Child = _viewport,
         }, "Surface.Sunken");
         // A Border does not clip its child to its rounded corners, and the canvas paints its
-        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in), which
-        // squared the frame's corners and hid the outline's arcs. Clip it to the inside edge,
-        // as the pin and tutorial frames do.
-        _viewport.SizeChanged += (_, args) => _viewport.Clip = InsideEdgeClip(frame, args.NewSize);
+        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in). The corners
+        // are drawn over the canvas, above everything in it, instead of clipping the canvas to
+        // the outline's inside edge: WPF draws a rounded clip through an intermediate surface as
+        // large as the canvas (about 30 MB for a 4K editor). The frame sits on the body's surface.
+        var corners = new CanvasFrameCorners(frame, "Surface.Base");
+        Panel.SetZIndex(corners, int.MaxValue);
+        _viewport.Children.Add(corners);
         return frame;
-    }
-
-    /// <summary>
-    /// The rounded inside edge of <paramref name="frame"/>'s outline, in the coordinates of a child
-    /// of <paramref name="size"/>. WPF draws a corner radius on the outline's centre line, so the
-    /// inside edge turns half the outline's thickness tighter around the same corner centre.
-    /// </summary>
-    private static RectangleGeometry InsideEdgeClip(Border frame, Size size)
-    {
-        double radius = Math.Max(0, frame.CornerRadius.TopLeft - frame.BorderThickness.Left / 2);
-        var clip = new RectangleGeometry(new Rect(size), radius, radius);
-        clip.Freeze();
-        return clip;
     }
 
     private Border BuildInspector()

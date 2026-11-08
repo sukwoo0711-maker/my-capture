@@ -201,6 +201,41 @@ public sealed class AnnotationRenderCacheTests
     });
 
     [Fact]
+    public void ACaptionTypedWhereItStandsReusesTheOutlinesOfGlyphsThatStayed() => StaTestHost.Run(() =>
+    {
+        var renderer = new AnnotationRenderer(new AnnotationImageStore());
+        AnnotationDocument document = AnnotationDocument.CreateFor(Width, Height);
+        var caption = new TextAnnotation
+        {
+            Rect = new RectD(40, 40, 200, 40),
+            Text = "입력",
+            FontSize = 24,
+            AutoSize = true,
+            HasOutline = true,
+            OutlineStyle = TextOutlineStyle.Consistent,
+        };
+        document.Add(caption);
+
+        void AssertTypingReuses(string typed, string more, string step)
+        {
+            caption.Text = typed;
+            List<Geometry> before = OutlineLeaves(Record(renderer, document));
+            caption.Text = more;
+            List<Geometry> after = OutlineLeaves(Record(renderer, document));
+            Assert.True(after.Count > before.Count, step);
+            for (int i = 0; i < before.Count; i++) Assert.Same(before[i], after[i]);
+        }
+
+        _ = OutlineLeaves(Record(renderer, document));
+        AssertTypingReuses("입력 중", "입력 중 자막", "typed where it was placed");
+
+        // A moved caption has no glyph in place to reuse; typed where it now stands, it reuses them again.
+        caption.Translate(13.25, -7.5);
+        Assert.NotEmpty(OutlineLeaves(Record(renderer, document)));
+        AssertTypingReuses("입력 중 자막이", "입력 중 자막이 길어짐", "typed after a move");
+    });
+
+    [Fact]
     public void ItemsNoLongerDrawnAreReleasedAfterLaterPaints() => StaTestHost.Run(() =>
     {
         var renderer = new AnnotationRenderer(new AnnotationImageStore());
@@ -427,6 +462,43 @@ public sealed class AnnotationRenderCacheTests
         }
 
         return found;
+    }
+
+    /// <summary>The glyph outlines of the one outlined caption a recorded paint strokes, in drawing order.</summary>
+    private static List<Geometry> OutlineLeaves(DrawingGroup group)
+    {
+        GeometryDrawing outline = Assert.Single(Drawings(group).OfType<GeometryDrawing>(),
+            drawing => drawing is { Brush: null, Pen: not null, Geometry: not (RectangleGeometry or LineGeometry or EllipseGeometry) });
+        var leaves = new List<Geometry>();
+        void Walk(Geometry node)
+        {
+            if (node is GeometryGroup children)
+            {
+                foreach (Geometry child in children.Children) Walk(child);
+            }
+            else if (!node.IsEmpty())
+            {
+                leaves.Add(node);
+            }
+        }
+
+        Walk(outline.Geometry);
+        return leaves;
+
+        static IEnumerable<Drawing> Drawings(DrawingGroup parent)
+        {
+            foreach (Drawing drawing in parent.Children)
+            {
+                if (drawing is DrawingGroup nested)
+                {
+                    foreach (Drawing inner in Drawings(nested)) yield return inner;
+                }
+                else
+                {
+                    yield return drawing;
+                }
+            }
+        }
     }
 
     private static byte[] Pixels(Action<DrawingContext> draw, double scale, int width = Width, int height = Height)

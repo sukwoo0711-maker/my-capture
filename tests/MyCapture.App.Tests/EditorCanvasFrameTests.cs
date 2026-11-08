@@ -20,22 +20,56 @@ namespace MyCapture.App.Tests;
 public sealed class EditorCanvasFrameTests
 {
     [Fact]
-    public void CanvasIsClippedToTheFramesRoundedInsideEdgeAtEverySize() => StaTestHost.Run(() =>
+    public void CanvasCornersAreDrawnOverTheCanvasInsteadOfClippingItAtEverySize() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create(beforeShow: UseShippedTheme);
         var viewport = Field<Grid>(host.Editor, "_viewport");
         var frame = Assert.IsType<Border>(VisualTreeHelper.GetParent(viewport));
         Assert.Equal(new CornerRadius(8), frame.CornerRadius);
+        CanvasFrameCorners corners = Assert.Single(viewport.Children.OfType<CanvasFrameCorners>());
+        // Above everything the canvas holds, and never in the pointer's way.
+        Assert.Equal(int.MaxValue, Panel.GetZIndex(corners));
+        Assert.False(corners.IsHitTestVisible);
+        // The outline's centre line turns at radius 8; its inside edge half a DIP tighter.
+        Assert.Equal(7.5, corners.InsideRadius);
 
+        // Along a corner's diagonal, with the corner centre 7.5 DIP in from both sides: the
+        // outline's outside edge (radius 8.5) crosses at 1.49 DIP from the canvas's corner and its
+        // inside edge (radius 7.5) at 2.20, where the canvas begins to show.
+        const double behindTheFrame = 0.5, onTheOutline = 1.85, onTheCanvas = 2.6;
         foreach (double width in new[] { 1000d, 760d, 1240d })
         {
             host.Window.Width = width;
             host.Window.UpdateLayout();
-            var clip = Assert.IsType<RectangleGeometry>(viewport.Clip);
-            Assert.Equal(new Rect(viewport.RenderSize), clip.Rect);
-            // The outline's centre line turns at radius 8; its inside edge half a DIP tighter.
-            Assert.Equal(7.5, clip.RadiusX);
-            Assert.Equal(7.5, clip.RadiusY);
+            // A clip that is not an axis-aligned rectangle makes WPF draw the whole canvas through
+            // an intermediate surface as large as the canvas: about 30 MB for a 4K editor.
+            Assert.Null(viewport.Clip);
+            Size size = viewport.RenderSize;
+            Assert.Equal(size, corners.RenderSize);
+            Geometry outside = Assert.IsAssignableFrom<Geometry>(corners.OutsideCorners);
+            Geometry arcs = Assert.IsAssignableFrom<Geometry>(corners.OutlineArcs);
+
+            foreach ((double x, double y, double dx, double dy) in new[]
+            {
+                (0d, 0d, 1d, 1d), (size.Width, 0d, -1d, 1d), (0d, size.Height, 1d, -1d), (size.Width, size.Height, -1d, -1d),
+            })
+            {
+                Point At(double along) => new(x + dx * along, y + dy * along);
+                string where = $"width {width}, corner ({x},{y})";
+                Assert.True(outside.FillContains(At(behindTheFrame)), where);
+                Assert.False(arcs.FillContains(At(behindTheFrame)), where);
+                Assert.True(outside.FillContains(At(onTheOutline)), where);
+                Assert.True(arcs.FillContains(At(onTheOutline)), where);
+                Assert.False(outside.FillContains(At(onTheCanvas)), where);
+                Assert.False(arcs.FillContains(At(onTheCanvas)), where);
+            }
+
+            // The sides and the middle are the canvas's: the outline's straight runs lie outside it.
+            foreach (Point canvas in new[] { new Point(size.Width / 2, 0.5), new Point(0.5, size.Height / 2), new Point(size.Width / 2, size.Height / 2) })
+            {
+                Assert.False(outside.FillContains(canvas), $"width {width}, {canvas}");
+                Assert.False(arcs.FillContains(canvas), $"width {width}, {canvas}");
+            }
         }
     });
 
@@ -64,7 +98,17 @@ public sealed class EditorCanvasFrameTests
             }
 
             // The canvas itself still fills the frame away from the corners.
-            Assert.NotEqual(behind, pixels[left + 4, top + 40]);
+            Color canvas = pixels[left + 4, top + 40];
+            Assert.NotEqual(behind, canvas);
+
+            // The outline's arcs show over the canvas: two pixels in from each corner of the
+            // frame's box, about half the pixel lies on the arc and the rest outside the outline.
+            foreach ((int x, int y) in new[] { (left + 2, top + 2), (right - 2, top + 2), (left + 2, bottom - 2), (right - 2, bottom - 2) })
+            {
+                Color arc = pixels[x, y];
+                Assert.True(Difference(behind, arc) > 8, $"crop={crop} arc ({x},{y}): {arc} is the surface behind the frame {behind}");
+                Assert.True(Difference(canvas, arc) > 8, $"crop={crop} arc ({x},{y}): {arc} is the canvas {canvas}");
+            }
         }
     });
 
@@ -136,11 +180,11 @@ public sealed class EditorCanvasFrameTests
         MyCapture.App.Themes.ThemeFonts.ApplyText(window);
     }
 
-    private static void AssertClose(Color expected, Color actual, string where)
-    {
-        int difference = Math.Max(Math.Abs(expected.R - actual.R), Math.Max(Math.Abs(expected.G - actual.G), Math.Abs(expected.B - actual.B)));
-        Assert.True(difference <= 2, $"{where}: expected {expected}, found {actual}");
-    }
+    private static void AssertClose(Color expected, Color actual, string where) =>
+        Assert.True(Difference(expected, actual) <= 2, $"{where}: expected {expected}, found {actual}");
+
+    private static int Difference(Color a, Color b) =>
+        Math.Max(Math.Abs(a.R - b.R), Math.Max(Math.Abs(a.G - b.G), Math.Abs(a.B - b.B)));
 
     /// <summary>The window's client content rendered offscreen at 96 DPI.</summary>
     private sealed class Pixels

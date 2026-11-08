@@ -536,7 +536,7 @@ internal sealed class AnnotationRenderer
 
         if (text.HasOutline)
         {
-            cache.Outline ??= Frozen(formatted.BuildGeometry(origin));
+            cache.Outline ??= Frozen(OutlineOf(cache, formatted, origin));
             bool consistent = text.OutlineStyle == TextOutlineStyle.Consistent;
             double thickness = consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12);
             dc.DrawGeometry(null, OutlinePen(OutlineColor(text), thickness), cache.Outline);
@@ -557,6 +557,24 @@ internal sealed class AnnotationRenderer
         {
             dc.Pop();
         }
+    }
+
+    /// <summary>
+    /// The caption's outline. A caption that changes where it stands, as one being typed does after
+    /// every keystroke, traces only the glyphs its new layout added or moved (see
+    /// <see cref="GlyphOutlines"/>). One outlined for the first time, or moved, has no glyph in
+    /// place to reuse, and its layout traces it whole in one pass.
+    /// </summary>
+    private static Geometry OutlineOf(TextCache cache, FormattedText formatted, Point origin)
+    {
+        if (cache.OutlinedAt != origin)
+        {
+            cache.OutlinedAt = origin;
+            cache.OutlineGlyphs = null;
+            return formatted.BuildGeometry(origin);
+        }
+
+        return GlyphOutlines.Build(cache.Glyphs ??= RecordGlyphs(formatted, origin), formatted, origin, ref cache.OutlineGlyphs);
     }
 
     /// <summary>The glyph runs <c>DrawText(formatted, origin)</c> issues, recorded once and frozen.</summary>
@@ -773,6 +791,10 @@ internal sealed class AnnotationRenderer
         internal Point Origin;
         internal DrawingGroup? Glyphs;
         internal Geometry? Outline;
+
+        /// <summary>Where the last outline was built; the glyph outlines below are kept for that place only.</summary>
+        internal Point? OutlinedAt;
+        internal Dictionary<GlyphOutlines.Key, Geometry>? OutlineGlyphs;
     }
 
     private sealed class InkCache : ItemCache
