@@ -65,6 +65,7 @@ public partial class App
             Exception? failure = null;
             try
             {
+                Capture.NativeSelectorChromeCache.Trim();
                 long workStart = evidence is null ? 0 : Stopwatch.GetTimestamp();
                 GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
                 if (evidence is not null) collectMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;

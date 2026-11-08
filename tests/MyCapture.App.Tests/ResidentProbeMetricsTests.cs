@@ -29,6 +29,19 @@ public sealed class ResidentProbeMetricsTests
         Assert.Contains(variant, selected, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("no-flight,selector-native-dib")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-fresh")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-parallel")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-dib")]
+    [InlineData("no-flight,selector-breakdown")]
+    public void StageOneSelectorMeasurementVariantsAreAccepted(string variants)
+    {
+        IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
+        Assert.Equal(variants.Split(',').Length, selected.Count);
+        foreach (string variant in variants.Split(',')) Assert.Contains(variant, selected);
+    }
+
     [Fact]
     public void ReceiptMarksHaveTheirOwnSchemaAndCollectionDeltas()
     {

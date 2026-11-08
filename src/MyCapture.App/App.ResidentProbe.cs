@@ -119,6 +119,13 @@ public partial class App
         }
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
+        if (_overlay is not null)
+        {
+            _overlay.UseNativeDibSelector = probe.Has("selector-native-dib");
+            _overlay.NativeChromeStrategy = probe.Has("selector-chrome-fresh") ? NativeSelectorChromeStrategy.Fresh
+                : probe.Has("selector-chrome-parallel") ? NativeSelectorChromeStrategy.Parallel
+                : probe.Has("selector-chrome-dib") ? NativeSelectorChromeStrategy.Dib : NativeSelectorChromeStrategy.Retained;
+        }
         PresentationDismissals.UseLegacySettleForProbe = probe.Has("legacy-capture-settle");
         CaptureFlight.UseLegacyBoundsForProbe = probe.Has("legacy-flight-bounds");
         // Diagnostic variant: no lifted capture flies into the card (CaptureFlight declines without layered windows).
@@ -256,9 +263,11 @@ public partial class App
         double selectorMs = await ProbeShortcutToSelectorAsync(recorder, name);
         recorder.Time(name + ": shortcut → selector first frame", selectorMs);
         recorder.Time(name + ": synthetic desktop grab (inside the selector timing)", s_lastProbeAcquisitionMs);
-        CaptureOverlayWindow overlay = ProbeOverlay ?? throw new InvalidOperationException("The selector did not open.");
-        recorder.Track(name, "selector window", overlay);
-        recorder.Track(name, "selector frame", (overlay.Content as CaptureOverlayView)?.Frame);
+        NativeCaptureOverlay? native = _overlay?.NativeOverlayForProbe;
+        CaptureOverlayWindow? overlay = ProbeOverlay;
+        if (native is null && overlay is null) throw new InvalidOperationException("The selector did not open.");
+        recorder.Track(name, "selector window", (object?)native ?? overlay);
+        recorder.Track(name, "selector frame", native?.Frame ?? (overlay?.Content as CaptureOverlayView)?.Frame);
 
         long selected = 0;
         double cardMs = -1;
@@ -297,7 +306,16 @@ public partial class App
             CompositionTarget.Rendering += rendering;
             try
             {
-                overlay.CompleteSelection(new RectD(160, 120, 1280, 720));
+                if (native is not null)
+                {
+                    // Exercise the same drag/controller and damage path as native mouse input.
+                    native.BeginSelection(new PointD(160, 120));
+                    native.MoveSelection(new PointD(800, 480));
+                    native.EndSelection(new PointD(1440, 840));
+                    if (!native.IsClosed || native.LiveOwnedNativeHandles != 0)
+                        throw new InvalidOperationException("Native selector resources remained live after selection.");
+                }
+                else overlay!.CompleteSelection(new RectD(160, 120, 1280, 720));
                 await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
             }
             finally
@@ -334,6 +352,7 @@ public partial class App
     /// </summary>
     private async Task<double> ProbeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
     {
+        if (_overlay?.UseNativeDibSelector == true) return await ProbeNativeShortcutToSelectorAsync(recorder, name);
         if (s_residentProbe?.Has("selector-breakdown") == true)
             return await ProbeShortcutToSelectorBreakdownAsync(recorder, name);
 
@@ -466,8 +485,57 @@ public partial class App
             RenderThreadCompleteMs = renderThreadCompleteMs is { } measured ? Math.Round(measured, 2) : null,
             RenderThreadCompleteError = renderThreadCompleteError
                 ?? (renderThreadCompleteMs is null ? "Render completion was not observed before the probe ended" : null),
+            ShortcutHandledMs = marks.FirstOrDefault(mark => mark.Name == "handler")?.Milliseconds,
+            SourceFrameReadyMs = marks.FirstOrDefault(mark => mark.Name == "source-frame-ready")?.Milliseconds,
+            ChromeReadyMs = marks.FirstOrDefault(mark => mark.Name == "content-rendered")?.Milliseconds,
+            InputReadyMs = marks.FirstOrDefault(mark => mark.Name == "content-rendered-handled")?.Milliseconds,
         });
         return selectorMs;
+    }
+
+    private async Task<double> ProbeNativeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
+    {
+        long dismissed = _overlay?.LastPresentationDismissalTick ?? long.MinValue;
+        double sinceDismissal = dismissed == long.MinValue ? -1 : Environment.TickCount64 - dismissed;
+        var marks = new List<ResidentProbeRecorder.Mark>();
+        long started = Stopwatch.GetTimestamp();
+        SelectorTimeline.Mark = stage =>
+        {
+            lock (marks) marks.Add(new ResidentProbeRecorder.Mark(stage,
+                Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2), Environment.CurrentManagedThreadId));
+        };
+        try
+        {
+            HandleCaptureRequested();
+            await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsReady: true }, 10_000, "native selector ready");
+            // Keep observing chrome separately so the scripted immediate drag cannot close the
+            // session before deferred chrome exists. InputReadyMs remains the earlier input turn.
+            await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsChromeReady: true }, 10_000, "native chrome ready");
+        }
+        finally { SelectorTimeline.Mark = null; }
+        ResidentProbeRecorder.Mark[] snapshot;
+        lock (marks) snapshot = marks.ToArray();
+        double? At(string stage) => snapshot.FirstOrDefault(mark => mark.Name == stage)?.Milliseconds;
+        double submitted = At("native-first-full-frame-submitted")
+            ?? throw new InvalidOperationException("No full native frame submission was observed.");
+        double ready = At("native-input-ready") ?? throw new InvalidOperationException("Native input readiness was not observed.");
+        int index = _probeBreakdownIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
+        _probeBreakdownIndex[name] = index;
+        recorder.Time(name + ": shortcut → native full frame submitted (GdiFlush)", submitted);
+        recorder.Time(name + ": shortcut → native input ready", ready);
+        if (At("native-dwm-flush-complete") is { } compositor)
+            recorder.Time(name + ": shortcut → native background compositor sync (DwmFlush)", compositor);
+        recorder.AddBreakdown(new ResidentProbeRecorder.Breakdown(name, index, submitted, sinceDismissal, snapshot)
+        {
+            Backend = "native-dib",
+            ShortcutHandledMs = At("handler"),
+            SourceFrameReadyMs = At("source-frame-ready"), DisplayDibReadyMs = At("native-display-dib-ready"),
+            FirstFullFrameSubmittedMs = submitted, CompositorSyncMs = At("native-dwm-flush-complete"),
+            ChromeReadyMs = At("native-chrome-ready"), InputReadyMs = ready,
+            PresentationError = At("native-dwm-flush-failed") is not null ? "DwmFlush failed" : null,
+            RenderThreadCompleteError = "Not applicable: native DIB background has no WPF render target",
+        });
+        return submitted;
     }
 
     /// <summary>

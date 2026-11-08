@@ -60,7 +60,8 @@ internal sealed class ResidentProbeOptions
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "no-flight-spare", "no-copy-wait",
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
-         "selector-breakdown", "receipt-breakdown", "no-key-panel"];
+         "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib",
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -163,6 +164,9 @@ internal sealed class ResidentProbeOptions
                 variants.Add(variant);
             }
         }
+        int chromeVariants = variants.Count(variant => variant.StartsWith("selector-chrome-", StringComparison.OrdinalIgnoreCase));
+        if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
+            throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
         return variants;
     }
 }
@@ -329,6 +333,15 @@ internal sealed class ResidentProbeRecorder : IDisposable
     {
         public double? RenderThreadCompleteMs { get; init; }
         public string? RenderThreadCompleteError { get; init; }
+        public string Backend { get; init; } = "wpf";
+        public double? ShortcutHandledMs { get; init; }
+        public double? SourceFrameReadyMs { get; init; }
+        public double? DisplayDibReadyMs { get; init; }
+        public double? FirstFullFrameSubmittedMs { get; init; }
+        public double? CompositorSyncMs { get; init; }
+        public double? ChromeReadyMs { get; init; }
+        public double? InputReadyMs { get; init; }
+        public string? PresentationError { get; init; }
     }
 
     internal void AddBreakdown(Breakdown breakdown)
@@ -561,8 +574,15 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 MetricDefinitions = new
                 {
                     PrivateWorkingSetMb = "QueryWorkingSet nonshared resident pages; null and PrivateWorkingSetError when unavailable",
-                    SelectorMs = "Shortcut handler to first CompositionTarget.Rendering tick with selector frame attached",
+                    SelectorMs = "Backend=wpf: first CompositionTarget.Rendering tick with selector frame attached; Backend=native-dib: full background BitBlt followed by GdiFlush; compare like endpoints separately",
                     RenderThreadCompleteMs = "Shortcut handler to diagnostic MediaContext.CompleteRender return after first Rendering; render-thread upper bound, not physical display latency",
+                    ShortcutHandledMs = "Handler-entry timeline mark, relative to probe invocation",
+                    SourceFrameReadyMs = "Frozen source ready on the acquisition worker, relative to probe invocation",
+                    DisplayDibReadyMs = "Native display DIB copied and dimmed, relative to probe invocation; null for WPF",
+                    FirstFullFrameSubmittedMs = "Native full-background WM_PAINT/BitBlt and GdiFlush completed; not physical display latency",
+                    CompositorSyncMs = "Diagnostic DwmFlush after native background submission, before chrome construction/show; null on failure or WPF",
+                    ChromeReadyMs = "Native: all small windows reported ContentRendered; WPF: selector ContentRendered",
+                    InputReadyMs = "Native: first input dispatcher turn after background submission and activation attempt, before deferred chrome construction; WPF: ContentRendered handler completed",
                     ReceiptBreakdowns = "Opt-in receipt marks from selection to first card Rendering; Gen0/1/2 are collection-count deltas over that interval",
                 },
                 Audits = _audits,

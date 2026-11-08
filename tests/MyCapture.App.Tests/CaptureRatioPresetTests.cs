@@ -24,13 +24,21 @@ namespace MyCapture.App.Tests;
 /// that names the lock, and the even sides the recording selector needs. The arithmetic itself is in
 /// <c>SelectionRatiosTests</c>; these tests check how the selector and its bar use it.
 /// </summary>
-public sealed class CaptureRatioPresetTests
+public sealed class CaptureRatioPresetTests : CaptureRatioContractTests { }
+
+public sealed class NativeCaptureRatioPresetTests : CaptureRatioContractTests
 {
+    protected override bool Native => true;
+}
+
+public abstract class CaptureRatioContractTests
+{
+    protected virtual bool Native => false;
     [Fact]
     public void RCyclesTheLockThroughFreeAndTheFourRatiosAndTheBarAndMessageFollow() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             CaptureModeBar bar = view.ModeBarForTest!;
@@ -66,7 +74,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void EachSelectorStartsFreeAndTheChoiceIsNotKept() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView first = RatioView(() => new PointD(300, 300));
+        RatioSelector first = RatioView(() => new PointD(300, 300));
         try
         {
             first.RaiseEvent(Overlay.KeyArgs(Key.R));
@@ -74,7 +82,7 @@ public sealed class CaptureRatioPresetTests
         }
         finally { first.ReleaseResources(); }
 
-        CaptureOverlayView second = RatioView(() => new PointD(300, 300));
+        RatioSelector second = RatioView(() => new PointD(300, 300));
         try
         {
             Assert.Equal(SelectionRatio.Free, second.Ratio);
@@ -90,7 +98,7 @@ public sealed class CaptureRatioPresetTests
     {
         using var language = UiText.UseLanguage("ko-KR");
         PointD pointer = new(100, 100);
-        CaptureOverlayView view = RatioView(() => pointer);
+        RatioSelector view = RatioView(() => pointer);
         RectD? confirmed = null;
         view.SelectionConfirmed += (_, e) => confirmed = e.BitmapRegion;
         try
@@ -109,7 +117,7 @@ public sealed class CaptureRatioPresetTests
         finally { view.ReleaseResources(); }
 
         pointer = new PointD(100, 100);
-        CaptureOverlayView locked = RatioView(() => pointer);
+        RatioSelector locked = RatioView(() => pointer);
         confirmed = null;
         locked.SelectionConfirmed += (_, e) => confirmed = e.BitmapRegion;
         try
@@ -140,7 +148,7 @@ public sealed class CaptureRatioPresetTests
     public void ALockedDragNearTheEdgeOfTheDesktopShrinksInsteadOfLeavingTheRatio() => StaTestHost.Run(() =>
     {
         PointD pointer = new(1100, 600);
-        CaptureOverlayView view = RatioView(() => pointer);
+        RatioSelector view = RatioView(() => pointer);
         try
         {
             view.RaiseEvent(Overlay.KeyArgs(Key.R));
@@ -157,7 +165,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void RWithASelectionRefitsItAroundItsCentreAndAFullRoundDoesNotWhittleItAway() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             var start = new RectD(100, 50, 800, 600);
@@ -197,19 +205,19 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void ShiftArrowResizeKeepsTheLockAndArrowsStillMove() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             view.RaiseEvent(Overlay.KeyArgs(Key.R));
             SetSelection(view, new RectD(100, 100, 160, 90));
 
-            Overlay.Invoke(view, "NudgeSelection", Key.Right, ModifierKeys.Shift);
+            view.NudgeSelection(Key.Right, ModifierKeys.Shift);
             Assert.Equal(new RectD(100, 100, 161, 91), view.Selection);
-            Overlay.Invoke(view, "NudgeSelection", Key.Down, ModifierKeys.Shift);
+            view.NudgeSelection(Key.Down, ModifierKeys.Shift);
             Assert.Equal(new RectD(100, 100, 164, 92), view.Selection);
-            Overlay.Invoke(view, "NudgeSelection", Key.Right, ModifierKeys.Shift | ModifierKeys.Control);
+            view.NudgeSelection(Key.Right, ModifierKeys.Shift | ModifierKeys.Control);
             Assert.Equal(new RectD(100, 100, 174, 98), view.Selection);
-            Overlay.Invoke(view, "NudgeSelection", Key.Left, ModifierKeys.Shift);
+            view.NudgeSelection(Key.Left, ModifierKeys.Shift);
             Assert.Equal(new RectD(100, 100, 173, 97), view.Selection);
 
             // Moving is not resizing: the size, and with it the ratio, is untouched.
@@ -218,7 +226,7 @@ public sealed class CaptureRatioPresetTests
 
             // Free resizes one side only, as before.
             view.SelectRatio(SelectionRatio.Free);
-            Overlay.Invoke(view, "NudgeSelection", Key.Right, ModifierKeys.Shift);
+            view.NudgeSelection(Key.Right, ModifierKeys.Shift);
             Assert.Equal(new RectD(101, 100, 174, 97), view.Selection);
         }
         finally { view.ReleaseResources(); }
@@ -227,7 +235,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void ChoosingTheSameFixedRectangleStartsANewRefitCycle() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(500, 500), frame: BlankFrame(1920, 1080),
+        RatioSelector view = RatioView(() => new PointD(500, 500), frame: BlankFrame(1920, 1080),
             monitors: [TwoMonitors[0]]);
         try
         {
@@ -252,7 +260,7 @@ public sealed class CaptureRatioPresetTests
     [InlineData(true)]
     public void MovingOrResizingBackToTheSameRectangleDoesNotReviveTheOldRefitBase(bool resize) => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             view.PlaceFixedSize(new FixedSelectionSize(1280, 720));
@@ -271,7 +279,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void SelectAllAfterARefitStartsFromTheNewWholeFrame() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             view.PlaceFixedSize(new FixedSelectionSize(1080, 1080));
@@ -290,7 +298,7 @@ public sealed class CaptureRatioPresetTests
     {
         using var language = UiText.UseLanguage("ko-KR");
         PointD pointer = new(500, 500);
-        CaptureOverlayView view = RatioView(() => pointer, frame: BlankFrame(2560, 1080), monitors: TwoMonitors);
+        RatioSelector view = RatioView(() => pointer, frame: BlankFrame(2560, 1080), monitors: TwoMonitors);
         RectD? confirmed = null;
         view.SelectionConfirmed += (_, e) => confirmed = e.BitmapRegion;
         try
@@ -329,7 +337,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void FixedSizeThatFitsKeepsItsExactSizeAndTheReadoutShowsTheRealSizeWhenItDoesNot() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             // The 1280 x 720 test desktop holds 1280 x 720 exactly and not 1920 x 1080.
@@ -356,7 +364,7 @@ public sealed class CaptureRatioPresetTests
         // A Ctrl+A selection or a fixed size of another shape is not labelled with a ratio it lacks.
         Assert.Equal("1920 × 1080", CaptureOverlayView.FormatReadout(1920, 1080, SelectionRatio.Ratio4x3));
 
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             view.RaiseEvent(Overlay.KeyArgs(Key.R));
@@ -382,7 +390,7 @@ public sealed class CaptureRatioPresetTests
         string fixedName, string changed) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage(culture);
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         try
         {
             CaptureModeBar bar = view.ModeBarForTest!;
@@ -457,7 +465,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void ARecordingSizeFixedBySettingsHidesTheButtonAndIgnoresR() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300), recording: true);
+        RatioSelector view = RatioView(() => new PointD(300, 300), recording: true);
         try
         {
             CaptureModeBar bar = view.ModeBarForTest!;
@@ -478,7 +486,7 @@ public sealed class CaptureRatioPresetTests
     public void RecordingSelectionKeepsEverySideEvenSoTheEncoderNeverTrimsTheRatio() => StaTestHost.Run(() =>
     {
         PointD pointer = new(100, 100);
-        CaptureOverlayView view = RatioView(() => pointer, recording: true);
+        RatioSelector view = RatioView(() => pointer, recording: true);
         RectD? confirmed = null;
         view.SelectionConfirmed += (_, e) => confirmed = e.BitmapRegion;
         try
@@ -499,7 +507,7 @@ public sealed class CaptureRatioPresetTests
         finally { view.ReleaseResources(); }
 
         pointer = new PointD(100, 100);
-        CaptureOverlayView free = RatioView(() => pointer, recording: true);
+        RatioSelector free = RatioView(() => pointer, recording: true);
         try
         {
             free.SimulatePointerDown();
@@ -510,14 +518,14 @@ public sealed class CaptureRatioPresetTests
         }
         finally { free.ReleaseResources(); }
 
-        CaptureOverlayView refit = RatioView(() => new PointD(300, 300), recording: true);
+        RatioSelector refit = RatioView(() => new PointD(300, 300), recording: true);
         try
         {
             SetSelection(refit, new RectD(101, 51, 801, 601));
             refit.SelectRatio(SelectionRatio.Ratio16x9);
             Assert.Equal(new RectD(101, 126, 800, 450), refit.Selection);
             SetSelection(refit, new RectD(10, 10, 1000, 500), refit: false);
-            Overlay.Invoke(refit, "NudgeSelection", Key.Right, ModifierKeys.Shift);
+            refit.NudgeSelection(Key.Right, ModifierKeys.Shift);
             Assert.Equal(0, refit.Selection!.Value.Width % 2);
             Assert.Equal(0, refit.Selection.Value.Height % 2);
             Assert.True(SelectionRatios.Matches((int)refit.Selection.Value.Width, (int)refit.Selection.Value.Height, SelectionRatio.Ratio16x9));
@@ -528,7 +536,7 @@ public sealed class CaptureRatioPresetTests
     [Fact]
     public void ColorModeIgnoresRAndHandsTheKeyBackWhenTheModeEnds() => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        RatioSelector view = RatioView(() => new PointD(300, 300));
         view.CopyColorText = _ => Task.FromResult(true);
         try
         {
@@ -553,33 +561,12 @@ public sealed class CaptureRatioPresetTests
         new(@"\\.\DISPLAY2", new RectD(1920, 0, 640, 1080), new RectD(1920, 0, 640, 1080), 96, IsPrimary: false),
     ];
 
-    private static CaptureOverlayView RatioView(Func<PointD> pointer, bool recording = false, FrozenFrame? frame = null,
-        IReadOnlyList<MonitorInfo>? monitors = null)
-    {
-        var view = new CaptureOverlayView(frame ?? Desktop(), showMagnifier: false)
-        {
-            ReadCursor = pointer,
-            PlaceCursor = _ => false,
-            ReadMonitors = () => monitors ?? Monitors,
-            RecordingSelection = recording,
-            ShowModeBar = true,
-        };
-        UsePalette(view, CaptureGuidePalette.Create(AppTheme.Glass, customColor: null, systemHighContrast: false));
-        view.InitializePointer();
-        return view;
-    }
+    private RatioSelector RatioView(Func<PointD> pointer, bool recording = false, FrozenFrame? frame = null,
+        IReadOnlyList<MonitorInfo>? monitors = null) =>
+        new(Native, frame ?? Desktop(), pointer, recording, monitors ?? Monitors);
 
-    /// <summary>What Ctrl+A or a finished keyboard move leaves behind; with <paramref name="refit"/> off the lock does not touch it.</summary>
-    private static void SetSelection(CaptureOverlayView view, RectD selection, bool refit = true)
-    {
-        typeof(CaptureOverlayView).GetField("_selection", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(view, (RectD?)selection);
-        if (!refit)
-        {
-            typeof(CaptureOverlayView).GetField("_refitBase", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(view, null);
-            typeof(CaptureOverlayView).GetField("_refitResult", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(view, null);
-        }
-    }
+    private static void SetSelection(RatioSelector view, RectD selection, bool refit = true) => view.SetSelection(selection, refit);
+    private static void Render(RatioSelector view, double scale = 1) => view.Render(scale);
 
     private static FrozenFrame BlankFrame(int width, int height)
     {
