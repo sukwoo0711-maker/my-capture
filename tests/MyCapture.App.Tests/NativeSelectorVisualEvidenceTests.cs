@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -29,13 +28,10 @@ public sealed class NativeSelectorVisualEvidenceTests
     [InlineData(1.5)]
     public void RenderPointerChromeAlongsideWpf(double scale) => StaTestHost.Run(() =>
     {
-        string? directory = Environment.GetEnvironmentVariable("MYCAPTURE_VISUAL_EVIDENCE_DIR");
-        if (string.IsNullOrWhiteSpace(directory)) return;
+        // Opt-in: a new evidence directory below repository artifacts, named per scale.
+        string? run = TestDiagnosticArtifacts.Create("MYCAPTURE_VISUAL_EVIDENCE_DIR", $"native-selector-{scale * 100:0}");
+        if (run is null) return;
         using var language = UiText.UseLanguage("ko-KR");
-        string label = Environment.GetEnvironmentVariable("MYCAPTURE_VISUAL_EVIDENCE_LABEL") ?? "comparison";
-        string run = Path.Combine(directory,
-            $"{label}-{scale * 100:0}-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(run);
 
         FrozenFrame frame = CaptureCueEvidenceTests.Desktop();
         RectD bounds = frame.ScreenBounds;
@@ -494,8 +490,8 @@ public sealed class NativeSelectorVisualEvidenceTests
 
     private static void SaveComparison(string directory, string name, BitmapSource wpf, BitmapSource native)
     {
-        Save(wpf, Path.Combine(directory, name + "-wpf.png"));
-        Save(native, Path.Combine(directory, name + "-native.png"));
+        TestDiagnosticArtifacts.SavePng(directory, name + "-wpf.png", wpf);
+        TestDiagnosticArtifacts.SavePng(directory, name + "-native.png", native);
         const int header = 38, gap = 12;
         int leftWidth = Math.Max(260, wpf.PixelWidth), rightWidth = Math.Max(360, native.PixelWidth);
         int height = Math.Max(wpf.PixelHeight, native.PixelHeight);
@@ -515,14 +511,6 @@ public sealed class NativeSelectorVisualEvidenceTests
         }
         var pair = new RenderTargetBitmap(leftWidth + rightWidth + gap, height + header, 96, 96, PixelFormats.Pbgra32);
         pair.Render(visual);
-        Save(pair, Path.Combine(directory, name + "-side-by-side.png"));
-    }
-
-    private static void Save(BitmapSource bitmap, string path)
-    {
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-        encoder.Save(stream);
+        TestDiagnosticArtifacts.SavePng(directory, name + "-side-by-side.png", pair);
     }
 }
