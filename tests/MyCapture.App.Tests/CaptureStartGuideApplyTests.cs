@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Capture;
 using MyCapture.App.Settings;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -52,6 +53,55 @@ public sealed class CaptureStartGuideApplyTests
         published.Capture.StartGuideShownCount = 3;
         published.Capture.KeyPanelShownCount = 5;
 
+        SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
+        Assert.True(result.Saved);
+        Assert.Equal(5, published.Capture.DelaySeconds);
+        Assert.Equal(3, published.Capture.StartGuideShownCount);
+        Assert.Equal(3, store.Load().Capture.StartGuideShownCount);
+        Assert.Equal(5, published.Capture.KeyPanelShownCount);
+        Assert.Equal(5, store.Load().Capture.KeyPanelShownCount);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SettingsApplyKeepsCountsClaimedByEitherSelectorRenderer(bool native) => StaTestHost.Run(() =>
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mycapture-start-guide-renderer-apply-").FullName;
+        var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
+        AppSettings published = store.Load();
+        store.CompleteFirstRun(published);
+        using var window = new NativeMessageWindow();
+        using var hotkeys = new GlobalHotkeyService(window, new AcceptingRegistrar(), NullLogger<GlobalHotkeyService>.Instance);
+        hotkeys.Initialize(published.Hotkeys);
+        var startup = new StartupRegistrationService(new MemoryRunKeyStore(), @"C:\Apps\MyCapture.exe");
+        var apply = new SettingsApplyService(store, () => published, next => published = next, null, hotkeys, startup, NullLogger.Instance);
+        var writes = new List<Action>();
+        var bookkeeping = new CaptureStartGuideBookkeeping(() => published, store.Save, writes.Add, NullLogger.Instance);
+        published.Capture.StartGuideShownCount = 1;
+        published.Capture.KeyPanelShownCount = 2;
+        var draft = new SettingsDraft(published) { DelaySeconds = "5" };
+
+        for (int i = 0; i < 5; i++)
+        {
+            bool startGuide = bookkeeping.Claim();
+            using var selector = new KeyPanelSelector(native)
+            {
+                ShowStartGuide = startGuide,
+                StartGuideClaimedForKeyPanel = startGuide,
+                ClaimKeyPanel = bookkeeping.ClaimKeyPanel,
+            };
+            int beforeFrame = published.Capture.KeyPanelShownCount;
+            selector.Render();
+            Assert.Equal(beforeFrame, published.Capture.KeyPanelShownCount);
+            selector.NotifyFirstFramePresented();
+            Assert.Equal(i < 2, selector.ShowStartGuide);
+            Assert.Equal(i >= 2, selector.ShowKeyPanel);
+            Assert.Equal(i < 2 ? 2 : i + 1, published.Capture.KeyPanelShownCount);
+        }
+        foreach (Action write in writes) write();
+        Assert.Equal(3, store.Load().Capture.StartGuideShownCount);
+        Assert.Equal(5, store.Load().Capture.KeyPanelShownCount);
         SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
         Assert.True(result.Saved);
         Assert.Equal(5, published.Capture.DelaySeconds);

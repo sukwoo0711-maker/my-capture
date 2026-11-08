@@ -27,16 +27,30 @@ internal sealed partial class NativeCaptureOverlay
 
     internal Func<PointD> ReadCursor { get; set; } = CursorLocator.GetPosition;
     internal Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
-    internal Func<string, Task<bool>>? CopyColorText { get; set; }
+    private Func<string, Task<bool>>? _copyColorText;
+    private bool _textCaptureAvailable, _recordingSelection;
+    internal Func<string, Task<bool>>? CopyColorText
+    {
+        get => _copyColorText;
+        set { _copyColorText = value; RefreshModeBar(); }
+    }
     internal Func<ColorFormat> ReadColorFormat { get; set; } = () => ColorFormat.Hex;
     internal Action<ColorCopyFeedback>? ColorCopied { get; set; }
-    internal bool TextCaptureAvailable { get; set; }
+    internal bool TextCaptureAvailable
+    {
+        get => _textCaptureAvailable;
+        set { _textCaptureAvailable = value; RefreshModeBar(); }
+    }
     internal bool TextCaptureMode
     {
         get => _textCaptureMode;
         set { if (_closed) return; _textCaptureMode = value; _mode = value ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture; RefreshModeBar(); RefreshHover(); }
     }
-    internal bool RecordingSelection { get; set; }
+    internal bool RecordingSelection
+    {
+        get => _recordingSelection;
+        set { _recordingSelection = value; RefreshModeBar(); }
+    }
     internal bool OffersOtherActions { get; set; }
     internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
     internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
@@ -46,6 +60,7 @@ internal sealed partial class NativeCaptureOverlay
         set { _detectWindows = value; _windowSelected = value; RefreshModeBar(); }
     }
     internal RectD? HoverRegion => _hoverRegion;
+    internal bool UsesWindowDetection => DetectWindows && _windowSelected && !RecordingSelection;
     internal System.Drawing.Size? PresetSize
     {
         get => _presetSize;
@@ -77,6 +92,7 @@ internal sealed partial class NativeCaptureOverlay
         _modeBar = bar;
         bar.ApplyPalette(_palette);
         bar.CancelRequested += Close;
+        bar.HelpRequested += ToggleStartGuide;
         bar.FullScreenRequested += CompleteMonitor;
         bar.ModeRequested += OnBarMode;
         bar.WindowRequested += OnBarWindow;
@@ -90,6 +106,7 @@ internal sealed partial class NativeCaptureOverlay
     {
         if (_modeBar is not { } bar) return;
         bar.CancelRequested -= Close;
+        bar.HelpRequested -= ToggleStartGuide;
         bar.FullScreenRequested -= CompleteMonitor;
         bar.ModeRequested -= OnBarMode;
         bar.WindowRequested -= OnBarWindow;
@@ -101,28 +118,31 @@ internal sealed partial class NativeCaptureOverlay
 
     private void OnBarMode(CaptureSelectorMode mode)
     {
+        DismissStartGuide();
         if (mode == CaptureSelectorMode.Capture) _windowSelected = false;
         SelectMode(mode);
         RefreshHover();
-        Activate();
+        ReturnFocusAfterPointer();
     }
 
     private void OnBarWindow()
     {
         if (_closed || !DetectWindows || RecordingSelection) return;
+        DismissStartGuide();
         _windowSelected = true;
         ResetRefitCycle();
         _selectedWindow = null;
         SetSelection(Int32Rect.Empty);
         SelectMode(CaptureSelectorMode.Capture);
         RefreshHover();
-        Activate();
+        ReturnFocusAfterPointer();
     }
 
-    private void OnBarRatio(SelectionRatio ratio) { SelectRatio(ratio); Activate(); }
+    private void OnBarRatio(SelectionRatio ratio) { DismissStartGuide(); SelectRatio(ratio); ReturnFocusAfterPointer(); }
 
     private void OnBarFixedSize(FixedSelectionSize size)
     {
+        DismissStartGuide();
         if (PlaceFixedSize(size))
             _ = _dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { if (!_closed) Activate(); }));
     }
@@ -133,6 +153,7 @@ internal sealed partial class NativeCaptureOverlay
             otherActions: OffersOtherActions, canRepeatLastRegion: CanRepeatLastRegion(), recording: RecordingSelection, ratioAvailable: PresetSize is null);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(Ratio);
+        UpdateDeferredGuides();
     }
 
     internal void SelectMode(CaptureSelectorMode mode)
@@ -164,7 +185,7 @@ internal sealed partial class NativeCaptureOverlay
             }
         }
         RefreshModeBar();
-        ShowToast(UiText.Format("CaptureRatio_Changed", CaptureModeBar.RatioName(ratio)), TimeSpan.FromSeconds(1));
+        ShowToast(UiText.Format("CaptureRatio_Changed", CaptureModeBar.RatioName(ratio)), FeedbackKind.Echo, RatioActivity);
     }
 
     private void ResetRefitCycle() { _refitBase = null; _refitResult = null; }
@@ -178,7 +199,7 @@ internal sealed partial class NativeCaptureOverlay
         _selectedWindow = null;
         ClearHover();
         SetSelection(placed);
-        ShowToast(UiText.Get("CaptureRatio_FixedHint"), TimeSpan.FromSeconds(6));
+        ShowToast(UiText.Get("CaptureRatio_FixedHint"), FeedbackKind.Result, RatioActivity);
         return true;
     }
 
@@ -191,8 +212,17 @@ internal sealed partial class NativeCaptureOverlay
     internal bool HandleKey(Key key, ModifierKeys modifiers)
     {
         if (_closed) return false;
+        if (key == Key.F1 && modifiers == ModifierKeys.None && !RecordingSelection)
+        {
+            ToggleKeyPanel();
+            return true;
+        }
+        if (key is not (Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
+            or Key.RightAlt or Key.System or Key.LWin or Key.RWin)) DismissStartGuide();
         switch (key)
         {
+            case Key.Tab when modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                FocusChrome(modifiers == ModifierKeys.Shift); return true;
             case Key.Escape: Close(); return true;
             case Key.Enter: ConfirmCurrent(); return true;
             case Key.A when modifiers.HasFlag(ModifierKeys.Control):
@@ -261,7 +291,7 @@ internal sealed partial class NativeCaptureOverlay
         {
             _copyingColor = false;
             if (_closed || _completing) return;
-            if (!copied) { ShowToast(UiText.Get("ColorPick_CopyFailed"), TimeSpan.FromSeconds(6)); return; }
+            if (!copied) { ShowToast(UiText.Get("ColorPick_CopyFailed"), FeedbackKind.Warning, "MyCapture.Capture.ColorCopy"); return; }
             Action<ColorCopyFeedback>? notify = ColorCopied;
             Close();
             notify?.Invoke(new ColorCopyFeedback(value, red, green, blue));
@@ -271,16 +301,20 @@ internal sealed partial class NativeCaptureOverlay
         return copied ? value : null;
     }
 
-    private void ShowToast(string message, TimeSpan duration)
+    private const string RatioActivity = "MyCapture.Capture.Ratio";
+
+    private void ShowToast(string message, FeedbackKind kind, string activity)
     {
+        if (_closed) return;
         ToastMessage = message;
         _toastTimer ??= new DispatcherTimer(DispatcherPriority.Normal, _dispatcher);
         _toastTimer.Stop();
         _toastTimer.Tick -= ClearToast;
         _toastTimer.Tick += ClearToast;
-        _toastTimer.Interval = duration;
+        _toastTimer.Interval = FeedbackTiming.DisplayTime(kind, overContent: true)!.Value;
         _toastTimer.Start();
         _chrome?.Update(ReadCursor(), _selection);
+        FeedbackTiming.Announce(AutomationProvider, message, kind, activity);
     }
 
     private void ClearToast(object? sender, EventArgs args)
