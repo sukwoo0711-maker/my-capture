@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 
 namespace MyCapture.App.Themes;
 
@@ -43,6 +45,9 @@ internal enum FeedbackKind
 /// </remarks>
 internal static class FeedbackTiming
 {
+    [ThreadStatic]
+    internal static Action<string, FeedbackKind, string>? AnnouncementRequestedForTest;
+
     /// <summary>A live value readout; long enough to read a number, gone before the next gesture.</summary>
     internal static readonly TimeSpan Echo = TimeSpan.FromSeconds(1);
 
@@ -82,15 +87,38 @@ internal static class FeedbackTiming
     /// </summary>
     internal static void Announce(UIElement source, string message, FeedbackKind kind, string activity)
     {
-        if (string.IsNullOrWhiteSpace(message) || !AutomationPeer.ListenerExists(AutomationEvents.Notification))
+        if (string.IsNullOrWhiteSpace(message)) return;
+        AnnouncementRequestedForTest?.Invoke(message, kind, activity);
+        if (!AutomationPeer.ListenerExists(AutomationEvents.Notification))
         {
             return;
         }
 
         AutomationPeer? peer = UIElementAutomationPeer.FromElement(source)
             ?? UIElementAutomationPeer.CreatePeerForElement(source);
+        // Drawing-only controls (including the WPF selector view) have no own peer.
+        // Their owning window is the accessible source of the same dynamic feedback.
+        if (peer is null && Window.GetWindow(source) is { } window)
+            peer = UIElementAutomationPeer.FromElement(window) ?? UIElementAutomationPeer.CreatePeerForElement(window);
         peer?.RaiseNotificationEvent(NotificationKind(kind), NotificationProcessing(kind), message, activity);
     }
+
+    internal static void Announce(IRawElementProviderSimple source, string message, FeedbackKind kind, string activity)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        AnnouncementRequestedForTest?.Invoke(message, kind, activity);
+        if (!UiaClientsAreListening()) return;
+        _ = UiaRaiseNotificationEvent(source, NotificationKind(kind), NotificationProcessing(kind), message, activity);
+    }
+
+    [DllImport("UIAutomationCore.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UiaClientsAreListening();
+
+    [DllImport("UIAutomationCore.dll", CharSet = CharSet.Unicode)]
+    private static extern int UiaRaiseNotificationEvent([MarshalAs(UnmanagedType.Interface)] IRawElementProviderSimple provider,
+        AutomationNotificationKind kind, AutomationNotificationProcessing processing,
+        [MarshalAs(UnmanagedType.BStr)] string message, [MarshalAs(UnmanagedType.BStr)] string activity);
 
     internal static AutomationNotificationKind NotificationKind(FeedbackKind kind) => kind switch
     {

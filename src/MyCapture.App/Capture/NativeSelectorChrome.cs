@@ -15,7 +15,7 @@ using MyCapture.Platform.Display;
 namespace MyCapture.App.Capture;
 
 /// <summary>Bounded windows only. A detached instance has no session, frame, or owner HWND.</summary>
-internal sealed class NativeSelectorChrome : IDisposable
+internal sealed partial class NativeSelectorChrome : IDisposable
 {
     private NativeCaptureOverlay? _owner;
     private readonly List<Window> _windows = [];
@@ -44,7 +44,6 @@ internal sealed class NativeSelectorChrome : IDisposable
         try
         {
             _bar = owner.ModeBar;
-            _bar.HelpRequested += ToggleHelp;
             _bar.ConstrainWidth(_workArea.Width / _scale - 24);
             _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             _barWindow = Create(_bar, _bar.DesiredSize.Width, _bar.DesiredSize.Height, interactive: true);
@@ -92,6 +91,7 @@ internal sealed class NativeSelectorChrome : IDisposable
         _rendered = false;
         _showingWindows = false;
         _guideVisible = true;
+        ResetGuides();
         owner.AttachModeBar(_bar);
         _bar.ConstrainWidth(_workArea.Width / _scale - 24);
         _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -108,7 +108,7 @@ internal sealed class NativeSelectorChrome : IDisposable
             AllCaptureExcluded &= excluded;
             if (requireExclusion && !excluded) throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             CaptureWindowExclusion.DisableTransitions(window);
-            _pendingFrames.Add(window);
+            if (!_deferredWindows.Contains(window)) _pendingFrames.Add(window);
         }
         Place(_barWindow, _workArea.Left + (_workArea.Width - _barWindow.Width * _scale) / 2, _workArea.Top + 12 * _scale, Placement.Layout);
         if (_guideWindow is { } guide)
@@ -161,11 +161,20 @@ internal sealed class NativeSelectorChrome : IDisposable
     {
         if (_owner is not { } owner) return;
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+        if (key is not (Key.F1 or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
+            or Key.RightAlt or Key.System or Key.LWin or Key.RWin)) owner.DismissStartGuide();
+        if (key == Key.Tab && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
+        {
+            e.Handled = NavigateTab(Keyboard.Modifiers == ModifierKeys.Shift);
+            return;
+        }
         if (_bar.Holds(e.OriginalSource as DependencyObject))
         {
             if (key == Key.Enter && e.OriginalSource is ButtonBase button)
             {
-                _bar.ActivateButton(button);
+                KeyboardActivation = true;
+                try { _bar.ActivateButton(button); }
+                finally { KeyboardActivation = false; }
                 e.Handled = true;
                 return;
             }
@@ -191,6 +200,7 @@ internal sealed class NativeSelectorChrome : IDisposable
         _showingWindows = true;
         foreach (Window window in _windows.ToArray())
         {
+            if (_deferredWindows.Contains(window)) continue;
             if (_closed || _owner is null) return;
             MarkWindow(window, "show-start");
             window.Show();
@@ -200,11 +210,21 @@ internal sealed class NativeSelectorChrome : IDisposable
             MarkWindow(window, "placed");
         }
         _owner?.FlushChromeStamps();
+        _owner?.UpdateDeferredGuides();
     }
 
     private void OnRendered(object? sender, EventArgs args)
     {
         if (_closed || !_showingWindows || _owner is null || sender is not Window window) return;
+        if (window == _keyPanelWindow)
+        {
+            if (!_keyPanelReady)
+            {
+                _keyPanelReady = true;
+                MyCapture.App.Diagnostics.SelectorTimeline.Mark?.Invoke("native-key-panel-ready");
+            }
+            return;
+        }
         if (!_pendingFrames.Remove(window)) return;
         MarkWindow(window, "rendered");
         if (_pendingFrames.Count == 0)
@@ -224,22 +244,20 @@ internal sealed class NativeSelectorChrome : IDisposable
         mark($"native-chrome-{name}-{phase}");
     }
 
-    private void ToggleHelp()
-    {
-        if (_owner is null) return;
-        _guideVisible = !_guideVisible;
-        if (_guideWindow is { } guide) { if (_guideVisible) guide.Show(); else guide.Hide(); }
-        Update(_owner.ReadCursor(), _owner.SelectionRectangle);
-    }
-
     internal void Update(PointD pointer, Int32Rect selection)
     {
         if (_closed || _owner is not { } owner) return;
+        owner.UpdateGuidePointer();
         _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.Ratio);
         _guideText.Text = owner.ToastMessage ?? DefaultGuide;
         if (_sizeWindow is { } size) Place(size, pointer.X + 20 * _scale, pointer.Y + 20 * _scale, Follow(size));
         if (_static is not null)
-            owner.SetChromeStamps(_static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible));
+        {
+            IReadOnlyList<NativeSelectorStamp> stamps = _static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible);
+            Int32Rect readout = stamps[^1].Bounds;
+            _staticReadoutBounds = new Rect(readout.X, readout.Y, readout.Width, readout.Height);
+            owner.SetChromeStamps(stamps);
+        }
         if (_magnifier is not null && _magnifierWindow is not null && owner.Frame is { } frame)
         {
             BitmapSource source = frame.Bitmap;
@@ -252,6 +270,7 @@ internal sealed class NativeSelectorChrome : IDisposable
             _magnifier.WritePixels(new Int32Rect(0, 0, width, height), _sample, 15 * 4, 0);
             Place(_magnifierWindow, pointer.X + 20 * _scale, pointer.Y + 64 * _scale, Follow(_magnifierWindow));
         }
+        owner.UpdateDeferredGuides();
     }
 
     private enum Placement { Layout, Show, Follow }
@@ -288,6 +307,7 @@ internal sealed class NativeSelectorChrome : IDisposable
         Hide();
         _owner?.DetachModeBar();
         _owner = null;
+        ResetGuides();
         _pendingFrames.Clear();
         foreach (Window window in _windows)
         {
@@ -307,7 +327,8 @@ internal sealed class NativeSelectorChrome : IDisposable
         if (_closed) return;
         _closed = true;
         Detach();
-        if (_bar is { } bar) bar.HelpRequested -= ToggleHelp;
+        _keyPanelController?.Release();
+        _keyPanelController = null;
         foreach (Window window in _windows)
         {
             HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.RemoveHook(OnMessage);

@@ -17,6 +17,7 @@ internal sealed class RatioSelector
     private readonly NativeCaptureOverlay? _native;
     private readonly Func<PointD> _pointer;
     private readonly RectD _bounds;
+    private Window? _host;
     internal RatioSelector(bool native, FrozenFrame frame, Func<PointD> pointer, bool recording,
         IReadOnlyList<MonitorInfo> monitors)
     {
@@ -30,6 +31,7 @@ internal sealed class RatioSelector
             };
             _native.AttachFrame(frame);
             _native.SelectionCompleted += (_, e) => SelectionConfirmed?.Invoke(this, new RegionSelectionEventArgs(e.BitmapRegion));
+            _native.Closed += (_, e) => CancelRequested?.Invoke(this, e);
         }
         else
         {
@@ -41,9 +43,11 @@ internal sealed class RatioSelector
             CaptureCueEvidenceTests.UsePalette(_wpf, CaptureGuidePalette.Create(MyCapture.Core.Themes.AppTheme.Glass, null, false));
             _wpf.InitializePointer();
             _wpf.SelectionConfirmed += (_, e) => SelectionConfirmed?.Invoke(this, e);
+            _wpf.CancelRequested += (_, e) => CancelRequested?.Invoke(this, e);
         }
     }
     internal event EventHandler<RegionSelectionEventArgs>? SelectionConfirmed;
+    internal event EventHandler? CancelRequested;
     internal CaptureModeBar? ModeBarForTest => _native?.ModeBar ?? _wpf!.ModeBarForTest;
     internal SelectionRatio Ratio => _native?.Ratio ?? _wpf!.Ratio;
     internal RectD? Selection => _native is { } native ? native.Selection : _wpf!.Selection;
@@ -57,6 +61,21 @@ internal sealed class RatioSelector
     internal Func<string, Task<bool>>? CopyColorText
     {
         set { if (_native is { } native) native.CopyColorText = value; else _wpf!.CopyColorText = value; }
+    }
+    internal Task<string?> CopyColorAtPointerAsync() => _native?.CopyColorAtPointerAsync() ?? _wpf!.CopyColorAtPointerAsync();
+    internal void Show()
+    {
+        if (_native is { } native) native.Show();
+        else
+        {
+            _host = new Window
+            {
+                Content = _wpf, Width = 800, Height = 500,
+                WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false,
+            };
+            _host.Show();
+            _host.UpdateLayout();
+        }
     }
     internal void RaiseEvent(KeyEventArgs key)
     {
@@ -128,5 +147,12 @@ internal sealed class RatioSelector
             }
         }
     }
-    internal void ReleaseResources() { _native?.Close(); _wpf?.ReleaseResources(); }
+    internal void ReleaseResources()
+    {
+        if (_wpf?.ModeBarForTest?.RatioMenuForTest is { } menu) menu.IsOpen = false;
+        _native?.Close();
+        _wpf?.ReleaseResources();
+        _host?.Close();
+        _host = null;
+    }
 }

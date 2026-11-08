@@ -9,7 +9,9 @@ using MyCapture.App.Capture;
 using MyCapture.App.Gallery;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 using Xunit;
@@ -46,18 +48,20 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
         Assert.Equal(TimeSpan.FromSeconds(6), CaptureOverlayView.ToastDuration(copied: false));
     }
 
-    [Fact]
-    public void FailedColorCopyUsesTheWarningTimeAndSuccessfulRetryEndsTheSelector() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedColorCopyUsesTheWarningTimeAndSuccessfulRetryEndsTheSelector(bool native) => StaTestHost.Run(() =>
     {
         bool copies = false;
-        var view = new CaptureOverlayView(WindowDetectOverlayTests.Frame(), showMagnifier: false)
+        var frame = WindowDetectOverlayTests.Frame();
+        var view = new RatioSelector(native, frame, () => new PointD(5, 5), false,
+            [new MyCapture.Platform.Display.MonitorInfo("test", frame.ScreenBounds, frame.ScreenBounds, 96, true)])
         {
-            ReadCursor = () => new MyCapture.Core.Primitives.PointD(5, 5),
             CopyColorText = _ => Task.FromResult(copies),
         };
         try
         {
-            view.InitializePointer();
             Assert.Null(view.CopyColorAtPointerAsync().Result);
             Assert.Equal(UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
             Assert.Equal(FeedbackTiming.Result, view.ToastIntervalForTest);
@@ -66,6 +70,30 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
             copies = true;
             Assert.NotNull(view.CopyColorAtPointerAsync().Result);
             Assert.Equal(1, cancelled);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RatioEchoAndFixedSizeResultReplaceTheMessageAndItsDisplayTime(bool native) => StaTestHost.Run(() =>
+    {
+        var view = new RatioSelector(native, CaptureCueEvidenceTests.Desktop(), () => new PointD(300, 300), false,
+            CaptureCueEvidenceTests.Monitors);
+        try
+        {
+            view.SelectRatio(SelectionRatio.Ratio16x9);
+            Assert.Equal(UiText.Format("CaptureRatio_Changed", CaptureModeBar.RatioName(SelectionRatio.Ratio16x9)), view.ToastMessageForTest);
+            Assert.Equal(TimeSpan.FromSeconds(1), view.ToastIntervalForTest);
+            Assert.True(view.PlaceFixedSize(new FixedSelectionSize(1280, 720)));
+            Assert.Equal(UiText.Get("CaptureRatio_FixedHint"), view.ToastMessageForTest);
+            Assert.Equal(TimeSpan.FromSeconds(6), view.ToastIntervalForTest);
+            view.SelectRatio(SelectionRatio.Ratio4x3);
+            Assert.Equal(UiText.Format("CaptureRatio_Changed", CaptureModeBar.RatioName(SelectionRatio.Ratio4x3)), view.ToastMessageForTest);
+            Assert.Equal(TimeSpan.FromSeconds(1), view.ToastIntervalForTest);
+            view.ReleaseResources();
+            Assert.Null(view.ToastIntervalForTest);
         }
         finally { view.ReleaseResources(); }
     });

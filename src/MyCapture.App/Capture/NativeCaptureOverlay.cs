@@ -45,7 +45,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         try
         {
             _ = WindowClass.Value;
-            Handle = NativeSelectorInterop.CreateWindowEx(0x88, ClassName, "MyCapture", 0x80000000,
+            Handle = NativeSelectorInterop.CreateWindowEx(0x88, ClassName, UiText.Get("Text_3816B940D53C"), 0x80000000,
                 (int)_bounds.Left, (int)_bounds.Top, (int)_bounds.Width, (int)_bounds.Height,
                 IntPtr.Zero, IntPtr.Zero, NativeSelectorInterop.GetModuleHandle(null), IntPtr.Zero);
             if (Handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -177,6 +177,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         if (_closed) return;
         _chromeReady = true;
         SelectorTimeline.Mark?.Invoke("native-chrome-ready");
+        if (_pendingChromeFocus is { } reverse) FocusChrome(reverse);
     }
 
     private void ShowChrome()
@@ -193,6 +194,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             chrome.Update(ReadCursor(), _selection);
             chrome.Show();
             if (!_closed) SelectorTimeline.Mark?.Invoke("native-chrome-show-returned");
+            if (!_closed) QueueDeferredGuides();
         }
         catch (Exception error)
         {
@@ -243,6 +245,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         _dispatcher.VerifyAccess();
         if (_closed || Frame is null || _copyingColor) return;
+        DismissStartGuide();
         if (Mode == CaptureSelectorMode.Color) { _ = CopyColorAtPointerAsync(); return; }
         ResetRefitCycle();
         _anchor = Clamp(bitmapPoint);
@@ -370,6 +373,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _dispatcher.VerifyAccess();
         if (_closed) return;
         _closed = true;
+        _pendingChromeFocus = null;
+        ReleaseDeferredGuides();
         _startup?.Dispose();
         _startup = null;
         _toastTimer?.Stop();
@@ -452,6 +457,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         switch (message)
         {
+            case 0x003D when unchecked((int)lParam.ToInt64()) == -25: // WM_GETOBJECT / UiaRootObjectId
+                return HandleAutomationMessage(hwnd, wParam, lParam);
             case 0x0014: return new IntPtr(1); // WM_ERASEBKGND: every invalid pixel is copied in WM_PAINT.
             case 0x000F:
                 Paint(hwnd);

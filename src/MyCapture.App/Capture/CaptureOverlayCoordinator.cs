@@ -690,6 +690,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             CanRepeatLastRegion = CanRepeatLastRegion,
         };
         _nativeOverlay = native;
+        native.ShowStartGuide = ClaimStartGuide();
+        native.ClaimKeyPanel = ClaimKeyPanel;
+        native.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
+        native.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
         native.SelectionCompleted += OnOverlaySelectionCompleted;
         native.ActionRequested += OnOverlayActionRequested;
         native.Failed += error => TransitionFailed?.Invoke(error);

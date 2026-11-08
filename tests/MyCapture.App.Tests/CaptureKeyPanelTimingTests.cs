@@ -15,6 +15,42 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureKeyPanelTimingTests(ITestOutputHelper output)
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PanelClaimsAndShortcutReadsRunOnceAfterThePresentedFrame(bool native) => StaTestHost.Run(() =>
+    {
+        using var selector = new KeyPanelSelector(native);
+        int claims = 0, shortcutReads = 0;
+        var marks = new List<string>();
+        Action<string>? previous = SelectorTimeline.Mark;
+        SelectorTimeline.Mark = marks.Add;
+        selector.ClaimKeyPanel = _ => { claims++; return true; };
+        selector.ReadPasteToScreenHotkey = () => { shortcutReads++; return MyCapture.Core.Settings.Hotkey.None; };
+        try
+        {
+            for (int i = 0; i < 5; i++) selector.Render();
+            Assert.False(selector.FirstFramePresentedForTest);
+            Assert.Null(selector.KeyPanelForTest);
+            Assert.Equal(0, claims);
+            Assert.Equal(0, shortcutReads);
+            Assert.DoesNotContain(marks, mark => mark.StartsWith("key-panel-", StringComparison.Ordinal));
+            marks.Add("test-presented-frame");
+            selector.NotifyFirstFramePresented();
+            Assert.True(selector.FirstFramePresentedForTest);
+            Assert.NotNull(selector.KeyPanelForTest);
+            Assert.Equal(1, claims);
+            Assert.Equal(1, shortcutReads);
+            Assert.True(marks.IndexOf("key-panel-controller") > marks.IndexOf("test-presented-frame"));
+            Assert.True(marks.IndexOf("key-panel-construct") > marks.IndexOf("test-presented-frame"));
+            selector.NotifyFirstFramePresented();
+            selector.Render();
+            Assert.Equal(1, claims);
+            Assert.Equal(1, shortcutReads);
+        }
+        finally { SelectorTimeline.Mark = previous; }
+    });
+
     [SelectorTimingFact]
     public void SelectorFirstFrame_RecordsPresentedFrameAndRetainsComparison() => StaTestHost.Run(() =>
     {
