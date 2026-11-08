@@ -18,6 +18,35 @@ public sealed class NativeSelectorChromeIdleTests
     private static readonly RectD Bounds = new(0, 0, 640, 360);
 
     [Fact]
+    public void TrimSkipsRetainedWindowsTheApplicationAlreadyClosed() => StaTestHost.Run(() =>
+    {
+        // Application shutdown closes every window before the dispatcher raises ShutdownStarted, whose
+        // handler trims the cache. Trimming must not touch the destroyed windows.
+        try
+        {
+            using var owner = Owner();
+            NativeSelectorChrome chrome = NativeSelectorChromeCache.Acquire(owner, true, false);
+            chrome.Show();
+            PumpUntil(() => owner.IsChromeReady);
+            NativeSelectorChromeCache.Release(chrome);
+            owner.Close();
+            IntPtr[] handles = Handles(chrome);
+            Assert.Equal(handles.Length, NativeSelectorChromeCache.RetainedWindowCount);
+            foreach (Window window in chrome.Windows.ToArray()) window.Close();
+            Assert.All(handles, handle => Assert.False(NativeSelectorInterop.IsWindow(handle)));
+
+            NativeSelectorChromeCache.Trim();
+
+            Assert.Equal(0, NativeSelectorChromeCache.RetainedWindowCount);
+            Assert.Empty(chrome.Windows);
+        }
+        finally
+        {
+            NativeSelectorChromeCache.Trim();
+        }
+    });
+
+    [Fact]
     public void IdleCollectionPreservesDetachedWindowsAndTheNextLeaseRendersAgain() => StaTestHost.Run(() =>
     {
         var marks = new List<string>();

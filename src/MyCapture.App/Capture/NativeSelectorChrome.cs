@@ -331,9 +331,14 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         _keyPanelController = null;
         foreach (Window window in _windows)
         {
-            HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.RemoveHook(OnMessage);
             window.ContentRendered -= OnRendered;
             window.PreviewKeyDown -= OnKeyDown;
+            // Every chrome window gets its handle when it is created, so a zero handle means the window
+            // is already destroyed: application shutdown closes every window before the dispatcher
+            // raises ShutdownStarted, and HwndSource.FromHwnd(IntPtr.Zero) throws.
+            IntPtr handle = new WindowInteropHelper(window).Handle;
+            if (handle == IntPtr.Zero) continue;
+            HwndSource.FromHwnd(handle)?.RemoveHook(OnMessage);
             window.Content = null;
             window.Close();
         }
