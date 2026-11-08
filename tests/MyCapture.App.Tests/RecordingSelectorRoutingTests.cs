@@ -23,7 +23,7 @@ public sealed class RecordingSelectorRoutingTests
     public void CompletedSelectionPassesScreenCoordinatesAndEndsOnce(bool native) => StaTestHost.Run(() =>
     {
         // No recording or library write is needed to verify selector-to-controls routing.
-        string root = Path.Combine(Path.GetTempPath(), "mc-record-routing-" + Guid.NewGuid().ToString("N"));
+        string root = OwnedTestDirectory.Create("mc-record-routing-");
         var bounds = new RectD(100, 100, 64, 48);
         var monitor = new MonitorInfo("recording-test", bounds, bounds, 96, true);
         BitmapSource bitmap = BitmapSource.Create(64, 48, 96, 96, PixelFormats.Bgra32, null, new byte[64 * 48 * 4], 64 * 4);
@@ -68,7 +68,7 @@ public sealed class RecordingSelectorRoutingTests
         };
         try
         {
-            Assert.False(Directory.Exists(root));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(root));
             coordinator.Toggle();
             PinHistoryTestSupport.Await(coordinator.LastSelectionPreparation);
             overlay = new RecordingSelector(coordinator, native);
@@ -84,12 +84,13 @@ public sealed class RecordingSelectorRoutingTests
             Assert.Equal(1, ended);
             coordinator.CancelRegionSelection();
             Assert.Equal(1, ended);
-            Assert.False(Directory.Exists(root));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(root));
         }
         finally
         {
             coordinator.CancelRegionSelection();
             PinHistoryTestSupport.Await(coordinator.LastSelectionPreparation);
+            OwnedTestDirectory.Delete(root);
         }
     });
 }

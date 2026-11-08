@@ -192,7 +192,7 @@ public sealed class RecordingSelectorFallbackTests
 
     private sealed class Fixture : IDisposable
     {
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "mc-record-fallback-" + Guid.NewGuid().ToString("N"));
+        private readonly string _root = OwnedTestDirectory.Create("mc-record-fallback-");
         private readonly RectD _bounds = new(100, 100, 64, 48);
         private readonly MonitorInfo _monitor;
         internal Fixture()
@@ -239,7 +239,7 @@ public sealed class RecordingSelectorFallbackTests
             Coordinator.CaptureSelectionRequested = () => CaptureRequests.Add(Coordinator.IsActive);
             Coordinator.SelectionPreparationFailed += Failures.Add;
             Coordinator.SessionEnded += (_, _) => Ended++;
-            Assert.False(Directory.Exists(_root));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(_root));
         }
 
         internal RegionRecordingCoordinator Coordinator { get; }
@@ -271,9 +271,14 @@ public sealed class RecordingSelectorFallbackTests
         }
         public void Dispose()
         {
-            Coordinator.CancelRegionSelection();
-            PinHistoryTestSupport.Await(Coordinator.LastSelectionPreparation);
-            Assert.False(Directory.Exists(_root));
+            try
+            {
+                Coordinator.CancelRegionSelection();
+                PinHistoryTestSupport.Await(Coordinator.LastSelectionPreparation);
+                // Selecting a region writes nothing under the data root.
+                Assert.Empty(Directory.EnumerateFileSystemEntries(_root));
+            }
+            finally { OwnedTestDirectory.Delete(_root); }
         }
     }
 
