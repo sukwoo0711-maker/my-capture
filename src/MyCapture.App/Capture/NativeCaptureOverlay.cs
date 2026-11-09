@@ -67,6 +67,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     internal bool IsReady { get; private set; }
     internal bool IsChromeReady => _chromeReady;
     internal NativeSelectorChromeStrategy ChromeStrategy { get; set; } = NativeSelectorChromeStrategy.Retained;
+    internal bool SkipChromeShowRestackForProbe { get; set; }
     internal NativeSelectorChrome? Chrome => _chrome;
     internal RectD ScreenBounds => _bounds;
     internal Int32Rect SelectionRectangle => _selection;
@@ -174,7 +175,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             if (_closed || !IsVisible) return;
             try
             {
+                SelectorTimeline.Mark?.Invoke("native-pointer-prepare-start");
                 PreparePointerFeedback();
+                SelectorTimeline.Mark?.Invoke("native-pointer-prepare-complete");
                 IsReady = true;
                 SelectorTimeline.Mark?.Invoke("native-input-ready");
                 RefreshHover();
@@ -202,8 +205,11 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _showing = true;
         try
         {
+            SelectorTimeline.Mark?.Invoke("native-chrome-callback-enter");
             _ = ReadEffectivePointer();
+            SelectorTimeline.Mark?.Invoke("native-feedback-prepare-start");
             PrepareVisualFeedback();
+            SelectorTimeline.Mark?.Invoke("native-feedback-prepare-complete");
             var chrome = _chrome ?? CreateChrome();
             if (_closed || !IsVisible) { chrome.Dispose(); return; }
             _chrome = chrome;
