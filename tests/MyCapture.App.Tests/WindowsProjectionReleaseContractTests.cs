@@ -158,22 +158,59 @@ public sealed class WindowsProjectionReleaseContractTests
         Assert.Contains("$env:MYCAPTURE_PROJECTION_LINKER_PATH = $cachedLinker", prepare, StringComparison.Ordinal);
         Assert.DoesNotContain("PackageReference", targets.Descendants().Select(element => element.Name.LocalName));
         Assert.DoesNotContain(targets.Descendants(), element => element.Name.LocalName is "PublishTrimmed" or "EnableTrimAnalyzer");
+        // A plain profile publish gets the pinned pack from its own restore: downloaded, never
+        // referenced, and compared with the pin before the linker runs.
+        XElement download = Assert.Single(targets.Descendants("PackageDownload"));
+        Assert.Equal("Microsoft.NET.ILLink.Tasks", (string?)download.Attribute("Include"));
+        Assert.Equal("[$(MyCaptureProjectionLinkerVersion)]", (string?)download.Attribute("Version"));
+        Assert.Contains(targets.Descendants("Error"), error => ((string?)error.Attribute("Condition") ?? string.Empty)
+            .Contains("'$(_ProjectionLinkerPackSha512)' != '$(MyCaptureProjectionLinkerPackageSha512)'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Release", "x64", null, null, true)]
+    [InlineData("Release", "x86", null, null, true)]
+    [InlineData("Release", "x86", "false", null, false)]
+    [InlineData("Debug", "x86", null, null, false)]
+    [InlineData("Release", null, null, null, false)]
+    [InlineData("Release", "x86", null, "prepared-linker", false)]
+    public void PinnedLinkerPack_IsRestoredOnlyByAPlainTrimmedProfilePublish(
+        string configuration, string? architecture, string? trimOverride, string? preparedLinker, bool expected)
+    {
+        // CI and a developer publish with the profile alone; build/package.ps1 prepares the linker
+        // itself, and ordinary builds and tests never ask for the pack.
+        using JsonDocument evaluation = Evaluate(configuration, architecture, trimOverride, preparedLinker, "-getItem:PackageDownload");
+        string[] downloads = evaluation.RootElement.GetProperty("Items").GetProperty("PackageDownload").EnumerateArray()
+            .Select(item => item.GetProperty("Identity").GetString() + " " + item.GetProperty("Version").GetString()).ToArray();
+        if (expected) Assert.Equal(["Microsoft.NET.ILLink.Tasks [10.0.12]"], downloads);
+        else Assert.Empty(downloads);
     }
 
     private static Dictionary<string, string> EvaluateProperties(string configuration, string? architecture, string? trimOverride)
+    {
+        using JsonDocument json = Evaluate(configuration, architecture, trimOverride, null,
+            "-getProperty:MyCaptureTrimWindowsProjection,PublishTrimmed,SelfContained,PublishReadyToRun,PublishSingleFile,RuntimeIdentifier");
+        return json.RootElement.GetProperty("Properties").EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value.GetString() ?? string.Empty, StringComparer.Ordinal);
+    }
+
+    private static JsonDocument Evaluate(string configuration, string? architecture, string? trimOverride, string? preparedLinker, string query)
     {
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = RepositoryRoot(), UseShellExecute = false,
             RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
         };
+        // The packaging script exports this variable; an inherited value must not decide the result.
+        if (preparedLinker is null) start.Environment.Remove("MYCAPTURE_PROJECTION_LINKER_PATH");
+        else start.Environment["MYCAPTURE_PROJECTION_LINKER_PATH"] = preparedLinker;
         start.ArgumentList.Add("msbuild");
         start.ArgumentList.Add(PathFor("src/MyCapture.App/MyCapture.App.csproj"));
         start.ArgumentList.Add("-nologo");
         start.ArgumentList.Add("-p:Configuration=" + configuration);
         if (architecture is not null) start.ArgumentList.Add("-p:PublishProfile=win-" + architecture + "-self-contained");
         if (trimOverride is not null) start.ArgumentList.Add("-p:MyCaptureTrimWindowsProjection=" + trimOverride);
-        start.ArgumentList.Add("-getProperty:MyCaptureTrimWindowsProjection,PublishTrimmed,SelfContained,PublishReadyToRun,PublishSingleFile,RuntimeIdentifier");
+        start.ArgumentList.Add(query);
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("MSBuild property evaluation did not start.");
         Task<string> stdout = process.StandardOutput.ReadToEndAsync();
         Task<string> stderr = process.StandardError.ReadToEndAsync();
@@ -186,9 +223,7 @@ public sealed class WindowsProjectionReleaseContractTests
         string output = stdout.GetAwaiter().GetResult();
         string errors = stderr.GetAwaiter().GetResult();
         Assert.True(process.ExitCode == 0, $"MSBuild exit {process.ExitCode}: {output}\n{errors}");
-        using JsonDocument json = JsonDocument.Parse(output);
-        return json.RootElement.GetProperty("Properties").EnumerateObject()
-            .ToDictionary(property => property.Name, property => property.Value.GetString() ?? string.Empty, StringComparer.Ordinal);
+        return JsonDocument.Parse(output);
     }
 
     private static string PathFor(string path) => Path.Combine(RepositoryRoot(), path.Replace('/', Path.DirectorySeparatorChar));

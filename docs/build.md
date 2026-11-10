@@ -93,10 +93,12 @@ dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:P
 
 두 self-contained Release publish 프로필은 `MyCaptureTrimWindowsProjection=true`로 `Microsoft.Windows.SDK.NET.dll`만 링크합니다. 애플리케이션·.NET·WPF·`WinRT.Runtime.dll`의 컴파일과 ReadyToRun 설정은 유지합니다. 개발 빌드와 테스트 빌드에는 적용하지 않습니다. Store·패키지 식별·시작 작업 및 COM 경계에서 사용하는 형식은 모든 멤버를 보존합니다. 보존 목록은 `build/WindowsProjectionRoots.xml`입니다.
 
-ILLink 버전과 패키지 해시는 `build/WindowsProjectionTrim.targets`에 고정합니다. `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 기존 캐시가 없으면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증합니다. 애플리케이션의 PackageReference나 trim analyzer를 켜지 않습니다. 직접 publish할 때도 먼저 이 준비 스크립트를 실행합니다.
+ILLink 버전과 패키지 해시는 `build/WindowsProjectionTrim.targets`에 고정합니다. 애플리케이션의 PackageReference나 trim analyzer를 켜지 않습니다.
+
+- 프로필로 직접 publish할 때는 준비 단계가 없습니다. 복원이 고정한 버전의 ILLink 패키지를 NuGet 캐시에 내려받고(참조하지 않고 받기만 하는 `PackageDownload`), publish는 NuGet이 그 패키지 옆에 적어 둔 SHA-512가 고정값과 같을 때만 링커를 실행합니다. `--no-restore`로 publish하려면 같은 속성으로 먼저 복원해 둡니다. CI의 x86 publish가 이 경로입니다.
+- `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 캐시에 없으면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증하고 `MYCAPTURE_PROJECTION_LINKER_PATH`로 넘깁니다. 이 변수가 있으면 복원은 패키지를 받지 않습니다.
 
 ```powershell
-& .\build\prepare-projection-linker.ps1
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishProfile=win-x64-self-contained -o '<새 x64 출력 폴더>'
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 --self-contained true -p:Platform=x86 -p:PublishProfile=win-x86-self-contained -o '<새 x86 출력 폴더>'
 ```

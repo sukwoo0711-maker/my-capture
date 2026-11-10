@@ -8,6 +8,15 @@
     <MyCaptureProjectionTrimWorkRoot Condition="'$(MyCaptureProjectionTrimWorkRoot)' == ''">$(TEMP)\mycapture-projection\$(MSBuildProjectName)\$(RuntimeIdentifier)\$([System.Guid]::NewGuid().ToString('N'))</MyCaptureProjectionTrimWorkRoot>
   </PropertyGroup>
 
+  <!-- A plain `dotnet publish -p:PublishProfile=...` (CI, a developer) has no prepared linker, so
+       its restore downloads the pinned pack into the NuGet cache. PackageDownload only downloads:
+       no package props/targets are imported and nothing is referenced, so compilation and trim
+       analyzers stay unchanged. build/package.ps1 prepares the linker itself and sets
+       MYCAPTURE_PROJECTION_LINKER_PATH, which turns this item off. -->
+  <ItemGroup Condition="'$(MyCaptureTrimWindowsProjection)' == 'true' and '$(MYCAPTURE_PROJECTION_LINKER_PATH)' == ''">
+    <PackageDownload Include="Microsoft.NET.ILLink.Tasks" Version="[$(MyCaptureProjectionLinkerVersion)]" />
+  </ItemGroup>
+
   <UsingTask TaskName="PrepareMyCaptureProjectionLink" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <Assemblies ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
@@ -59,10 +68,20 @@
            Text="Projection trimming requires self-contained, ReadyToRun, non-single-file publishing with PublishTrimmed=false." />
     <PropertyGroup>
       <_ProjectionLinker Condition="'$(MYCAPTURE_PROJECTION_LINKER_PATH)' != ''">$(MYCAPTURE_PROJECTION_LINKER_PATH)</_ProjectionLinker>
-      <_ProjectionLinker Condition="'$(_ProjectionLinker)' == ''">$(NuGetPackageRoot)microsoft.net.illink.tasks\$(MyCaptureProjectionLinkerVersion)\tools\net\illink.dll</_ProjectionLinker>
+      <!-- A packages folder given as a property (RestorePackagesPath) arrives without its trailing slash. -->
+      <_ProjectionLinkerPack>$([MSBuild]::EnsureTrailingSlash('$(NuGetPackageRoot)'))microsoft.net.illink.tasks\$(MyCaptureProjectionLinkerVersion)\</_ProjectionLinkerPack>
+      <_ProjectionLinker Condition="'$(_ProjectionLinker)' == ''">$(_ProjectionLinkerPack)tools\net\illink.dll</_ProjectionLinker>
       <_ProjectionRoot>$([System.IO.Path]::GetFullPath('$(MyCaptureProjectionTrimWorkRoot)'))</_ProjectionRoot>
     </PropertyGroup>
-    <Error Condition="!Exists('$(_ProjectionLinker)')" Text="The pinned ILLink pack is missing: $(_ProjectionLinker). Prepare Microsoft.NET.ILLink.Tasks $(MyCaptureProjectionLinkerVersion), or use -p:MyCaptureTrimWindowsProjection=false for an untrimmed diagnostic publish (not a release package)." />
+    <Error Condition="!Exists('$(_ProjectionLinker)')" Text="The pinned ILLink pack is missing: $(_ProjectionLinker). Publish without --no-restore so that restore downloads Microsoft.NET.ILLink.Tasks $(MyCaptureProjectionLinkerVersion), or run build/prepare-projection-linker.ps1 first, or use -p:MyCaptureTrimWindowsProjection=false for an untrimmed diagnostic publish (not a release package)." />
+    <!-- The pack restore put in the NuGet cache must be the pinned package. NuGet stores the
+         Base64 SHA-512 of the .nupkg next to it; a linker prepared by the script was verified there. -->
+    <PropertyGroup Condition="'$(MYCAPTURE_PROJECTION_LINKER_PATH)' == ''">
+      <_ProjectionLinkerPackHashFile>$(_ProjectionLinkerPack)microsoft.net.illink.tasks.$(MyCaptureProjectionLinkerVersion).nupkg.sha512</_ProjectionLinkerPackHashFile>
+      <_ProjectionLinkerPackSha512 Condition="Exists('$(_ProjectionLinkerPackHashFile)')">$([System.IO.File]::ReadAllText('$(_ProjectionLinkerPackHashFile)').Trim())</_ProjectionLinkerPackSha512>
+    </PropertyGroup>
+    <Error Condition="'$(MYCAPTURE_PROJECTION_LINKER_PATH)' == '' and '$(_ProjectionLinkerPackSha512)' != '$(MyCaptureProjectionLinkerPackageSha512)'"
+           Text="The ILLink pack in the NuGet cache does not match its pinned SHA-512 ($(_ProjectionLinkerPackHashFile)). Remove that package folder and restore again, or run build/prepare-projection-linker.ps1." />
     <ItemGroup>
       <_ProjectionOriginal Include="@(_ReadyToRunCompileList)" Condition="'%(Filename)%(Extension)' == 'Microsoft.Windows.SDK.NET.dll'" />
     </ItemGroup>
