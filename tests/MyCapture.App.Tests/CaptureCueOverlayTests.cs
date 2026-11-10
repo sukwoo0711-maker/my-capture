@@ -41,7 +41,7 @@ public sealed class CaptureCueOverlayTests
             view.InitializePointer();
             RenderTargetBitmap hover = Render(view);
             Assert.Equal(CaptureCueState.Click, view.CueState);
-            Assert.Equal(UiText.Get("CaptureGuide2_ClickWindow") + "  620 × 420", view.TargetLabelForTest);
+            Assert.Equal(UiText.Get("CaptureGuide2_ClickWindow") + UiText.Get("CaptureGuide2_ElementWheelHint") + "  620 × 420", view.TargetLabelForTest);
             Assert.Equal(CaptureCueTabPlacement.Above, view.TargetTabPlacementForTest);
             Rect tab = view.TargetTabForTest!.Value;
             Assert.Equal(120, tab.Left, 6);
@@ -107,7 +107,7 @@ public sealed class CaptureCueOverlayTests
         {
             view.InitializePointer();
             Render(view);
-            Assert.Equal("Click: Capture window  620 × 420", view.TargetLabelForTest);
+            Assert.Equal("Click: Capture window · Wheel: Select element  620 × 420", view.TargetLabelForTest);
             pointer = new PointD(1000, 120);
             view.UpdatePointer(false, false);
             Render(view);

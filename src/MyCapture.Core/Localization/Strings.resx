@@ -5611,4 +5611,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>번역 그림으로 보기</value>
   </data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>휠</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>창 안 요소 선택 (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>클릭: 요소 캡처 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>클릭: 요소 텍스트 복사 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · 휠: 요소 선택</value></data>
 </root>

@@ -12,7 +12,10 @@ internal sealed class NativeSelectorHoverTab
     private readonly Brush _accent, _text;
     private readonly Typeface _ui, _mono;
     private readonly string[] _labels = [UiText.Get("CaptureGuide2_ClickWindow"), UiText.Get("CaptureGuide2_ClickMonitor"),
-        UiText.Get("CaptureGuide2_ClickWindowText"), UiText.Get("CaptureGuide2_ClickMonitorText")];
+        UiText.Get("CaptureGuide2_ClickWindowText"), UiText.Get("CaptureGuide2_ClickMonitorText"),
+        UiText.Get("CaptureGuide2_ClickElement"), UiText.Get("CaptureGuide2_ClickElementText"),
+        UiText.Get("CaptureGuide2_ClickWindow") + UiText.Get("CaptureGuide2_ElementWheelHint"),
+        UiText.Get("CaptureGuide2_ClickWindowText") + UiText.Get("CaptureGuide2_ElementWheelHint")];
     private readonly DrawingGroup _drawing = new();
     private FormattedText? _labelText, _sizeText;
     private int _labelIndex = -1, _width, _height;
@@ -38,10 +41,11 @@ internal sealed class NativeSelectorHoverTab
     }
 
     internal Rect Render(RectD shown, RectD target, bool wholeMonitor, bool textMode, double scale,
-        Size viewport, IReadOnlyList<Rect> avoid)
+        Size viewport, IReadOnlyList<Rect> avoid, bool element = false, bool elementHint = false)
     {
         RenderCount++;
-        int index = (textMode ? 2 : 0) + (wholeMonitor ? 1 : 0);
+        int index = element ? (textMode ? 5 : 4) : elementHint && !wholeMonitor ? (textMode ? 7 : 6)
+            : (textMode ? 2 : 0) + (wholeMonitor ? 1 : 0);
         int width = (int)target.Width, height = (int)target.Height;
         if (_labelText is null || _labelIndex != index || _width != width || _height != height || _scale != scale)
         {

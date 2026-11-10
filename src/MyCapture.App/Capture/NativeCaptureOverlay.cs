@@ -271,6 +271,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
 
     internal void BeginSelection(PointD bitmapPoint)
     {
+        SelectorTimeline.Mark?.Invoke("selector-begin-selection");
         _dispatcher.VerifyAccess();
         if (_closed || Frame is null || _copyingColor) return;
         DismissStartGuide();
@@ -279,6 +280,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _anchor = Clamp(bitmapPoint);
         RefreshHover();
         _selectedWindow = null;
+        _elements?.Stop();
         _dragBeyondClick = false;
         _dragging = true;
         SetSelection(Int32Rect.Empty);
@@ -301,6 +303,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
 
     internal void EndSelection(PointD bitmapPoint)
     {
+        try
+        {
         if (_closed || !_dragging) return;
         MoveSelection(bitmapPoint);
         _dragging = false;
@@ -319,6 +323,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         if ((CaptureOverlayView.ResolvePresetSelection(_anchor, PresetSize, FrameBounds)
             ?? CaptureOverlayView.ResolveCompletedDrag(_anchor, Clamp(bitmapPoint), FrameBounds, ActiveRatio, RecordingSelection)) is { Width: >= 2, Height: >= 2 } region)
             CompleteSelection(region);
+        }
+        finally { SelectorTimeline.Mark?.Invoke("selector-end-selection"); }
     }
 
     private PointD Clamp(PointD point) => new(Math.Clamp(point.X, 0, _bounds.Width), Math.Clamp(point.Y, 0, _bounds.Height));
@@ -345,6 +351,15 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
 
     internal void ConfirmCurrent()
     {
+        if (Selection is null && !_dragging)
+        {
+            RefreshHover();
+            if (_hoverRegion is { } hover)
+            {
+                _elements?.Stop(); _selectedWindow = _hoverWindow;
+                CompleteSelection(hover, _hoverWholeMonitor); return;
+            }
+        }
         if (_selection.Width >= 2 && _selection.Height >= 2)
             CompleteSelection(new RectD(_selection.X, _selection.Y, _selection.Width, _selection.Height));
     }
@@ -422,6 +437,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         _dispatcher.VerifyAccess();
         if (_closed) return;
         _closed = true;
+        _elements?.Dispose(); _elements = null; CreateElementSource = null;
+        _elementScaleWindow = null;
         _pendingChromeFocus = null;
         ReleaseDeferredGuides();
         _precisionPointer?.Reset();
@@ -476,6 +493,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                     ColorCopied = null;
                     SelectorTimeline.Mark?.Invoke("native-resources-released");
                     Closed?.Invoke(this, EventArgs.Empty);
+                    SelectorTimeline.Mark?.Invoke("selector-closed");
                 }
             }
         }
@@ -519,6 +537,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             case 0x000F:
                 Paint(hwnd);
                 return IntPtr.Zero;
+            case 0x020A: // WM_MOUSEWHEEL: signed high word, 120 units per level.
+                if (HandleElementWheel(unchecked((short)((wParam.ToInt64() >> 16) & 0xffff)))) return IntPtr.Zero;
+                break;
             case 0x0201: // WM_LBUTTONDOWN
                 BeginSelection(Pointer());
                 _ = NativeSelectorInterop.SetCapture(hwnd);
