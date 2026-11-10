@@ -65,7 +65,7 @@ public sealed class RecordingAudioMediaDetailsTests
         Assert.Equal(3, details.SizeBytes);
         using var language = UiText.UseLanguage("en-US");
         Assert.Equal(UiText.Get("MediaInfo.Unavailable"), MediaDetailsWindow.AudioText(details));
-        Assert.NotEqual(UiText.Get("Recording_NoAudio"), MediaDetailsWindow.AudioText(details));
+        Assert.NotEqual(UiText.Get("MediaInfo.AudioNone"), MediaDetailsWindow.AudioText(details));
         MediaDetails missing = Assert.Single(await MediaDetailsReader.ReadAsync([new(Path.Combine(directory, "missing.mp4"))]));
         Assert.True(missing.FileUnavailable);
         Assert.Null(missing.Audio);
@@ -75,10 +75,10 @@ public sealed class RecordingAudioMediaDetailsTests
     }
 
     [Theory]
-    [InlineData("ko-KR", "AAC 48 kHz 스테레오", "소리 없음", "모노", "6채널")]
-    [InlineData("en-US", "AAC 48 kHz stereo", "No audio", "mono", "6 channels")]
+    [InlineData("ko-KR", "AAC 48 kHz 스테레오", "없음", "있음", "모노", "6채널")]
+    [InlineData("en-US", "AAC 48 kHz stereo", "None", "Present", "mono", "6 channels")]
     public void AudioFactUsesProbedCodecRateAndChannels(string language, string expected, string silent,
-        string mono, string multichannel)
+        string present, string mono, string multichannel)
     {
         using var scope = UiText.UseLanguage(language);
         var audio = new AudioSourceInfo(1, new Guid("00001610-0000-0010-8000-00AA00389B71"), 48_000, 2, 0);
@@ -89,8 +89,12 @@ public sealed class RecordingAudioMediaDetailsTests
             { Audio = new(audio with { SampleRate = 44_100, Channels = 1 }) }));
         Assert.Equal("AAC 48 kHz " + multichannel, MediaDetailsWindow.AudioText(details with
             { Audio = new(audio with { Channels = 6 }) }));
-        Assert.Equal(UiText.Get("MediaInfo.AudioPresent"), MediaDetailsWindow.AudioText(details with
+        Assert.Equal(present, MediaDetailsWindow.AudioText(details with
             { Audio = new(audio with { Subtype = Guid.Empty, SampleRate = 0, Channels = 0 }) }));
+        // The value sits under the "소리"/"Audio" label, so neither fallback repeats that word.
+        string label = UiText.Get("MediaInfo.Audio");
+        Assert.DoesNotContain(label, silent, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(label, present, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -134,7 +138,7 @@ public sealed class RecordingAudioMediaDetailsTests
                             bool hasAudio = ReferenceEquals(record, records[0]);
                             string state = hasAudio ? "audio" : "silent";
                             string expected = hasAudio ? (language == "ko-KR" ? "AAC 48 kHz 스테레오" : "AAC 48 kHz stereo")
-                                : UiText.Get("Recording_NoAudio");
+                                : UiText.Get("MediaInfo.AudioNone");
                             services.ViewModel!.Select(record.Id);
                             gallery.UpdateLayout();
                             PumpUntil(() => gallery.PendingDetailsAudioRead.IsCompleted);
@@ -172,7 +176,7 @@ public sealed class RecordingAudioMediaDetailsTests
                         PumpUntil(() => gallery.PendingDetailsAudioRead.IsCompleted);
                         TextBlock current = Descendants((FrameworkElement)gallery.FindName("GalleryDetailsContent"))
                             .OfType<TextBlock>().Single(row => AutomationProperties.GetAutomationId(row) == "LibraryDetailsAudio");
-                        Assert.EndsWith(UiText.Get("Recording_NoAudio"), current.Text);
+                        Assert.Equal(UiText.Get("MediaInfo.Audio") + ": " + UiText.Get("MediaInfo.AudioNone"), current.Text);
                         VerifySameRecordEditAndLateRead(services, gallery, records[1], current);
                         gallery.SetDetailsPaneOpen(false);
                         Assert.Empty(current.Text);
@@ -205,7 +209,7 @@ public sealed class RecordingAudioMediaDetailsTests
     {
         GalleryItemViewModel selected = services.ViewModel!.SingleSelectedTile!;
         Assert.Same(record, selected.Record);
-        Assert.EndsWith(UiText.Get("Recording_NoAudio"), row.Text);
+        Assert.Equal(UiText.Get("MediaInfo.Audio") + ": " + UiText.Get("MediaInfo.AudioNone"), row.Text);
         var readFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseOld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         gallery.SetDetailsPaneOpen(false);
@@ -253,7 +257,7 @@ public sealed class RecordingAudioMediaDetailsTests
         Assert.NotSame(editedRead, movedRead);
         PumpUntil(() => movedRead.IsCompleted);
         movedRead.GetAwaiter().GetResult();
-        Assert.Equal(UiText.Get("MediaInfo.Audio") + ": " + UiText.Get("Recording_NoAudio"), row.Text);
+        Assert.Equal(UiText.Get("MediaInfo.Audio") + ": " + UiText.Get("MediaInfo.AudioNone"), row.Text);
         Assert.Equal(row.Text, new TextBlockAutomationPeer(row).GetName());
         record.Tags = "updated tag";
         selected.RaiseMetaChanged();

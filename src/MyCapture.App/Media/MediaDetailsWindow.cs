@@ -108,7 +108,8 @@ internal sealed class MediaDetailsWindow : Window
     internal static string AudioText(MediaDetails details)
     {
         if (details.Audio is null) return UiText.Get("MediaInfo.Unavailable");
-        if (details.Audio.Format is not { } audio) return UiText.Get("Recording_NoAudio");
+        // The fact already sits under the "소리"/"Audio" label, so the value does not repeat that word.
+        if (details.Audio.Format is not { } audio) return UiText.Get("MediaInfo.AudioNone");
         var parts = new List<string>();
         string? codec = audio.Subtype.ToString("D").ToUpperInvariant() switch
         {

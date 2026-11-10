@@ -5639,7 +5639,10 @@ Install the model?</value></data>
     <value>{0} channels</value>
   </data>
   <data name="MediaInfo.AudioPresent" xml:space="preserve">
-    <value>Audio present</value>
+    <value>Present</value>
+  </data>
+  <data name="MediaInfo.AudioNone" xml:space="preserve">
+    <value>None</value>
   </data>
   <data name="RecordingAudio_System" xml:space="preserve">
     <value>System audio</value>

@@ -5639,7 +5639,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>{0}채널</value>
   </data>
   <data name="MediaInfo.AudioPresent" xml:space="preserve">
-    <value>소리 있음</value>
+    <value>있음</value>
+  </data>
+  <data name="MediaInfo.AudioNone" xml:space="preserve">
+    <value>없음</value>
   </data>
   <data name="RecordingAudio_System" xml:space="preserve">
     <value>시스템 소리</value>
