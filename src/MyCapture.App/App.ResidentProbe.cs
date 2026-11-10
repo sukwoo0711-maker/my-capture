@@ -317,16 +317,22 @@ public partial class App
             CompositionTarget.Rendering += rendering;
             try
             {
-                if (native is not null)
+                if (!(s_residentProbe?.Has("selector-freeform") == true
+                    || (s_residentProbe?.Has("selector-freeform-once") == true && !_probeFreeformUsed))
+                    || !await ProbeFreeformSelectionAsync(recorder, name, native, overlay?.Content as CaptureOverlayView,
+                        () => selected = Stopwatch.GetTimestamp()))
                 {
-                    // Exercise the same drag/controller and damage path as native mouse input.
-                    native.BeginSelection(new PointD(160, 120));
-                    native.MoveSelection(new PointD(800, 480));
-                    native.EndSelection(new PointD(1440, 840));
-                    if (!native.IsClosed || native.LiveOwnedNativeHandles != 0)
-                        throw new InvalidOperationException("Native selector resources remained live after selection.");
+                    if (native is not null)
+                    {
+                        // Exercise the same drag/controller and damage path as native mouse input.
+                        native.BeginSelection(new PointD(160, 120));
+                        native.MoveSelection(new PointD(800, 480));
+                        native.EndSelection(new PointD(1440, 840));
+                        if (!native.IsClosed || native.LiveOwnedNativeHandles != 0)
+                            throw new InvalidOperationException("Native selector resources remained live after selection.");
+                    }
+                    else overlay!.CompleteSelection(new RectD(160, 120, 1280, 720));
                 }
-                else overlay!.CompleteSelection(new RectD(160, 120, 1280, 720));
                 await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
             }
             finally

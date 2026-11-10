@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Diagnostics;
+using MyCapture.Core.Primitives;
 
 namespace MyCapture.App.Capture;
 
@@ -16,6 +17,10 @@ internal sealed class NativeSelectorDib : IDisposable
     private bool _initialized;
     private IReadOnlyList<NativeSelectorStamp> _stamps = [];
     private NativeSelectorStamp? _anchorStamp;
+    // Allocated only after entering freeform. Signed fan-triangle windings let a new point
+    // change only its closing triangle, including when a stroke crosses itself.
+    private int[]? _freeformWinding;
+    private bool _freeform;
     internal IntPtr Bitmap { get; private set; }
     internal IntPtr Dc { get; private set; }
     internal IntPtr Bits { get; private set; }
@@ -79,6 +84,86 @@ internal sealed class NativeSelectorDib : IDisposable
         _ = NativeSelectorInterop.GdiFlush();
         foreach (Int32Rect region in dirty) { Update(region); CompositeStamps(region); }
         return dirty;
+    }
+
+    internal void BeginFreeform()
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _freeformWinding ??= new int[checked(Width * Height)];
+        Array.Clear(_freeformWinding);
+        _freeform = true;
+    }
+
+    internal void EndFreeform(Int32Rect dirty)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _freeform = false;
+        Reveal = Int32Rect.Empty;
+        dirty = NativeSelectorDirtyRegions.Clip(dirty, Width, Height);
+        if (dirty.Width == 0 || dirty.Height == 0) return;
+        _ = NativeSelectorInterop.GdiFlush();
+        Update(dirty);
+        CompositeStamps(dirty);
+    }
+
+    /// <summary>
+    /// Append the signed triangle between the first, previous and new point. Only runs whose
+    /// nonzero membership changed are recopied or invalidated. Half-open centre samples match
+    /// the winding fill; neither point input nor this raster update allocates a geometry/mask.
+    /// </summary>
+    internal void AppendFreeformTriangle(PointD first, PointD previous, PointD next, IntPtr window)
+    {
+        if (!_freeform || _freeformWinding is null) return;
+        double cross = (previous.X - first.X) * (next.Y - first.Y) - (next.X - first.X) * (previous.Y - first.Y);
+        if (cross == 0) return;
+        int direction = cross > 0 ? 1 : -1;
+        int top = Math.Clamp((int)Math.Ceiling(Math.Min(first.Y, Math.Min(previous.Y, next.Y)) - 0.5), 0, Height);
+        int bottom = Math.Clamp((int)Math.Ceiling(Math.Max(first.Y, Math.Max(previous.Y, next.Y)) - 0.5), 0, Height);
+        _ = NativeSelectorInterop.GdiFlush();
+        for (int y = top; y < bottom; y++)
+        {
+            double left = double.PositiveInfinity, right = double.NegativeInfinity;
+            TriangleIntersection(first, previous, y + 0.5, ref left, ref right);
+            TriangleIntersection(previous, next, y + 0.5, ref left, ref right);
+            TriangleIntersection(next, first, y + 0.5, ref left, ref right);
+            if (!(left < right)) continue;
+            int start = Math.Clamp((int)Math.Ceiling(left - 0.5), 0, Width);
+            int end = Math.Clamp((int)Math.Ceiling(right - 0.5), 0, Width);
+            int changedStart = -1;
+            for (int x = start; x < end; x++)
+            {
+                int offset = y * Width + x;
+                int before = _freeformWinding[offset];
+                int after = before + direction;
+                _freeformWinding[offset] = after;
+                bool changed = (before == 0) != (after == 0);
+                if (changed && changedStart < 0) changedStart = x;
+                else if (!changed && changedStart >= 0)
+                {
+                    UpdateFreeformRun(changedStart, y, x - changedStart, window);
+                    changedStart = -1;
+                }
+            }
+            if (changedStart >= 0) UpdateFreeformRun(changedStart, y, end - changedStart, window);
+        }
+    }
+
+    private static void TriangleIntersection(PointD a, PointD b, double y, ref double left, ref double right)
+    {
+        if (!((a.Y <= y && b.Y > y) || (b.Y <= y && a.Y > y))) return;
+        double x = a.X + (y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
+        left = Math.Min(left, x);
+        right = Math.Max(right, x);
+    }
+
+    private void UpdateFreeformRun(int x, int y, int width, IntPtr window)
+    {
+        var dirty = new Int32Rect(x, y, width, 1);
+        Update(dirty);
+        CompositeStamps(dirty);
+        if (window == IntPtr.Zero) return;
+        var native = new NativeSelectorInterop.Rect(x, y, width, 1);
+        _ = NativeSelectorInterop.InvalidateRect(window, ref native, false);
     }
 
     internal IReadOnlyList<Int32Rect> SetStamps(IReadOnlyList<NativeSelectorStamp> stamps)
@@ -146,6 +231,20 @@ internal sealed class NativeSelectorDib : IDisposable
         for (int y = region.Y; y < region.Y + region.Height; y++)
         {
             var row = new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width);
+            if (_freeform && _freeformWinding is { } winding)
+            {
+                int run = 0;
+                while (run < row.Length)
+                {
+                    bool inside = winding[y * Width + region.X + run] != 0;
+                    int end = run + 1;
+                    while (end < row.Length && (winding[y * Width + region.X + end] != 0) == inside) end++;
+                    if (inside) NativeSelectorPixels.MakeOpaque(row[run..end]);
+                    else _pixels.Dim(row[run..end]);
+                    run = end;
+                }
+                continue;
+            }
             if (y < Reveal.Y || y >= Reveal.Y + Reveal.Height || Reveal.Width == 0)
             {
                 _pixels.Dim(row);
@@ -174,6 +273,7 @@ internal sealed class NativeSelectorDib : IDisposable
         _ = NativeSelectorInterop.GdiFlush();
         Bitmap = Dc = Bits = _previous = IntPtr.Zero;
         _source = null;
+        _freeformWinding = null;
         _stamps = [];
         _anchorStamp = null;
     }

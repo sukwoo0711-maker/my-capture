@@ -25,6 +25,9 @@ internal enum CaptureSelectorMode
 
     /// <summary>A click copies the colour of the frozen pixel under the pointer; nothing is captured.</summary>
     Color,
+
+    /// <summary>A pointer-drawn outline captured with transparency.</summary>
+    Freeform,
 }
 
 /// <summary>Something the selector hands back to the app instead of capturing: it closes and the app runs it.</summary>
@@ -109,6 +112,8 @@ internal sealed class CaptureModeBar : Border
 
     private readonly RadioButton _capture;
     private readonly RadioButton _window;
+    private readonly RadioButton _freeform;
+    private string? _freeformUnavailableReason;
     private readonly RadioButton _text;
     private readonly RadioButton _color;
     private readonly RadioButton _captureKind;
@@ -190,6 +195,8 @@ internal sealed class CaptureModeBar : Border
         Decorate(_window);
         _window.Content = ButtonContent(_window, WindowIcon, null);
         _window.Checked += (_, _) => { if (!_syncing) WindowRequested?.Invoke(); };
+        _freeform = ModeButton(CaptureSelectorMode.Freeform, Geometry.Parse("M5,3 C0,3 1,12 6,14 C12,19 18,13 16,7 C15,3 10,1 5,3 Z M6,14 L4,18"), new TextBlock(), modeTemplate);
+        ToolTipService.SetShowOnDisabled(_freeform, true);
         _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), actionTemplate);
         _scroll = ActionButton(ScrollIcon, null, actionTemplate);
         _delay = ActionButton(DelayIcon, null, actionTemplate);
@@ -217,7 +224,7 @@ internal sealed class CaptureModeBar : Border
         KeyboardNavigation.SetDirectionalNavigation(_items, KeyboardNavigationMode.Cycle);
         foreach (UIElement item in new UIElement[]
                  {
-                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _fullScreen, _scroll, _delay,
+                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _freeform, _fullScreen, _scroll, _delay,
                      _ratio, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
                  })
             _items.Children.Add(item);
@@ -247,6 +254,7 @@ internal sealed class CaptureModeBar : Border
 
     internal RadioButton CaptureButton => _capture;
     internal RadioButton WindowButton => _window;
+    internal RadioButton FreeformButton => _freeform;
 
     internal RadioButton TextButton => _text;
 
@@ -282,8 +290,11 @@ internal sealed class CaptureModeBar : Border
     /// by a setting.
     /// </summary>
     internal void Configure(bool detectWindows, bool textAvailable, bool colorAvailable, bool otherActions = false,
-        bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true)
+        bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true,
+        string? freeformUnavailableReason = null)
     {
+        _freeformUnavailableReason = freeformUnavailableReason ?? (recording ? UiText.Get("CaptureFreeform_Recording") : null);
+        _freeform.IsEnabled = _freeformUnavailableReason is null;
         _recording = recording;
         _otherActions = otherActions;
         _compactActions = false;
@@ -360,12 +371,13 @@ internal sealed class CaptureModeBar : Border
         {
             _capture.IsChecked = mode == CaptureSelectorMode.Capture && !windowSelected;
             _window.IsChecked = mode == CaptureSelectorMode.Capture && windowSelected;
+            _freeform.IsChecked = mode == CaptureSelectorMode.Freeform;
             _text.IsChecked = mode == CaptureSelectorMode.Text;
             _color.IsChecked = mode == CaptureSelectorMode.Color;
         }
         finally { _syncing = false; }
         // The colour mode picks a pixel, not a region: nothing for a ratio to apply to.
-        _ratio.IsEnabled = mode != CaptureSelectorMode.Color;
+        _ratio.IsEnabled = mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform);
     }
 
     /// <summary>Fills in the current lock, without raising <see cref="RatioRequested"/>.</summary>
@@ -563,6 +575,13 @@ internal sealed class CaptureModeBar : Border
         Describe(_capture, _recording ? "CaptureBar_RecordRegionHelp" : "CaptureGuide2_RegionOnlyHelp", key: null);
         AutomationProperties.SetName(_window, UiText.Get("CaptureBar_Window"));
         Describe(_window, "CaptureBar_WindowHelp", key: null);
+        AutomationProperties.SetName(_freeform, UiText.Get("CaptureFreeform_Name"));
+        Describe(_freeform, "CaptureFreeform_Help", "F");
+        if (_freeformUnavailableReason is { } reason)
+        {
+            _freeform.ToolTip = reason;
+            AutomationProperties.SetHelpText(_freeform, reason);
+        }
         AutomationProperties.SetName(_fullScreen, UiText.Get("CaptureGuide2_FullScreen"));
         Describe(_fullScreen, _recording ? "CaptureBar_RecordFullScreenHelp" : "CaptureGuide2_FullScreenHelp", key: null);
         AutomationProperties.SetName(_scroll, UiText.Get("Text_4DBA30197C0A"));
@@ -597,6 +616,7 @@ internal sealed class CaptureModeBar : Border
     /// <summary>Routes Enter through the same activation as a mouse/Space click.</summary>
     internal void ActivateButton(ButtonBase button)
     {
+        if (!button.IsEnabled) return;
         if (button is RegionModeButton region)
         {
             region.Activate();

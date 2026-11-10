@@ -136,7 +136,9 @@ internal static class ClipboardImageService
             var data = new DataObject();
             using var pngStream = new MemoryStream(pngBytes, writable: false);
             data.SetData("PNG", pngStream);
-            data.SetImage(frozen);
+            // CF_BITMAP has no reliable alpha contract. PNG keeps the exact transparent
+            // picture; legacy consumers get the same white matte as JPEG exports.
+            data.SetImage(LegacyBitmap(frozen));
             if (originalText is not null) data.SetText(originalText, TextDataFormat.UnicodeText);
             // Only an opaque process-local reference travels with the clipboard. File exports
             // and PNG metadata retain their existing privacy rules.
@@ -200,6 +202,25 @@ internal static class ClipboardImageService
         BitmapSource copy = bitmap.Clone();
         copy.Freeze();
         return copy;
+    }
+
+    private static BitmapSource LegacyBitmap(BitmapSource bitmap)
+    {
+        if (!ImageCodec.HasAlpha(bitmap)) return bitmap;
+        BitmapSource bgra = bitmap.Format == System.Windows.Media.PixelFormats.Bgra32
+            ? bitmap
+            : new FormatConvertedBitmap(bitmap, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        int stride = checked(bitmap.PixelWidth * 4);
+        byte[] row = new byte[stride];
+        for (int y = 0; y < bitmap.PixelHeight; y++)
+        {
+            bgra.CopyPixels(new Int32Rect(0, y, bitmap.PixelWidth, 1), row, stride, 0);
+            for (int x = 3; x < row.Length; x += 4)
+                if (row[x] != 255)
+                    return ImageCodec.FlattenOnto(bitmap, System.Windows.Media.Colors.White);
+        }
+        // An ordinary opaque capture retains its original bitmap and needs no composition.
+        return bitmap;
     }
 
     /// <summary>One pin's PNG, released on image replacement or close; clipboard tokens are never cached.</summary>
