@@ -239,6 +239,7 @@ function Assert-SelfContainedPublish([string]$PublishRoot) {
     $requiredRuntimeFiles = @(
         'MyCapture.exe',
         'MyCapture.dll',
+        'zxing.dll',
         'coreclr.dll',
         'hostfxr.dll',
         'hostpolicy.dll',
