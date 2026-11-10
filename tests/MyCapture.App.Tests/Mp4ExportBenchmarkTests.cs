@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
@@ -83,8 +84,9 @@ public sealed class Mp4ExportBenchmarkTests
         int rounds = int.TryParse(Environment.GetEnvironmentVariable(RoundsVariable), out int parsed)
             ? Math.Clamp(parsed, 1, 10)
             : 3;
-        string output = Path.Combine(root, label);
-        Directory.CreateDirectory(output);
+        // The label names one folder directly below the output root. A label with a separator, or
+        // one that would leave the root, is refused instead of becoming part of an export path.
+        string output = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(root, label));
         RecordingResult recording = GifExportEngineBenchmarkTests.EnsureSyntheticClip(
             Path.Combine(root, "source-1080p30-10s.mp4"));
 
