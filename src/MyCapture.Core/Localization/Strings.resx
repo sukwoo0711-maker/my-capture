@@ -5614,4 +5614,18 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>번역 그림으로 보기</value>
   </data>
+  <data name="Pin_Collapse" xml:space="preserve"><value>접기</value></data>
+  <data name="Pin_Expand" xml:space="preserve"><value>펼치기</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+더블클릭</value></data>
+  <data name="Pin_CollapsedTip" xml:space="preserve"><value>더블클릭하면 핀을 펼칩니다.</value></data>
+  <data name="Tray_PinCollapsed" xml:space="preserve"><value>접힘</value></data>
+  <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>끌 때 가장자리와 다른 핀에 붙이기</value></data>
+  <data name="Pin_CollapseToggle" xml:space="preserve"><value>핀 접기·펼치기</value></data>
+  <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>접힌 핀 펼치기</value></data>
+  <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>더블클릭</value></data>
+  <data name="Pin_SnapBypass" xml:space="preserve"><value>붙이기 없이 이동</value></data>
+  <data name="Pin_ShiftDragGesture" xml:space="preserve"><value>Shift+드래그</value></data>
+  <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>확대·축소 · 100%에서 정지</value></data>
+  <data name="Pin_ZoomGesture" xml:space="preserve"><value>휠 / + / -</value></data>
+  <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+더블클릭으로 핀을 접거나 펼칩니다. 끌 때 Shift를 누르면 붙이기를 잠시 끕니다. 휠과 +·- 키의 확대·축소는 100%에서 한 번 멈춥니다.</value></data>
 </root>

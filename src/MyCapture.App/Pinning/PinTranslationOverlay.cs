@@ -32,6 +32,8 @@ internal sealed class PinOverlayComposition(BitmapSource source, Drawing? overla
     private BitmapSource? image;
     private ImageSource? display;
 
+    internal void ReleaseFlattenedImage() => image = null;
+
     internal BitmapSource Source { get; } = source;
     internal Drawing? Overlay { get; } = overlay;
     internal bool NeedsReview { get; } = needsReview;

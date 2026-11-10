@@ -1038,6 +1038,11 @@
                         AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                         IsChecked="{Binding CloseOnDoubleClick}" />
 
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                        Content="{loc:Text Pin_SnapWhileDragging}"
+                        AutomationProperties.Name="{loc:Text Pin_SnapWhileDragging}"
+                        IsChecked="{Binding SnapWhileDragging}" />
+
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"

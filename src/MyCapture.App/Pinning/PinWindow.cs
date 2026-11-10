@@ -105,6 +105,12 @@ internal sealed partial class PinWindow : Window
     private double _dragGrabMarginPx;
     private int _lastDragCursorX = int.MinValue;
     private int _lastDragCursorY = int.MinValue;
+    private ModifierKeys _lastDragModifiers;
+    private IReadOnlyList<PinSnap.Target> _snapTargets = [];
+    private IReadOnlyList<PinDisplayArea> _snapDisplays = [];
+    internal Func<IReadOnlyList<PinSnap.Target>> ReadSnapTargets { get; set; } = static () => [];
+    internal Func<IReadOnlyList<PinDisplayArea>> ReadSnapDisplays { get; set; } = static () =>
+        MonitorEnumerator.GetAll().Select(m => new PinDisplayArea(m.DeviceName, m.Bounds, m.WorkArea, m.ScaleFactor)).ToArray();
     private IntPtr _handle;
     // Closed as far as anyone can tell: set when a close starts, even while its exit still plays.
     private bool _isClosed;
@@ -342,6 +348,9 @@ internal sealed partial class PinWindow : Window
         PendingProvenanceUpdateForTest = content.PendingProvenance is { } pending
             ? ApplyPendingProvenanceAsync(new WeakReference<PinWindow>(this), pending)
             : Task.CompletedTask;
+        RefreshCollapseMenu();
+        if (_state.IsCollapsed) ShowThumbnail(VisualTreeHelper.GetDpi(this));
+        Closed += (_, _) => { _thumbnail = null; _thumbnailContent = null; };
     }
 
     internal Task PendingProvenanceUpdateForTest { get; }
@@ -406,7 +415,7 @@ internal sealed partial class PinWindow : Window
     /// </summary>
     internal void ShowHoverBar()
     {
-        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
+        if (_isClosed || _state.IsCollapsed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
         _hoverHideTimer.Stop();
         PinHoverBar bar = _hoverBar ??= CreateHoverBar();
         if (!bar.IsVisible)
@@ -889,7 +898,7 @@ internal sealed partial class PinWindow : Window
     /// </summary>
     private void RerenderAt(double monitorScale, double rasterScale, bool notify = true)
     {
-        if (_isClosed || !_content.CanRerender) return;
+        if (_isClosed || _state.IsCollapsed || !_content.CanRerender) return;
         _mermaidMonitorScale = monitorScale;
         PinContent rendered = _content.RenderedAt(rasterScale);
         PinContent? renderedSource = _markdownSourceContent?.RenderedAt(rasterScale);
@@ -908,6 +917,9 @@ internal sealed partial class PinWindow : Window
     private void ShowDisplayAt(Size element, DpiScale dpi)
     {
         if (_isClosed) return;
+        if (_state.IsCollapsed) { ShowThumbnail(dpi); return; }
+        _thumbnail = null;
+        _thumbnailContent = null;
         ImageSource display = DisplayContent.DisplayAt(new Size(element.Width * dpi.DpiScaleX, element.Height * dpi.DpiScaleY));
         if (!ReferenceEquals(_imageElement.Source, display)) _imageElement.Source = display;
     }
@@ -919,7 +931,7 @@ internal sealed partial class PinWindow : Window
 
     private void UpdateImageRasterLayout()
     {
-        if (!_content.CanRerender)
+        if (_state.IsCollapsed || !_content.CanRerender)
         {
             // A picture that returns after its translated document was shown fills its frame again.
             if (_imageElement.Stretch != Stretch.Fill)
@@ -943,8 +955,9 @@ internal sealed partial class PinWindow : Window
 
     private void UpdateImageClip(Size imageSize)
     {
-        double zoom = _content.CanRerender ? _state.Zoom * TranslationFitScale : 1;
-        Rect bounds = ImageClipBounds(_content.CanRerender ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
+        bool textLayout = !_state.IsCollapsed && _content.CanRerender;
+        double zoom = textLayout ? _state.Zoom * TranslationFitScale : 1;
+        Rect bounds = ImageClipBounds(textLayout ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
         _imageClip.Rect = new Rect(bounds.X / zoom, bounds.Y / zoom, bounds.Width / zoom, bounds.Height / zoom);
         _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
     }
@@ -1228,7 +1241,7 @@ internal sealed partial class PinWindow : Window
     // ----- Mouse: interior drag to move, edge drag/wheel to zoom, Ctrl+wheel opacity -----
 
     internal PinResizeEdge ResizeEdgeAt(Point point) =>
-        _isClosed || _state.IsClickThrough || IsTextSelectionMode || _dragInput.Modifiers.HasFlag(ModifierKeys.Control)
+        _isClosed || _state.IsCollapsed || _state.IsClickThrough || IsTextSelectionMode || _dragInput.Modifiers.HasFlag(ModifierKeys.Control)
             ? PinResizeEdge.None : PinResize.HitTest(point.X, point.Y, Width, Height);
 
     internal static Cursor? ResizeCursor(PinResizeEdge edge) => edge switch
@@ -1243,6 +1256,7 @@ internal sealed partial class PinWindow : Window
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        if (e.Handled || HandleCollapseDoubleClick(e)) return;
         if (_isClosed || _state.IsClickThrough || IsTextSelectionMode) return;
 
         bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
@@ -1300,6 +1314,11 @@ internal sealed partial class PinWindow : Window
                 _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
                 _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
                 _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
+                if (_resizeEdge == PinResizeEdge.None && _settings().SnapWhileDragging)
+                {
+                    _snapTargets = ReadSnapTargets();
+                    _snapDisplays = ReadSnapDisplays();
+                }
                 _dragging = true;
                 Focus();
             }
@@ -1328,13 +1347,14 @@ internal sealed partial class PinWindow : Window
         }
 
         (int cursorX, int cursorY) = _dragInput.CursorPosition;
-        if (cursorX == _lastDragCursorX && cursorY == _lastDragCursorY)
+        if (cursorX == _lastDragCursorX && cursorY == _lastDragCursorY && _lastDragModifiers == _dragInput.Modifiers)
         {
             return;
         }
 
         _lastDragCursorX = cursorX;
         _lastDragCursorY = cursorY;
+        _lastDragModifiers = _dragInput.Modifiers;
         if (_resizeEdge != PinResizeEdge.None)
         {
             ResizeToCursor();
@@ -1381,6 +1401,8 @@ internal sealed partial class PinWindow : Window
         _resizeEdge = PinResizeEdge.None;
         Cursor = null;
         _dragDesktop = null;
+        _snapTargets = [];
+        _snapDisplays = [];
         _lastDragCursorX = int.MinValue;
         _lastDragCursorY = int.MinValue;
         if (_dragInput.HasCapture(this)) _dragInput.Release(this);
@@ -1404,6 +1426,7 @@ internal sealed partial class PinWindow : Window
 
     internal void HandleMouseWheel(MouseWheelEventArgs e, ModifierKeys modifiers)
     {
+        if (_state.IsCollapsed && !modifiers.HasFlag(ModifierKeys.Control)) { e.Handled = true; return; }
         if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection is { } selection)
         {
             selection.TryScroll(e.Delta);
@@ -1563,7 +1586,7 @@ internal sealed partial class PinWindow : Window
 
     private void ToggleTextSelection()
     {
-        if (_isClosed) return;
+        if (_isClosed || _state.IsCollapsed) return;
         if (IsTextSelectionMode || IsRecognizingSelection)
         {
             LeaveTextSelection();
@@ -1633,12 +1656,12 @@ internal sealed partial class PinWindow : Window
         {
             (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
             DpiScale dpi = VisualTreeHelper.GetDpi(this);
-            MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
+            MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY), allowSnap: false);
         }
         if (!_isClosed) ViewStateChanged?.Invoke();
     }
 
-    private void MovePhysical(double left, double top)
+    private void MovePhysical(double left, double top, bool allowSnap = true)
     {
         (int currentLeft, int currentTop, int right, int bottom) = WindowStyleFacade.GetWindowBounds(_handle);
         double width = right - currentLeft;
@@ -1654,6 +1677,8 @@ internal sealed partial class PinWindow : Window
         var target = new RectD(left, top, width, height);
         if (_dragging)
         {
+            if (allowSnap && _settings().SnapWhileDragging)
+                target = PinSnap.Calculate(target, _snapDisplays, _snapTargets, _dragInput.Modifiers.HasFlag(ModifierKeys.Shift));
             PhysicalWindowPositioner.Move(_handle, target);
         }
         else
@@ -1666,6 +1691,7 @@ internal sealed partial class PinWindow : Window
 
     private void ZoomAt(int notches, double pointerXDip, double pointerYDip)
     {
+        if (_state.IsCollapsed) return;
         double oldZoom = _state.Zoom;
         double newZoom = _state.ApplyZoomStep(notches);
         if (Math.Abs(newZoom - oldZoom) < 1e-9)
@@ -1700,6 +1726,7 @@ internal sealed partial class PinWindow : Window
 
     private void ResetZoomCentered()
     {
+        if (_state.IsCollapsed) return;
         double centerX = Left + (Width / 2.0);
         double centerY = Top + (Height / 2.0);
         double oldZoom = _state.Zoom;
@@ -2089,6 +2116,12 @@ internal sealed partial class PinWindow : Window
         // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
         // Never restart that timer or animate a window whose lifetime has ended.
         if (_isClosed) return;
+        if (_state.IsCollapsed)
+        {
+            // Copy/save may have flattened a translation while the thumbnail stayed visible.
+            ReleaseCollapsedDisplayCaches();
+            return;
+        }
         if (kind == FeedbackKind.Progress)
         {
             // Work that finishes within the reveal delay reports only its result.
@@ -2285,6 +2318,9 @@ internal sealed partial class PinWindow : Window
             ClickThroughGesture());
         menu.Items.Add(_clickThroughItem);
         menu.Items.Add(new Separator());
+        _collapseItem = MenuItemFor(UiText.Get(_state.IsCollapsed ? "Pin_Expand" : "Pin_Collapse"),
+            (_, _) => ToggleCollapsed(), inputGestureText: UiText.Get("Pin_CollapseGesture"));
+        menu.Items.Add(_collapseItem);
         menu.Items.Add(MenuItemFor(UiText.Get("Pin_Hide"),
             (_, _) => HideRequested?.Invoke(this, EventArgs.Empty), UiText.Get("Pin_HideHelp")));
         _showOnlyItem = MenuItemFor(UiText.Get("Pin_ShowOnly"),
@@ -2305,11 +2341,13 @@ internal sealed partial class PinWindow : Window
         menu.Opened += (_, _) =>
         {
             RefreshTextSelectionMenuItem(menu, selectTextIndex);
+            RefreshCollapseMenu();
             RefreshRestoreClosedMenuItem();
             RefreshShowOnlyMenuItem();
         };
 
         ContextMenu = menu;
+        RefreshCollapseMenu();
         if (_textSelection is not null) _textSelection.ContextMenu = menu;
     }
 

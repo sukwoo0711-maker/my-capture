@@ -23,9 +23,9 @@ namespace MyCapture.App.Tests;
 public sealed class PinTidyTests
 {
     [Theory]
-    [InlineData("ko-KR", "숨기기", "이 핀만 보기")]
-    [InlineData("en-US", "Hide", "Show only this pin")]
-    public void MenuGroupsAndAvailabilityFollowOtherShownPins(string language, string hide, string only) => StaTestHost.Run(() =>
+    [InlineData("ko-KR", "숨기기", "이 핀만 보기", "접기", "Shift+더블클릭")]
+    [InlineData("en-US", "Hide", "Show only this pin", "Collapse", "Shift+Double-click")]
+    public void MenuGroupsAndAvailabilityFollowOtherShownPins(string language, string hide, string only, string collapse, string gesture) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var fixture = new Fixture();
@@ -33,6 +33,9 @@ public sealed class PinTidyTests
         ContextMenu menu = first.ContextMenu;
         int index = menu.Items.IndexOf(Item(first, "Onboard_PinAllowClickThrough"));
         Assert.IsType<Separator>(menu.Items[++index]);
+        MenuItem collapseItem = Assert.IsAssignableFrom<MenuItem>(menu.Items[++index]);
+        Assert.Equal(collapse, collapseItem.Header);
+        Assert.Equal(gesture, collapseItem.InputGestureText);
         MenuItem hideItem = Assert.IsAssignableFrom<MenuItem>(menu.Items[++index]);
         MenuItem onlyItem = Assert.IsAssignableFrom<MenuItem>(menu.Items[++index]);
         Assert.Equal(hide, hideItem.Header);

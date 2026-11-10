@@ -29,10 +29,12 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 | 핀에서 | 동작 |
 |---|---|
 | `Ctrl+C`, `Ctrl+더블클릭` | 원문 복사. 이미지 핀은 `Ctrl+더블클릭`으로 이 PC에서 인식한 글자를 복사 |
+| `Shift+더블클릭` | 작은 미리 보기로 접기·펼치기 |
+| 접힌 핀 더블클릭 | 원래 크기로 펼치기 |
 | `Ctrl+휠` | 투명도 20–100% |
-| 휠 | 확대·축소 10–800% |
-| 드래그 | 이동 |
-| 오른쪽 클릭 | 뒤 창 클릭 허용, 원문 텍스트 복사, 닫은 핀 다시 열기, 저장, 모두 닫기 |
+| 휠, `+`·`-` | 확대·축소 10–800%, 100%에서 한 번 정지 |
+| 드래그 | 화면 가장자리와 다른 핀에 붙여 이동. `Shift`를 누르면 붙이기 해제 |
+| 오른쪽 클릭 | 접기·펼치기, 뒤 창 클릭 허용, 원문 텍스트 복사, 닫은 핀 다시 열기, 저장, 모두 닫기 |
 | `Esc` | 닫기 |
 
 뒤 창 클릭을 허용한 핀은 클릭을 받지 않으므로 `Shift+F3`을 두 번 누르거나 트레이 메뉴의 '모든 핀 클릭 허용 해제'로 되돌립니다.
@@ -107,10 +109,12 @@ The 32-bit (x86) compatibility edition for Windows 10 version 22H2 uses Windows 
 | On a pin | Action |
 |---|---|
 | `Ctrl+C`, `Ctrl`+double-click | Copy the original text; `Ctrl`+double-click on an image pin copies text recognized on this PC |
+| `Shift`+double-click | Collapse to a thumbnail or expand |
+| Double-click a collapsed pin | Expand to the original size |
 | `Ctrl`+wheel | Opacity, 20–100% |
-| Wheel | Zoom, 10–800% |
-| Drag | Move |
-| Right-click | Click through to windows behind, Copy original text, Reopen closed pin, Save, Close all |
+| Wheel, `+` / `-` | Zoom, 10–800%; stop once at 100% |
+| Drag | Snap to screen edges and other pins; hold `Shift` to bypass snapping |
+| Right-click | Collapse or expand, Click through to windows behind, Copy original text, Reopen closed pin, Save, Close all |
 | `Esc` | Close |
 
 A click-through pin does not take clicks, so press `Shift+F3` twice or choose Turn off click through on all pins in the tray menu.

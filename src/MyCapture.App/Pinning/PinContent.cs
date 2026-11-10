@@ -62,6 +62,8 @@ internal sealed record PinContent
     /// <summary>What a pin window shows: the bitmap, or a picture translation's layers without a flattened copy.</summary>
     internal ImageSource Display => Overlay?.Display ?? _image;
 
+    internal void ReleaseDisplayCache() => Overlay?.ReleaseFlattenedImage();
+
     /// <summary>
     /// What a pin window shows at <paramref name="device"/> pixels. A picture translation's layers are exact only
     /// while each source pixel lands on one device pixel; scaled, the source under them is interpolated past the

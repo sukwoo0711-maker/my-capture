@@ -134,6 +134,28 @@ public sealed class PinGeometryTests
         Assert.Equal(PinGeometry.MinZoom, PinGeometry.StepZoom(PinGeometry.MinZoom, -5, 0.1), 6);
     }
 
+    [Theory]
+    [InlineData(.95, 1, .1)]
+    [InlineData(1.05, -1, .1)]
+    [InlineData(.5, 12, .1)]
+    [InlineData(2, -12, .1)]
+    [InlineData(.9, 1, .25)]
+    [InlineData(1.1, -1, .25)]
+    public void StepZoom_StopsExactlyAtOneWhenCrossing(double start, int notches, double step)
+    {
+        Assert.Equal(1, PinGeometry.StepZoom(start, notches, step));
+        Assert.Equal(Math.Pow(1 + step, Math.Sign(notches)), PinGeometry.StepZoom(1, Math.Sign(notches), step));
+    }
+
+    [Theory]
+    [InlineData(1, 3, .1)]
+    [InlineData(1, -3, .1)]
+    [InlineData(.5, 2, .25)]
+    [InlineData(2, -1, .25)]
+    [InlineData(.9, 0, .1)]
+    public void StepZoom_LeavesNonCrossingStepsUnchanged(double start, int notches, double step) =>
+        Assert.Equal(PinGeometry.ClampZoom(start * Math.Pow(1 + step, notches)), PinGeometry.StepZoom(start, notches, step));
+
     [Fact]
     public void AnchorTopLeftForZoom_KeepsPointerPixelFixed()
     {

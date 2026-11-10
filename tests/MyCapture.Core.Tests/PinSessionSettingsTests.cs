@@ -74,6 +74,7 @@ public sealed class PinSessionSettingsTests
             Pin =
             {
                 CloseOnDoubleClick = false,
+                SnapWhileDragging = false,
                 RestoreOpenPinsOnLaunch = true,
                 CtrlClickDebounceMs = 350,
                 InitialOpacity = 0.75,
