@@ -61,6 +61,15 @@ internal sealed partial class VideoEditorWindow : Window
     private VideoEditDocument? _initialDocument;
 
     private readonly MediaElement _media;
+    private readonly VideoPlaybackAudio _audio;
+    private readonly MonitorInfo? _initialMonitor;
+    private Button _muteButton = null!;
+    private SymbolIcon _muteIcon = null!;
+    private bool _cutAudioPending;
+    internal Func<double>? PlaybackPositionForTest { get; set; }
+    internal Func<string, Task<VideoSourceInfo>>? SourceProbeForTest { get; set; }
+    internal Action<MediaElement>? OpenMediaForTest { get; set; }
+    internal Button MuteButtonForTest => _muteButton;
     private readonly TimedTextPreviewView _overlayPreview;
     private readonly VideoLayerCanvas _layerCanvas;
     private readonly List<VideoEditDocument> _undo = [];
@@ -216,12 +225,15 @@ internal sealed partial class VideoEditorWindow : Window
         ILoggerFactory loggerFactory,
         VideoEditDocument? editDocument = null,
         IVideoPreviewEngine? previewEngine = null,
-        Action? playMedia = null)
+        Action? playMedia = null,
+        PlaybackAudioPreference? audioPreference = null,
+        MonitorInfo? initialMonitor = null)
     {
         _recording = recording ?? throw new ArgumentNullException(nameof(recording));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
+        _initialMonitor = initialMonitor;
         VideoLayerResourceBudget.Validate(editDocument?.FrameEditLayers);
         // Until the media opens, keep the document on its own measured source length so trim
         // and layer times are not clipped to a different recorded value; CompleteOpen then
@@ -256,7 +268,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         Width = Math.Max(920, recording.Width + 120);
         Height = Math.Max(680, recording.Height + 260);
-        FitInitialSizeToMonitor(MonitorEnumerator.GetFromCursor());
+        FitInitialSizeToMonitor(_initialMonitor ?? MonitorEnumerator.GetFromCursor());
         SourceInitialized += OnSourceInitialized;
 
         AutomationProperties.SetName(this, UiText.Get("VideoEditorUx_WindowName"));
@@ -267,7 +279,10 @@ internal sealed partial class VideoEditorWindow : Window
             UnloadedBehavior = MediaState.Manual,
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
+            IsMuted = true,
+            Volume = 0,
         };
+        _audio = new VideoPlaybackAudio(_media, audioPreference ?? App.PlaybackAudioForWindow());
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
@@ -479,9 +494,9 @@ internal sealed partial class VideoEditorWindow : Window
         // Respect callers that explicitly position/size an editor instead.
         if (WindowStartupLocation != WindowStartupLocation.CenterScreen) return;
         IntPtr ownerHandle = Owner is null ? IntPtr.Zero : new WindowInteropHelper(Owner).Handle;
-        MonitorInfo monitor = ownerHandle == IntPtr.Zero
+        MonitorInfo monitor = _initialMonitor ?? (ownerHandle == IntPtr.Zero
             ? MonitorEnumerator.GetFromCursor()
-            : MonitorEnumerator.GetFromWindow(ownerHandle);
+            : MonitorEnumerator.GetFromWindow(ownerHandle));
         FitInitialSizeToMonitor(monitor);
         // WPF has already computed the CenterScreen origin from the previous size.
         // Recenter the resized HWND in physical pixels; preserve its activation/z-order.
@@ -573,9 +588,13 @@ internal sealed partial class VideoEditorWindow : Window
         _sourceInfo = ReadSourceAsync();
         try
         {
-            _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
-            _media.Play();   // Manual mode: Play kicks decoding so MediaOpened fires reliably…
-            _media.Pause();  // …then immediately pause so we sit on frame 0.
+            if (OpenMediaForTest is { } open) open(_media);
+            else
+            {
+                _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
+                _media.Play();   // Manual mode: Play kicks decoding so MediaOpened fires reliably…
+                _media.Pause();  // …then immediately pause so we sit on frame 0.
+            }
         }
         catch (Exception ex)
         {
@@ -609,10 +628,12 @@ internal sealed partial class VideoEditorWindow : Window
     /// </summary>
     private async Task<VideoSourceInfo> ReadSourceAsync()
     {
-        VideoSourceInfo source = await VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
+        VideoSourceInfo source = await (SourceProbeForTest?.Invoke(_recording.OutputPath)
+            ?? VideoSourceProbe.ReadAsync(_recording.OutputPath, _log));
         if (!_closing)
         {
             StudioRangeVideoEffect.Apply(_media, source.StudioRange, VideoPlayerKind.Editor, _log);
+            _audio.SetSource(source.Audio is not null);
         }
 
         return source;
@@ -1208,7 +1229,17 @@ internal sealed partial class VideoEditorWindow : Window
         play.Name = "VideoPlayPause";
         _playButton = play;
         UpdatePlayButton();
-        row.Children.Add(play);
+        var playback = new StackPanel { Orientation = Orientation.Horizontal };
+        playback.Children.Add(play);
+        _muteButton = MakeTransportIcon("Icon.Volume", UiText.Get("PlaybackAudio_Mute"), "Button.Ghost", () => _audio.ToggleMute());
+        _muteButton.Name = "VideoMute";
+        _muteButton.MinWidth = play.MinWidth;
+        _muteIcon = FindGlyph(_muteButton.Content)!;
+        ShortcutPresentation.Attach(_muteButton, ShortcutScope.Video, "Mute");
+        _audio.Changed += UpdateAudioControl;
+        UpdateAudioControl();
+        playback.Children.Add(_muteButton);
+        row.Children.Add(playback);
         _positionLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _positionLabel.VerticalAlignment = VerticalAlignment.Center;
         _positionChip = new Border
@@ -1326,6 +1357,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnPreviewPositionRequested()
     {
+        _audio.SetPlaying(false);
         StudioRangeVideoEffect.PositionRequested(_media);
         if (_saveCurrentFrameButton is not null) _saveCurrentFrameButton.IsEnabled = false;
         _ = RefreshFrameAvailabilityAfterSeekAsync();
@@ -1439,6 +1471,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnMediaFailed(object? sender, ExceptionRoutedEventArgs e)
     {
+        _audio.SetPlaying(false);
         StopLoadTimers();
         _mediaFailed = true;
         _mediaFailure = e?.ErrorException?.Message ?? UiText.Get("Text_6A72B554A7C2");
@@ -1451,6 +1484,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnMediaEnded(object? sender, RoutedEventArgs e)
     {
+        _audio.SetPlaying(false);
         _previewEngine.StreamReachedEnd();
         _media.Pause();
         _isPlaying = false;
@@ -1472,6 +1506,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void PausePlayback()
     {
+        _audio.SetPlaying(false);
+        _cutAudioPending = false;
         _cutPlayback.Reset();
         _cutSeekInFlight = false;
         _settlingCutPlaybackEnd = false;
@@ -1511,6 +1547,7 @@ internal sealed partial class VideoEditorWindow : Window
             {
                 if (version != _playRequestVersion || !_playRequested || !IsLoaded) { return; }
                 _playRequested = false;
+                _audio.SetPlaying(true);
                 _playMedia();
                 _isPlaying = true;
                 _playbackTimer.Start();
@@ -1651,7 +1688,7 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
-        double position = _media.Position.TotalMilliseconds;
+        double position = PlaybackPositionForTest?.Invoke() ?? _media.Position.TotalMilliseconds;
         PreviewCutDecision decision = _cutPlayback.Observe(_cutTimeline, position, PlaybackClock());
         if (decision.Action == PreviewCutAction.TimedOut)
         {
@@ -1659,11 +1696,22 @@ internal sealed partial class VideoEditorWindow : Window
             _statusLabel.Text = UiText.Get("VideoMulticut_PreviewSeekFailed");
             return;
         }
-        if (_cutSeekInFlight || decision.Action == PreviewCutAction.Wait) return;
+        if (_cutSeekInFlight || decision.Action == PreviewCutAction.Wait)
+        {
+            _audio.SetPlaying(false);
+            _cutAudioPending = true;
+            return;
+        }
         if (decision.Action == PreviewCutAction.Seek)
         {
+            _audio.SetPlaying(false);
             _ = SkipRemovedRange(decision.SourceTimeMs);
             return;
+        }
+        if (decision.Action == PreviewCutAction.Present && _cutAudioPending)
+        {
+            _cutAudioPending = false;
+            _audio.SetPlaying(true);
         }
         if (decision.Action == PreviewCutAction.Stop)
         {
@@ -1710,6 +1758,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private async Task SkipRemovedRange(double targetMs)
     {
+        _audio.SetPlaying(false);
+        _cutAudioPending = true;
         _cutSeekInFlight = true;
         long version = _playRequestVersion;
         try
@@ -2755,7 +2805,9 @@ internal sealed partial class VideoEditorWindow : Window
         {
             DeletePrivateRenderStage(outputPath);
             _log.LogError(ex, "Video re-render failed");
-            _statusLabel.Text = UiText.Get("Text_2DC82774E99B") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
+            _statusLabel.Text = ex is RecordingAudioPreservationException
+                ? UiText.Get("RecordingAudio_SaveFailed")
+                : UiText.Get("Text_2DC82774E99B") + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         }
         finally
@@ -2912,6 +2964,7 @@ internal sealed partial class VideoEditorWindow : Window
     private void BuildShortcutActions()
     {
         _shortcutActions["Play"] = TogglePlay;
+        _shortcutActions["Mute"] = () => _audio.ToggleMute();
         _shortcutActions["In"] = SetInHere; _shortcutActions["Out"] = SetOutHere;
         _shortcutActions["Trim"] = SelectTrimHandle;
         _shortcutActions["Split"] = SplitHere;
@@ -3007,6 +3060,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         if (focusedElement is TextBoxBase or PasswordBox) return false;
         string? command = ShortcutCatalog.Match(ShortcutScope.Video, key, modifiers);
+        if (command == "Mute" && (isRepeat || !_mediaReady || !_audio.HasAudio)) return false;
         if (_savingCurrentFrame || (command == "SaveFrame" && (isRepeat || !CanSaveCurrentFrame))) return false;
         if (command is not null && command != "SaveFrame") _resumedFrameSaveStatus = null;
         if (command is null || (command == "Cancel" && !_operationRunning)) return false;
@@ -3138,6 +3192,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         FinishDraftRecovery();
         _closing = true;
+        _audio.Dispose();
         _framePresentationCts?.Cancel();
         _frameSaveCts?.Cancel();
         _sourceFileSizeCts?.Cancel();
@@ -3192,6 +3247,16 @@ internal sealed partial class VideoEditorWindow : Window
     }
 
     // ---- small view helpers (kept local so the editor matches the 0.4.0 token system) ----
+
+    private void UpdateAudioControl()
+    {
+        if (_muteButton is null) return;
+        string label = UiText.Get(_audio.IsMuted ? "PlaybackAudio_Unmute" : "PlaybackAudio_Mute");
+        _muteIcon.Data = TryGeometry(_audio.IsMuted ? "Icon.Muted" : "Icon.Volume");
+        _muteButton.ToolTip = label + " (M)";
+        AutomationProperties.SetName(_muteButton, label);
+        _muteButton.Visibility = _audio.HasAudio ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private Button MakeButton(object content, string automationName, string styleKey, Action onClick)
     {

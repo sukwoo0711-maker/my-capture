@@ -784,6 +784,23 @@
                                      Text="{Binding RecordingStartDelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
+                        <StackPanel Style="{StaticResource Settings.Field}" Margin="0,0,0,12">
+                            <CheckBox x:Name="RecordSystemAudioCheckBox" Style="{StaticResource Settings.CheckBox}"
+                                      Content="{loc:Text RecordingAudio_RecordSystem}"
+                                      AutomationProperties.Name="{loc:Text RecordingAudio_RecordSystem}"
+                                      AutomationProperties.HelpText="{loc:Text RecordingAudio_SystemDescription}"
+                                      IsChecked="{Binding RecordSystemAudio}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingAudio_SystemDescription}" />
+                        </StackPanel>
+                        <StackPanel Style="{StaticResource Settings.Field}" Margin="0,0,0,12">
+                            <CheckBox x:Name="RecordMicrophoneCheckBox" Style="{StaticResource Settings.CheckBox}"
+                                      Content="{loc:Text RecordingAudio_RecordMicrophone}"
+                                      AutomationProperties.Name="{loc:Text RecordingAudio_RecordMicrophone}"
+                                      AutomationProperties.HelpText="{loc:Text RecordingAudio_MicrophoneDescription}"
+                                      IsChecked="{Binding RecordMicrophone}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingAudio_MicrophoneDescription}" />
+                        </StackPanel>
+
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

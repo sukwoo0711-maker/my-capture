@@ -89,18 +89,20 @@ public sealed class VideoExportCalculationTests
         {
             string original = Path.Combine(root, "source.mp4");
             string output = Path.Combine(root, "output.mp4");
-            File.WriteAllBytes(original, [7, 8]);
+            RecordingAudioEditingTests.Encode(original, audioSeconds: 0);
+            byte[] originalBytes = File.ReadAllBytes(original);
             File.WriteAllBytes(output, [9, 10]);
-            using var result = VideoExportCalculation.Calculate(0, 1000, 1_000_000,
-                (path, _, _, _) => File.WriteAllBytes(path, [1, 2, 3]), CancellationToken.None);
+            using var result = VideoExportCalculation.Calculate(0, 3000, 1_000_000,
+                (path, _, _, _) => RecordingAudioEditingTests.Encode(path, audioSeconds: 0), CancellationToken.None);
+            byte[] stagedBytes = File.ReadAllBytes(result.ResultPath);
             Assert.Throws<IOException>(() => result.SaveCopy(original, original, CancellationToken.None));
             Assert.Throws<IOException>(() => result.SaveCopy(Path.Combine(root, "wrong.gif"), original, CancellationToken.None));
             Assert.Throws<OperationCanceledException>(() => result.SaveCopy(output, original, new CancellationToken(true)));
             Assert.Equal(new byte[] { 9, 10 }, File.ReadAllBytes(output));
             Assert.Equal(2, Directory.GetFiles(root).Length);
             result.SaveCopy(output, original, CancellationToken.None);
-            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(output));
-            Assert.Equal(new byte[] { 7, 8 }, File.ReadAllBytes(original));
+            Assert.Equal(stagedBytes, File.ReadAllBytes(output));
+            Assert.Equal(originalBytes, File.ReadAllBytes(original));
         }
         finally { OwnedTestDirectory.Delete(root); }
     }
@@ -123,27 +125,29 @@ public sealed class VideoExportCalculationTests
         {
             string folder = Directory.CreateDirectory(Path.Combine(root, "original")).FullName;
             string source = Path.Combine(folder, "source.mp4");
-            File.WriteAllBytes(source, [7, 8, 9]);
+            RecordingAudioEditingTests.Encode(source, audioSeconds: 0);
+            byte[] sourceBytes = File.ReadAllBytes(source);
             UpdatePathsTests.CreateJunction(link, folder);
-            using var result = VideoExportCalculation.Calculate(0, 1000, 1_000_000,
-                (path, _, _, _) => File.WriteAllBytes(path, [1, 2, 3, 4]), CancellationToken.None);
+            using var result = VideoExportCalculation.Calculate(0, 3000, 1_000_000,
+                (path, _, _, _) => RecordingAudioEditingTests.Encode(path, audioSeconds: 0), CancellationToken.None);
+            byte[] stagedBytes = File.ReadAllBytes(result.ResultPath);
 
             Assert.ThrowsAny<IOException>(() => result.SaveCopy(Path.Combine(link, "source.mp4"), source, CancellationToken.None));
-            Assert.Equal(new byte[] { 7, 8, 9 }, File.ReadAllBytes(source));
+            Assert.Equal(sourceBytes, File.ReadAllBytes(source));
             Assert.Single(Directory.GetFiles(folder));
             // The chosen parent may legitimately be a junction; a distinct new export
             // is still supported without putting the immutable source at risk.
             result.SaveCopy(Path.Combine(link, "export.mp4"), source, CancellationToken.None);
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
-            Assert.Equal(new byte[] { 7, 8, 9 }, File.ReadAllBytes(source));
+            Assert.Equal(stagedBytes, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
+            Assert.Equal(sourceBytes, File.ReadAllBytes(source));
             Assert.Equal(2, Directory.GetFiles(folder).Length);
 
             // Cancellation also stages beside the resolved physical parent, then
             // recycles only that owned sibling. The chosen destination stays intact.
             Assert.Throws<OperationCanceledException>(() => result.SaveCopy(
                 Path.Combine(link, "export.mp4"), source, new CancellationToken(true)));
-            Assert.Equal(new byte[] { 1, 2, 3, 4 }, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
-            Assert.Equal(new byte[] { 7, 8, 9 }, File.ReadAllBytes(source));
+            Assert.Equal(stagedBytes, File.ReadAllBytes(Path.Combine(folder, "export.mp4")));
+            Assert.Equal(sourceBytes, File.ReadAllBytes(source));
             Assert.Equal(2, Directory.GetFiles(folder).Length);
         }
         finally

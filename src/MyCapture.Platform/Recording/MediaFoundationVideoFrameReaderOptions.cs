@@ -59,8 +59,12 @@ public enum DecodedVideoPixelFormat
 public readonly record struct VideoYuvEncoding(bool Bt709, bool FullRange);
 
 /// <summary>
-/// What a player needs to know about a clip before it presents it: the exact container duration
+/// What a player needs to know about a clip before it presents it: the video track duration
 /// (0 when none is advertised) and whether the video is studio range (16–235), which WPF's
 /// MediaElement presents without expanding to full range.
 /// </summary>
-public readonly record struct VideoSourceInfo(double DurationMs, bool StudioRange);
+public readonly record struct VideoSourceInfo(double DurationMs, bool StudioRange)
+{
+    /// <summary>The first audio stream's native format, or null when the source has no sound.</summary>
+    public AudioSourceInfo? Audio { get; init; }
+}

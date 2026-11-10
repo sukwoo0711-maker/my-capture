@@ -5611,4 +5611,82 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="Recording_NoAudio" xml:space="preserve">
+    <value>No audio</value>
+  </data>
+  <data name="RecordingAudio_SaveFailed" xml:space="preserve">
+    <value>Could not save because the audio could not be preserved. The original and your edits are unchanged.</value>
+  </data>
+  <data name="PlaybackAudio_Mute" xml:space="preserve">
+    <value>Mute</value>
+  </data>
+  <data name="PlaybackAudio_Unmute" xml:space="preserve">
+    <value>Unmute</value>
+  </data>
+  <data name="PlaybackAudio_Toggle" xml:space="preserve">
+    <value>Toggle mute</value>
+  </data>
+  <data name="MediaInfo.Audio" xml:space="preserve">
+    <value>Audio</value>
+  </data>
+  <data name="MediaInfo.AudioMono" xml:space="preserve">
+    <value>mono</value>
+  </data>
+  <data name="MediaInfo.AudioStereo" xml:space="preserve">
+    <value>stereo</value>
+  </data>
+  <data name="MediaInfo.AudioChannels" xml:space="preserve">
+    <value>{0} channels</value>
+  </data>
+  <data name="MediaInfo.AudioPresent" xml:space="preserve">
+    <value>Audio present</value>
+  </data>
+  <data name="RecordingAudio_System" xml:space="preserve">
+    <value>System audio</value>
+  </data>
+  <data name="RecordingAudio_Microphone" xml:space="preserve">
+    <value>Microphone</value>
+  </data>
+  <data name="RecordingAudio_Both" xml:space="preserve">
+    <value>System + mic</value>
+  </data>
+  <data name="RecordingAudio_ChooseSources" xml:space="preserve">
+    <value>Choose recording audio</value>
+  </data>
+  <data name="RecordingAudio_Unavailable" xml:space="preserve">
+    <value>{0} · Unavailable</value>
+  </data>
+  <data name="RecordingAudio_NextRecording" xml:space="preserve">
+    <value>Applies to the next recording</value>
+  </data>
+  <data name="RecordingAudio_RecordSystem" xml:space="preserve">
+    <value>Record system audio</value>
+  </data>
+  <data name="RecordingAudio_RecordMicrophone" xml:space="preserve">
+    <value>Record microphone</value>
+  </data>
+  <data name="RecordingAudio_SystemDescription" xml:space="preserve">
+    <value>Records the computer’s sound in the video.</value>
+  </data>
+  <data name="RecordingAudio_MicrophoneDescription" xml:space="preserve">
+    <value>Uses the default recording device; the microphone opens only during recording with it on.</value>
+  </data>
+  <data name="RecordingAudio_AccessDenied" xml:space="preserve">
+    <value>Microphone access is off in Windows settings. Recording continues.</value>
+  </data>
+  <data name="RecordingAudio_NoDevice" xml:space="preserve">
+    <value>The {0} device could not be found. Recording continues.</value>
+  </data>
+  <data name="RecordingAudio_Disconnected" xml:space="preserve">
+    <value>The {0} device was disconnected. Recording continues.</value>
+  </data>
+  <data name="RecordingAudio_InUse" xml:space="preserve">
+    <value>Another application is using the {0} device. Recording continues.</value>
+  </data>
+  <data name="RecordingAudio_FormatChanged" xml:space="preserve">
+    <value>The {0} device’s audio format changed. Recording continues.</value>
+  </data>
+  <data name="RecordingAudio_Failed" xml:space="preserve">
+    <value>{0} recording is unavailable. Recording continues.</value>
+  </data>
 </root>

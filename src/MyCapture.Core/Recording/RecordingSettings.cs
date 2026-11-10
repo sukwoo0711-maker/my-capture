@@ -48,6 +48,15 @@ public sealed class RecordingSettings
     /// <summary>Composite the mouse cursor into the recorded frames.</summary>
     public bool IncludeCursor { get; set; } = true;
 
+    /// <summary>Include the default playback device's sound in new recordings. Off by default.</summary>
+    public bool RecordSystemAudio { get; set; }
+
+    /// <summary>Include the default microphone in new recordings. Off by default.</summary>
+    public bool RecordMicrophone { get; set; }
+
+    /// <summary>Shared player/editor mute choice. Sound is on by default.</summary>
+    public bool PlaybackMuted { get; set; }
+
     /// <summary>
     /// Draws an emphasis ring around the pointer on every recorded frame, turning red
     /// while the left button is held. Requires <see cref="IncludeCursor"/>.

@@ -32,6 +32,10 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
     };
     private readonly Slider _seek = new() { Minimum = 0, Maximum = 1, Value = 0, IsMoveToPointEnabled = true, Margin = new Thickness(0, 10, 0, 0) };
     private readonly Button _playButton = new() { MinWidth = 76, Style = (Style)Application.Current.Resources["Button.Primary"] };
+    private readonly Button _muteButton = new() { Name = "PlayerMute", Visibility = Visibility.Collapsed };
+    private readonly SymbolIcon _muteIcon = new() { Size = 20 };
+    private readonly VideoPlaybackAudio _audio;
+    private bool _playbackEnded;
     private readonly ToggleButton _fullScreenButton = new() { Style = (Style)Application.Current.Resources["ToggleButton.Tool"] };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _time = new() { FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Mono"], VerticalAlignment = VerticalAlignment.Center };
@@ -58,9 +62,11 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
 
     internal GalleryVideoPlayerWindow(ILogger? log = null) : this(log, null) { }
 
-    internal GalleryVideoPlayerWindow(ILogger? log, GalleryPlayerDiagnosticOptions? diagnosticOptions)
+    internal GalleryVideoPlayerWindow(ILogger? log, GalleryPlayerDiagnosticOptions? diagnosticOptions,
+        PlaybackAudioPreference? audioPreference = null)
     {
         _log = log;
+        _audio = new VideoPlaybackAudio(_video, audioPreference ?? App.PlaybackAudioForWindow());
         DiagnosticOptions = diagnosticOptions;
         Title = "MyCapture";
         Width = 720;
@@ -107,6 +113,15 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         _fullScreenButton.Margin = new Thickness(0, 0, 8, 0);
         _status.Margin = new Thickness(0, 0, 8, 0);
         controls.Children.Add(_playButton);
+        _muteButton.SetResourceReference(StyleProperty, "Button.Ghost");
+        _muteButton.Content = _muteIcon;
+        CommandButtonPresentation.Apply(_muteButton, compact: true);
+        ShortcutPresentation.Attach(_muteButton, ShortcutScope.Video, "Mute");
+        _muteButton.Margin = new Thickness(0, 0, 8, 0);
+        _muteButton.Click += (_, _) => _audio.ToggleMute();
+        _audio.Changed += UpdateAudioControl;
+        UpdateAudioControl();
+        controls.Children.Add(_muteButton);
         controls.Children.Add(_fullScreenButton);
         InitializeFrameCapture(controls);
         KoreanWordWrap.Show(_status, UiText.Get("Text_6E86D1A85620"));
@@ -148,8 +163,10 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         _video.MediaOpened += OnMediaOpened;
         _video.MediaEnded += OnMediaEnded;
         _video.MediaFailed += OnMediaFailed;
-        _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(_frameSeekPending ? !_resumeAfterFrameSeek : !_playing); };
+        _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(_frameScrubbing ? !_resumeAfterScrub : _frameSeekPending ? !_resumeAfterFrameSeek : !_playing); };
         _seek.ValueChanged += OnSeekChanged;
+        _seek.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnSeekDragStarted), handledEventsToo: true);
+        _seek.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(OnSeekDragCompleted), handledEventsToo: true);
         _timer.Tick += (_, _) => { UpdatePosition(); UpdateFrameCaptureState(); };
         PreviewKeyDown += OnPreviewKeyDown;
         SetStatusPlaying(false);
@@ -157,7 +174,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         if (diagnosticOptions?.CaptureExclusion != false)
             SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
-        Closed += (_, _) => { _frameClosed = true; _frameCaptureCts?.Cancel(); CloseFrameSeeking(); _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); _video.Source = null; PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        Closed += (_, _) => { _audio.Dispose(); _frameClosed = true; _frameCaptureCts?.Cancel(); CloseFrameSeeking(); _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); _video.Source = null; PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
@@ -191,6 +208,24 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
     internal bool IsMediaReadyForDiagnostic => _mediaReady;
     internal bool IsPlayingForDiagnostic => _playing;
     internal GalleryPlayerDiagnosticOptions? DiagnosticOptions { get; }
+    internal Button MuteButtonForTest => _muteButton;
+
+    private void UpdateAudioControl()
+    {
+        string label = UiText.Get(_audio.IsMuted ? "PlaybackAudio_Unmute" : "PlaybackAudio_Mute");
+        _muteIcon.SetResourceReference(SymbolIcon.DataProperty, _audio.IsMuted ? "Icon.Muted" : "Icon.Volume");
+        _muteButton.ToolTip = label + " (M)";
+        AutomationProperties.SetName(_muteButton, label);
+        _muteButton.Visibility = _audio.HasAudio ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    internal bool HandleMuteShortcut(Key key, ModifierKeys modifiers, IInputElement? focusedElement, bool isRepeat = false)
+    {
+        if (key != Key.M || modifiers != ModifierKeys.None || isRepeat || !_mediaReady || !_audio.HasAudio
+            || focusedElement is TextBoxBase or PasswordBox) return false;
+        _audio.ToggleMute();
+        return true;
+    }
 
     /// <summary>Loads a video; returns false when the file is missing or cannot be opened.</summary>
     internal bool Open(Guid id, string title, string path, bool autoPlay)
@@ -207,6 +242,9 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         }
 
         _videoId = id;
+        _audio.SetPlaying(false);
+        _audio.SetSource(false);
+        _playbackEnded = false;
         _frameCaptureCts?.Cancel();
         _frameOpenVersion++;
         ResetFrameSeeking();
@@ -267,7 +305,9 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         UpdateFrameCaptureState();
-        if (HandleFrameShortcut(e.Key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat))
+        Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, Keyboard.FocusedElement is TextBoxBase);
+        if (HandleMuteShortcut(key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat)
+            || HandleFrameShortcut(key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat))
         {
             e.Handled = true;
             return;
@@ -333,6 +373,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         }
 
         StudioRangeVideoEffect.Apply(_video, source.StudioRange, VideoPlayerKind.Gallery, _log);
+        _audio.SetSource(source.Audio is not null);
         double containerMs = source.DurationMs;
 
         _mediaReady = true;
@@ -363,6 +404,8 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
 
     private void OnMediaEnded(object sender, RoutedEventArgs e)
     {
+        _audio.SetPlaying(false);
+        _playbackEnded = true;
         if (_frameSeekEngine is MediaElementPreviewEngine native) native.StreamReachedEnd();
         if (_frameSeekPending) return;
         _playing = false;
@@ -374,6 +417,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
 
     private void OnMediaFailed(object? sender, ExceptionRoutedEventArgs e)
     {
+        _audio.SetPlaying(false);
         _mediaReady = false;
         UpdateFrameCaptureState();
         _playing = false;
@@ -385,12 +429,25 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
     private void SetPlayback(bool playing, bool seekTransition = false)
     {
         if (!_mediaReady) return;
+        if (_frameScrubbing && !seekTransition)
+        {
+            _resumeAfterScrub = playing;
+            _audio.SetPlaying(false);
+            SetStatusPlaying(playing);
+            return;
+        }
         if (_frameSeekPending && !seekTransition)
         {
             _resumeAfterFrameSeek = playing;
             SetStatusPlaying(playing);
             return;
         }
+        if (playing && (_playbackEnded || (_seek.Maximum > 1 && _video.Position.TotalMilliseconds >= _seek.Maximum - 1)))
+        {
+            RequestFrameSeekAndResume(0, resume: true);
+            return;
+        }
+        _audio.SetPlaying(playing);
         if (playing)
         {
             _framePresentedPositionMs = null;
@@ -406,11 +463,6 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         }
         if (playing)
         {
-            if (_video.Position.TotalMilliseconds >= _seek.Maximum - 1)
-            {
-                StudioRangeVideoEffect.PositionRequested(_video);
-                _video.Position = TimeSpan.Zero;
-            }
             _video.Play();
             _playing = true;
             _timer.Start();
@@ -435,9 +487,26 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         UpdateTime();
     }
 
+    private void OnSeekDragStarted(object sender, DragStartedEventArgs e)
+    {
+        if (!_mediaReady) return;
+        _resumeAfterScrub = _frameSeekPending ? _resumeAfterFrameSeek : _playing;
+        _frameScrubbing = true;
+        SetPlayback(false, seekTransition: true);
+        SetStatusPlaying(_resumeAfterScrub);
+        UpdateFrameCaptureState();
+    }
+
+    private void OnSeekDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (!_frameScrubbing) return;
+        _frameScrubbing = false;
+        if (_mediaReady) RequestFrameSeekAndResume(Math.Clamp(_seek.Value, 0, _seek.Maximum), _resumeAfterScrub);
+    }
+
     private void UpdatePosition()
     {
-        if (!_mediaReady || _frameSeekPending) return;
+        if (!_mediaReady || _frameSeekPending || _frameScrubbing) return;
         _seekUpdating = true;
         try { _seek.Value = Math.Clamp(_video.Position.TotalMilliseconds, 0, _seek.Maximum); }
         finally { _seekUpdating = false; }

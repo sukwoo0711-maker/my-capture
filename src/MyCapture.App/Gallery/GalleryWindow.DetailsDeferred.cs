@@ -59,6 +59,7 @@ internal sealed partial class GalleryWindow
 
     private void OnDeferredDetailsClosed(object? sender, EventArgs e)
     {
+        CancelSelectedDetailsAudio();
         _viewModel.PropertyChanged -= OnDetailsSelectionChanged;
         Closed -= OnDeferredDetailsClosed;
     }

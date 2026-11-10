@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Recording;
+using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Media;
 
@@ -11,10 +12,14 @@ internal sealed record MediaDetailsSource(string? FilePath, int Width = 0, int H
     bool ReadImageDimensions = false);
 
 internal sealed record MediaDetails(MediaDetailsSource Source, string FilePath, long? SizeBytes,
-    DateTime? CreatedAt, DateTime? ModifiedAt, int Width, int Height, string Format, bool FileUnavailable)
+    DateTime? CreatedAt, DateTime? ModifiedAt, int Width, int Height, string Format, bool FileUnavailable,
+    MediaAudioDetails? Audio = null)
 {
     internal string Resolution => MediaDetailsFormatter.Resolution(Width, Height);
 }
+
+// A missing result means the probe failed; a successful result with no format means no audio track.
+internal sealed record MediaAudioDetails(AudioSourceInfo? Format);
 
 /// <summary>Called only on an explicit information action or a tooltip opening, never on card creation.</summary>
 internal static class MediaDetailsReader
@@ -68,8 +73,19 @@ internal static class MediaDetailsReader
                 }
                 catch (Exception ex) when (IsUnreadableMedia(ex)) { }
             }
+            MediaAudioDetails? audio = null;
+            if (format == "MP4")
+            {
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    audio = new(MediaFoundationAudioReader.ReadSourceInfo(path));
+                }
+                catch (Exception ex) when (IsUnreadableMedia(ex)
+                    || ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException) { }
+            }
             cancellationToken.ThrowIfCancellationRequested();
-            return new(source, path, file.Length, file.CreationTime, file.LastWriteTime, width, height, format, false);
+            return new(source, path, file.Length, file.CreationTime, file.LastWriteTime, width, height, format, false, audio);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {

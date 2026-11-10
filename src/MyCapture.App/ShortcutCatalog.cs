@@ -72,6 +72,7 @@ internal static class ShortcutCatalog
             Add(ShortcutScope.Video, command, key, hint);
         // X is "crop" in the image editor; in the recording editor the same key trims.
         Add(ShortcutScope.Video, "Trim", Key.X, "X");
+        Add(ShortcutScope.Video, "Mute", Key.M, "M");
         Add(ShortcutScope.Video, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
         Add(ShortcutScope.Video, "SaveFrame", Key.S, "Shift+S", ModifierKeys.Shift);
         Add(ShortcutScope.Video, "Export", Key.S, "Ctrl+Shift+S", ModifierKeys.Control | ModifierKeys.Shift);

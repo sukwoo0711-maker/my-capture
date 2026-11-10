@@ -50,6 +50,8 @@ internal static class SettingsSectionCatalog
         new("RecordingFrameRate", SettingsSection.Recording, null, null, null),
         new("UseRecordingStartDelay", SettingsSection.Recording, null, null, null),
         new("RecordingStartDelaySeconds", SettingsSection.Recording, null, null, null),
+        new("RecordSystemAudio", SettingsSection.Recording, null, null, null),
+        new("RecordMicrophone", SettingsSection.Recording, null, null, null),
         new("RecordingIncludeCursor", SettingsSection.Recording, null, "G05", null),
         new("RecordingCursorHighlight", SettingsSection.Recording, null, "G05", null),
         new("UseRecordingDraggedSize", SettingsSection.Recording, null, "G04", null),

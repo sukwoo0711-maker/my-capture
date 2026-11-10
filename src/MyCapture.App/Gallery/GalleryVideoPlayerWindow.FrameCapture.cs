@@ -33,6 +33,8 @@ internal sealed partial class GalleryVideoPlayerWindow
     private long _frameSeekVersion;
     private bool _frameSeekFailed;
     private bool _resumeAfterFrameSeek;
+    private bool _frameScrubbing;
+    private bool _resumeAfterScrub;
     private double? _framePresentedPositionMs;
 
     internal Func<MediaElement, IVideoPreviewEngine>? FrameSeekEngineFactoryForTest { get; set; }
@@ -48,6 +50,8 @@ internal sealed partial class GalleryVideoPlayerWindow
         _frameSeekPending = false;
         _frameSeekFailed = false;
         _resumeAfterFrameSeek = false;
+        _frameScrubbing = false;
+        _resumeAfterScrub = false;
         _framePresentedPositionMs = null;
     }
 
@@ -60,7 +64,12 @@ internal sealed partial class GalleryVideoPlayerWindow
 
     private void RequestFrameSeek(double targetMs)
     {
-        bool resume = _frameSeekPending ? _resumeAfterFrameSeek : _playing;
+        bool resume = _frameScrubbing ? _resumeAfterScrub : _frameSeekPending ? _resumeAfterFrameSeek : _playing;
+        RequestFrameSeekAndResume(targetMs, resume);
+    }
+
+    private void RequestFrameSeekAndResume(double targetMs, bool resume)
+    {
         _frameSeekCts?.Cancel();
         var cancellation = new CancellationTokenSource();
         _frameSeekCts = cancellation;
@@ -99,10 +108,12 @@ internal sealed partial class GalleryVideoPlayerWindow
             cancellation.Token.ThrowIfCancellationRequested();
             if (_frameClosed || version != _frameSeekVersion) return;
             _framePresentedPositionMs = targetMs;
+            _playbackEnded = false;
             _frameSeekPending = false;
             UpdateFrameCaptureState();
             UpdatePosition();
-            SetPlayback(_resumeAfterFrameSeek);
+            if (_frameScrubbing) SetStatusPlaying(_resumeAfterScrub);
+            else SetPlayback(_resumeAfterFrameSeek);
         }
         catch (OperationCanceledException) { }
         catch (Exception error)
@@ -164,7 +175,7 @@ internal sealed partial class GalleryVideoPlayerWindow
     }
 
     private bool CanSaveCurrentFrame => _mediaReady && !_frameClosed && !_frameCaptureRunning
-        && !_frameSeekPending && !_frameSeekFailed && !_seek.IsMouseCaptureWithin && !_frameBuffering
+        && !_frameSeekPending && !_frameSeekFailed && !_frameScrubbing && !_seek.IsMouseCaptureWithin && !_frameBuffering
         && _frameCaptureService?.CanCapture(_videoId, _frameSourceRevision) == true;
 
     private void UpdateFrameCaptureState()

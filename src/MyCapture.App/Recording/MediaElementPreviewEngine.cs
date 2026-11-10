@@ -38,6 +38,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     // The element position this engine set last; dispatcher-owned, NaN until known.
     private double _lastPositionMs = double.NaN;
     private bool _disposed;
+    private static int _activeCount;
+    internal static int ActiveCount => Volatile.Read(ref _activeCount);
     private readonly CancellationTokenSource _presentationShutdown = new();
 
     internal MediaElementPreviewEngine(MediaElement media, int fps)
@@ -45,6 +47,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         _media = media ?? throw new ArgumentNullException(nameof(media));
         _dispatcher = media.Dispatcher;
         _frameMs = FrameStepCalculator.FrameDurationMs(fps);
+        Interlocked.Increment(ref _activeCount);
     }
 
     /// <summary>Clip length; a seek at the very end is not moved past it.</summary>
@@ -392,6 +395,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 }
 
                 StudioRangeVideoEffect.PositionRequested(_media);
+                _media.IsMuted = true;
+                _media.Volume = 0;
                 _media.Pause();
                 _media.Position = TimeSpan.FromMilliseconds(position);
                 _lastPositionMs = position;
@@ -567,6 +572,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 }
 
                 ReopenCountForTest++;
+                _media.IsMuted = true;
+                _media.Volume = 0;
                 _media.MediaOpened += OnOpened;
                 _media.MediaFailed += OnFailed;
                 _media.Source = null;
@@ -601,6 +608,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     {
         if (_disposed) return;
         _disposed = true;
+        Interlocked.Decrement(ref _activeCount);
         _presentationShutdown.Cancel();
         _presentationShutdown.Dispose();
         lock (_watchGate)

@@ -1369,6 +1369,11 @@
                         <StackPanel AutomationProperties.AutomationId="LibraryDetailsInfo">
                             <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
                             <TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,4,0,0" />
+                            <TextBlock x:Name="SelectedDetailAudio" AutomationProperties.AutomationId="LibraryDetailsAudio"
+                                       Foreground="{DynamicResource Text.Secondary}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
+                                       DataContextChanged="OnSelectedDetailAudioContextChanged"
+                                       IsVisibleChanged="OnSelectedDetailAudioVisibilityChanged" />
                             <TextBlock themes:KoreanWordWrap.Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
                         </StackPanel>
                         <StackPanel Margin="0,16,0,0">

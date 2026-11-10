@@ -131,7 +131,9 @@ public sealed class ShortcutHelpSearchTests
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
-        Assert.Equal(8, view.VisibleResults().Length);
+        Assert.Equal(9, view.VisibleResults().Length);
+        Assert.Contains(view.VisibleResults(), row =>
+            KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("PlaybackAudio_Toggle"));
 
         // Only spaces is no search: the tabs stay.
         view.Search.Text = "   ";
