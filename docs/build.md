@@ -88,3 +88,36 @@ dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:P
 ```
 
 정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 5.3.0 -Architecture x64` 다음 `build/package.ps1 -Version 5.3.0 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/5.3.0/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.
+
+## 릴리스 크기와 Windows API 보존
+
+두 self-contained Release publish 프로필은 `MyCaptureTrimWindowsProjection=true`로 `Microsoft.Windows.SDK.NET.dll`만 링크합니다. 애플리케이션·.NET·WPF·`WinRT.Runtime.dll`의 컴파일과 ReadyToRun 설정은 유지합니다. 개발 빌드와 테스트 빌드에는 적용하지 않습니다. Store·패키지 식별·시작 작업 및 COM 경계에서 사용하는 형식은 모든 멤버를 보존합니다. 보존 목록은 `build/WindowsProjectionRoots.xml`입니다.
+
+ILLink 버전과 패키지 해시는 `build/WindowsProjectionTrim.targets`에 고정합니다. `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 기존 캐시가 없으면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증합니다. 애플리케이션의 PackageReference나 trim analyzer를 켜지 않습니다. 직접 publish할 때도 먼저 이 준비 스크립트를 실행합니다.
+
+```powershell
+& .\build\prepare-projection-linker.ps1
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishProfile=win-x64-self-contained -o '<새 x64 출력 폴더>'
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 --self-contained true -p:Platform=x86 -p:PublishProfile=win-x86-self-contained -o '<새 x86 출력 폴더>'
+```
+
+진단용 원본 SDK와 비교하려면 같은 명령에 **`-p:MyCaptureTrimWindowsProjection=false`**를 추가하고 별도의 새 출력 폴더를 사용합니다. 이 진단 publish는 SDK 크기 제한을 적용하지 않지만 정식 패키징은 제한을 다시 검사하므로 원본 SDK를 실수로 출하할 수 없습니다. 출력 파일을 덮어 섞지 마십시오.
+
+```cmd
+build\tools\size-report.cmd "<원본 publish>" "<축소 publish>" --verify-only-projection --json
+```
+
+설치 파일 합계, portable ZIP 및 SDK DLL의 바이트 예산은 **`build/ReleaseSizeBudgets.props` 한 곳**에 있습니다. publish는 설치 파일 합계와 SDK DLL을 검사하고, 패키징은 법적 고지 파일을 포함한 설치 파일 합계를 다시 검사한 뒤 실제 생성한 ZIP도 검사합니다. Store 패키징도 설치 파일과 SDK 제한을 검사합니다. 초과 시 실패하며, 의도한 증가는 파일별 크기 보고서와 실제 ZIP 측정값을 검토한 다음 해당 아키텍처의 예산을 수정합니다.
+
+패키지 자체 검사는 전달받은 publish의 SDK를 확인해 축소본에 WinRT 검사와 엄격한 실제 WGC 프레임 검사를 적용합니다. 원본 여부를 확인할 수 없어도 이 검사를 적용합니다. 기존 8종 검사·시간 제한·보고서는 그대로 유지합니다. `packaged-validation.yml`의 수동 실행에는 새 입력이 필요하지 않습니다.
+
+## 디버거 지원 파일과 고객 덤프 분석
+
+두 아키텍처의 Release publish에는 다음 디버거 지원 파일을 포함하지 않습니다. CLR 실행에 필요한 `coreclr.dll`, `hostfxr.dll`, `hostpolicy.dll` 등은 유지합니다.
+
+- `mscordaccore.dll`: 디버거가 CLR 내부 자료를 읽는 DAC(Data Access Component).
+- `mscordaccore_<아키텍처>_<아키텍처>_<런타임 빌드>.dll`: 같은 DAC의 버전 식별 이름.
+- `mscordbi.dll`: 관리 코드 디버깅 지원 인터페이스.
+- `Microsoft.DiaSymReader.Native.amd64.dll` 또는 `.x86.dll`: 디버거의 네이티브 심볼 판독 지원.
+
+앱 실행·OCR·녹화에는 필요하지 않지만, 고객 PC에서 앱 폴더만으로 관리 코드 디버깅이나 덤프 분석을 수행할 수는 없습니다. 덤프 파일 생성 자체는 유지됩니다. 분석 담당자는 덤프와 정확한 배포 버전·아키텍처·`coreclr.dll` 파일 버전 및 모듈 식별 정보를 함께 보존합니다. 분석 PC에서 WinDbg/SOS 등 대상 아키텍처를 지원하는 도구와 Microsoft 심볼 서버(`https://msdl.microsoft.com/download/symbols`)를 사용하고, **덤프의 CLR 런타임 빌드와 정확히 일치하는 DAC**를 내려받습니다. 제품 버전이나 .NET 주 버전만 같은 DAC를 대신 사용하지 않습니다. 분석 도구의 심볼 캐시를 통해 DAC를 로드하고, SOS에서 CLR 버전과 DAC 일치 여부를 확인한 뒤 스택·힙을 분석합니다. 분석 PC가 오프라인이면 연결된 분석 PC에서 해당 DAC·심볼을 미리 확보해 전달합니다. 디버거와 심볼은 제품 설치 폴더에 재배포하지 않습니다.

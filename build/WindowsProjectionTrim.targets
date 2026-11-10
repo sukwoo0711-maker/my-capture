@@ -1,0 +1,97 @@
+<Project>
+  <PropertyGroup>
+    <!-- Release profiles opt in. Never set PublishTrimmed or application trim analyzers. -->
+    <MyCaptureTrimWindowsProjection Condition="'$(MyCaptureTrimWindowsProjection)' == ''">false</MyCaptureTrimWindowsProjection>
+    <MyCaptureProjectionLinkerVersion Condition="'$(MyCaptureProjectionLinkerVersion)' == ''">10.0.12</MyCaptureProjectionLinkerVersion>
+    <MyCaptureProjectionLinkerPackageSha512>opT5P1p+CG70xGaveTgq3Q5OZKd7MZ0Rs10x4Tewl6bcPbu4SLo4F0n6RBCInvBKxoR10T11+X0M9dgjKEfucw==</MyCaptureProjectionLinkerPackageSha512>
+    <MyCaptureProjectionRoots Condition="'$(MyCaptureProjectionRoots)' == ''">$(MSBuildThisFileDirectory)WindowsProjectionRoots.xml</MyCaptureProjectionRoots>
+    <MyCaptureProjectionTrimWorkRoot Condition="'$(MyCaptureProjectionTrimWorkRoot)' == ''">$(TEMP)\mycapture-projection\$(MSBuildProjectName)\$(RuntimeIdentifier)\$([System.Guid]::NewGuid().ToString('N'))</MyCaptureProjectionTrimWorkRoot>
+  </PropertyGroup>
+
+  <UsingTask TaskName="PrepareMyCaptureProjectionLink" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Assemblies ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <WorkRoot Required="true" />
+      <Descriptor Required="true" />
+      <ResponseFile Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Collections.Generic" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Directory.CreateDirectory(WorkRoot);
+        var lines = new List<string> { "--action skip", "--trim-mode skip",
+          "--action link Microsoft.Windows.SDK.NET", "--deterministic",
+          // Keep ILLink's default skip-unresolved=true: copied WPF/WebView/facade assemblies
+          // reference optional WinForms, SQL and ODBC packages absent from the normal publish.
+          // These assemblies are never consumed from linked/. Projection closure is verified
+          // by the packaged WinRT probes and the full publish hash comparison.
+          "--singlewarn-", "--warnaserror-", "-out \"" + Path.Combine(WorkRoot, "linked") + "\"",
+          "-x \"" + Path.GetFullPath(Descriptor) + "\"" };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in Assemblies.OrderBy(x => x.ItemSpec, StringComparer.Ordinal)) {
+          var path = Path.GetFullPath(item.ItemSpec);
+          if (!seen.Add(path)) continue;
+          lines.Add("-reference \"" + path + "\"");
+          var name = Path.GetFileNameWithoutExtension(path);
+          // Root complete application libraries, including reflection/BAML-only entry points.
+          if (name == "MyCapture" || name.StartsWith("MyCapture.", StringComparison.Ordinal)) {
+            lines.Add("--action copy " + name);
+            lines.Add("-a \"" + path + "\" all");
+          }
+          // Its reflection-based RCW/generic machinery must also participate in marking.
+          if (name == "WinRT.Runtime") lines.Add("--action copy WinRT.Runtime");
+        }
+        ResponseFile = Path.Combine(WorkRoot, "projection.rsp");
+        File.WriteAllLines(ResponseFile, lines);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Keep the SDK's original reference closure and every other R2R input/output.
+       Only replace the projection's compilation input AFTER the SDK prepares R2R.
+       Do not consume the linker's copies of other assemblies or regenerate deps.json. -->
+  <Target Name="MyCaptureTrimProjection" AfterTargets="_PrepareForReadyToRunCompilation"
+          Condition="'$(MyCaptureTrimWindowsProjection)' == 'true'">
+    <Error Condition="'$(SelfContained)' != 'true' or '$(PublishReadyToRun)' != 'true' or '$(PublishTrimmed)' == 'true' or '$(PublishSingleFile)' == 'true'"
+           Text="Projection trimming requires self-contained, ReadyToRun, non-single-file publishing with PublishTrimmed=false." />
+    <PropertyGroup>
+      <_ProjectionLinker Condition="'$(MYCAPTURE_PROJECTION_LINKER_PATH)' != ''">$(MYCAPTURE_PROJECTION_LINKER_PATH)</_ProjectionLinker>
+      <_ProjectionLinker Condition="'$(_ProjectionLinker)' == ''">$(NuGetPackageRoot)microsoft.net.illink.tasks\$(MyCaptureProjectionLinkerVersion)\tools\net\illink.dll</_ProjectionLinker>
+      <_ProjectionRoot>$([System.IO.Path]::GetFullPath('$(MyCaptureProjectionTrimWorkRoot)'))</_ProjectionRoot>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_ProjectionLinker)')" Text="The pinned ILLink pack is missing: $(_ProjectionLinker). Prepare Microsoft.NET.ILLink.Tasks $(MyCaptureProjectionLinkerVersion), or use -p:MyCaptureTrimWindowsProjection=false for an untrimmed diagnostic publish (not a release package)." />
+    <ItemGroup>
+      <_ProjectionOriginal Include="@(_ReadyToRunCompileList)" Condition="'%(Filename)%(Extension)' == 'Microsoft.Windows.SDK.NET.dll'" />
+    </ItemGroup>
+    <Error Condition="'@(_ProjectionOriginal->Count())' != '1'" Text="Expected exactly one Windows projection in the SDK ReadyToRun compile list." />
+    <PrepareMyCaptureProjectionLink Assemblies="@(_ReadyToRunImplementationAssemblies)" WorkRoot="$(_ProjectionRoot)"
+                                    Descriptor="$(MyCaptureProjectionRoots)">
+      <Output TaskParameter="ResponseFile" PropertyName="_ProjectionResponse" />
+    </PrepareMyCaptureProjectionLink>
+    <Exec Command="dotnet &quot;$(_ProjectionLinker)&quot; @&quot;$(_ProjectionResponse)&quot;" IgnoreStandardErrorWarningFormat="true" />
+    <Error Condition="!Exists('$(_ProjectionRoot)\linked\Microsoft.Windows.SDK.NET.dll')" Text="ILLink did not produce the Windows projection." />
+    <MakeDir Directories="$(_ProjectionRoot)\r2r" />
+    <ItemGroup>
+      <_ReadyToRunCompileList Remove="@(_ProjectionOriginal)" />
+      <_ReadyToRunCompileList Include="$(_ProjectionRoot)\linked\Microsoft.Windows.SDK.NET.dll">
+        <OutputR2RImage>$(_ProjectionRoot)\r2r\Microsoft.Windows.SDK.NET.dll</OutputR2RImage>
+      </_ReadyToRunCompileList>
+      <_ReadyToRunFilesToPublish Remove="@(_ReadyToRunFilesToPublish)" Condition="'%(Filename)%(Extension)' == 'Microsoft.Windows.SDK.NET.dll'" />
+      <_ReadyToRunFilesToPublish Include="$(_ProjectionRoot)\r2r\Microsoft.Windows.SDK.NET.dll">
+        <RelativePath>Microsoft.Windows.SDK.NET.dll</RelativePath>
+        <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      </_ReadyToRunFilesToPublish>
+      <!-- CreateReadyToRunImages normally removes the original IL item using its compile list. -->
+      <ResolvedFileToPublish Remove="@(_ProjectionOriginal)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ValidateMyCaptureProjectionTrimConfiguration" BeforeTargets="PrepareForPublish"
+          Condition="'$(MyCaptureTrimWindowsProjection)' == 'true'">
+    <Error Condition="'$(SelfContained)' != 'true' or '$(PublishReadyToRun)' != 'true' or '$(PublishTrimmed)' == 'true' or '$(PublishSingleFile)' == 'true'"
+           Text="Projection trimming requires the unchanged self-contained ReadyToRun profile (PublishTrimmed=false)." />
+  </Target>
+</Project>
