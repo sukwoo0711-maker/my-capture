@@ -13,7 +13,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **제품 이름**: 두 언어 모두 `MyCapture`. 패키지 DisplayName과 같습니다.
 - **예약해 둔 이름**: `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20 예약). Store 정책 10.1.1은 제품 이름에 설명 문구나 키워드를 넣지 못하게 하므로 목록에는 쓰지 않습니다. 설명어는 짧은 소개 첫 문장과 검색어에 넣었습니다. 예약한 이름은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 - **Store ID**: `9PB33MC095VR`, https://apps.microsoft.com/detail/9PB33MC095VR
-- **게시자 표시 이름**: `MyCapture`. 계정 설정 > Legal info > Contact info의 Publisher name에서 바꿉니다. 바꾸면 계정이 추가 검토를 받고, 이후 패키지는 `package-store.ps1 -PublisherDisplayName 'MyCapture'`로 다시 만들어야 합니다. 2026-10-20에는 4.3.1(제출 12, `sukwoo0711`로 빌드)이 인증 중이라 게시 뒤에 바꿉니다.
+- **게시자 표시 이름**: `Mimiloaf`(2026-10-21 Partner Center 승인, 4.5.2 제출부터). 계정 설정 > Legal info > Contact info의 Publisher name에서 바꿉니다. 바꾸면 계정이 추가 검토를 받고, 이후 패키지는 승인된 이름으로 `package-store.ps1 -PublisherDisplayName 'Mimiloaf'`처럼 다시 만들어야 합니다. 패키징 값은 [README](README.md)의 패키지 ID 표에 있습니다.
 - **개발자(Developed by)**: `MyCapture`
 - **저작권**: `Copyright (c) 2026 MyCapture`
 - **범주**: 생산성 또는 사진 및 비디오
@@ -103,24 +103,35 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.12.2)
+### 이 버전의 새로운 기능 (5.3.0)
 
-입력 한도는 1,500자입니다.
+입력 한도는 1,500자입니다. Store의 5.1.0에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
 
-- 핀 메뉴에 ‘숨기기’와 ‘이 핀만 보기’가 생겼습니다. 트레이의 ‘열린 핀’은 미리 보기와 함께 숨긴 핀을 표시하고, 고른 핀을 깜빡여 알려 줍니다.
-- 문자 인식 결과의 표 칸과 글자를 그 자리에서 고치고, 고친 결과를 원문째 핀으로 띄웁니다. 칸을 고르면 원본의 같은 줄이 강조됩니다.
-- 그림 핀에서 글자를 복사하면 처음 인식한 결과를 기억해 다음부터 다시 인식하지 않습니다.
-- 편집기가 캡처를 실제 크기로 보여 줘 글자와 가는 선이 흐려지지 않습니다. 자른 뒤에도 배율이 그대로입니다.
-- 펜·형광펜·단계 번호는 그리기 전부터 실제 두께와 시작점을 보여 줍니다. 단계 번호는 모서리를 끌어 크기를 바꿉니다.
-- 모자이크와 흐림을 ‘가리기’ 도구 하나로 합쳤습니다(M 모자이크, B 흐림). ‘도장’은 ‘워터마크’로 이름을 바꿨습니다.
-- Esc는 한 번에 한 겹씩 닫고, 맨 바깥에서는 편집기를 닫습니다. 저장하지 않은 변경이 있으면 먼저 묻습니다.
-- 여러 글상자의 크기·굵기·배경·글꼴을 한 번에 바꿉니다.
-- 동영상 플레이어와 영상 편집기에서 지금 장면을 이미지로 저장합니다(Shift+S).
-- 화면을 녹화할 때 글자나 이미지 워터마크를 넣을 수 있습니다.
-- 라이브러리에서 고른 이미지로 PDF를 만듭니다. 카드의 출처 아이콘을 누르면 원본 페이지·파일·앱이 열립니다.
-- 문자 인식 창에서 정확도를 바꿔 다시 인식하고, 고른 부분만 복사합니다.
-- 설정을 아홉 범주로 나누고, ‘변화 보기’로 바꾸기 전과 후를 비교합니다.
-- 처음 사용 연습을 한 단계에 한 행동씩 15단계로 다시 만들었습니다.
+- 캡처 선택 화면이 더 빨리 뜨고 키보드·마우스 입력을 더 빨리 받습니다. 닫은 뒤 남는 메모리도 줄었습니다.
+- 여러 캡처를 휴지통으로 옮기고 되돌리는 시간이 줄었습니다. 라이브러리 미리 보기·복사·저장의 화면 대기도 줄였습니다.
+- 스크롤 캡처의 반복 무늬 처리를 개선했습니다. 녹화 검증이 잠시 실패해도 완성된 영상과 복구 정보를 보존하며, 녹화 도움말이 영상에 찍히지 않습니다. 녹화 영역의 고정 크기가 버튼을 놓을 때 바뀌던 문제를 고쳤습니다.
+- 글상자 입력 중에도 외곽선을 표시하고, 밝거나 어두운 바탕에서 입력 위치가 보이도록 고쳤습니다.
+- VS Code에서 복사한 Markdown 문서를 핀으로 표시합니다. Mermaid 도표도 보입니다.
+- 정확 모드의 표 인식과 긴 문장 번역을 고치고, 문자 인식 대기 중 CPU 사용량을 줄였습니다.
+- 오류 창에서 보고할 내용을 골라 보냅니다. 예기치 않은 종료는 다음 실행 때 알립니다.
+- 새로 설치하면 핵심 단축키를 지정하고 첫 실행 때 알립니다.
+- 화면의 정렬·잘림·포커스 표시와 입력란 바깥 클릭을 고쳤습니다.
+
+### 이 버전의 새로운 기능 (5.1.0)
+
+입력 한도는 1,500자입니다. Store에는 5.0.0이 게시되어 있습니다. 그래서 5.1.0 줄 아래에 5.0.1에서 바뀐 점을 둡니다. 5.0.1을 Store에 먼저 냈다면 마지막 줄은 지웁니다.
+
+- 편집기 포인터가 도구마다 달라집니다. 도형은 회색 바탕에서도 보이는 십자, 펜은 연필입니다.
+- 펜과 형광펜은 그리기 전에 실제 굵기를 획 색 원으로 보입니다. `[`와 `]`로 굵기를 14단계로 바꿉니다.
+- 형광펜 굵기를 펜과 따로 기억합니다.
+- 사용자 지정 색상 입력칸이 편집기 창 안에 열립니다. 바깥을 누르면 닫히기만 하고 그리기는 시작하지 않습니다.
+- 라이브러리에서 카드를 고른 채 창 폭을 바꾸면 고른 카드와 포커스를 잃던 문제를 고쳤습니다.
+- 라이브러리, 저장, 문자 인식이 하는 일을 줄였습니다. 1,000개 항목 라이브러리를 한 번 저장하는 CPU 시간이 절반으로 줄었습니다.
+- 인식 품질 ‘정확’이 기울어진 글자의 위치를 바르게 잡습니다.
+- 모델을 받다가 네트워크가 멈추면 계속 기다리던 문제를 고쳤습니다.
+- Windows 10에서 녹화 제어창과 캡처 카드의 배경이 투명해지던 문제를 고쳤습니다. 125% 같은 배율에서는 카드 끌기와 동영상 타임라인 글자 문제를 고쳤습니다.
+- 사용법 영상을 지금 화면으로 다시 만들었습니다.
+- 인식 품질 ‘정확’으로 문자를 인식한 뒤 메모리를 1 GB 넘게 계속 차지하던 문제를 고쳤습니다(5.0.1).
 
 ### 검색어
 
@@ -204,24 +215,35 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.12.2)
+### What's new in this version (5.3.0)
 
-Limit: 1,500 characters.
+Limit: 1,500 characters. Covers changes since the Store version, 5.1.0. Enter the lines below in the Store.
 
-- New pin menu items: Hide and Show only this pin. Open pins in the tray adds thumbnails and flashes the pin you pick.
-- Edit table cells and text in the text recognition result, with the source line highlighted, then pin it as text.
-- Image pins remember their first text recognition, so the next copy skips it.
-- The editor shows captures at actual size, so text and thin lines stay sharp. Cropping keeps the zoom.
-- Pen, highlighter and step numbers show their real width and starting point before you draw. Drag a corner of a step number to resize it.
-- Mosaic and blur are now one Obscure tool (M for mosaic, B for blur). Stamp is now called Watermark.
-- Esc closes one layer at a time and closes the editor at the outermost layer. If you have unsaved changes, MyCapture asks first.
-- Change the size, weight, background and font of several text boxes at once.
-- Save the current frame of a video as an image in the player and the video editor (Shift+S).
-- Add a text or image watermark when you record the screen.
-- Create a PDF from images you select in the library. Click a card's source icon to open the original page, file or app.
-- Change the accuracy in the text recognition window to recognize again, and copy only the part you select.
-- Settings are grouped into nine categories. See the difference compares a setting before and after.
-- The first-use practice is rebuilt as 15 steps, one action per step.
+- The capture selector appears and accepts keyboard and mouse input sooner, with less memory left in use after it closes.
+- Moving captures to the Recycle Bin and restoring them is faster. Library previews, copying and saving cause less waiting.
+- Improved scrolling capture on repeated patterns. Completed recordings and recovery data survive temporary validation failures. Recording tooltips stay out of the video. A fixed recording size no longer changes when you release the mouse button.
+- Text boxes show outlines while you type, with a caret visible on light and dark backgrounds.
+- Markdown copied from VS Code opens as a document pin, including Mermaid diagrams.
+- Improved Accurate table recognition, fixed long-text translation and reduced CPU use while OCR is idle.
+- Choose what to send from the error dialog. The app notifies you of unexpected exits at the next launch.
+- New installations assign the core shortcuts and explain them at first launch.
+- Fixed alignment, clipping, focus indicators and clicks outside text fields.
+
+### What's new in this version (5.1.0)
+
+Limit: 1,500 characters. The Store has 5.0.0, so the 5.0.1 change follows the 5.1.0 lines. Remove the last line if 5.0.1 goes to the Store first.
+
+- The editor pointer now matches the tool: a crosshair that stays visible on gray for shapes, and a pencil for the pen.
+- The pen and highlighter show their real width as a dot in the stroke color before you draw. Press [ and ] to step the width through 14 sizes.
+- The highlighter remembers its own width, separate from the pen.
+- The custom color box opens inside the editor window. Clicking outside it closes the box without starting a stroke.
+- Fixed the library losing the selected card and keyboard focus when you resize its window.
+- The library, saving and text recognition do less work. Saving a 1,000-item library takes half the CPU time.
+- Accurate recognition places tilted text correctly.
+- Fixed a model download that waited forever when the network stopped.
+- Fixed transparent backgrounds on the recording controls and capture card on Windows 10. At display scales such as 125%, fixed dragging the card and the video timeline text.
+- The how-to videos are remade with the current screens.
+- Fixed MyCapture keeping more than 1 GB of memory after Accurate text recognition (5.0.1).
 
 ### Search terms
 

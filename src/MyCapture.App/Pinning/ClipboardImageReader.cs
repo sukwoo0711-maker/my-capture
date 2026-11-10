@@ -343,7 +343,11 @@ internal static class ClipboardImageReader
                 clipboardSequence,
                 systemImageFallback);
         string? html = TryGetClipboardString(data, DataFormats.Html, false);
-        bool hasExplicitMarkdown = ClipboardMarkdownRenderer.IsExplicitMarkdownHtml(html);
+        bool hasCodeHtml = ClipboardCodeRenderer.IsCodeHtml(html);
+        // VS Code's code HTML names no language; the editor language it copies alongside does.
+        // Other producers' custom data, which can be large, is not read.
+        bool hasExplicitMarkdown = ClipboardMarkdownRenderer.IsExplicitMarkdownHtml(html)
+            || (hasCodeHtml && ClipboardMarkdownRenderer.IsMarkdownLanguage(ClipboardEditorLanguage.TryRead(data)));
         // A named Markdown/Mermaid container uses the document renderer below. Avoid
         // building a discarded editor bitmap on the clipboard's UI-thread capture path.
         PinCodeDocument? codeDocument = originalText is not null && !isTabularText && !hasExplicitMarkdown
@@ -366,7 +370,7 @@ internal static class ClipboardImageReader
         {
             CodeDocument = codeDocument,
             CodePreview = codePreview,
-            HasCodeHtml = ClipboardCodeRenderer.IsCodeHtml(html),
+            HasCodeHtml = hasCodeHtml,
             HasExplicitMarkdown = hasExplicitMarkdown,
             Provenance = provenance.Source,
             PendingProvenance = provenance.Pending,

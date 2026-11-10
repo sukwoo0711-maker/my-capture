@@ -19,7 +19,7 @@ internal static class DiagnosticBundle
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(2);
 
-    internal static void Write(string destination, string summary, RollingFileLog? log)
+    internal static void Write(string destination, string summary, RollingFileLog? log, UnexpectedExitLog? exits = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
         ArgumentNullException.ThrowIfNull(summary);
@@ -41,6 +41,9 @@ internal static class DiagnosticBundle
                     foreach (string file in log.ExistingFiles())
                         WriteText(zip, LogsFolder + Path.GetFileName(file), string.Join("\r\n", SafeLines(file, log.MaximumFileBytes)));
                 }
+                if (exits is not null)
+                    foreach ((string name, string text) in exits.SafeEntries())
+                        WriteText(zip, "unexpected-exits/" + name, text);
             }
             // The save dialog already asked before replacing an existing file.
             File.Move(stage, target, overwrite: true);

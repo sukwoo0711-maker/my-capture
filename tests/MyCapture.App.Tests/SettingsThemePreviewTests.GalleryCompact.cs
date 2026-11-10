@@ -236,7 +236,18 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(more.ContextMenu!.IsOpen);
             Assert.Same(more, more.ContextMenu.PlacementTarget);
             Assert.Same(vm, more.ContextMenu.DataContext);
-            more.ContextMenu.IsOpen = false;
+            ContextMenu keyboardMenu = more.ContextMenu!;
+            bool keyboardMenuClosed = false;
+            RoutedEventHandler onKeyboardMenuClosed = (_, _) => keyboardMenuClosed = true;
+            keyboardMenu.Closed += onKeyboardMenuClosed;
+            try
+            {
+                keyboardMenu.IsOpen = false;
+                _ = PumpLibraryUntil(window, () => keyboardMenu,
+                    menu => keyboardMenuClosed && menu is { IsOpen: false },
+                    language + ": keyboard overflow menu Closed before More click");
+            }
+            finally { keyboardMenu.Closed -= onKeyboardMenuClosed; }
             window.Dispatcher.Invoke(() => more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
             SettleGalleryLayout(window);
             var overflow = more.ContextMenu!;

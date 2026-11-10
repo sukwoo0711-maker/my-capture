@@ -35,6 +35,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     private static readonly DependencyProperty CropFrameShadowProperty = DependencyProperty.Register(
         "CropFrameShadow", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    // The brush preview's edge: two 1 DIP rings at 70% opacity, the dark one inside the light one.
+    private static readonly Pen BrushEdgeDark = EdgePen(Color.FromArgb(0xB3, EditorCursorStyle.Ink.R, EditorCursorStyle.Ink.G, EditorCursorStyle.Ink.B));
+    private static readonly Pen BrushEdgeLight = EdgePen(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
+
     private FrozenFrame _frame;
     private RectD _cropRegion;
     private readonly AnnotationEditorController _controller;
@@ -123,10 +127,15 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         {
             if (_pointerPreviewPoint is not { } point || PendingCrop is not null
                 || _controller.Tool is not (EditorTool.Pen or EditorTool.Highlighter)) return null;
-            double width = _controller.Tool == EditorTool.Highlighter
-                ? Math.Max(12, _controller.StrokeThickness) : _controller.StrokeThickness;
-            return BrushPreviewBounds(ToSurfacePoint(point), width, DipPerPixel);
+            return BrushPreviewBounds(ToSurfacePoint(point), _controller.BrushThickness, DipPerPixel);
         }
+    }
+
+    private static Pen EdgePen(Color color)
+    {
+        var pen = new Pen(new SolidColorBrush(color), 1);
+        pen.Freeze();
+        return pen;
     }
 
     internal static Rect BrushPreviewBounds(Point centre, double strokeWidth, double dipPerPixel)
@@ -268,7 +277,37 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         scale = Math.Max(double.Epsilon, scale);
         double framePixelX = (dip.X - origin.X) / scale;
         double framePixelY = (dip.Y - origin.Y) / scale;
-        return new PointD(framePixelX - _cropRegion.Left, framePixelY - _cropRegion.Top);
+        return new PointD(
+            RestorePixelBoundary(framePixelX - _cropRegion.Left, dip.X, origin.X, scale, _cropRegion.Left),
+            RestorePixelBoundary(framePixelY - _cropRegion.Top, dip.Y, origin.Y, scale, _cropRegion.Top));
+    }
+
+    private static double RestorePixelBoundary(double image, double dip, double origin, double scale, double cropOffset)
+    {
+        double integer = Math.Round(image);
+        if (!double.IsFinite(integer) || image == integer) return image;
+        double framePixel = integer + cropOffset;
+        double scaled = framePixel * scale;
+        double projected = origin + scaled;
+        if (!double.IsFinite(projected)) return image;
+
+        // Qualify the integer in DIP space using the same forward map as ToSurfacePoint.
+        // One ULP for each rounded input/intermediate covers the local affine round trip:
+        // the DIP input, frame origin, scaled displacement, and pixel+crop addition
+        // (the last error is converted to DIP). This is a representation-error budget,
+        // not a fixed image-pixel snap radius. Positions outside this local roundoff
+        // envelope retain their continuous coordinates.
+        double budget = Ulp(dip) + Ulp(origin) + Ulp(scaled) + Ulp(framePixel) * scale;
+        // If adjacent pixel boundaries cannot be distinguished at this magnitude/zoom,
+        // keep the continuous coordinate instead of choosing an ambiguous integer.
+        return double.IsFinite(budget) && budget < scale / 2 && Math.Abs(projected - dip) <= budget
+            ? integer : image;
+
+        static double Ulp(double value)
+        {
+            double magnitude = Math.Abs(value);
+            return Math.BitIncrement(magnitude) - magnitude;
+        }
     }
 
     /// <summary>Maps a selected-image pixel point to a point on the surface (DIP).</summary>
@@ -341,8 +380,10 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         AnnotationItem? suppress = _controller.EditingText;
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
-        // base capture in annotation pixel space that blur layers sample.
-        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap);
+        // base capture in annotation pixel space that blur layers sample. A caption being typed
+        // keeps its committed plate and outline under the live box, which draws its glyphs.
+        _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap,
+            _controller.LiveTextForPaint(), _controller.LiveTextScroll);
         SourceWindowTitleRenderer.Draw(dc, SourceWindowTitle, _cropRegion.Width, _cropRegion.Height);
 
         dc.Pop();
@@ -370,10 +411,21 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         {
             dc.PushClip(new RectangleGeometry(CropRectDip));
             var center = new Point(brush.X + brush.Width / 2, brush.Y + brush.Height / 2);
-            // The path follows the true footprint, even for a subpixel brush. Only the
-            // contrast edge has a fixed DIP width; the locator follows Windows pointer size.
-            dc.DrawEllipse(null, new Pen(Brushes.Black, 3), center, brush.Width / 2, brush.Height / 2);
-            dc.DrawEllipse(null, new Pen(Brushes.White, 1), center, brush.Width / 2, brush.Height / 2);
+            double radius = brush.Width / 2;
+            // The footprint follows the true size, even for a subpixel brush, and shows the colour
+            // the stroke will have. While a stroke is drawn its own head is already there, so only
+            // the edge stays (a highlighter's translucent head would otherwise be doubled).
+            if (!_controller.IsDrawingStroke)
+            {
+                ColorRgba ink = AnnotationRenderer.PenInk(_controller.StrokeColor, _controller.Tool == EditorTool.Highlighter);
+                dc.DrawEllipse(ink.ToBrush(), null, center, radius, radius);
+            }
+
+            // Only the contrast edge has a fixed DIP width. A dark and a light ring sit just
+            // outside the footprint, so the edge reads on light and dark captures alike and never
+            // covers the colour inside it.
+            dc.DrawEllipse(null, BrushEdgeDark, center, radius + 0.5, radius + 0.5);
+            dc.DrawEllipse(null, BrushEdgeLight, center, radius + 1.5, radius + 1.5);
             dc.Pop();
         }
         else if (_pointerPreviewPoint is { } point && PendingCrop is null
@@ -478,13 +530,19 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
-        Rect inflated = Rect.Inflate(bounds, 2, 2);
+        bool endpoints = !multiple && selected is PolylineAnnotation { Points.Count: 2 };
+        Rect inflated = !multiple && selected is TextAnnotation { IsStepNumber: false }
+            ? ToSurfaceRect(PointerIntentGeometry.SelectionFrame(selected, DipPerPixel))
+            : Rect.Inflate(bounds, 2, 2);
         bool rotated = !multiple && selected is TextAnnotation { RotationDegrees: not 0 };
         if (rotated)
             dc.PushTransform(new RotateTransform(((TextAnnotation)selected).RotationDegrees,
                 bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
-        dc.DrawRectangle(null, _edgeShadowPen, inflated);
-        dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        if (!endpoints)
+        {
+            dc.DrawRectangle(null, _edgeShadowPen, inflated);
+            dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        }
         if (rotated) dc.Pop();
 
         if (multiple || !selected.SupportsResize)
@@ -492,15 +550,61 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             return;
         }
 
+        // The rings pass behind an arrow's heads, so a head keeps the pixels it has unselected
+        // however small the image scale makes it.
+        Geometry? behindHeads = endpoints ? OutsideArrowHeads((PolylineAnnotation)selected) : null;
+        if (behindHeads is not null) dc.PushClip(behindHeads);
         foreach (SelectionHandle handle in _controller.GetSelectionHandles(DipPerPixel))
         {
             Point center = ToSurfacePoint(handle.Position);
+            if (endpoints)
+            {
+                // Only strokes: the line remains visible through each ring.
+                dc.DrawEllipse(null, _edgeShadowPen, center, HandlePixels / 2, HandlePixels / 2);
+                dc.DrawEllipse(null, _handlePen, center, HandlePixels / 2, HandlePixels / 2);
+                continue;
+            }
             dc.DrawRectangle(
                 _handleFillBrush,
                 _handlePen,
                 new Rect(center.X - (HandlePixels / 2), center.Y - (HandlePixels / 2), HandlePixels, HandlePixels));
         }
+        if (behindHeads is not null) dc.Pop();
     }
+
+    /// <summary>
+    /// The surface outside <paramref name="line"/>'s arrowheads and a margin of
+    /// <see cref="ArrowHeadClearancePixels"/> device pixels around them, or <see langword="null"/>
+    /// when it has none.
+    /// </summary>
+    private Geometry? OutsideArrowHeads(PolylineAnnotation line)
+    {
+        var heads = new GeometryGroup();
+        foreach (Geometry head in AnnotationRenderer.ArrowHeads(line)) heads.Children.Add(head);
+        if (heads.Children.Count == 0) return null;
+        double scale = Math.Max(0.0001, DipPerPixel);
+        // Widened in image pixels, the heads' own space, by as many image pixels as the margin's
+        // device pixels take at this image scale; the union is then placed on the surface.
+        double margin = ArrowHeadClearancePixels / Math.Max(0.0001, VisualTreeHelper.GetDpi(this).PixelsPerDip) / scale;
+        Point origin = ToSurfacePoint(default);
+        // Round joins keep the margin even around each corner, the tip included.
+        var clear = new CombinedGeometry(GeometryCombineMode.Union, heads,
+            heads.GetWidenedPathGeometry(new Pen(Brushes.Black, 2 * margin) { LineJoin = PenLineJoin.Round }))
+        {
+            Transform = new MatrixTransform(scale, 0, 0, scale, origin.X, origin.Y),
+        };
+        var everything = new RectangleGeometry(new Rect(0, 0, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight)));
+        var outside = new CombinedGeometry(GeometryCombineMode.Exclude, everything, clear);
+        outside.Freeze();
+        return outside;
+    }
+
+    /// <summary>
+    /// How far the endpoint rings stop short of an arrowhead, in device pixels. A pixel that a head
+    /// touches lies within the pixel's diagonal (about 1.41) of the head, so past this margin neither
+    /// edge's anti-aliasing reaches it, and it keeps the colour it has unselected.
+    /// </summary>
+    private const double ArrowHeadClearancePixels = 1.5;
 
     private static IEnumerable<Point> HandleCenters(Rect rect)
     {

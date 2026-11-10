@@ -28,6 +28,39 @@ public sealed class TranslationLiveModelTests
     private static readonly TimeSpan FortyLineBudget = TimeSpan.FromSeconds(3);
 
     [Fact]
+    public async Task LongUnspacedSourceReachesTheRealEncoderInFull()
+    {
+        using LiveModel? live = LiveModel.CreateIfPresent();
+        if (live is null) return;
+        var engine = new RecordingEngine(MarianTranslator.Load(live.Store.ModelDirectory, TranslationModelCatalog.ModelFiles, 4));
+        using var service = new TextTranslationService(live.Store, () => engine, NullLogger.Instance, TimeSpan.FromMinutes(5));
+        string source = string.Join(",", Enumerable.Range(1, 300).Select(index => $"item_{index}"));
+
+        TranslatedText result = Assert.Single(await service.TranslateAsync([source], null, CancellationToken.None));
+
+        Assert.True(engine.Rows.Count > 1);
+        Assert.All(engine.Rows, row => Assert.InRange(engine.CountTokens(row), 1, MarianTranslator.MaxSourceTokens));
+        Assert.Equal(source, string.Concat(engine.Rows.OrderBy(row => source.IndexOf(row, StringComparison.Ordinal))));
+        // The encoder refuses a row over the limit instead of cutting it, so a finished translation means every
+        // row, the one ending in item_300 included, reached the encoder in full. What the model writes for a
+        // long run of identifiers is a translation quality question this test does not settle.
+        Assert.Contains(engine.Rows, row => row.EndsWith("item_300", StringComparison.Ordinal));
+        Assert.False(string.IsNullOrWhiteSpace(result.Text));
+    }
+
+    private sealed class RecordingEngine(MarianTranslator inner) : ISentenceTranslator
+    {
+        internal List<string> Rows { get; } = [];
+        public int CountTokens(string text) => inner.CountTokens(text);
+        public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken)
+        {
+            Rows.AddRange(sentences);
+            return inner.Translate(sentences, cancellationToken);
+        }
+        public void Dispose() => inner.Dispose();
+    }
+
+    [Fact]
     public void ReproducesTheProbeTranslationsSentenceBySentence()
     {
         using LiveModel? live = LiveModel.CreateIfPresent();
@@ -45,6 +78,24 @@ public sealed class TranslationLiveModelTests
     }
 
     [Fact]
+    public void SharedWeightsTranslateExactlyLikeSeparateSessions()
+    {
+        using LiveModel? live = LiveModel.CreateIfPresent();
+        if (live is null) return;
+        string[] screen = [.. ProbeTranslations().Take(40).Select(item => item.Text)];
+        IReadOnlyList<string> Translate(bool shareWeights)
+        {
+            using MarianTranslator translator = MarianTranslator.Load(live.Store.ModelDirectory,
+                TranslationModelCatalog.ModelFiles, 4, shareWeights);
+            return [.. TextTranslationService.PlanBatches(screen, translator.CountTokens)
+                .SelectMany(batch => translator.Translate(batch, CancellationToken.None))
+                .Concat(screen.Take(8).SelectMany(line => translator.Translate([line], CancellationToken.None)))];
+        }
+
+        Assert.Equal(Translate(shareWeights: false), Translate(shareWeights: true));
+    }
+
+    [Fact]
     public void FortyLineScreenTranslatesWithinTheBudget()
     {
         using LiveModel? live = LiveModel.CreateIfPresent();
@@ -58,7 +109,7 @@ public sealed class TranslationLiveModelTests
         for (int round = 0; round < 3; round++)
         {
             var watch = Stopwatch.StartNew();
-            translated = [.. screen.Chunk(TextTranslationService.BatchSize)
+            translated = [.. TextTranslationService.PlanBatches(screen, translator.CountTokens)
                 .SelectMany(batch => translator.Translate(batch, CancellationToken.None))];
             timings.Add(watch.Elapsed);
         }

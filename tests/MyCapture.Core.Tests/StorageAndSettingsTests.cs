@@ -249,8 +249,10 @@ public sealed class SettingsStoreTests
         Assert.Equal(MyCapture.Core.Queue.CaptureRetention.NeverHours, settings.Queue.ImageRetentionHours);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
-        // A new installation assigns capture, recording and clipboard pin keys.
-        Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
+        // A new installation assigns the four core shortcuts and records their default takeover.
+        Assert.Equal(CoreShortcuts.OpenLibrary, settings.Hotkeys.OpenLibrary);
+        Assert.True(settings.Hotkeys.ForceCoreShortcuts);
+        Assert.True(settings.Hotkeys.CoreShortcutsAsked);
         Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
         Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
         Assert.True(settings.Pin.CloseOnDoubleClick);

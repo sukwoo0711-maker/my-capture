@@ -40,7 +40,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_01EC445E93F5" xml:space="preserve">
-    <value>F  프레임</value>
+    <value>프레임</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0226F79FE6FB" xml:space="preserve">
@@ -937,7 +937,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_541F62E38579" xml:space="preserve">
-    <value>T  텍스트</value>
+    <value>텍스트</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_542965B456C7" xml:space="preserve">
@@ -1980,7 +1980,7 @@
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_AD80E1DD716A" xml:space="preserve">
-    <value>T  텍스트 {0}</value>
+    <value>텍스트 {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_AD823133F009" xml:space="preserve">
@@ -2818,7 +2818,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml.cs</comment>
   </data>
   <data name="Text_F085C7366DEB" xml:space="preserve">
-    <value>F  프레임 {0}</value>
+    <value>프레임 {0}</value>
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_F09A6C5A6A10" xml:space="preserve">
@@ -3071,6 +3071,8 @@
   <data name="LibraryUndo_PartlyRestored" xml:space="preserve"><value>라이브러리에 {0}개 복원됨 · {1}개는 휴지통에 남아 있습니다.</value></data>
   <data name="LibrarySelection_DeleteFailed" xml:space="preserve"><value>삭제를 저장하지 못했습니다. 라이브러리를 확인한 후 다시 시도하십시오.</value></data>
   <data name="LibrarySelection_CleanupPending" xml:space="preserve"><value>삭제된 {0}개 항목의 파일 정리가 아직 완료되지 않았습니다. 해당 항목의 디스크 공간 확보는 확인되지 않았습니다.</value></data>
+  <data name="LibrarySelection_Moving" xml:space="preserve"><value>{0}개를 휴지통으로 옮기는 중…</value></data>
+  <data name="LibrarySelection_MovingProgress" xml:space="preserve"><value>{1}개 중 {0}개를 휴지통으로 옮기는 중…</value></data>
   <data name="LibrarySelection_RecycleUnavailableTitle" xml:space="preserve"><value>휴지통 사용 불가</value></data>
   <data name="LibrarySelection_RecycleUnavailableMessage" xml:space="preserve"><value>휴지통으로 옮길 수 없는 항목이 {0}개 있습니다. 휴지통이 꺼져 있거나, 항목이 이동식·네트워크 드라이브에 있거나, 휴지통 용량보다 클 수 있습니다. 이 항목을 영구 삭제하시겠습니까? 영구 삭제한 항목은 복원할 수 없습니다.</value></data>
   <data name="LibrarySelection_PermanentDelete" xml:space="preserve"><value>영구 삭제</value></data>
@@ -3145,7 +3147,7 @@
   <data name="MediaExport_SizeOriginalHelp" xml:space="preserve"><value>표준 비트레이트로 인코딩합니다. 해상도와 프레임 속도는 유지합니다.</value></data>
   <data name="MediaExport_SizePresetHelp" xml:space="preserve"><value>비트레이트를 약 {0}% 낮춥니다. 해상도와 프레임 속도는 유지하며 화질이 낮아질 수 있습니다.</value></data>
   <data name="MediaExport_Advanced" xml:space="preserve"><value>고급</value></data>
-  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>예상 크기 약 {0} · {1} · {2}×{3}</value></data>
+  <data name="MediaExport_Mp4Summary" xml:space="preserve"><value>예상 크기 약 {0} · {1} · {2} × {3}</value></data>
   <data name="MediaExport_GifSummary" xml:space="preserve"><value>예상 크기 {0} · {1:N0}프레임 · 재생 {2:N1}초</value></data>
   <data name="MediaExport_SizeMb" xml:space="preserve"><value>{0:0.0}MB</value></data>
   <data name="MediaExport_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
@@ -3207,6 +3209,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.MarkIn" xml:space="preserve"><value>시작</value></data>
   <data name="Video.MarkOut" xml:space="preserve"><value>끝</value></data>
   <data name="Video.Layers" xml:space="preserve"><value>레이어</value></data>
+  <data name="Video.NoLayers" xml:space="preserve"><value>레이어 없음</value></data>
   <data name="VideoEditorUx_LayerInterval" xml:space="preserve">
     <value>{0}–{1}</value>
   </data>
@@ -3255,6 +3258,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings_Search" xml:space="preserve"><value>설정 검색</value></data>
   <data name="Settings_SearchHint" xml:space="preserve"><value>설정 이름과 설명 검색 · Esc: 검색 지우기</value></data>
   <data name="Settings_SearchEmpty" xml:space="preserve"><value>검색 결과 없음</value></data>
+  <data name="Settings_SearchNoMatch" xml:space="preserve"><value>일치하는 설정이 없습니다.</value></data>
+  <data name="Settings_SearchNoMatchQuery" xml:space="preserve"><value>검색어: {0}</value></data>
   <data name="Settings_ResetConfirm" xml:space="preserve"><value>모든 설정을 기본값으로 재설정하시겠습니까?</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>설정 파일을 읽을 수 없습니다.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>설정 내보내기 완료</value></data>
@@ -3269,8 +3274,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Recording_SizeHint" xml:space="preserve"><value>고정 크기를 고르면 녹화 영역을 지정할 때 드래그로 위치만 정합니다. 가로·세로 96 ~ 7680픽셀.</value></data>
   <data name="Recording_LastRegion" xml:space="preserve"><value>마지막 영역</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>자유</value></data>
-  <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
-  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Recording_Fixed720" xml:space="preserve"><value>1280 × 720</value></data>
+  <data name="Recording_Fixed1080" xml:space="preserve"><value>1920 × 1080</value></data>
   <data name="Ocr_Accuracy" xml:space="preserve"><value>인식 정확도</value></data>
   <data name="Ocr_QualityFast" xml:space="preserve"><value>빠름</value></data>
   <data name="Ocr_QualityBalanced" xml:space="preserve"><value>균형</value></data>
@@ -3615,8 +3620,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Crop.Ratio" xml:space="preserve"><value>비율</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>자유</value></data>
   <data name="Crop.Original" xml:space="preserve"><value>원본</value></data>
-  <data name="Crop.Width" xml:space="preserve"><value>너비 (px)</value></data>
-  <data name="Crop.Height" xml:space="preserve"><value>높이 (px)</value></data>
+  <data name="Crop.Width" xml:space="preserve"><value>너비</value></data>
+  <data name="Crop.Height" xml:space="preserve"><value>높이</value></data>
   <data name="Crop.Apply" xml:space="preserve"><value>적용</value></data>
   <data name="Crop.Applied" xml:space="preserve"><value>자르기 적용됨</value></data>
   <data name="Crop.Cancelled" xml:space="preserve"><value>미적용 자르기 취소됨</value></data>
@@ -3717,7 +3722,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.Oldest" xml:space="preserve"><value>오래된순</value></data>
   <data name="Folder410.ByName" xml:space="preserve"><value>이름순</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>이 위치로 이동할 수 없습니다.</value></data>
-  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다.</value></data>
+  <data name="Folder410.EmptyFolder" xml:space="preserve"><value>폴더에 캡처가 없습니다</value></data>
   <data name="Folder410.EmptyFolderHint" xml:space="preserve"><value>캡처를 끌어 넣거나 새 캡처 저장 위치로 지정하십시오.</value></data>
   <data name="Startup.StoreDisabledByUser" xml:space="preserve"><value>Windows 설정에서 MyCapture 시작 앱이 꺼져 있습니다. 설정 &gt; 앱 &gt; 시작 프로그램에서 켜십시오.</value></data>
   <data name="Startup.StoreManagedByPolicy" xml:space="preserve"><value>조직 정책이 시작 프로그램 설정을 관리합니다.</value></data>
@@ -3758,6 +3763,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Microsoft Store를 열 수 없습니다. Microsoft Store 앱이 설치되어 있는지 확인하십시오.</value></data>
   <data name="StoreRating_InviteMessage" xml:space="preserve"><value>MyCapture를 Microsoft Store에서 평가하시겠습니까?</value></data>
   <data name="StoreRating_InviteAction" xml:space="preserve"><value>평가</value></data>
+  <data name="StoreRating_InviteCloseName" xml:space="preserve"><value>평가 초대 닫기</value></data>
   <data name="PrtScGuide_SettingsPath" xml:space="preserve"><value>Windows 설정 &gt; 접근성 &gt; 키보드</value></data>
   <data name="PrtScGuide_SettingsPath_Windows10" xml:space="preserve"><value>Windows 설정 &gt; 접근성 &gt; 키보드</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen 키 충돌</value></data>
@@ -4059,7 +4065,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_WindowTitle" xml:space="preserve"><value>동영상 편집</value></data>
   <data name="VideoEditorUx_WindowName" xml:space="preserve"><value>동영상 편집 창</value></data>
   <data name="VideoEditorUx_HeaderTitle" xml:space="preserve"><value>동영상 편집</value></data>
-  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>동영상 {0} · {1}×{2} · {3}fps</value></data>
+  <data name="VideoEditorUx_HeaderDetails" xml:space="preserve"><value>동영상 {0} · {1} × {2} · {3}fps</value></data>
   <data name="VideoEditorUx_CommandBarName" xml:space="preserve"><value>동영상 편집 도구</value></data>
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>자르기</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>남길 구간의 시작 손잡이를 고르고 그 프레임을 보여 줍니다. 다시 누르면 끝 손잡이로 바뀝니다.</value></data>
@@ -4141,6 +4147,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="About_PrivacyModel" xml:space="preserve"><value>정확 품질은 텍스트 인식 모델(약 {0} MB)을 ModelScope에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
   <data name="About_PrivacyUpdates" xml:space="preserve"><value>새 버전 자동 확인이 켜져 있으면 하루에 한 번 새 버전 정보를 확인합니다.</value></data>
+  <data name="About_HelpHeading" xml:space="preserve"><value>도움말</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>피드백</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>문의하기</value></data>
   <data name="Support_Title" xml:space="preserve"><value>문의하기</value></data>
@@ -4161,6 +4168,28 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Support_Unpackaged" xml:space="preserve"><value>일반 설치</value></data>
   <data name="Support_DisplayScale" xml:space="preserve"><value>화면 배율: {0:0.##}%</value></data>
   <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture 문의</value></data>
+  <data name="Support_ReportError" xml:space="preserve"><value>오류 보고</value></data>
+  <data name="Support_ErrorSummary" xml:space="preserve"><value>오류 요약</value></data>
+  <data name="Support_ErrorSummaryHint" xml:space="preserve"><value>보내기 전에 요약을 확인하고 고칠 수 있습니다.</value></data>
+  <data name="Support_ErrorIssueTitle" xml:space="preserve"><value>MyCapture 오류 보고: {0}</value></data>
+  <data name="Support_ErrorKind" xml:space="preserve"><value>오류 종류</value></data>
+  <data name="Support_ErrorTime" xml:space="preserve"><value>발생 시각</value></data>
+  <data name="Support_RecordedVersion" xml:space="preserve"><value>종료 당시 버전</value></data>
+  <data name="Support_ErrorOperation" xml:space="preserve"><value>작업</value></data>
+  <data name="Support_ErrorException" xml:space="preserve"><value>예외</value></data>
+  <data name="Support_ErrorCause" xml:space="preserve"><value>원인</value></data>
+  <data name="Support_ErrorLocation" xml:space="preserve"><value>발생 위치</value></data>
+  <data name="Support_StackSignature" xml:space="preserve"><value>호출 경로 식별값</value></data>
+  <data name="Support_RecentErrors" xml:space="preserve"><value>최근 오류</value></data>
+  <data name="Support_RecentLog" xml:space="preserve"><value>최근 로그</value></data>
+  <data name="Support_ErrorKindUnhandled" xml:space="preserve"><value>처리되지 않은 오류</value></data>
+  <data name="Support_ErrorKindUnexpectedExit" xml:space="preserve"><value>예기치 않은 종료</value></data>
+  <data name="Support_GitHubOpenedTrimmed" xml:space="preserve"><value>GitHub 이슈 작성 페이지를 열었습니다. 길이 제한으로 일부 내용이 줄었습니다. 전체 내용은 복사하거나 진단 묶음으로 저장할 수 있습니다.</value></data>
+  <data name="Support_BundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료, 폴더 열림</value></data>
+  <data name="Support_BundleSavedFolderFailed" xml:space="preserve"><value>진단 묶음을 저장했지만 폴더를 열지 못했습니다.</value></data>
+  <data name="Support_BundleFailed" xml:space="preserve"><value>진단 묶음을 저장하지 못했습니다. 다른 위치를 선택한 뒤 다시 시도하십시오.</value></data>
+  <data name="Support_ExitNoticeTitle" xml:space="preserve"><value>지난번에 MyCapture가 예기치 않게 종료되었습니다</value></data>
+  <data name="Support_ExitNoticeBody" xml:space="preserve"><value>오류 보고를 누르면 보낼 내용을 먼저 확인하고 고칠 수 있습니다. 기록에는 캡처 내용, 파일 경로, 창 제목, 입력한 글이 들어 있지 않으며, 직접 보내기 전에는 아무것도 전송하지 않습니다.</value></data>
   <data name="About_ReportProblemHelp" xml:space="preserve"><value>진단 정보를 확인하고 문의 내용을 작성합니다.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>진단 정보를 복사했습니다. 신고 페이지에 붙여 넣으십시오.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>진단 정보를 복사하지 못했습니다. 신고 페이지에 문제 상황을 직접 적어 주십시오.</value></data>
@@ -4712,7 +4741,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
-  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
+  <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 오류 보고를 눌러 보낼 내용을 확인한 뒤 보내십시오.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
   <data name="CopyTerms_SizeMb" xml:space="preserve"><value>{0:0.#}MB</value></data>
@@ -4884,6 +4913,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>날짜</value></data>
   <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>파일명</value></data>
   <data name="Library.Tags.Title" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Tags.EmptyHint" xml:space="preserve"><value>태그를 달면 여기에 표시됩니다.</value></data>
   <data name="Library.Tags.Edit" xml:space="preserve"><value>태그 편집</value></data>
   <data name="Library.Tags.More" xml:space="preserve"><value>더 보기</value></data>
   <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>선택한 {0}개 캡처의 태그</value></data>
@@ -5162,16 +5192,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>업데이트나 가져오기가 끝날 때까지 시작할 수 없습니다.</value></data>
   <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>앱을 종료하는 중이라 시작하지 않았습니다.</value></data>
   <data name="CoreShortcuts.Title" xml:space="preserve"><value>핵심 단축키 지정</value></data>
-  <data name="CoreShortcuts.Body" xml:space="preserve"><value>MyCapture의 핵심 기능에 다음 단축키를 지정합니다.
-
-Ctrl+Shift+C  영역 캡처
-Ctrl+Shift+X  영역 녹화 시작/중지
-Ctrl+Shift+Z  라이브러리 열기
-F3  편집·선택 중인 그림 또는 클립보드 핀
-
-다른 프로그램이 같은 키를 쓰고 있어도 MyCapture가 먼저 처리합니다. MyCapture가 실행 중인 동안에는 파일 탐색기의 F3 검색, 편집기의 Ctrl+Shift+Z 다시 실행처럼 다른 프로그램의 같은 단축키가 동작하지 않습니다.
-
-단축키를 덮어쓰시겠습니까? 나중에 설정 → 단축키에서 바꿀 수 있습니다.</value></data>
+  <data name="CoreShortcuts.Body" xml:space="preserve"><value>MyCapture의 핵심 기능에 다음 단축키를 지정합니다.</value></data>
+  <data name="CoreShortcuts.NoticeTitle" xml:space="preserve"><value>핵심 단축키</value></data>
+  <data name="CoreShortcuts.NoticeBody" xml:space="preserve"><value>MyCapture의 핵심 기능에 다음 단축키를 지정했습니다.</value></data>
+  <data name="CoreShortcuts.Capture" xml:space="preserve"><value>영역 캡처</value></data>
+  <data name="CoreShortcuts.RecordRegion" xml:space="preserve"><value>영역 녹화 시작/중지</value></data>
+  <data name="CoreShortcuts.OpenLibrary" xml:space="preserve"><value>라이브러리 열기</value></data>
+  <data name="CoreShortcuts.PasteToScreen" xml:space="preserve"><value>편집·선택 중인 그림 또는 클립보드 핀</value></data>
+  <data name="CoreShortcuts.Takeover" xml:space="preserve"><value>다른 프로그램이 같은 키를 쓰고 있어도 MyCapture가 먼저 처리합니다. MyCapture가 실행 중인 동안에는 파일 탐색기의 F3 검색, 편집기의 Ctrl+Shift+Z 다시 실행처럼 다른 프로그램의 같은 단축키가 동작하지 않습니다.</value></data>
+  <data name="CoreShortcuts.Question" xml:space="preserve"><value>단축키를 덮어쓰시겠습니까? 나중에 설정 → 단축키에서 바꿀 수 있습니다.</value></data>
+  <data name="CoreShortcuts.NoticeChange" xml:space="preserve"><value>설정 → 단축키에서 바꿀 수 있습니다.</value></data>
+  <data name="CoreShortcuts.OpenSettings" xml:space="preserve"><value>단축키 설정</value></data>
   <data name="CoreShortcuts.Overwrite" xml:space="preserve"><value>덮어쓰기</value></data>
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>그대로 두기</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Ctrl+Shift+C·X·Z와 F3을 다른 프로그램보다 먼저 처리</value></data>
@@ -5276,6 +5307,12 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   </data>
   <data name="Pin_Translating" xml:space="preserve">
     <value>번역 중</value>
+  </data>
+  <data name="Pin_TranslationSecondsLeft" xml:space="preserve">
+    <value>{0} · 약 {1}초 남음</value>
+  </data>
+  <data name="Pin_TranslationMinutesLeft" xml:space="preserve">
+    <value>{0} · 약 {1}분 남음</value>
   </data>
   <data name="Pin_TranslationDownloading" xml:space="preserve">
     <value>번역 모델 설치 중</value>
@@ -5450,6 +5487,12 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   <data name="Shortcuts.SendBackward" xml:space="preserve">
     <value>한 단계 뒤로</value>
   </data>
+  <data name="Shortcuts.StrokeThinner" xml:space="preserve">
+    <value>선 두께 줄이기</value>
+  </data>
+  <data name="Shortcuts.StrokeThicker" xml:space="preserve">
+    <value>선 두께 늘리기</value>
+  </data>
   <data name="Shortcuts.DeleteSelection" xml:space="preserve">
     <value>선택 항목 삭제</value>
   </data>
@@ -5562,4 +5605,10 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>미리보기 메모리 한도에 도달했습니다. 크기 또는 선택 구간을 줄이십시오.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>저장됨 · {0} · {1}</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>예상 크기 약 {0} ({3}) · {1:N0}프레임 · 재생 {2:N1}초</value></data>
+  <data name="Pin_TranslationDocumentView" xml:space="preserve">
+    <value>번역문 문서로 보기</value>
+  </data>
+  <data name="Pin_TranslationPictureView" xml:space="preserve">
+    <value>번역 그림으로 보기</value>
+  </data>
 </root>

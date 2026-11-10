@@ -14,7 +14,7 @@ public sealed class DesignGuidelinesSyncTests
     private static readonly string[] RequiredTokens =
     [
         "Accent.Default", "Accent.Hover", "Accent.Pressed", "Text.OnAccent",
-        "Text.Primary", "Text.Secondary", "Text.Muted",
+        "Text.Primary", "Text.Secondary", "Text.Muted", "Text.Warning", "Text.Success",
         "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
         "State.Warning", "State.Success", "State.Danger", "Border.Focus", "Focus.RingWidth",
         "Size.HitTarget", "Size.HitTarget.Compact", "Size.RailButton", "Size.IconGlyph",

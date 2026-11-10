@@ -138,6 +138,7 @@ public static class AppSettingsClone
         FillTransparency = s.FillTransparency,
         StrokeColor = s.StrokeColor,
         StrokeThickness = s.StrokeThickness,
+        HighlighterThickness = s.HighlighterThickness,
         TextColor = s.TextColor,
         FontSize = s.FontSize,
         FontFamily = s.FontFamily,
@@ -201,6 +202,8 @@ public static class AppSettingsClone
         LastCaptureFailed = s.LastCaptureFailed,
         RequestAttemptedUtc = s.RequestAttemptedUtc,
         InvitationShownUtc = s.InvitationShownUtc,
+        InvitationShownCount = s.InvitationShownCount,
+        InvitationDismissedUtc = s.InvitationDismissedUtc,
     };
 
     private static StoreUpdateState Clone(StoreUpdateState s) => new()

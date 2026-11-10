@@ -105,7 +105,7 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
                 .AsTask(cancellationToken)
                 .ConfigureAwait(false);
 
-            return Convert(winrt, engine);
+            return Convert(winrt, engine, softwareBitmap.PixelWidth, softwareBitmap.PixelHeight);
         }
         finally
         {
@@ -141,7 +141,8 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
         }
     }
 
-    private static RecognizedText Convert(WinRtOcrResult winrt, WinRtOcrEngine engine)
+    private static RecognizedText Convert(WinRtOcrResult winrt, WinRtOcrEngine engine,
+        int preparedWidth, int preparedHeight)
     {
         var lines = new List<RecognizedLine>(winrt.Lines.Count);
         foreach (WinRtOcrLine line in winrt.Lines)
@@ -154,14 +155,53 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
                     word.BoundingRect.Y,
                     word.BoundingRect.Width,
                     word.BoundingRect.Height);
-                words.Add(new RecognizedWord(word.Text, rect));
+                words.Add(new RecognizedWord(word.Text,
+                    MapTextAngleBounds(rect, winrt.TextAngle, preparedWidth, preparedHeight)));
             }
 
             lines.Add(new RecognizedLine(line.Text, words));
         }
 
         string tag = engine.RecognizerLanguage?.LanguageTag ?? string.Empty;
-        return new RecognizedText(tag, lines);
+        return new RecognizedText(tag, lines) { TextAngle = winrt.TextAngle };
     }
 
+
+    /// <summary>Maps WinRT's text-angle axes into the actual prepared bitmap's pixel axes.</summary>
+    /// <remarks>
+    /// Windows.Media.Ocr.TextAngle specifies a clockwise rotation around the image center
+    /// for word overlays. Normalize at the WinRT boundary, before language passes, unscaling
+    /// or whole-image right-angle restoration. TextAngle metadata remains unchanged.
+    /// https://learn.microsoft.com/uwp/api/windows.media.ocr.ocrresult.textangle
+    /// </remarks>
+    internal static OcrRect MapTextAngleBounds(OcrRect bounds, double? textAngle,
+        int preparedWidth, int preparedHeight)
+    {
+        // Preserve the previous geometry for absent/zero or unusable metadata. In particular,
+        // a nonfinite angle remains in TextAngle for downstream validity checks, not in boxes.
+        if (textAngle is not { } angle || angle == 0 || !double.IsFinite(angle)
+            || preparedWidth <= 0 || preparedHeight <= 0)
+            return bounds;
+
+        double centerX = preparedWidth / 2.0, centerY = preparedHeight / 2.0;
+        (double sin, double cos) = Math.SinCos(angle * (Math.PI / 180.0));
+        double left = double.PositiveInfinity, top = double.PositiveInfinity;
+        double right = double.NegativeInfinity, bottom = double.NegativeInfinity;
+        Include(bounds.X, bounds.Y);
+        Include(bounds.Right, bounds.Y);
+        Include(bounds.X, bounds.Bottom);
+        Include(bounds.Right, bounds.Bottom);
+        return new OcrRect(left, top, right - left, bottom - top);
+
+        void Include(double x, double y)
+        {
+            double dx = x - centerX, dy = y - centerY;
+            double mappedX = centerX + cos * dx - sin * dy;
+            double mappedY = centerY + sin * dx + cos * dy;
+            left = Math.Min(left, mappedX);
+            top = Math.Min(top, mappedY);
+            right = Math.Max(right, mappedX);
+            bottom = Math.Max(bottom, mappedY);
+        }
+    }
 }

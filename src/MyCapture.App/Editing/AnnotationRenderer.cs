@@ -28,7 +28,9 @@ namespace MyCapture.App.Editing;
 /// then costs no allocation and hands the composition thread the resources it already has.
 /// When any input differs the resource is built exactly as before, so a paint issues the
 /// same drawing commands with equal resources, and therefore the same pixels, whether or not
-/// it was cached. Items that stop being drawn (deleted, undone, edited live) drop out.
+/// it was cached. Items that stop being drawn (deleted, undone, edited live) drop out. A caption
+/// edited live is drawn through the stand-in its editor keeps for it (see <c>liveText</c>), so
+/// typing rebuilds only that stand-in's layout and outline.
 /// </para>
 /// <para>
 /// Blur layers sample the base capture passed as <c>blurSource</c>. Exports blur exactly the
@@ -81,12 +83,24 @@ internal sealed class AnnotationRenderer
     /// The unannotated base capture in the document's pixel space, sampled by blur layers.
     /// Without it a blur layer draws an opaque cover rather than reveal anything.
     /// </param>
+    /// <param name="liveText">
+    /// The suppressed caption as its live text box currently reads. Its plate and outline are
+    /// drawn in the suppressed caption's place in the paint order, exactly as a committed caption
+    /// draws them, without the glyph fill: the text box draws the glyphs, caret and IME
+    /// composition on top, so the order stays plate, outline, glyphs.
+    /// </param>
+    /// <param name="liveScroll">
+    /// How far the live box has scrolled <paramref name="liveText"/> when it is taller than the
+    /// canvas; its plate and outline then show only in the band the box shows, moved with its glyphs.
+    /// </param>
     internal void Render(
         DrawingContext dc,
         AnnotationDocument document,
         double pixelsPerDip,
         AnnotationItem? suppress = null,
-        BitmapSource? blurSource = null)
+        BitmapSource? blurSource = null,
+        TextAnnotation? liveText = null,
+        LiveCaptionScroll? liveScroll = null)
     {
         ArgumentNullException.ThrowIfNull(dc);
         ArgumentNullException.ThrowIfNull(document);
@@ -100,7 +114,7 @@ internal sealed class AnnotationRenderer
         _pass++;
         try
         {
-            RenderItems(dc, document, pixelsPerDip, suppress, blurSource);
+            RenderItems(dc, document, pixelsPerDip, suppress, blurSource, liveText, liveScroll);
         }
         finally
         {
@@ -118,13 +132,23 @@ internal sealed class AnnotationRenderer
         AnnotationDocument document,
         double pixelsPerDip,
         AnnotationItem? suppress,
-        BitmapSource? blurSource)
+        BitmapSource? blurSource,
+        TextAnnotation? liveText,
+        LiveCaptionScroll? liveScroll)
     {
-        foreach (AnnotationItem item in document.Items)
+        foreach (AnnotationItem documentItem in document.Items)
         {
-            if (ReferenceEquals(item, suppress))
+            AnnotationItem item = documentItem;
+            bool glyphs = true;
+            if (ReferenceEquals(documentItem, suppress))
             {
-                continue;
+                if (liveText is null)
+                {
+                    continue;
+                }
+
+                item = liveText;
+                glyphs = false;
             }
 
             double previousOpacity = item.Opacity;
@@ -149,7 +173,7 @@ internal sealed class AnnotationRenderer
                     DrawPen(dc, pen);
                     break;
                 case TextAnnotation text:
-                    DrawText(dc, text, pixelsPerDip);
+                    DrawText(dc, text, pixelsPerDip, glyphs, glyphs ? null : liveScroll);
                     break;
                 case ImageAnnotation image:
                     DrawImage(dc, image);
@@ -329,8 +353,25 @@ internal sealed class AnnotationRenderer
         }
     }
 
+    /// <summary>
+    /// The filled heads <see cref="DrawPolyline"/> paints for <paramref name="polyline"/>, in image
+    /// pixels: the area its selection rings pass behind. Unlike the heads painted, their edges are
+    /// stroked, so the selection can widen them into a margin around the heads.
+    /// </summary>
+    internal static IEnumerable<Geometry> ArrowHeads(PolylineAnnotation polyline)
+    {
+        IReadOnlyList<PointD> points = polyline.Points;
+        if (points.Count < 2) yield break;
+        double headLength = polyline.StrokeThickness * polyline.HeadSizeFactor;
+        if (polyline.HeadAtEnd && BuildArrowHead(new ArrowHeadKey(points[^2], points[^1], headLength), stroked: true) is { } end) yield return end;
+        if (polyline.HeadAtStart && BuildArrowHead(new ArrowHeadKey(points[1], points[0], headLength), stroked: true) is { } start) yield return start;
+    }
+
     /// <summary>The filled head at <c>To</c>, or <see langword="null"/> for a zero-length segment.</summary>
-    private static PathGeometry? BuildArrowHead(ArrowHeadKey key)
+    /// <param name="stroked">
+    /// Whether its edges are stroked. Painting only fills a head; widening it needs the edges.
+    /// </param>
+    private static PathGeometry? BuildArrowHead(ArrowHeadKey key, bool stroked = false)
     {
         PointD from = key.From;
         PointD to = key.To;
@@ -355,13 +396,23 @@ internal sealed class AnnotationRenderer
         var right = new Point(baseCenter.X - (px * headWidth / 2), baseCenter.Y - (py * headWidth / 2));
 
         var figure = new PathFigure { StartPoint = ToPoint(to), IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new LineSegment(left, isStroked: false));
-        figure.Segments.Add(new LineSegment(right, isStroked: false));
+        figure.Segments.Add(new LineSegment(left, stroked));
+        figure.Segments.Add(new LineSegment(right, stroked));
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         geometry.Freeze();
         return geometry;
     }
+
+    /// <summary>The most opaque a highlighter stroke is painted, whatever colour is picked.</summary>
+    internal const byte HighlighterMaxAlpha = 110;
+
+    /// <summary>
+    /// The colour a pen or highlighter stroke is painted with. The brush preview calls this too,
+    /// so what the pointer shows is what the stroke will look like.
+    /// </summary>
+    internal static ColorRgba PenInk(ColorRgba stroke, bool isHighlighter) =>
+        isHighlighter ? stroke.WithAlpha((byte)Math.Min((int)stroke.A, HighlighterMaxAlpha)) : stroke;
 
     private void DrawPen(DrawingContext dc, PenAnnotation pen)
     {
@@ -371,7 +422,7 @@ internal sealed class AnnotationRenderer
             return;
         }
 
-        ColorRgba color = pen.IsHighlighter ? pen.Stroke.WithAlpha((byte)Math.Min((int)pen.Stroke.A, 110)) : pen.Stroke;
+        ColorRgba color = PenInk(pen.Stroke, pen.IsHighlighter);
 
         if (points.Count == 1)
         {
@@ -419,7 +470,12 @@ internal sealed class AnnotationRenderer
         return geometry;
     }
 
-    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip)
+    /// <param name="glyphs">
+    /// False for a caption being typed: only its plate and outline, which its live text box
+    /// cannot draw. The box draws the glyph fill over them.
+    /// </param>
+    /// <param name="scroll">How the live box scrolls a caption being typed, if it does.</param>
+    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip, bool glyphs, LiveCaptionScroll? scroll = null)
     {
         Rect box = ToRect(text.Rect);
         TextCache cache = CacheFor<TextCache>(text);
@@ -446,6 +502,20 @@ internal sealed class AnnotationRenderer
 
         FormattedText formatted = cache.Formatted;
 
+        if (scroll is { } view)
+        {
+            // Only the band the live box shows, wide enough for any outline and italic overhang,
+            // with the text moved up as far as the box has scrolled its glyphs.
+            double width = Math.Max(box.Width, formatted.WidthIncludingTrailingWhitespace);
+            var band = new RectangleGeometry(new Rect(
+                box.Left - text.FontSize, box.Top + view.Top, width + (2 * text.FontSize), Math.Max(0, view.Height)));
+            band.Freeze();
+            var moved = new TranslateTransform(0, -view.Offset);
+            moved.Freeze();
+            dc.PushClip(band);
+            dc.PushTransform(moved);
+        }
+
         Brush? plate = BrushOrNull(text.Background);
         if (plate is not null)
         {
@@ -455,30 +525,56 @@ internal sealed class AnnotationRenderer
         var origin = text.IsStepNumber
             ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
             : new Point(box.Left, box.Top);
-        if (cache.Glyphs is null || !cache.Origin.Equals(origin))
+        if (!cache.Origin.Equals(origin))
         {
             // The layout bakes its origin into every glyph and outline coordinate, so a moved
             // caption builds both again exactly where the uncached paint would have.
             cache.Origin = origin;
-            cache.Glyphs = RecordGlyphs(formatted, origin);
+            cache.Glyphs = null;
             cache.Outline = null;
         }
 
         if (text.HasOutline)
         {
-            cache.Outline ??= Frozen(formatted.BuildGeometry(origin));
+            cache.Outline ??= Frozen(OutlineOf(cache, formatted, origin));
             bool consistent = text.OutlineStyle == TextOutlineStyle.Consistent;
-            ColorRgba outline = Contrasting(text.Foreground, consistent);
             double thickness = consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12);
-            dc.DrawGeometry(null, OutlinePen(outline, thickness), cache.Outline);
+            dc.DrawGeometry(null, OutlinePen(OutlineColor(text), thickness), cache.Outline);
         }
 
-        dc.DrawDrawing(cache.Glyphs);
+        if (glyphs)
+        {
+            dc.DrawDrawing(cache.Glyphs ??= RecordGlyphs(formatted, origin));
+        }
+
+        if (scroll is not null)
+        {
+            dc.Pop();
+            dc.Pop();
+        }
 
         if (rotated)
         {
             dc.Pop();
         }
+    }
+
+    /// <summary>
+    /// The caption's outline. A caption that changes where it stands, as one being typed does after
+    /// every keystroke, traces only the glyphs its new layout added or moved (see
+    /// <see cref="GlyphOutlines"/>). One outlined for the first time, or moved, has no glyph in
+    /// place to reuse, and its layout traces it whole in one pass.
+    /// </summary>
+    private static Geometry OutlineOf(TextCache cache, FormattedText formatted, Point origin)
+    {
+        if (cache.OutlinedAt != origin)
+        {
+            cache.OutlinedAt = origin;
+            cache.OutlineGlyphs = null;
+            return formatted.BuildGeometry(origin);
+        }
+
+        return GlyphOutlines.Build(cache.Glyphs ??= RecordGlyphs(formatted, origin), formatted, origin, ref cache.OutlineGlyphs);
     }
 
     /// <summary>The glyph runs <c>DrawText(formatted, origin)</c> issues, recorded once and frozen.</summary>
@@ -629,6 +725,13 @@ internal sealed class AnnotationRenderer
     private static Point ToPoint(PointD p) => new(p.X, p.Y);
 
     /// <summary>
+    /// The colour <paramref name="text"/>'s glyph outline is drawn in when it has one: black or
+    /// white against its fill. A caption being typed outlines its caret in it too.
+    /// </summary>
+    internal static ColorRgba OutlineColor(TextAnnotation text) =>
+        Contrasting(text.Foreground, text.OutlineStyle == TextOutlineStyle.Consistent);
+
+    /// <summary>
     /// A near-black or near-white outline that contrasts with the fill colour.
     /// </summary>
     private static ColorRgba Contrasting(ColorRgba c, bool consistent)
@@ -688,6 +791,10 @@ internal sealed class AnnotationRenderer
         internal Point Origin;
         internal DrawingGroup? Glyphs;
         internal Geometry? Outline;
+
+        /// <summary>Where the last outline was built; the glyph outlines below are kept for that place only.</summary>
+        internal Point? OutlinedAt;
+        internal Dictionary<GlyphOutlines.Key, Geometry>? OutlineGlyphs;
     }
 
     private sealed class InkCache : ItemCache

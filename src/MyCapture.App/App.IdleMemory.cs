@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Pinning;
+using MyCapture.App.Diagnostics;
 
 namespace MyCapture.App;
 
@@ -55,10 +57,43 @@ public partial class App
             // Remain on the dispatcher: no background check/collect race with a capture
             // starting on the UI thread. Input and capture work outrank ContextIdle.
             long started = Stopwatch.GetTimestamp();
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            _log?.LogInformation("Idle memory collection completed in {PauseMs:F2} ms",
-                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            ResidentLongRunEvidence? evidence = _longRunEvidence;
+            int before = evidence is null ? 0 : GC.CollectionCount(2);
+            evidence?.ObserveIdleGc(new("start", started, started, before, before, null, null, null));
+            double? collectMs = null;
+            double? workMs = null;
+            Exception? failure = null;
+            try
+            {
+                Capture.NativeSelectorChromeCache.TrimForIdle();
+                long workStart = evidence is null ? 0 : Stopwatch.GetTimestamp();
+                GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                if (evidence is not null) collectMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
+                TrimProcessHeap();
+                if (evidence is not null) workMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
+                _log?.LogInformation("Idle memory collection completed in {PauseMs:F2} ms",
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+            catch (Exception error) { failure = error; throw; }
+            finally
+            {
+                evidence?.ObserveIdleGc(new("finish", started, Stopwatch.GetTimestamp(), before,
+                    GC.CollectionCount(2), collectMs, workMs,
+                    failure?.GetType().FullName));
+            }
         });
+    }
+
+    /// <summary>
+    /// Native code that frees into the process heap (ONNX Runtime without its arena, Skia, WIC) leaves
+    /// the freed pages committed for later allocations; hands them back like the collection does.
+    /// </summary>
+    private static void TrimProcessHeap()
+    {
+        IntPtr heap = GetProcessHeap();
+        _ = HeapCompact(heap, 0);
+        var information = new HeapOptimizeResourcesInformation { Version = HeapOptimizeResourcesCurrentVersion };
+        _ = HeapSetInformation(heap, HeapOptimizeResources, ref information, (nuint)Marshal.SizeOf<HeapOptimizeResourcesInformation>());
     }
 
     private void ObserveIdleMemoryWindow(Window window)
@@ -105,4 +140,20 @@ public partial class App
         try { await work; }
         finally { ScheduleIdleMemoryReclamation(); }
     }
+
+    private const int HeapOptimizeResources = 3;
+    private const uint HeapOptimizeResourcesCurrentVersion = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HeapOptimizeResourcesInformation
+    {
+        public uint Version;
+        public uint Flags;
+    }
+
+    [DllImport("kernel32.dll")] private static extern IntPtr GetProcessHeap();
+    [DllImport("kernel32.dll")] private static extern nuint HeapCompact(IntPtr heap, uint flags);
+    [DllImport("kernel32.dll")]
+    private static extern bool HeapSetInformation(IntPtr heap, int informationClass,
+        ref HeapOptimizeResourcesInformation information, nuint length);
 }

@@ -10,11 +10,12 @@ using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.EditorKeysTests;
 
 namespace MyCapture.App.Tests;
 
-public sealed class EditorObscureToolTests
+public sealed class EditorObscureToolTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("ko-KR", "모자이크 M · 흐림 B")]
@@ -169,10 +170,22 @@ public sealed class EditorObscureToolTests
         editor.SimulatePointerDown(editor.ViewportPointOf(new PointD(600, 300)));
         editor.SimulatePointerMove(editor.ViewportPointOf(new PointD(680, 390)), leftPressed: true);
         var expected = new RectD(600, 300, 40, 60);
+        var surface = Field<AnnotationEditorSurface>(editor, "_surface");
+        if (surface.MosaicGestureRegion is { } preview)
+        {
+            RectD pixels = preview.ToPixelBounds();
+            output.WriteLine($"Mosaic scale={surface.DipPerPixel:R}; " +
+                $"preview X={preview.X:R} Y={preview.Y:R} W={preview.Width:R} H={preview.Height:R}; " +
+                $"pixel bounds X={pixels.X:R} Y={pixels.Y:R} W={pixels.Width:R} H={pixels.Height:R}.");
+        }
         Assert.Equal(expected, Field<AnnotationEditorSurface>(editor, "_surface").MosaicGestureRegion);
         editor.SimulatePointerUp(editor.ViewportPointOf(new PointD(680, 390)));
         EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
-        Assert.Equal(expected, Assert.IsType<ImageAnnotation>(Assert.Single(Controller(editor).Document.Items)).Rect);
+        ImageAnnotation patch = Assert.IsType<ImageAnnotation>(Assert.Single(Controller(editor).Document.Items));
+        Assert.Equal(expected, patch.Rect);
+        var asset = Field<AnnotationImageStore>(editor, "_imageStore").Get(patch.AssetFileName);
+        Assert.NotNull(asset);
+        Assert.Equal((40, 60), (asset.PixelWidth, asset.PixelHeight));
     });
 
     private static ComboBox Style(AnnotationEditorControl editor, string section) =>

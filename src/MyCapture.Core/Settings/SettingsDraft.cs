@@ -819,6 +819,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         // Preserve members not surfaced in the UI so mapping back is lossless.
         _preservedSchemaVersion = s.SchemaVersion;
         _preservedStrokeColor = s.Annotation.StrokeColor;
+        _preservedHighlighterThickness = s.Annotation.HighlighterThickness;
         _preservedTextColor = s.Annotation.TextColor;
         _preservedTextBold = s.Annotation.TextBold;
         _preservedTextBackground = s.Annotation.TextBackground;
@@ -845,14 +846,20 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     /// <summary>
     /// Resets every editable field to the defaults a new installation starts with
-    /// (<see cref="NewInstallDefaults"/>). Deliberate and fully reversible: nothing is written
+    /// (<see cref="NewInstallDefaults"/>), except the user's answer about the core shortcuts:
+    /// whether it was given and whether those shortcuts take priority over other programs stay
+    /// as they are. Deliberate and fully reversible: nothing is written
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
     public void ResetToDefaults()
     {
         AppSettings defaults = NewInstallDefaults.Create();
+        // Priority is the user's answer, not a default: a reset must not take the core keys from
+        // another program for someone who kept their keys, nor before an upgrade's open question
+        // has been answered.
         defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        defaults.Hotkeys.ForceCoreShortcuts = _forceCoreShortcuts;
         defaults.General.PracticeRevisionOffered = _preservedPracticeRevisionOffered;
         ReplaceValues(defaults);
     }
@@ -889,7 +896,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
-        _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
+        _preservedStrokeColor.ToString(), Dbl(_preservedHighlighterThickness), _preservedTextColor.ToString(),
         B(_preservedTextBold), B(_preservedTextBackground), B(_preservedTextOutline),
         string.Join(";", _preservedRecentFontFamilies),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
@@ -1044,6 +1051,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 FillTransparency = _annotationFillTransparency,
                 StrokeColor = _preservedStrokeColor,
                 StrokeThickness = ParseDouble(_strokeThickness),
+                HighlighterThickness = _preservedHighlighterThickness,
                 TextColor = _preservedTextColor,
                 FontSize = ParseDouble(_fontSize),
                 FontFamily = _fontFamily.Trim(),
@@ -1540,6 +1548,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private int _preservedSchemaVersion = 1;
     private Primitives.ColorRgba _preservedStrokeColor;
+    private double _preservedHighlighterThickness = 12;
     private Primitives.ColorRgba _preservedTextColor;
     private bool _preservedTextBold;
     private bool _preservedTextBackground;

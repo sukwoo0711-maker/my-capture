@@ -33,7 +33,7 @@ internal sealed class QuickAccessScene : TutorialScene
     private static readonly Rect NoteClient = new(20, 52, 318, 360);
     private const double Toolbar = 36;
     // The captured part of the page, in page pixels: the heading and the first two items.
-    private static readonly Int32Rect Region = new(16, 44, 280, 120);
+    private static readonly Int32Rect Region = Fixtures.PurchaseSheetParts.QuickRegion;
 
     private readonly BitmapSource _page;
     private readonly BitmapSource _captured;
@@ -47,7 +47,7 @@ internal sealed class QuickAccessScene : TutorialScene
 
     internal QuickAccessScene(string id, string language) : base(id, language)
     {
-        _page = Fixtures.Checklist(Korean, (int)BrowserClient.Width, (int)(BrowserClient.Height - Toolbar));
+        _page = Fixtures.PurchaseSheet(Korean, (int)BrowserClient.Width, (int)(BrowserClient.Height - Toolbar));
         var crop = new CroppedBitmap(_page, Region);
         crop.Freeze();
         _captured = crop;
@@ -159,11 +159,11 @@ internal sealed class QuickAccessScene : TutorialScene
 
     private void DrawBrowser(DrawingContext dc)
     {
-        Stage.DrawWindowFrame(dc, BrowserClient, L("릴리스 준비 - Microsoft Edge", "Release prep - Microsoft Edge"));
+        Stage.DrawWindowFrame(dc, BrowserClient, Fixtures.SheetTitle(Korean) + " - Microsoft Edge");
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF7)), null, new Rect(BrowserClient.X, BrowserClient.Y, BrowserClient.Width, Toolbar));
         dc.DrawRoundedRectangle(Brushes.White, new Pen(new SolidColorBrush(Color.FromRgb(0xD5, 0xD9, 0xE0)), 1),
             new Rect(BrowserClient.X + 64, BrowserClient.Y + 6, BrowserClient.Width - 128, 24), 12, 12);
-        Fixtures.Text(dc, "release.example.test/checklist", BrowserClient.X + 80, BrowserClient.Y + 10, 12, new SolidColorBrush(Color.FromRgb(0x44, 0x4B, 0x58)));
+        Fixtures.Text(dc, "intranet.contoso.com/purchase/2026-q2", BrowserClient.X + 80, BrowserClient.Y + 10, 12, new SolidColorBrush(Color.FromRgb(0x44, 0x4B, 0x58)));
         dc.DrawImage(_page, new Rect(BrowserClient.X, BrowserClient.Y + Toolbar, _page.PixelWidth, _page.PixelHeight));
     }
 
@@ -172,7 +172,7 @@ internal sealed class QuickAccessScene : TutorialScene
         Stage.DrawWindowFrame(dc, NoteClient, L("메모", "Notes"));
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xF7)), null, NoteClient);
         Fixtures.Text(dc, L("회의 준비", "Meeting prep"), NoteClient.X + 18, NoteClient.Y + 14, 18, Brushes.Black, bold: true);
-        Fixtures.Text(dc, L("릴리스 체크리스트 공유", "Share the release checklist"), NoteClient.X + 18, NoteClient.Y + 44, 13, Brushes.DimGray);
+        Fixtures.Text(dc, L("구매 요청 표 공유", "Share the purchase request"), NoteClient.X + 18, NoteClient.Y + 44, 13, Brushes.DimGray);
         double top = NoteClient.Y + 70;
         if (_pasted)
         {

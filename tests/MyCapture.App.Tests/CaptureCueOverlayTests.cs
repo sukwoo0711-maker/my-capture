@@ -300,6 +300,9 @@ public sealed class CaptureCueOverlayTests
         {
             AutoDetectWindows = () => true,
             ApplyCaptureExclusion = _ => true,
+            // ShowShortcutHints is a property of the WPF selector window. The native mode bar reads the
+            // same setting through ShortcutPresentation, which both renderers share.
+            UseNativeDibSelector = false,
         };
         Assert.False(coordinator.ShowShortcutHints());
         coordinator.ShowShortcutHints = () => settings.General.AlwaysShowShortcutHints;

@@ -4,12 +4,12 @@ namespace MyCapture.Ocr;
 
 internal static class OcrTableReconstructor
 {
-    internal static OcrTable Build(IReadOnlyList<OcrLayoutRow> source)
+    internal static OcrTable Build(IReadOnlyList<OcrLayoutRow> source, double columnGapHeightScale = 1)
     {
         if (source.Count == 0) return OcrTable.Empty;
         double height = OcrGeometry.Median(source.Select(row => row.Bounds.Height));
         double characterWidth = OcrGeometry.CharacterWidth(source.SelectMany(row => row.Words));
-        double gap = Math.Max(height * .7, characterWidth * 2.5);
+        double gap = Math.Max(height * columnGapHeightScale * .7, characterWidth * 2.5);
         List<List<OcrLayoutRow>> groups = [[]];
         foreach (OcrLayoutRow row in source)
         {

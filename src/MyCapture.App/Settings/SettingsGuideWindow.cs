@@ -214,6 +214,8 @@ internal sealed class SettingsGuideWindow : Window
         content.Children.Add(caption); content.Children.Add(value); content.Children.Add(preview);
         var border = new Border { Padding = new Thickness(14), BorderThickness = new Thickness(1), Child = content };
         border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle"); border.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        // A raised panel takes the card radius, like the cards of the settings window it explains.
+        border.SetResourceReference(Border.CornerRadiusProperty, "Radius.Lg");
         return border;
     }
 }

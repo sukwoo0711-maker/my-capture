@@ -12,6 +12,14 @@ internal interface ISentenceTranslator : IDisposable
     int CountTokens(string text);
 
     IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The same translation, calling <paramref name="sentenceDone"/> on the translating thread with a sentence's index
+    /// as soon as its decoding has ended. A call decodes until its longest sentence ends, so shorter ones end first;
+    /// a sentence that runs to the length limit is not reported, and the call's return covers it.
+    /// </summary>
+    IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, Action<int>? sentenceDone,
+        CancellationToken cancellationToken) => Translate(sentences, cancellationToken);
 }
 
 /// <summary>File names of one Marian model inside its folder.</summary>
@@ -35,6 +43,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
     private readonly InferenceSession _encoder;
     private readonly InferenceSession _decoder;
     private readonly InferenceSession _decoderWithPast;
+    private readonly MarianSharedWeights? _weights;
     private readonly SentencePieceModel _source;
     private readonly string?[] _targetPieces;
     private readonly int _targetEos;
@@ -44,11 +53,12 @@ internal sealed class MarianTranslator : ISentenceTranslator
     private readonly string[] _decoderWithPastOutputs;
 
     private MarianTranslator(InferenceSession encoder, InferenceSession decoder, InferenceSession decoderWithPast,
-        SentencePieceModel source, TargetVocabulary target)
+        MarianSharedWeights? weights, SentencePieceModel source, TargetVocabulary target)
     {
         _encoder = encoder;
         _decoder = decoder;
         _decoderWithPast = decoderWithPast;
+        _weights = weights;
         _source = source;
         _targetPieces = target.Pieces;
         _targetEos = target.EndOfSentence;
@@ -61,7 +71,12 @@ internal sealed class MarianTranslator : ISentenceTranslator
     /// <summary>Threads for one translation: half the logical processors, at most four.</summary>
     internal static int DefaultThreads => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
 
-    internal static MarianTranslator Load(string directory, MarianModelFiles files, int threads)
+    internal static MarianTranslator Load(string directory, MarianModelFiles files, int threads) =>
+        Load(directory, files, threads, shareWeights: true);
+
+    /// <param name="shareWeights">False gives every session its own copy of the weights, as before they were shared;
+    /// tests compare the two.</param>
+    internal static MarianTranslator Load(string directory, MarianModelFiles files, int threads, bool shareWeights)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentNullException.ThrowIfNull(files);
@@ -70,51 +85,70 @@ internal sealed class MarianTranslator : ISentenceTranslator
         TargetVocabulary target = TargetVocabulary.Load(Path.Combine(directory, files.TargetVocabulary));
         if (source.EndOfSentenceId < 0) throw new InvalidDataException("The source vocabulary has no end-of-sentence piece.");
 
-        using var options = new SessionOptions
+        void Configure(SessionOptions options)
         {
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-            IntraOpNumThreads = threads,
-            InterOpNumThreads = 1,
-        };
+            options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+            options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            options.IntraOpNumThreads = threads;
+            options.InterOpNumThreads = 1;
+        }
+
+        MarianSharedWeights? weights = shareWeights ? new MarianSharedWeights(directory) : null;
+        InferenceSession Create(string file)
+        {
+            string path = Path.Combine(directory, file);
+            if (weights is not null) return weights.CreateSession(path, Configure);
+            using var options = new SessionOptions();
+            Configure(options);
+            return new InferenceSession(path, options);
+        }
+
         InferenceSession? encoder = null, decoder = null, decoderWithPast = null;
         try
         {
-            encoder = new InferenceSession(Path.Combine(directory, files.Encoder), options);
-            decoder = new InferenceSession(Path.Combine(directory, files.Decoder), options);
-            decoderWithPast = new InferenceSession(Path.Combine(directory, files.DecoderWithPast), options);
-            return new MarianTranslator(encoder, decoder, decoderWithPast, source, target);
+            encoder = Create(files.Encoder);
+            decoder = Create(files.Decoder);
+            decoderWithPast = Create(files.DecoderWithPast);
+            return new MarianTranslator(encoder, decoder, decoderWithPast, weights, source, target);
         }
         catch
         {
             encoder?.Dispose();
             decoder?.Dispose();
             decoderWithPast?.Dispose();
+            weights?.Dispose();
             throw;
         }
     }
 
     public int CountTokens(string text) => _source.EncodeToIds(text).Length + 1;
 
-    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken)
+    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, CancellationToken cancellationToken) =>
+        Translate(sentences, null, cancellationToken);
+
+    public IReadOnlyList<string> Translate(IReadOnlyList<string> sentences, Action<int>? sentenceDone,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sentences);
         if (sentences.Count == 0) return [];
         int[][] sources = [.. sentences.Select(EncodeSource)];
-        return [.. Generate(sources, cancellationToken).Select(Decode)];
+        return [.. Generate(sources, sentenceDone, cancellationToken).Select(Decode)];
     }
 
-    private int[] EncodeSource(string text)
+    private int[] EncodeSource(string text) => EncodeSource(_source, text);
+
+    internal static int[] EncodeSource(SentencePieceModel source, string text)
     {
-        int[] pieces = _source.EncodeToIds(text);
-        int length = Math.Min(pieces.Length, MaxSourceTokens - 1);
-        var ids = new int[length + 1];
-        pieces.AsSpan(0, length).CopyTo(ids);
-        ids[length] = _source.EndOfSentenceId;
+        int[] pieces = source.EncodeToIds(text);
+        if (pieces.Length + 1 > MaxSourceTokens)
+            throw new ArgumentException("The source exceeds the model's token limit.", nameof(text));
+        var ids = new int[pieces.Length + 1];
+        pieces.CopyTo(ids, 0);
+        ids[pieces.Length] = source.EndOfSentenceId;
         return ids;
     }
 
-    private List<int>[] Generate(IReadOnlyList<int[]> sources, CancellationToken cancellationToken)
+    private List<int>[] Generate(IReadOnlyList<int[]> sources, Action<int>? sentenceDone, CancellationToken cancellationToken)
     {
         int batch = sources.Count;
         int sourceLength = sources.Max(source => source.Length);
@@ -180,7 +214,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
                 var byName = new Dictionary<string, OrtValue>(outputNames.Length, StringComparer.Ordinal);
                 for (int index = 0; index < outputNames.Length; index++) byName[outputNames[index]] = result[index];
 
-                bool done = PickNextTokens(byName["logits"], next, finished, outputs);
+                bool done = PickNextTokens(byName["logits"], next, finished, outputs, sentenceDone);
                 if (step == 0)
                 {
                     first = result;
@@ -205,8 +239,8 @@ internal sealed class MarianTranslator : ISentenceTranslator
         return outputs;
     }
 
-    /// <summary>Greedy choice per unfinished row; the padding token is never generated.</summary>
-    private bool PickNextTokens(OrtValue logitsValue, long[] next, bool[] finished, List<int>[] outputs)
+    /// <summary>Greedy choice per unfinished row; the padding token is never generated. A row that ends is reported once.</summary>
+    private bool PickNextTokens(OrtValue logitsValue, long[] next, bool[] finished, List<int>[] outputs, Action<int>? rowDone)
     {
         ReadOnlySpan<float> logits = logitsValue.GetTensorDataAsSpan<float>();
         long[] shape = logitsValue.GetTensorTypeAndShape().Shape;
@@ -236,6 +270,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
             {
                 finished[row] = true;
                 next[row] = _pad;
+                rowDone?.Invoke(row);
             }
             else
             {
@@ -262,6 +297,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
         _encoder.Dispose();
         _decoder.Dispose();
         _decoderWithPast.Dispose();
+        _weights?.Dispose();
     }
 
     /// <summary>vocab.json of the target side: piece to id.</summary>

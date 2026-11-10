@@ -27,6 +27,22 @@ public partial class App
 {
     private static ResidentProbeOptions? s_residentProbe;
 
+    private void ApplySelectorVariants(IReadOnlySet<string> variants)
+    {
+        bool native = ResidentProbeOptions.UsesNativeSelector(variants);
+        NativeSelectorChromeStrategy strategy = ResidentProbeOptions.GetSelectorChromeStrategy(variants);
+        if (_overlay is not null)
+        {
+            _overlay.UseNativeDibSelector = native;
+            _overlay.NativeChromeStrategy = strategy;
+        }
+        if (_recorder is not null)
+        {
+            _recorder.UseNativeDibSelector = native;
+            _recorder.NativeChromeStrategy = strategy;
+        }
+    }
+
     private static readonly FieldInfo ProbeActiveOverlay =
         typeof(CaptureOverlayCoordinator).GetField("_activeOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -52,8 +68,10 @@ public partial class App
     private static FrozenFrame AcquireProbeFrame(bool includeCursor)
     {
         long started = Stopwatch.GetTimestamp();
-        FrozenFrame frame = ResidentProbeImages.DesktopFrame(MonitorEnumerator.GetVirtualDesktopBounds(), Environment.TickCount & 0xFF,
-            s_residentProbe?.Has("frame-cached") == true);
+        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        FrozenFrame frame = s_longRunPrivacy is { } privacy ? privacy.AcquireFrame(desktop)
+            : ResidentProbeImages.DesktopFrame(desktop, Environment.TickCount & 0xFF,
+                s_residentProbe?.Has("frame-cached") == true);
         s_lastProbeAcquisitionMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         return frame;
     }
@@ -82,8 +100,15 @@ public partial class App
     internal static void ApplyResidentProbeSettings(AppSettings settings)
     {
         settings.General.IsFirstRun = false;
+        // The release perf gate measures the same path as 5.1.0, which never showed the invitation in the probe.
+        StoreRatingPolicy.MarkAttempted(settings.StoreRating, DateTimeOffset.UtcNow);
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
+        // Defensive only. A new installation handles its core keys before other programs, but the
+        // probe registers no global shortcuts at all (InitializeShell skips _hotkeys.Initialize while
+        // s_residentProbe is set), so no keyboard hook is installed either way. Priority stays off so
+        // the measured settings still match the previous release if the probe ever registers them.
+        settings.Hotkeys.ForceCoreShortcuts = false;
         settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
@@ -93,6 +118,21 @@ public partial class App
 
     private async Task RunResidentProbeAsync(ResidentProbeOptions probe)
     {
+        if (probe.LibraryFirstPage)
+        {
+            await RunLibraryFirstPageProbeAsync(probe);
+            return;
+        }
+        if (probe.LongRunPreflight)
+        {
+            await RunResidentLongRunPreflightAsync(probe);
+            return;
+        }
+        if (probe.LongRun)
+        {
+            await RunResidentLongRunAsync(probe);
+            return;
+        }
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
         PresentationDismissals.UseLegacySettleForProbe = probe.Has("legacy-capture-settle");
@@ -151,6 +191,8 @@ public partial class App
             CaptureOverlayView.SuppressKeyPanelForProbe = false;
         }
 
+        // A step that finished over its release budget (the library delete) fails the run as well.
+        if (exitCode == 0 && recorder.Failed) exitCode = 1;
         try { recorder.Write(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { exitCode = 2; }
         recorder.Dispose();
@@ -197,6 +239,24 @@ public partial class App
                     () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
                 await recorder.AuditAsync("pins-10 closed");
                 break;
+            case ResidentProbeLibraryDelete.Scenario:
+                await ProbeLibraryDeleteAsync(probe, recorder);
+                await recorder.SettleAsync(ResidentProbeLibraryDelete.Scenario + " closed", probe.SettleSeconds);
+                await recorder.AuditAsync(ResidentProbeLibraryDelete.Scenario + " closed");
+                break;
+            case "soak":
+                await ProbeSoakAsync(probe, recorder);
+                // Past the minute after which idle engines are released.
+                await recorder.SettleAsync("soak closed", probe.Quick ? probe.SettleSeconds : [0, 10, 30, 75],
+                    () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
+                await recorder.AuditAsync("soak closed");
+                break;
+            case "idle-empty":
+            case "idle-two-fast":
+            case "idle-library-open":
+            case "idle-library-closed":
+                await ProbeIdleCpuAsync(probe, recorder, scenario);
+                break;
             default:
                 throw new ArgumentException("Unknown resident probe scenario: " + scenario);
         }
@@ -212,9 +272,11 @@ public partial class App
         double selectorMs = await ProbeShortcutToSelectorAsync(recorder, name);
         recorder.Time(name + ": shortcut → selector first frame", selectorMs);
         recorder.Time(name + ": synthetic desktop grab (inside the selector timing)", s_lastProbeAcquisitionMs);
-        CaptureOverlayWindow overlay = ProbeOverlay ?? throw new InvalidOperationException("The selector did not open.");
-        recorder.Track(name, "selector window", overlay);
-        recorder.Track(name, "selector frame", (overlay.Content as CaptureOverlayView)?.Frame);
+        NativeCaptureOverlay? native = _overlay?.NativeOverlayForProbe;
+        CaptureOverlayWindow? overlay = ProbeOverlay;
+        if (native is null && overlay is null) throw new InvalidOperationException("The selector did not open.");
+        recorder.Track(name, "selector window", (object?)native ?? overlay);
+        recorder.Track(name, "selector frame", native?.Frame ?? (overlay?.Content as CaptureOverlayView)?.Frame);
 
         long selected = 0;
         double cardMs = -1;
@@ -227,9 +289,9 @@ public partial class App
             gen0 = GC.CollectionCount(0);
             gen1 = GC.CollectionCount(1);
             gen2 = GC.CollectionCount(2);
+            // Through the dwell: a card that receives the flight stays clear until the image starts flying.
             ReceiptTimeline.Mark = stage =>
             {
-                if (cardMs >= 0) return;
                 double at = Stopwatch.GetElapsedTime(selected).TotalMilliseconds;
                 lock (receiptMarks) receiptMarks.Add(new ResidentProbeRecorder.Mark(stage, Math.Round(at, 2), Environment.CurrentManagedThreadId));
             };
@@ -248,18 +310,39 @@ public partial class App
                     "card-first-rendering", Math.Round(cardMs, 2), Environment.CurrentManagedThreadId));
             }
         };
-        CompositionTarget.Rendering += rendering;
         try
         {
-            overlay.CompleteSelection(new RectD(160, 120, 1280, 720));
-            await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
+            CompositionTarget.Rendering += rendering;
+            try
+            {
+                if (native is not null)
+                {
+                    // Exercise the same drag/controller and damage path as native mouse input.
+                    native.BeginSelection(new PointD(160, 120));
+                    native.MoveSelection(new PointD(800, 480));
+                    native.EndSelection(new PointD(1440, 840));
+                    if (!native.IsClosed || native.LiveOwnedNativeHandles != 0)
+                        throw new InvalidOperationException("Native selector resources remained live after selection.");
+                }
+                else overlay!.CompleteSelection(new RectD(160, 120, 1280, 720));
+                await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
+            }
+            finally
+            {
+                CompositionTarget.Rendering -= rendering;
+            }
+            recorder.Time(name + ": selection → card shown", cardMs);
+            recorder.Track(name, "card", _quickAccess);
+            recorder.Track(name, "card image", _quickAccess?.PreviewForTest.Source);
+            recorder.Track(name, "flight", _captureFlight);
+            recorder.Track(name, "flight window", _captureFlight?.WindowForTest);
+
+            await Task.Delay(dwellMs);
         }
         finally
         {
-            CompositionTarget.Rendering -= rendering;
             if (receiptMarks is not null) ReceiptTimeline.Mark = previousReceiptMark;
         }
-        recorder.Time(name + ": selection → card shown", cardMs);
         if (receiptMarks is not null)
         {
             int index = _probeReceiptIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
@@ -267,12 +350,6 @@ public partial class App
             lock (receiptMarks) recorder.AddReceiptBreakdown(new ResidentProbeRecorder.ReceiptBreakdown(
                 name, index, Math.Round(cardMs, 2), collected0, collected1, collected2, receiptMarks.ToArray()));
         }
-        recorder.Track(name, "card", _quickAccess);
-        recorder.Track(name, "card image", _quickAccess?.PreviewForTest.Source);
-        recorder.Track(name, "flight", _captureFlight);
-        recorder.Track(name, "flight window", _captureFlight?.WindowForTest);
-
-        await Task.Delay(dwellMs);
         _quickAccess?.RequestClose();
         await ProbeWaitAsync(() => _quickAccess is null && _overlay?.IsActive != true && _capturePersistenceTask.IsCompleted,
             10_000, "card closed");
@@ -284,6 +361,7 @@ public partial class App
     /// </summary>
     private async Task<double> ProbeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
     {
+        if (_overlay?.UseNativeDibSelector == true) return await ProbeNativeShortcutToSelectorAsync(recorder, name);
         if (s_residentProbe?.Has("selector-breakdown") == true)
             return await ProbeShortcutToSelectorBreakdownAsync(recorder, name);
 
@@ -416,12 +494,106 @@ public partial class App
             RenderThreadCompleteMs = renderThreadCompleteMs is { } measured ? Math.Round(measured, 2) : null,
             RenderThreadCompleteError = renderThreadCompleteError
                 ?? (renderThreadCompleteMs is null ? "Render completion was not observed before the probe ended" : null),
+            ShortcutHandledMs = marks.FirstOrDefault(mark => mark.Name == "handler")?.Milliseconds,
+            SourceFrameReadyMs = marks.FirstOrDefault(mark => mark.Name == "source-frame-ready")?.Milliseconds,
+            ChromeReadyMs = marks.FirstOrDefault(mark => mark.Name == "content-rendered")?.Milliseconds,
+            InputReadyMs = marks.FirstOrDefault(mark => mark.Name == "content-rendered-handled")?.Milliseconds,
         });
         return selectorMs;
     }
 
-    /// <summary>A 3840 x 2160 capture opened in the editor, closed, then the next shortcut at once.</summary>
-    private async Task ProbeEditorAsync(ResidentProbeRecorder recorder)
+    /// <summary>Names the selector milestones reached and the state of every chrome window when chrome never became ready.</summary>
+    private string DescribeNativeChrome(List<ResidentProbeRecorder.Mark> marks)
+    {
+        var text = new System.Text.StringBuilder("Native chrome was not ready. Marks: ");
+        lock (marks) text.AppendJoin(", ", marks.Select(mark => mark.Name + "@" + mark.Milliseconds));
+        NativeCaptureOverlay? native = _overlay?.NativeOverlayForProbe;
+        text.Append(native is null ? ". Overlay: gone"
+            : $". Overlay visible={native.IsVisible} ready={native.IsReady} closed={native.IsClosed} bounds={native.ScreenBounds}");
+        if (native?.Chrome is { } chrome)
+        {
+            text.Append($". Chrome pending={chrome.PendingFrameCount} detached={chrome.IsDetached}");
+            foreach (System.Windows.Window window in chrome.Windows)
+                text.Append($". Window {window.Content?.GetType().Name ?? "(no content)"} visible={window.IsVisible} "
+                    + $"size={window.ActualWidth:0.#}x{window.ActualHeight:0.#} at {window.Left:0.#},{window.Top:0.#}");
+        }
+        return text.ToString();
+    }
+
+    private async Task<double> ProbeNativeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
+    {
+        long dismissed = _overlay?.LastPresentationDismissalTick ?? long.MinValue;
+        double sinceDismissal = dismissed == long.MinValue ? -1 : Environment.TickCount64 - dismissed;
+        var marks = new List<ResidentProbeRecorder.Mark>();
+        long started = Stopwatch.GetTimestamp();
+        SelectorTimeline.Mark = stage =>
+        {
+            lock (marks) marks.Add(new ResidentProbeRecorder.Mark(stage,
+                Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2), Environment.CurrentManagedThreadId));
+        };
+        try
+        {
+            HandleCaptureRequested();
+            await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsReady: true }, 10_000, "native selector ready");
+            // Keep observing chrome separately so the scripted immediate drag cannot close the
+            // session before deferred chrome exists. InputReadyMs remains the earlier input turn.
+            try
+            {
+                await ProbeWaitAsync(() => _overlay?.NativeOverlayForProbe is { IsChromeReady: true }, 10_000, "native chrome ready");
+            }
+            catch (TimeoutException timeout)
+            {
+                throw new TimeoutException(DescribeNativeChrome(marks), timeout);
+            }
+        }
+        finally { SelectorTimeline.Mark = null; }
+        ResidentProbeRecorder.Mark[] snapshot;
+        lock (marks) snapshot = marks.ToArray();
+        double? At(string stage) => snapshot.FirstOrDefault(mark => mark.Name == stage)?.Milliseconds;
+        double submitted = At("native-first-full-frame-submitted")
+            ?? throw new InvalidOperationException("No full native frame submission was observed.");
+        double ready = At("native-input-ready") ?? throw new InvalidOperationException("Native input readiness was not observed.");
+        int index = _probeBreakdownIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
+        _probeBreakdownIndex[name] = index;
+        recorder.Time(name + ": shortcut → native full frame submitted (GdiFlush)", submitted);
+        recorder.Time(name + ": shortcut → native input ready", ready);
+        if (At("native-dwm-flush-complete") is { } compositor)
+            recorder.Time(name + ": shortcut → native background compositor sync (DwmFlush)", compositor);
+        recorder.AddBreakdown(new ResidentProbeRecorder.Breakdown(name, index, submitted, sinceDismissal, snapshot)
+        {
+            Backend = "native-dib",
+            ShortcutHandledMs = At("handler"),
+            SourceFrameReadyMs = At("source-frame-ready"), DisplayDibReadyMs = At("native-display-dib-ready"),
+            FirstFullFrameSubmittedMs = submitted, CompositorSyncMs = At("native-dwm-flush-complete"),
+            ChromeReadyMs = At("native-chrome-ready"), InputReadyMs = ready,
+            PresentationError = At("native-dwm-flush-failed") is not null ? "DwmFlush failed" : null,
+            RenderThreadCompleteError = "Not applicable: native DIB background has no WPF render target",
+        });
+        return submitted;
+    }
+
+    /// <summary>
+    /// Diagnostic only (<c>--resident-scenarios soak</c>, never in the release table): rounds of a capture
+    /// to its card, a full-HD capture in the editor, two pins, OCR and the library, sampled after each
+    /// round, so memory that keeps growing or a step that slows down over time shows as a trend.
+    /// </summary>
+    private async Task ProbeSoakAsync(ResidentProbeOptions probe, ResidentProbeRecorder recorder)
+    {
+        int rounds = probe.Quick ? 3 : 40;
+        for (int round = 1; round <= rounds; round++)
+        {
+            await ProbeCaptureToCardAsync(recorder, "soak", dwellMs: 300);
+            await ProbeEditorAsync(recorder, "soak-editor", 1920, 1080, dwellMs: 300);
+            await ProbePinsAsync(recorder, "soak-pins", images: 1, texts: 1, dwellMs: 300);
+            await ProbeOcrAsync(recorder, "soak-ocr", dwellMs: 1000);
+            await ProbeLibraryAsync(recorder, "soak-library", dwellMs: 500);
+            recorder.Sample($"soak after {round}", 0, $"{_queue?.Count ?? 0} captures");
+        }
+    }
+
+    /// <summary>A capture (3840 x 2160 unless given) opened in the editor, closed, then the next shortcut at once.</summary>
+    private async Task ProbeEditorAsync(ResidentProbeRecorder recorder, string name = "editor-4k",
+        int width = 3840, int height = 2160, int dwellMs = 1500)
     {
         if (_overlay is null || _settings is null) throw new InvalidOperationException("The capture shell is unavailable.");
         AfterCaptureAction previous = _settings.General.AfterCapture;
@@ -430,7 +602,7 @@ public partial class App
         {
             DismissQuickAccessForCapture();
             RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
-            FrozenFrame frame = ResidentProbeImages.DesktopFrame(new RectD(desktop.Left, desktop.Top, 3840, 2160), 7,
+            FrozenFrame frame = ResidentProbeImages.DesktopFrame(new RectD(desktop.Left, desktop.Top, width, height), 7,
                 s_residentProbe?.Has("frame-cached") == true);
             long started = Stopwatch.GetTimestamp();
             double editorMs = -1;
@@ -441,31 +613,31 @@ public partial class App
             CompositionTarget.Rendering += rendering;
             try
             {
-                recorder.Track("editor-4k", "4K frame", frame.Bitmap);
-                if (!_overlay.StartWithSelection(frame, new RectD(0, 0, 3840, 2160), "Resident probe"))
+                recorder.Track(name, "capture frame", frame.Bitmap);
+                if (!_overlay.StartWithSelection(frame, new RectD(0, 0, width, height), "Resident probe"))
                     throw new InvalidOperationException("The editor did not start.");
                 frame = null!;
                 await ProbeWaitAsync(() => editorMs >= 0, 60_000, "editor shown");
             }
             finally { CompositionTarget.Rendering -= rendering; }
-            recorder.Time("editor-4k: capture → editor shown", editorMs);
-            recorder.Track("editor-4k", "editor window", ProbeEditor);
-            recorder.Track("editor-4k", "editor control", ProbeEditor?.Editor);
-            await Task.Delay(1500);
-            recorder.Sample("editor-4k open", 0);
+            recorder.Time(name + ": capture → editor shown", editorMs);
+            recorder.Track(name, "editor window", ProbeEditor);
+            recorder.Track(name, "editor control", ProbeEditor?.Editor);
+            await Task.Delay(dwellMs);
+            recorder.Sample(name + " open", 0);
             ProbeEditor?.Close();
             await ProbeWaitAsync(() => _overlay.IsActive != true && _capturePersistenceTask.IsCompleted, 15_000, "editor closed");
         }
         finally { _settings.General.AfterCapture = previous; }
 
         // The complaint: the next capture right after an editor closed.
-        double selectorMs = await ProbeShortcutToSelectorAsync(recorder, "editor-4k next");
-        recorder.Time("editor-4k: closed → next shortcut → selector first frame", selectorMs);
+        double selectorMs = await ProbeShortcutToSelectorAsync(recorder, name + " next");
+        recorder.Time(name + ": closed → next shortcut → selector first frame", selectorMs);
         _overlay.Cancel();
         await ProbeWaitAsync(() => _overlay.IsActive != true, 10_000, "selector cancelled");
     }
 
-    private async Task ProbeLibraryAsync(ResidentProbeRecorder recorder)
+    private async Task ProbeLibraryAsync(ResidentProbeRecorder recorder, string name = "library", int dwellMs = 2500)
     {
         long started = Stopwatch.GetTimestamp();
         double shownMs = -1;
@@ -480,15 +652,15 @@ public partial class App
             await ProbeWaitAsync(() => shownMs >= 0, 15_000, "library shown");
         }
         finally { CompositionTarget.Rendering -= rendering; }
-        recorder.Time("library: open → shown", shownMs);
-        recorder.Track("library", "library window", _galleryWindow);
-        await Task.Delay(2500);
-        recorder.Sample("library open", 0, $"{_queue?.Count ?? 0} captures");
+        recorder.Time(name + ": open → shown", shownMs);
+        recorder.Track(name, "library window", _galleryWindow);
+        await Task.Delay(dwellMs);
+        recorder.Sample(name + " open", 0, $"{_queue?.Count ?? 0} captures");
         _galleryWindow?.Close();
         await ProbeWaitAsync(() => _galleryWindow is not { IsVisible: true }, 10_000, "library closed");
     }
 
-    private async Task ProbeOcrAsync(ResidentProbeRecorder recorder)
+    private async Task ProbeOcrAsync(ResidentProbeRecorder recorder, string name = "ocr", int dwellMs = 4000)
     {
         if (_ocrPresenter is null || _settings is null) throw new InvalidOperationException("OCR is unavailable.");
         BitmapSource image = ResidentProbeImages.Text(1600, 900,
@@ -502,11 +674,11 @@ public partial class App
         long started = Stopwatch.GetTimestamp();
         _ocrPresenter.ShowRecognized(() => OcrRequestFactory.FromBitmap(image, ocr), "Resident probe");
         await ProbeWaitAsync(() => ProbeOcrWindow() is { IsVisible: true }, 15_000, "OCR window shown");
-        recorder.Time("ocr: request → window shown", Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-        recorder.Track("ocr", "OCR image", image);
-        recorder.Track("ocr", "OCR window", ProbeOcrWindow());
-        await Task.Delay(4000);
-        recorder.Sample("ocr open", 0, ocr.Quality.ToString());
+        recorder.Time(name + ": request → window shown", Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        recorder.Track(name, "OCR image", image);
+        recorder.Track(name, "OCR window", ProbeOcrWindow());
+        await Task.Delay(dwellMs);
+        recorder.Sample(name + " open", 0, ocr.Quality.ToString());
         ProbeOcrWindow()?.Close();
         await ProbeWaitAsync(() => ProbeOcrWindow() is not { IsVisible: true }, 10_000, "OCR window closed");
     }
@@ -514,21 +686,22 @@ public partial class App
     private static OcrResultWindow? ProbeOcrWindow() =>
         Current?.Windows.OfType<OcrResultWindow>().FirstOrDefault();
 
-    private async Task ProbePinsAsync(ResidentProbeRecorder recorder)
+    private async Task ProbePinsAsync(ResidentProbeRecorder recorder, string name = "pins-10", int images = 5, int texts = 5,
+        int dwellMs = 1500)
     {
         if (_pins is null) throw new InvalidOperationException("Pins are unavailable.");
         long started = Stopwatch.GetTimestamp();
-        for (int index = 0; index < 5; index++) _pins.PinImage(ResidentProbeImages.Pattern(1920, 1080, index));
-        for (int index = 0; index < 5; index++)
+        for (int index = 0; index < images; index++) _pins.PinImage(ResidentProbeImages.Pattern(1920, 1080, index));
+        for (int index = 0; index < texts; index++)
         {
             BitmapSource text = ResidentProbeImages.Text(900, 360, [$"Pinned text {index}", "SELECT * FROM captures;", "x = y + 1"]);
             _pins.PinRenderedText(text, $"Pinned text {index}\nSELECT * FROM captures;\nx = y + 1", isTable: false);
         }
-        await ProbeWaitAsync(() => _pins.SnapshotOpenPinWindows().Count(pin => pin.IsVisible) >= 10, 15_000, "pins shown");
-        recorder.Time("pins-10: create → all shown", Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-        foreach (var pin in _pins.SnapshotOpenPinWindows()) recorder.Track("pins-10", "pin window", pin);
-        await Task.Delay(1500);
-        recorder.Sample("pins-10 open", 0);
+        await ProbeWaitAsync(() => _pins.SnapshotOpenPinWindows().Count(pin => pin.IsVisible) >= images + texts, 15_000, "pins shown");
+        recorder.Time(name + ": create → all shown", Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        foreach (var pin in _pins.SnapshotOpenPinWindows()) recorder.Track(name, "pin window", pin);
+        await Task.Delay(dwellMs);
+        recorder.Sample(name + " open", 0);
         _pins.CloseAll();
         await ProbeWaitAsync(() => _pins.Count == 0, 10_000, "pins closed");
     }

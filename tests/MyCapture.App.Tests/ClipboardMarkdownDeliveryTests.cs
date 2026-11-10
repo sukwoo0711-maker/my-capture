@@ -215,6 +215,99 @@ public sealed class ClipboardMarkdownDeliveryTests
     }
 
     [Fact]
+    public async Task VsCodeMarkdownCopy_RendersDocumentAndMermaidInsteadOfACodePin()
+    {
+        const string source = "# LED 버튼 동작\r\n\r\n버튼을 누를 때마다 LED 모드가 바뀝니다.\r\n\r\n- **OFF**: 꺼짐\r\n- **ON**: 켜짐\r\n- **BLINK**: 0.5초마다 깜빡임\r\n\r\n```mermaid\r\nflowchart LR\r\n    OFF -->|버튼| ON\r\n    ON -->|버튼| BLINK\r\n    BLINK -->|버튼| OFF\r\n```\r\n";
+        var captured = await Capture(source, VsCodeHtml(source), Convert.FromBase64String(VsCodeMarkdownCopyData));
+        Assert.True(captured.HasCodeHtml);
+        Assert.True(captured.HasExplicitMarkdown);
+        Assert.Null(captured.CodePreview);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured,
+            _ => throw new InvalidOperationException("VS Code publishes no picture."),
+            (_, _) => throw new InvalidOperationException("A VS Code Markdown copy must use the document renderer."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."));
+        Assert.True(completed.Content!.IsMarkdown);
+        Assert.Equal(PinTextStyle.Markdown, completed.Content.TextStyle);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.True(completed.Content.Image.IsFrozen);
+        MarkdownMermaidBlock diagram = Assert.Single(ClipboardMarkdownRenderer.ExtractMermaidBlocks(source));
+        Assert.StartsWith("flowchart LR", diagram.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VsCodeCSourceCopy_KeepsTheColoredCodePin()
+    {
+        const string source = "#include <stdint.h>\r\n#include <stdbool.h>\r\n\r\n#define LED_PIN     5\r\n\r\n/* 버튼을 누를 때마다 OFF -> ON -> BLINK 순서로 바꿈 */\r\nvoid on_button_pressed(void)\r\n{\r\n    mode = (led_mode_t)((mode + 1) % 3);\r\n}\r\n";
+        var captured = await Capture(source, VsCodeHtml(source), Convert.FromBase64String(VsCodeCCopyData));
+        Assert.True(captured.HasCodeHtml);
+        Assert.False(captured.HasExplicitMarkdown);
+        Assert.NotNull(captured.CodePreview);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured,
+            _ => throw new InvalidOperationException("Code preview already exists."),
+            (_, _) => throw new InvalidOperationException("Keep the code renderer."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."),
+            _ => throw new InvalidOperationException("A C copy must not select Markdown."));
+        Assert.False(completed.Content!.IsMarkdown);
+        Assert.Equal(PinTextStyle.Code, completed.Content.TextStyle);
+        Assert.Same(captured.CodePreview, completed.Content.Image);
+        Assert.Equal("#121314", completed.Content.CodeDocument!.Background);
+        Assert.Equal(source, completed.Content.OriginalText);
+    }
+
+    [Fact]
+    public async Task VsCodeMermaidFileCopy_UsesTheDiagramPipeline()
+    {
+        const string source = "flowchart LR\r\n    OFF -->|버튼| ON\r\n    ON -->|버튼| OFF\r\n";
+        var captured = await Capture(source, VsCodeHtml(source), ChromiumCustomData(
+            ("vscode-editor-data", "{\"version\":1,\"isFromEmptySelection\":false,\"multicursorText\":null,\"mode\":\"mermaid\"}")));
+        Assert.True(captured.HasExplicitMarkdown);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => null,
+            (_, _) => throw new InvalidOperationException("Mermaid must use the diagram placeholder."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."));
+        Assert.True(completed.Content!.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.Equal(source, Assert.Single(ClipboardMarkdownRenderer.ExtractMermaidBlocks(source)).Source);
+    }
+
+    [Theory]
+    [InlineData(VsCodeMarkdownCopyData, "markdown")]
+    [InlineData(VsCodeCCopyData, "c")]
+    public void VsCodeEditorLanguage_IsReadFromRealCopiesAsStreamOrBytes(string payload, string expected)
+    {
+        byte[] bytes = Convert.FromBase64String(payload);
+        Assert.Equal(expected, ClipboardEditorLanguage.TryParseVsCodeMode(bytes));
+        var stream = new DataObject();
+        stream.SetData(ClipboardEditorLanguage.ChromiumCustomDataFormat, new System.IO.MemoryStream(bytes), false);
+        Assert.Equal(expected, ClipboardEditorLanguage.TryRead(stream));
+        var array = new DataObject();
+        array.SetData(ClipboardEditorLanguage.ChromiumCustomDataFormat, bytes, false);
+        Assert.Equal(expected, ClipboardEditorLanguage.TryRead(array));
+    }
+
+    [Fact]
+    public void VsCodeEditorLanguage_IgnoresMalformedOrUnrelatedCustomData()
+    {
+        byte[] real = Convert.FromBase64String(VsCodeMarkdownCopyData);
+        Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(real.AsSpan(0, real.Length - 8)));
+        Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(real.AsSpan(0, 6)));
+        byte[] countTooLarge = (byte[])real.Clone();
+        countTooLarge[7] = 0x01;
+        Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(countTooLarge));
+        byte[] lengthBeyondPayload = (byte[])real.Clone();
+        lengthBeyondPayload[8] = 0xFF;
+        lengthBeyondPayload[9] = 0xFF;
+        Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(lengthBeyondPayload));
+        Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(ChromiumCustomData(
+            ("application/vnd.code.copymetadata", "{\"mode\":\"markdown\"}"))));
+        foreach (string editorData in new[] { "not json", "[\"markdown\"]", "{\"version\":1}", "{\"mode\":null}", "{\"mode\":3}" })
+            Assert.Null(ClipboardEditorLanguage.TryParseVsCodeMode(ChromiumCustomData(("vscode-editor-data", editorData))));
+        Assert.Null(ClipboardEditorLanguage.TryRead(new DataObject()));
+        var unrelated = new DataObject();
+        unrelated.SetData(ClipboardEditorLanguage.ChromiumCustomDataFormat, "markdown", false);
+        Assert.Null(ClipboardEditorLanguage.TryRead(unrelated));
+    }
+
+    [Fact]
     public async Task FormattingFailure_KeepsExactPlainSource()
     {
         const string source = "# Release\n\n**Ready**";
@@ -296,11 +389,52 @@ public sealed class ClipboardMarkdownDeliveryTests
         return true;
     });
 
-    private static Task<ClipboardImageReader.CapturedAttempt> Capture(string text, string? html) => StaThreadTask.RunAsync(() =>
+    // "Chromium Web Custom MIME Data Format" from VS Code 1.141.0 on Windows, copied with Ctrl+A,
+    // Ctrl+C from button_led.md and button_led.c on 2026-11-05. Besides vscode-editor-data it
+    // carries VS Code's application/vnd.code.copymetadata entry.
+    private const string VsCodeMarkdownCopyData = "uAMAAAIAAAAhAAAAYQBwAHAAbABpAGMAYQB0AGkAbwBuAC8AdgBuAGQALgBjAG8AZABlAC4AYwBvAHAAeQBtAGUAdABhAGQAYQB0AGEAAAAOAQAAewAiAGkAZAAiADoAIgBhADUANQAxAGIAZgAwAGUALQA5AGYAZQBmAC0ANAAwAGIAZQAtAGEAZQBmADkALQA4ADcAMwAxADMAOAAwADIAMQBmAGQAMwAiACwAIgBwAHIAbwB2AGkAZABlAHIAQwBvAHAAeQBNAGkAbQBlAFQAeQBwAGUAcwAiADoAWwAiAGEAcABwAGwAaQBjAGEAdABpAG8AbgAvAHYAbgBkAC4AdgBzAGMAbwBkAGUALgBtAGEAcgBrAGQAbwB3AG4ALgB1AHAAZABhAHQAZQBsAGkAbgBrAHMALgBtAGUAdABhAGQAYQB0AGEAIgAsACIAYQBwAHAAbABpAGMAYQB0AGkAbwBuAC8AdgBuAGQALgBjAG8AZABlAC4AYQBkAGQAaQB0AGkAbwBuAGEAbAAtAGUAZABpAHQAbwByAC0AZABhAHQAYQAiAF0ALAAiAGQAZQBmAGEAdQBsAHQAUABhAHMAdABlAFAAYQB5AGwAbwBhAGQAIgA6AHsAIgBtAHUAbAB0AGkAYwB1AHIAcwBvAHIAVABlAHgAdAAiADoAbgB1AGwAbAAsACIAcABhAHMAdABlAE8AbgBOAGUAdwBMAGkAbgBlACIAOgBmAGEAbABzAGUALAAiAGkAcwBCAGwAbwBjAGsAIgA6AGYAYQBsAHMAZQAsACIAbQBvAGQAZQAiADoAbgB1AGwAbAB9AH0AEgAAAHYAcwBjAG8AZABlAC0AZQBkAGkAdABvAHIALQBkAGEAdABhAI8AAAB7ACIAdgBlAHIAcwBpAG8AbgAiADoAMQAsACIAaQBkACIAOgAiADEANQAwADIAYgA1ADgAYQAtAGIANQAzADkALQA0ADUAZgA1AC0AOABmAGUAZgAtADYAYQBiADAAYgA4ADMANAAxAGIAZQBjACIALAAiAGkAcwBGAHIAbwBtAEUAbQBwAHQAeQBTAGUAbABlAGMAdABpAG8AbgAiADoAZgBhAGwAcwBlACwAIgBpAHMAQgBsAG8AYwBrACIAOgBmAGEAbABzAGUALAAiAG0AdQBsAHQAaQBjAHUAcgBzAG8AcgBUAGUAeAB0ACIAOgBuAHUAbABsACwAIgBtAG8AZABlACIAOgAiAG0AYQByAGsAZABvAHcAbgAiAH0AAAA=";
+    private const string VsCodeCCopyData = "PAMAAAIAAAAhAAAAYQBwAHAAbABpAGMAYQB0AGkAbwBuAC8AdgBuAGQALgBjAG8AZABlAC4AYwBvAHAAeQBtAGUAdABhAGQAYQB0AGEAAADXAAAAewAiAGkAZAAiADoAIgAzAGEANAAyADMANgA3ADcALQBjADYAZQBhAC0ANAAyAGMAZgAtAGEAMgBiADIALQA5ADYAYwA0AGEAYQAxADQAMgA0ADYANwAiACwAIgBwAHIAbwB2AGkAZABlAHIAQwBvAHAAeQBNAGkAbQBlAFQAeQBwAGUAcwAiADoAWwAiAGEAcABwAGwAaQBjAGEAdABpAG8AbgAvAHYAbgBkAC4AYwBvAGQAZQAuAGEAZABkAGkAdABpAG8AbgBhAGwALQBlAGQAaQB0AG8AcgAtAGQAYQB0AGEAIgBdACwAIgBkAGUAZgBhAHUAbAB0AFAAYQBzAHQAZQBQAGEAeQBsAG8AYQBkACIAOgB7ACIAbQB1AGwAdABpAGMAdQByAHMAbwByAFQAZQB4AHQAIgA6AG4AdQBsAGwALAAiAHAAYQBzAHQAZQBPAG4ATgBlAHcATABpAG4AZQAiADoAZgBhAGwAcwBlACwAIgBpAHMAQgBsAG8AYwBrACIAOgBmAGEAbABzAGUALAAiAG0AbwBkAGUAIgA6AG4AdQBsAGwAfQB9AAAAEgAAAHYAcwBjAG8AZABlAC0AZQBkAGkAdABvAHIALQBkAGEAdABhAIgAAAB7ACIAdgBlAHIAcwBpAG8AbgAiADoAMQAsACIAaQBkACIAOgAiAGUAMAAxADkAYgBjADkAMwAtADQAZQA4ADQALQA0ADcAMgAxAC0AYgAzAGQAYgAtAGMAMAAyAGUAOAA5ADEANABiAGQAZABhACIALAAiAGkAcwBGAHIAbwBtAEUAbQBwAHQAeQBTAGUAbABlAGMAdABpAG8AbgAiADoAZgBhAGwAcwBlACwAIgBpAHMAQgBsAG8AYwBrACIAOgBmAGEAbABzAGUALAAiAG0AdQBsAHQAaQBjAHUAcgBzAG8AcgBUAGUAeAB0ACIAOgBuAHUAbABsACwAIgBtAG8AZABlACIAOgAiAGMAIgB9AA==";
+
+    /// <summary>The CF_HTML VS Code publishes: one pre-formatted block, one div per line, no language name.</summary>
+    private static string VsCodeHtml(string source)
+    {
+        var lines = source.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n').Split('\n')
+            .Select(static line => line.Length == 0
+                ? "<br>"
+                : "<div><span style=\"color: #bbbebf;\">" + System.Net.WebUtility.HtmlEncode(line) + "</span></div>");
+        return "Version:0.9\r\n<html>\r\n<body>\r\n<!--StartFragment--><div style=\"color: #bbbebf;background-color: #121314;"
+            + "font-family: Consolas, 'Courier New', monospace;font-weight: normal;font-size: 14px;line-height: 19px;white-space: pre;\">"
+            + string.Concat(lines) + "</div><!--EndFragment-->\r\n</body>\r\n</html>";
+    }
+
+    /// <summary>Writes entries the way Chromium pickles non-standard clipboard types.</summary>
+    private static byte[] ChromiumCustomData(params (string Type, string Value)[] entries)
+    {
+        var payload = new List<byte>();
+        void WriteUInt32(uint value) => payload.AddRange(BitConverter.GetBytes(value));
+        void WriteString16(string value)
+        {
+            WriteUInt32((uint)value.Length);
+            payload.AddRange(System.Text.Encoding.Unicode.GetBytes(value));
+            while (payload.Count % 4 != 0) payload.Add(0);
+        }
+        WriteUInt32((uint)entries.Length);
+        foreach ((string type, string value) in entries)
+        {
+            WriteString16(type);
+            WriteString16(value);
+        }
+        return [.. BitConverter.GetBytes((uint)payload.Count), .. payload];
+    }
+
+    private static Task<ClipboardImageReader.CapturedAttempt> Capture(string text, string? html, byte[]? editorData = null) =>
+        StaThreadTask.RunAsync(() =>
     {
         var data = new DataObject();
         data.SetData(DataFormats.UnicodeText, text);
         if (html is not null) data.SetData(DataFormats.Html, html);
+        if (editorData is not null)
+            data.SetData(ClipboardEditorLanguage.ChromiumCustomDataFormat, new System.IO.MemoryStream(editorData), false);
         return ClipboardImageReader.CaptureFrom(data, 41, () => null);
     }, "Markdown clipboard fixture");
 

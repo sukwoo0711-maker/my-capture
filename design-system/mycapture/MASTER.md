@@ -11,9 +11,13 @@ source and a near-white forward pane for the floating, editable object. The curr
 mark is an open capture frame with a pin; its geometry and colours are in `docs/design/brand/README.md`.
 The mark keeps its supplied colours: changing the UI accent never recolours the artwork.
 
-The default UI accent is pin red: fill `#E0453C`, hover `#F35B4D`, pressed `#DA433A`, ink `#0A0818`.
-Violet is the alternative accent. Focus and selection use neutral outlines.
-`ThemeService` computes accessible accent foregrounds per theme. The six themes are Midnight, Glass,
+The product has one UI accent, red. At runtime `AccentPalette.RedOverrides` (`AppAccent.cs`) gives every
+theme except high contrast a deep red primary fill with white ink: fill `#C9352C`, hover `#BD3129`,
+pressed `#B32E26`, ink `#FFFFFF` (5.2:1, and hover and pressed only darken). The brighter brand red
+`#E0453C` stays on what marks the brand or a live recording over other apps: the pin outline and the
+recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines.
+The accent rows in the token table below are the `Tokens.xaml` startup defaults that this runtime palette
+replaces, not the colours users see. The six themes are Midnight, Glass,
 Workspace, Daylight, GlassLight and HighContrast; System follows Windows. Windows high contrast takes
 precedence and uses the user's system colours.
 
@@ -23,7 +27,9 @@ Primitive → Semantic → Component. Primitive colours (`Primitive.*`) feed rol
 dimensions and styles. The active neutral ramp is `Primitive.Warm*`: 980/950/900/850 are `#080C12`/`#0B0F17`/
 `#101722`/`#151E2B`; 600/550 are `#6A7B94`/`#56677F`. Legacy primitive names remain compatibility aliases.
 Semantic roles are what UI code uses: `Surface.*` is a four-step depth ladder (Canvas, Base, Raised, Overlay),
-`Text.*` carries hierarchy, `State.*` marks warning, success and danger (timeline layers included), and
+`Text.*` carries hierarchy, `State.*` marks warning, success and danger (timeline layers included; warning
+and success words take `Text.Warning`/`Text.Success`, which reach 4.5:1 on the surfaces that carry them,
+while glyphs, fills and outlines keep `State.*`), and
 `Accent.*` belongs to the approved consumers that `AccentUsagePolicyTests` lists. Component values are the
 `Size.*`, `Space.*`, `Radius.*`, `Focus.*` and `Motion.*` tokens plus the control styles in `Controls.xaml`.
 The table lists the resolved `Tokens.xaml` defaults before runtime palette overrides; sizes are DIP.
@@ -38,6 +44,8 @@ The table lists the resolved `Tokens.xaml` defaults before runtime palette overr
 | Text.Primary | #FFFFFF |
 | Text.Secondary | #C9D1DD |
 | Text.Muted | #9AA5B5 |
+| Text.Warning | #F5B942 |
+| Text.Success | #45D6A2 |
 | Surface.Canvas | #080C12 |
 | Surface.Base | #0B0F17 |
 | Surface.Raised | #101722 |
@@ -117,16 +125,22 @@ surrounding space and a keyboard alternative), rail buttons 44, icon glyphs 16. 
 overlay, so focus never shifts layout. Buttons, icon buttons, tabs, timeline handles and cards expose
 default, hover, pressed, focused, selected and disabled states through shared resources.
 Motion is 83/167/250 ms, animates opacity and transforms only (never capture geometry or timeline
-dimensions), stays interruptible and respects reduced animation.
+dimensions), stays interruptible and respects reduced animation. An intended exception: the delayed-capture
+countdown's digit lands over 200 ms (`CountdownWindow.LandingDuration`), a beat longer than the 167 ms fade
+it lands with, because it is the only thing moving on that surface.
 Text meets WCAG AA (4.5:1); focus and non-text indicators meet 3:1. Every icon-only control has an
 accessible name and a tooltip. Colour is never the only signal: keep labels, shapes or hatching.
 
 ## Commands and settled product decisions
 
 New-install defaults (`NewInstallDefaults`, `AppSettings`): `Ctrl+Shift+C` captures a region,
-`Ctrl+Shift+X` starts or stops region recording, `F3` pins clipboard content, `Shift+F3` hides or shows
-the pins. The library and upload have no shortcut on new installs; existing users keep `Ctrl+Shift+Z` and
-`F9`. A lone `Ctrl+X` is never presented as the recording default: Windows users read it as Cut.
+`Ctrl+Shift+X` starts or stops region recording, `Ctrl+Shift+Z` opens the library, `F3` pins clipboard
+content, `Shift+F3` hides or shows the pins, and upload has no shortcut. The first four are taken ahead
+of other programs (`ForceCoreShortcuts`), and the first run says so in a "Core shortcuts" notice instead
+of asking (2026-11-07 decision). An existing settings file keeps what it stores, and a value it lacks
+reads back the earlier default: upload keeps `F9` and priority stays off. An upgrade that never answered
+still gets the question. "Reset to defaults" restores these keys but keeps the user's answer, priority
+included. A lone `Ctrl+X` is never presented as the recording default: Windows users read it as Cut.
 Reviews must not reverse these decisions: editor Ctrl+C copies and closes; Alt reveals shortcut labels;
 pin hover-bar labels all show or all hide; there are no pin boards. Prefer the smallest change to existing
 UI over new overlays or badges. Follow Windows conventions: Explorer menu order, Properties last, and an

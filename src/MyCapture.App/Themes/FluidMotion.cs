@@ -581,6 +581,13 @@ public static class FluidMotion
 
         if (scale is null)
         {
+            // Nothing pressed this control, so a release (pointer leaving, a disabled command) has
+            // nothing to bring back; animating 1 to 1 would still draw frames for the whole duration.
+            if (!pressed)
+            {
+                return;
+            }
+
             // A control that deliberately owns a transform keeps it; motion must never trample
             // component-specific rendering or replace a transform used for hit testing.
             if (element.ReadLocalValue(UIElement.RenderTransformProperty) != DependencyProperty.UnsetValue)

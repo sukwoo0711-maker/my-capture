@@ -1,9 +1,11 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Extensions.Logging;
@@ -17,6 +19,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
@@ -80,6 +83,55 @@ public sealed class CaptureWindowExclusionTests
     [Fact]
     public void TryApplyStillRejectsZeroHandle() => Assert.False(CaptureWindowExclusion.TryApply(IntPtr.Zero));
 
+    [Fact]
+    public void TheFirstLayeredWindowAnswersInsteadOfAProbeWindow() => StaTestHost.Run(() =>
+    {
+        bool real = NativeExclusion.SupportsLayeredWindows;
+        Func<bool> original = CaptureWindowExclusion.LayeredWindowProbe;
+        Window window = NativeExclusion.HiddenLayeredWindow();
+        try
+        {
+            NativeExclusion.ResetAppProbe();
+            int probes = CaptureWindowExclusion.ProbeWindowsForTest;
+            // Nothing has asked yet: a layered surface may be made, and its own window answers.
+            Assert.True(CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(real, CaptureWindowExclusion.TryApplyLayered(window));
+            Assert.Equal(real, CaptureWindowExclusion.SupportsLayeredWindows);
+            Assert.Equal(real, CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(probes, CaptureWindowExclusion.ProbeWindowsForTest);
+        }
+        finally
+        {
+            window.Close();
+            CaptureWindowExclusion.LayeredWindowProbe = original;
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AProbePutInPlaceStaysTheAnswerAfterALayeredWindow(bool supported) => StaTestHost.Run(() =>
+    {
+        bool real = NativeExclusion.SupportsLayeredWindows;
+        Func<bool> original = CaptureWindowExclusion.LayeredWindowProbe;
+        Window window = NativeExclusion.HiddenLayeredWindow();
+        int calls = 0;
+        try
+        {
+            CaptureWindowExclusion.LayeredWindowProbe = () => { calls++; return supported; };
+            Assert.Equal(real, CaptureWindowExclusion.TryApplyLayered(window));
+            Assert.Equal(0, calls);
+            Assert.Equal(supported, CaptureWindowExclusion.MayTryLayeredWindow);
+            Assert.Equal(supported, CaptureWindowExclusion.SupportsLayeredWindows);
+            Assert.Equal(1, calls);
+        }
+        finally
+        {
+            window.Close();
+            CaptureWindowExclusion.LayeredWindowProbe = original;
+        }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -111,8 +163,9 @@ public sealed class CaptureWindowExclusionTests
             _ = new WindowInteropHelper(window).EnsureHandle();
             NativeExclusion.AssertWindow(window, supported);
             Border surface = Assert.IsType<Border>(window.Content);
-            Assert.Equal(new Thickness(supported ? 8 : 0), surface.Margin);
-            Assert.Equal(new CornerRadius(supported ? 12 : 0), surface.CornerRadius);
+            // The shadow band and the corners of a notification card.
+            Assert.Equal(new Thickness(supported ? ThemedShellPresenter.ShadowMargin : 0), surface.Margin);
+            Assert.Equal(supported ? ThemedShellPresenter.CardCorner : new CornerRadius(0), surface.CornerRadius);
             Assert.Equal(328, window.Width - surface.Margin.Left - surface.Margin.Right);
             if (!supported) Assert.Null(surface.Effect);
         }
@@ -317,6 +370,84 @@ public sealed class CaptureWindowExclusionTests
             Assert.Equal(1, brush.Opacity);
         }, typeof(CaptureWindowExclusionTests));
 
+    // Issue #220: Binding.Source holds a brush only weakly, so a collection under a live backing
+    // used to drop its theme source and the next UpdateTarget turned the backing transparent.
+    [Fact]
+    public void OpaqueBackingKeepsItsThemeSourceThroughCollection() => StaTestHost.Run(() =>
+    {
+        (SolidColorBrush brush, WeakReference source) = NewOpaqueBacking();
+        CollectFully();
+        BindingExpression expression = OpaqueBinding(brush);
+        expression.UpdateTarget();
+        Assert.Equal(255, brush.Color.A);
+        Assert.Equal(1, brush.Opacity);
+        Assert.Equal(BindingStatus.Active, expression.Status);
+        Assert.True(source.IsAlive, "The theme source must live as long as the backing that binds to it.");
+        GC.KeepAlive(brush);
+    });
+
+    [Fact]
+    public Task OpaqueBackingFollowsApplicationThemeAfterCollectionAndReleasesItsFollower() => SettingsThemePreviewTests.RunIsolated(
+        nameof(OpaqueBackingFollowsApplicationThemeAfterCollectionAndReleasesItsFollower), () =>
+        {
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+                application.Resources.MergedDictionaries.Add(new ResourceDictionary
+                    { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+            ThemeService.ApplyResources(AppTheme.Glass, application.Resources, systemHighContrast: false);
+            (SolidColorBrush brush, _) = NewOpaqueBacking();
+            (WeakReference released, WeakReference releasedSource) = NewReleasedOpaqueBacking();
+            var seen = new HashSet<Color>();
+            foreach (AppTheme theme in new[] { AppTheme.GlassLight, AppTheme.Glass })
+            {
+                CollectFully();
+                ThemeService.ApplyResources(theme, application.Resources, systemHighContrast: false);
+                Color token = Assert.IsType<SolidColorBrush>(application.Resources["Surface.Floating"]).Color;
+                Assert.True(token.A < 255, $"{theme} must keep a translucent floating token for this test.");
+                Color expected = Color.FromRgb(token.R, token.G, token.B);
+                Assert.Equal(expected, brush.Color);
+                CollectFully();
+                BindingExpression expression = OpaqueBinding(brush);
+                expression.UpdateTarget();
+                Assert.Equal(expected, brush.Color);
+                Assert.Equal(1, brush.Opacity);
+                Assert.Equal(BindingStatus.Active, expression.Status);
+                seen.Add(expected);
+            }
+
+            Assert.Equal(2, seen.Count);
+            Assert.False(released.IsAlive, "A released backing must not be kept alive.");
+            Assert.False(releasedSource.IsAlive, "The follower of a released backing must be collectable.");
+            GC.KeepAlive(brush);
+        }, typeof(CaptureWindowExclusionTests));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (SolidColorBrush Brush, WeakReference Source) NewOpaqueBacking()
+    {
+        SolidColorBrush brush = Assert.IsType<SolidColorBrush>(CaptureWindowExclusion.OpaqueBackground());
+        object source = Assert.IsAssignableFrom<SolidColorBrush>(
+            BindingOperations.GetBinding(brush, SolidColorBrush.ColorProperty)?.Source);
+        return (brush, new WeakReference(source));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference Brush, WeakReference Source) NewReleasedOpaqueBacking()
+    {
+        (SolidColorBrush brush, WeakReference source) = NewOpaqueBacking();
+        return (new WeakReference(brush), source);
+    }
+
+    private static BindingExpression OpaqueBinding(SolidColorBrush brush) =>
+        Assert.IsType<BindingExpression>(BindingOperations.GetBindingExpression(brush, SolidColorBrush.ColorProperty));
+
+    // Collection is a test probe only; production never forces it.
+    private static void CollectFully()
+    {
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+    }
+
     private static QuickAccessWindow QuickAccess(bool exclude = true)
     {
         var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
@@ -367,6 +498,16 @@ internal static class NativeExclusion
     });
 
     internal static bool SupportsLayeredWindows => RealLayeredSupport.Value;
+
+    // The app's own probe, set back: a new answer nothing has asked for yet.
+    internal static void ResetAppProbe() => CaptureWindowExclusion.LayeredWindowProbe = (Func<bool>)typeof(CaptureWindowExclusion)
+        .GetField("s_probeWindow", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+
+    internal static Window HiddenLayeredWindow() => new()
+    {
+        AllowsTransparency = true, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false,
+        Width = 1, Height = 1, Left = -32000, Top = -32000,
+    };
     internal static bool ExpectsSuccess(bool layered) => !layered || SupportsLayeredWindows;
 
     internal static void AssertAffinity(IntPtr hwnd, bool layered)

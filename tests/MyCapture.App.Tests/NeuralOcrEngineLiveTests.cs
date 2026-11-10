@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,33 +8,26 @@ using MyCapture.App.Diagnostics;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-public sealed class NeuralOcrEngineLiveTests
+public sealed class NeuralOcrEngineLiveTests(ITestOutputHelper output)
 {
-    [Fact]
+    [NeuralOcrLiveFact]
     public void RealKoreanModel_InitializesSession()
     {
-        using LiveModels? fixture = CreateIfModelsPresent();
-        if (fixture is null)
-        {
-            return;
-        }
+        using LiveModels fixture = CreateModels();
         NeuralOcrEngine engine = fixture.Engine;
 
         Assert.True(engine.TryInitialize(), "PP-OCR session should initialize from the downloaded Korean model.");
         Assert.True(engine.IsReady);
     }
 
-    [Fact]
+    [NeuralOcrLiveFact]
     public void RealKoreanModel_WritesReceiptProbeReport()
     {
-        using LiveModels? fixture = CreateIfModelsPresent();
-        if (fixture is null)
-        {
-            return;
-        }
+        using LiveModels fixture = CreateModels();
         NeuralOcrEngine engine = fixture.Engine;
 
         Assert.True(engine.TryInitialize());
@@ -73,14 +67,10 @@ public sealed class NeuralOcrEngineLiveTests
         });
     }
 
-    [Fact]
+    [NeuralOcrLiveFact]
     public void RealKoreanModel_ReadsPrintedReceiptWords()
     {
-        using LiveModels? fixture = CreateIfModelsPresent();
-        if (fixture is null)
-        {
-            return;
-        }
+        using LiveModels fixture = CreateModels();
         NeuralOcrEngine engine = fixture.Engine;
 
         Assert.True(engine.TryInitialize());
@@ -97,27 +87,99 @@ public sealed class NeuralOcrEngineLiveTests
         });
     }
 
+    [NeuralOcrLiveFact]
+    public void RealKoreanModel_LeavesAfterTheIdleSpellAndReadsAgain()
+    {
+        using var released = new ManualResetEventSlim();
+        using LiveModels fixture = CreateModels(engineIdleRelease: TimeSpan.FromMilliseconds(300));
+        NeuralOcrEngine engine = fixture.Engine;
+        engine.EngineReleased += released.Set;
+
+        StaTestHost.Run(() =>
+        {
+            BitmapSource receipt = ReceiptBitmap();
+            OcrResult first = Recognize(engine, receipt);
+            Assert.True(released.Wait(TimeSpan.FromSeconds(10)), "The whole-image sessions should leave once idle.");
+            Assert.False(engine.IsReady);
+
+            OcrResult again = Recognize(engine, receipt);
+            Assert.Equal(OcrStatus.Success, again.Status);
+            Assert.Equal(first.Text, again.Text);
+        });
+    }
+
+    [NeuralOcrLiveFact]
+    public void RealKoreanModel_ReadsACaptureWhoseFourthByteIsZero()
+    {
+        using LiveModels fixture = CreateModels();
+        NeuralOcrEngine engine = fixture.Engine;
+
+        StaTestHost.Run(() =>
+        {
+            // A desktop capture is Bgr32, and nothing defines its fourth byte.
+            BitmapSource capture = WithFourthByteZero(ReceiptBitmap());
+            OcrResult whole = Recognize(engine, capture);
+            Assert.Contains("12345", whole.Text, StringComparison.Ordinal);
+
+            OcrResult rows = engine.ReadRowsAsync(Request(capture), whole.Lines, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            Assert.Contains("12345", rows.Text, StringComparison.Ordinal);
+        });
+    }
+
+    private static OcrRequest Request(BitmapSource image) =>
+        OcrRequest.FromBitmap(image, 1.0, ["ko-KR"], false, true, true);
+
+    private static OcrResult Recognize(NeuralOcrEngine engine, BitmapSource image) =>
+        engine.RecognizeAsync(Request(image), CancellationToken.None).GetAwaiter().GetResult();
+
+    private static BitmapSource WithFourthByteZero(BitmapSource image)
+    {
+        var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        byte[] pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 0;
+        BitmapSource capture = BitmapSource.Create(bgra.PixelWidth, bgra.PixelHeight, 96, 96, PixelFormats.Bgr32, null, pixels, stride);
+        capture.Freeze();
+        return capture;
+    }
+
     /// <summary>
     /// Opt-in: set MYCAPTURE_OCR_LIVE_MODELS to a local folder that holds the catalog's model
     /// files. The files are copied into an owned test profile; the store and engine, including their
     /// background verification and retired-file cleanup, never see the source folder or the
     /// real MyCapture profile, and every download request is rejected.
     /// </summary>
-    private static LiveModels? CreateIfModelsPresent()
+    private LiveModels CreateModels(TimeSpan? engineIdleRelease = null)
     {
-        string? setting = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_LIVE_MODELS");
-        if (string.IsNullOrWhiteSpace(setting)) return null;
+        string? setting = Environment.GetEnvironmentVariable(NeuralOcrLiveFactAttribute.ModelsVariable);
+        Assert.False(string.IsNullOrWhiteSpace(setting),
+            $"Required live OCR validation needs {NeuralOcrLiveFactAttribute.ModelsVariable}. No inference was executed.");
 
-        string models = Path.GetFullPath(setting);
+        string models = Path.GetFullPath(setting!);
         string root = OwnedTestDirectory.Create("ocr-live-");
         HttpClient? http = null;
         try
         {
             AppPaths paths = CopyModelsToIsolatedProfile(models, root);
+            output.WriteLine($"Required OCR models: catalog={OcrModelCatalog.CatalogVersion}, files={string.Join(';', OcrModelCatalog.Required.Select(file => file.FileName))}");
+            foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(OcrModelCatalog.Optional))
+            {
+                string path = Path.Combine(paths.OcrModelsRoot, file.FileName);
+                if (!File.Exists(path) && OcrModelCatalog.Optional.Contains(file)) continue;
+                using FileStream stream = File.OpenRead(path);
+                Assert.Equal(file.ExpectedBytes, stream.Length);
+                string hash = Convert.ToHexString(SHA256.HashData(stream));
+                Assert.Equal(file.ExpectedSha256, hash, ignoreCase: true);
+                output.WriteLine($"Verified OCR model: catalog={OcrModelCatalog.CatalogVersion}, file={file.FileName}, bytes={stream.Length}, sha256={hash}");
+            }
             http = new HttpClient(new RejectingHandler());
             var store = new OcrModelStore(paths, http, NullLogger.Instance);
             Assert.True(store.HasRequiredModels, "The opt-in folder must contain every required, verified OCR model.");
-            return new LiveModels(root, http, new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance));
+            return new LiveModels(root, http,
+                new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance, engineIdleRelease: engineIdleRelease));
         }
         catch
         {

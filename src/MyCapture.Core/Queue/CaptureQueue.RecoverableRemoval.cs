@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Storage;
 
@@ -18,6 +17,12 @@ public interface ICaptureRemovalTransaction
     /// <returns><see langword="false"/> when the files could not be removed yet.</returns>
     bool Complete() => true;
 }
+
+/// <summary>
+/// How one record of a batch was prepared: its transaction, or the failure that keeps it in the
+/// index. Neither means the record was not prepared and stays, exactly as a null transaction does.
+/// </summary>
+public readonly record struct CaptureRemovalAdmission(ICaptureRemovalTransaction? Transaction, Exception? Failure = null);
 
 public sealed partial class CaptureQueue
 {
@@ -76,6 +81,13 @@ public sealed partial class CaptureQueue
     /// <summary>Production supplies a recoverable file move before a record can leave the index.
     /// Null preserves the standalone index contract. A rejected move returns null.</summary>
     public Func<CaptureRecord, string, ICaptureRemovalTransaction?>? PrepareRemoval { get; set; }
+
+    /// <summary>
+    /// Production prepares a whole batch at once, so its Recycle Bin moves share one Shell
+    /// operation: one admission per record, in order, on the removal worker. Null prepares each
+    /// record with <see cref="PrepareRemoval"/>.
+    /// </summary>
+    public Func<IReadOnlyList<CaptureRecord>, string, IReadOnlyList<CaptureRemovalAdmission>>? PrepareRemovals { get; set; }
 
     /// <summary>Invoked on the queue owner; production schedules Shell work without blocking capture.</summary>
     public Action<IReadOnlyList<Guid>, string>? ScheduleAutomaticRemoval { get; set; }
@@ -207,25 +219,7 @@ public sealed partial class CaptureQueue
         {
             // Shell IO is serialized away from the UI owner. Lease each candidate until the
             // move/index transaction ends, then publish one snapshot on the existing FIFO.
-            var prepared = await Task.Run(() =>
-            {
-                var result = new List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)>();
-                foreach (CaptureRecord record in candidates)
-                {
-                    try
-                    {
-                        if (PrepareRemoval!(record, reason) is { } transaction) result.Add((record, transaction));
-                    }
-                    catch (RecycleBinUnavailableException ex)
-                    {
-                        // Nothing moved. Preserve the capture when Windows cannot recycle it.
-                        _log.LogWarning(ex, "Capture {Id} cannot be moved to the Recycle Bin; keeping it", record.Id);
-                        unavailable.Add(record.Id);
-                    }
-                    catch (Exception ex) { _log.LogWarning(ex, "Recycle admission failed for capture {Id}", record.Id); }
-                }
-                return result;
-            });
+            var prepared = await Task.Run(() => Admit(candidates, reason, unavailable));
             if (prepared.Count == 0) return new(0, 0) { RecycleUnavailableIds = unavailable };
             CaptureRecord[] removed = prepared.Select(item => item.Record).ToArray();
             _records.ReplaceWith(_records.Except(removed).ToArray());
@@ -233,7 +227,7 @@ public sealed partial class CaptureQueue
             UpdatePinPressureFlag();
             Task publication;
             lock (_writeGate)
-                publication = EnqueuePublication(reservation, BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
+                publication = EnqueuePublication(reservation, DetachedIndexWrites());
             try { await publication; }
             catch
             {
@@ -256,6 +250,59 @@ public sealed partial class CaptureQueue
             try { foreach (IDisposable lease in leases) lease.Dispose(); }
             finally { if (automatic) _automaticLeaseReleaseDepth--; }
         }
+    }
+
+    /// <summary>
+    /// Prepares the candidates on the removal worker: a batch all at once when production supplies
+    /// <see cref="PrepareRemovals"/>, otherwise one record at a time. A record Windows refused to
+    /// recycle is added to <paramref name="unavailable"/>; any other failure keeps the record.
+    /// </summary>
+    private List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)> Admit(IReadOnlyList<CaptureRecord> candidates,
+        string reason, List<Guid> unavailable)
+    {
+        var admitted = new List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)>(candidates.Count);
+        void Accept(CaptureRecord record, CaptureRemovalAdmission admission)
+        {
+            if (admission.Transaction is { } transaction)
+            {
+                admitted.Add((record, transaction));
+            }
+            else if (admission.Failure is RecycleBinUnavailableException refused)
+            {
+                // Nothing moved. Preserve the capture when Windows cannot recycle it.
+                _log.LogWarning(refused, "Capture {Id} cannot be moved to the Recycle Bin; keeping it", record.Id);
+                unavailable.Add(record.Id);
+            }
+            else if (admission.Failure is { } failure)
+            {
+                _log.LogWarning(failure, "Recycle admission failed for capture {Id}", record.Id);
+            }
+        }
+
+        if (PrepareRemovals is { } prepareAll && candidates.Count > 1)
+        {
+            IReadOnlyList<CaptureRemovalAdmission> admissions;
+            try { admissions = prepareAll(candidates, reason); }
+            catch (Exception ex)
+            {
+                // Each record's own failure is reported in its admission; this keeps every record.
+                _log.LogWarning(ex, "Recycle admission failed for a batch of {Count} captures", candidates.Count);
+                return admitted;
+            }
+
+            for (int index = 0; index < candidates.Count; index++)
+                Accept(candidates[index], index < admissions.Count ? admissions[index] : default);
+            return admitted;
+        }
+
+        foreach (CaptureRecord record in candidates)
+        {
+            CaptureRemovalAdmission admission;
+            try { admission = new(PrepareRemoval!(record, reason)); }
+            catch (Exception ex) { admission = new(null, ex); }
+            Accept(record, admission);
+        }
+        return admitted;
     }
 
     private CaptureRecord[] SelectRemovalCandidates(HashSet<Guid> requested, string reason, Func<Guid, bool>? canRemove)
@@ -296,7 +343,7 @@ public sealed partial class CaptureQueue
     private Task SaveCorrectiveSnapshotAsync()
     {
         lock (_writeGate)
-            return EnqueuePublication(null, BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
+            return EnqueuePublication(null, DetachedIndexWrites());
     }
 
     /// <summary>Restores an already verified directory, without assigning today's capture destination.</summary>

@@ -10,11 +10,12 @@ using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.EditorKeysTests;
 
 namespace MyCapture.App.Tests;
 
-public sealed class EditorCompactInspectorControlTests
+public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("ko-KR")]
@@ -56,6 +57,7 @@ public sealed class EditorCompactInspectorControlTests
 
             Assert.Equal(!beforeValue, values[index](text));
             Assert.Equal(!beforeValue, toggle.IsChecked);
+            if (toggle.IsChecked == true) AssertGlyphTakesTheSelectionInk(toggle);
             Assert.Equal(beforeValue ? ToggleState.Off : ToggleState.On, provider.ToggleState);
             Assert.Same(toggle, Keyboard.FocusedElement);
             Assert.Equal(undoCount + 1, controller.Undo.UndoCount);
@@ -71,8 +73,15 @@ public sealed class EditorCompactInspectorControlTests
     public void TrashIconIsLastAfterADividerAndDeletesTheSelectionWithOneUndo(
         string language, string name, string tooltip) => StaTestHost.Run(() =>
     {
+        using var dpiContext = TestDpiContext.At96Dpi();
         using var culture = UiText.UseLanguage(language);
-        using var host = new InspectorContractHost(width: 2000);
+        using var host = new InspectorContractHost(width: 2000, beforeShow: window =>
+        {
+            TestDpiContext.Initialize96DpiWindow(window);
+            _ = new WindowTrackSizeScope(window, new Size(4096, 2160));
+        });
+        TestDpiContext.Assert96Dpi(host.Window);
+        Assert.Equal(2000, host.Window.ActualWidth);
         AnnotationEditorController controller = Controller(host.Editor);
         SelectText(host);
         controller.Document.Add(new RectangleAnnotation { Rect = new RectD(250, 80, 100, 70) });
@@ -96,8 +105,40 @@ public sealed class EditorCompactInspectorControlTests
         Rect previous = groups[^2].TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(groups[^2].RenderSize));
         Rect current = delete.TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(delete.RenderSize));
         Rect divider = host.PropertyGroups.DividerBounds[^1];
+        output.WriteLine($"Inspector geometry {language}: window requested={host.Window.Width:R}, actual={host.Window.ActualWidth:R}; " +
+            $"panel={host.PropertyGroups.ActualWidth:R}x{host.PropertyGroups.ActualHeight:R}; " +
+            $"previous X={previous.X:R} Y={previous.Y:R} W={previous.Width:R} H={previous.Height:R}; " +
+            $"delete X={current.X:R} Y={current.Y:R} W={current.Width:R} H={current.Height:R}; " +
+            $"last divider X={divider.X:R} Y={divider.Y:R} W={divider.Width:R} H={divider.Height:R}; " +
+            $"divider count={host.PropertyGroups.DividerBounds.Count}.");
+        Assert.Equal(LayoutInformation.GetLayoutSlot(groups[^2]).Top, LayoutInformation.GetLayoutSlot(delete).Top);
         Assert.InRange(divider.Left, previous.Right, current.Left);
         Assert.Equal(20, divider.Height);
+        // Constrain the panel itself: narrowing the window can also introduce its automatic
+        // vertical scrollbar, invalidating a Window.Width - panel.ActualWidth estimate.
+        // DesiredSize includes group margins. A width between the prefix and whole-row sums
+        // fits every preceding group but leaves less than one delete slot on the first row.
+        Size[] unwrappedSizes = groups.Select(group => group.DesiredSize).ToArray();
+        double prefixWidth = unwrappedSizes.Take(groups.Length - 1).Sum(size => size.Width);
+        double wrappedWidth = Math.Ceiling(prefixWidth + unwrappedSizes[^1].Width / 2);
+        Assert.True(wrappedWidth >= prefixWidth);
+        Assert.True(wrappedWidth < prefixWidth + unwrappedSizes[^1].Width);
+        host.PropertyGroups.Width = wrappedWidth;
+        host.Settle();
+        TestDpiContext.Assert96Dpi(host.Window);
+        Assert.Equal(2000, host.Window.ActualWidth);
+        Assert.Equal(wrappedWidth, host.PropertyGroups.ActualWidth);
+        Assert.Equal(unwrappedSizes, groups.Select(group => group.DesiredSize).ToArray());
+        Rect[] wrappedSlots = groups.Select(LayoutInformation.GetLayoutSlot).ToArray();
+        output.WriteLine($"Wrapped inspector {language}: prefix={prefixWidth:R}; panel={host.PropertyGroups.ActualWidth:R}; " +
+            $"slots={string.Join("; ", wrappedSlots.Select(slot => $"X={slot.X:R},Y={slot.Y:R},W={slot.Width:R},H={slot.Height:R}"))}.");
+        Assert.All(wrappedSlots[..^1], slot => Assert.Equal(wrappedSlots[0].Top, slot.Top));
+        Rect wrapped = delete.TransformToAncestor(host.PropertyGroups).TransformBounds(new Rect(delete.RenderSize));
+        Assert.Equal(0, LayoutInformation.GetLayoutSlot(delete).Left);
+        Assert.True(LayoutInformation.GetLayoutSlot(delete).Top > LayoutInformation.GetLayoutSlot(groups[^2]).Top);
+        Assert.DoesNotContain(host.PropertyGroups.DividerBounds,
+            rule => rule.Top < wrapped.Bottom && rule.Bottom > wrapped.Top);
+        Assert.Equal(groups.Length - 2, host.PropertyGroups.DividerBounds.Count);
         string before = controller.Document.ToJson();
         Assert.Equal(2, controller.SelectedItems.Count);
 
@@ -175,6 +216,29 @@ public sealed class EditorCompactInspectorControlTests
         controller.SetSelected(text);
         host.Settle();
         return text;
+    }
+
+    // On, a style toggle is the selection fill: its glyph takes the selection ink, and the
+    // background glyph's letter is cut out of its ink box in the fill colour.
+    private static void AssertGlyphTakesTheSelectionInk(ToggleButton toggle)
+    {
+        static System.Windows.Media.Color Of(object brush) => Assert.IsType<System.Windows.Media.SolidColorBrush>(brush).Color;
+        System.Windows.Media.Color fill = Of(Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle)).Background);
+        System.Windows.Media.Color ink = Of(toggle.Foreground);
+        Assert.Equal(Of(toggle.FindResource("Text.SelectionBackground")), fill);
+        Assert.Equal(Of(toggle.FindResource("Text.SelectionForeground")), ink);
+        var glyph = Assert.IsAssignableFrom<DependencyObject>(toggle.Content);
+        int parts = 0;
+        foreach (DependencyObject part in Descendants(glyph).Prepend(glyph))
+        {
+            switch (part)
+            {
+                case System.Windows.Shapes.Shape shape: Assert.Equal(ink, Of(shape.Stroke)); parts++; break;
+                case Border box: Assert.Equal(ink, Of(box.Background)); parts++; break;
+                case TextBlock letter: Assert.Equal(letter.Parent is Border ? fill : ink, Of(letter.Foreground)); parts++; break;
+            }
+        }
+        Assert.True(parts > 0, $"{AutomationProperties.GetAutomationId(toggle)} has no glyph part");
     }
 
     private static void PressSpace(ToggleButton toggle)

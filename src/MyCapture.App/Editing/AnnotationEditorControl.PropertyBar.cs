@@ -19,7 +19,6 @@ internal sealed partial class AnnotationEditorControl
     private FrameworkElement _mosaicSection = null!;
     private Slider _mosaicSlider = null!;
     private EditorTool _obscureStyle = EditorTool.Mosaic;
-    private Popup _customColorPopup = null!;
     private Button _customColorButton = null!;
     private FrameworkElement _arrowHeadSection = null!;
     private readonly Dictionary<ArrowHeadStyle, ToggleButton> _arrowHeadButtons = [];
@@ -189,27 +188,13 @@ internal sealed partial class AnnotationEditorControl
             _customColorInput.Text = ColorCode(CurrentPropertyColor());
             CloseCustomColorFlyout(returnFocus: true);
         };
-        _customColorPopup = new Popup
-        {
-            PlacementTarget = _customColorButton, Placement = PlacementMode.Bottom,
-            StaysOpen = false, AllowsTransparency = true, Child = flyout,
-        };
+        InitializeColorFlyout(flyout);
         DisableImeOutsideTextInputs(flyout);
-        _customColorPopup.Opened += (_, _) =>
-        {
-            _customColorInput.Focus();
-            _customColorInput.SelectAll();
-        };
         _customColorButton.Click += (_, _) =>
         {
-            if (_customColorPopup.IsOpen) CloseCustomColorFlyout(returnFocus: true);
-            else
-            {
-                _customColorInput.Text = ColorCode(CurrentPropertyColor());
-                _customColorPopup.IsOpen = true;
-            }
+            if (IsCustomColorFlyoutOpen) CloseCustomColorFlyout(returnFocus: true);
+            else OpenCustomColorFlyout();
         };
-        panel.Children.Add(_customColorPopup);
         return panel;
     }
 
@@ -227,15 +212,8 @@ internal sealed partial class AnnotationEditorControl
 
     private void FinishCustomColorInput()
     {
-        if (_customColorPopup.IsOpen) CloseCustomColorFlyout(returnFocus: true);
+        if (IsCustomColorFlyoutOpen) CloseCustomColorFlyout(returnFocus: true);
         else Focus();
-    }
-
-    private void CloseCustomColorFlyout(bool returnFocus)
-    {
-        if (_customColorPopup is null || !_customColorPopup.IsOpen) return;
-        _customColorPopup.IsOpen = false;
-        if (returnFocus) _customColorButton.Focus();
     }
 
     private ColorRgba CurrentPropertyColor() => _controller.Selected switch
@@ -267,7 +245,7 @@ internal sealed partial class AnnotationEditorControl
             else if (!selected && !ReferenceEquals(ringBrush, Brushes.Transparent)) ring.BorderBrush = Brushes.Transparent;
             AutomationProperties.SetItemStatus(button, selected ? UiText.Get("EditorProperty_SelectedColor") : string.Empty);
         }
-        if (!_customColorPopup.IsOpen) _customColorInput.Text = ColorCode(current);
+        if (!IsCustomColorFlyoutOpen) _customColorInput.Text = ColorCode(current);
     }
 
     private FrameworkElement BuildThicknessSection()
@@ -297,6 +275,7 @@ internal sealed partial class AnnotationEditorControl
             if (_syncingInspector) return;
             _controller.ApplyStrokeThickness(args.NewValue);
             RememberPreferences();
+            RefreshBrushCursor();
             if (_controller.Selected is not null) SetStatus(UiText.Format("Text_DBAF1D995258", args.NewValue));
         };
         return panel;
@@ -312,7 +291,7 @@ internal sealed partial class AnnotationEditorControl
             Minimum = SettingsRanges.MosaicBlockSize.Min, Maximum = SettingsRanges.MosaicBlockSize.Max,
             Value = Math.Clamp(_mosaicBlockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max),
             SmallChange = 1, LargeChange = 4, TickFrequency = 1, IsSnapToTickEnabled = true,
-            Width = 64, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            Width = InspectorSliderWidth, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_mosaicSlider, UiText.Get("EditorProperty_MosaicStrength"));
         panel.Children.Add(ValueEntry(_mosaicSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorProperty_MosaicStrength")).Element);
@@ -360,6 +339,5 @@ internal sealed partial class AnnotationEditorControl
         panel.Children.Add(choice);
     }
 
-    internal Popup CustomColorPopupForTest => _customColorPopup;
     internal Button CustomColorButtonForTest => _customColorButton;
 }

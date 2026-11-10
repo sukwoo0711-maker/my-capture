@@ -154,10 +154,39 @@ public sealed class PlayerFrameRound2Tests
         Assert.True(fixture.Player.MediaForDiagnostic.HasVideo);
         foreach ((double target, Color expected) in new[] { (100d, Colors.Lime), (500d, Colors.Blue), (900d, Colors.Red) })
             CheckNativeFrame(fixture, target, expected);
+        // Open plays the clip until the player is ready (ADR 0007 keeps that order). On a loaded
+        // runner that playback can reach the end before MediaOpened or the source probe is
+        // handled; its MediaEnded must not release the wait for the playback requested here,
+        // or the seek below runs while that playback is still going.
+        ended = false;
         fixture.Player.RequestPlay();
         WaitUntil(() => ended, 5);
         CheckNativeFrame(fixture, 500, Colors.Blue);
         Assert.Equal(4, fixture.Saved.Count);
+    });
+
+    [Fact]
+    public Task NativeSeekStaysSaveableAfterTheUiThreadStallsDuringComposition() => Run(nameof(NativeSeekStaysSaveableAfterTheUiThreadStallsDuringComposition), () =>
+    {
+        using var fixture = new Fixture(realClip: true, nativePlayback: true);
+        Assert.True(fixture.Player.Open(fixture.Source.Id, fixture.Source.Title, fixture.SourcePath, autoPlay: false));
+        fixture.Player.Show();
+        WaitUntil(() => fixture.Player.IsMediaReadyForDiagnostic, 15);
+        var engine = Field<MediaElementPreviewEngine>(fixture.Player, "_frameSeekEngine");
+        int stalls = 0;
+        bool lockedWhileWaiting = false;
+        engine.CompositionWaitStartedForTest = () =>
+        {
+            if (stalls++ > 0) return;
+            lockedWhileWaiting = !fixture.SaveButton.IsEnabled;
+            // With every core busy the UI thread has stalled for about half a second right after
+            // the player showed. A slow compositor is not a stopped one: the seek must still
+            // become saveable, and capture stays locked until it does.
+            Thread.Sleep(600);
+        };
+        CheckNativeFrame(fixture, 100, Colors.Lime);
+        Assert.Equal(1, stalls);
+        Assert.True(lockedWhileWaiting);
     });
 
     private static void CheckNativeFrame(Fixture fixture, double target, Color expected)

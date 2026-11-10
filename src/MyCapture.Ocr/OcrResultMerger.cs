@@ -27,7 +27,7 @@ internal static class OcrResultMerger
         bool[,] crossRows = CrossEngineRows(readingBounds, compact, first.Length);
         var members = parents.Select(index => new List<int> { index }).ToArray();
         var consumed = new bool[allLines.Length];
-        var selected = new List<OcrLine>();
+        var selected = new List<(OcrLine Line, bool FromWindows)>();
         int windowsCharacters = 0, neuralCharacters = 0;
 
         // A padded narrow cell and a tight wide row can have little area overlap despite
@@ -38,8 +38,8 @@ internal static class OcrResultMerger
             if (consumed[match.Row] || match.Cells.Any(index => consumed[index])) continue;
             consumed[match.Row] = true;
             foreach (int index in match.Cells) consumed[index] = true;
-            selected.Add(match.Line);
             bool fromWindows = (match.UseCells ? match.Cells[0] : match.Row) < first.Length;
+            selected.Add((match.Line, fromWindows));
             int count = Profile.Create(match.Line.Text).Meaningful;
             if (fromWindows) windowsCharacters += count;
             else neuralCharacters += count;
@@ -119,13 +119,13 @@ internal static class OcrResultMerger
             bool useWindows = right.Length == 0 || (left.Length > 0 &&
                 PreferWindows(left, right, windows.LanguageTag, orientation));
             OcrLine[] chosen = useWindows ? left : right;
-            selected.AddRange(chosen);
+            selected.AddRange(chosen.Select(line => (line, useWindows)));
             int count = chosen.Sum(line => Profile.Create(line.Text).Meaningful);
             if (useWindows) windowsCharacters += count;
             else neuralCharacters += count;
         }
 
-        OcrLine[] ordered = OrderLines(selected, orientation);
+        OcrLine[] ordered = OrderLines(RemoveSamePlaceDuplicates(selected, orientation), orientation);
         string language = (windowsCharacters > neuralCharacters ? windows.LanguageTag : neural.LanguageTag)
             ?? windows.LanguageTag ?? string.Empty;
         if (ordered.Length > 0)
@@ -133,7 +133,8 @@ internal static class OcrResultMerger
             // Do not use BuildBlockText here: it removes repeated adjacent text even when it
             // occupies distinct source rows (e.g. two spreadsheet cells with the same value).
             return OcrResult.Success(string.Join('\n', ordered.Select(line => line.Text)),
-                language, ordered, elapsed, orientation);
+                language, ordered, elapsed, orientation, OcrResult.MostTilted([windows.TextAngle, neural.TextAngle]))
+                .WithNeuralLines(neural.HasText ? neural.Lines : []);
         }
 
         if (windows.Status is OcrStatus.Success or OcrStatus.NoText ||
@@ -143,6 +144,61 @@ internal static class OcrResultMerger
             return OcrResult.Failed((neural.Status == OcrStatus.Failed ? neural.Message : windows.Message)
                 ?? string.Empty, elapsed);
         return OcrResult.Unavailable(neural.Message ?? windows.Message);
+    }
+
+    private static IEnumerable<OcrLine> RemoveSamePlaceDuplicates(
+        List<(OcrLine Line, bool FromWindows)> selected, OcrReadingOrientation orientation)
+    {
+        OcrRect[] bounds = selected.Select(entry => orientation.ToReading(entry.Line.Bounds)).ToArray();
+        string[] compact = selected.Select(entry => Profile.Create(entry.Line.Text).Compact).ToArray();
+        var removed = new bool[selected.Count];
+
+        // Visit the longest readings first so every removal has a surviving witness.
+        // Equal readings keep Windows, including when a row was assembled from cells.
+        foreach (int longer in Enumerable.Range(0, selected.Count)
+                     .OrderByDescending(index => compact[index].Length)
+                     .ThenByDescending(index => selected[index].FromWindows))
+        {
+            if (removed[longer]) continue;
+            OcrRect[] words = selected[longer].Line.Words
+                .Select(word => orientation.ToReading(word.Bounds)).ToArray();
+            string[] text = selected[longer].Line.Words.Select(word => Profile.Create(word.Text).Compact).ToArray();
+            if (words.Length == 0 || words.Any(word => !HasArea(word)) ||
+                string.Concat(text) != compact[longer]) continue;
+
+            for (int shorter = 0; shorter < selected.Count; shorter++)
+            {
+                if (removed[shorter] || selected[shorter].FromWindows == selected[longer].FromWindows ||
+                    compact[shorter].Length == 0 || compact[shorter].Length > compact[longer].Length ||
+                    (compact[shorter].Length == compact[longer].Length && selected[shorter].FromWindows) ||
+                    !(SameRow(bounds[shorter], bounds[longer]) || PaddedRow(bounds[shorter], bounds[longer]))) continue;
+
+                for (int start = 0; start < words.Length && !removed[shorter]; start++)
+                {
+                    string runText = string.Empty;
+                    OcrRect runBounds = default;
+                    bool containsEveryWord = true;
+                    for (int end = start; end < words.Length; end++)
+                    {
+                        if (text[end].Length == 0) break;
+                        runText += text[end];
+                        if (!compact[shorter].StartsWith(runText, StringComparison.Ordinal)) break;
+                        runBounds = OcrRect.Union(runBounds, words[end]);
+                        containsEveryWord &= Contains(bounds[shorter], words[end]);
+                        if (runText != compact[shorter]) continue;
+
+                        // Contains requires 80% coverage on EACH axis. Check each tight word
+                        // inside a padded cell, or the tight cell inside the padded run union.
+                        removed[shorter] = containsEveryWord ||
+                            (bounds[shorter].Width <= runBounds.Width && bounds[shorter].Height <= runBounds.Height &&
+                             Contains(runBounds, bounds[shorter]));
+                        break;
+                    }
+                }
+            }
+        }
+
+        return selected.Where((entry, index) => !removed[index]).Select(entry => entry.Line);
     }
 
     private static OcrLine[] PlausibleLines(OcrResult result, OcrResult other, OcrReadingOrientation orientation) => result.HasText

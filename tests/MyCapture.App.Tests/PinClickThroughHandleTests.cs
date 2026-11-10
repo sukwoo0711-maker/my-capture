@@ -232,7 +232,7 @@ public sealed class PinClickThroughHandleTests
             BeforeShowForTest = pin =>
             {
                 pin.Left = pin.Top = -10000;
-                pin.ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000);
+                pin.ReadWorkArea = _ => OffScreenWorkArea(pin);
             },
         };
         int saved = 0;
@@ -395,11 +395,22 @@ public sealed class PinClickThroughHandleTests
         Assert.InRange(Math.Abs(actual.Top - (top + 6 * scale)), 0, 1);
     }
 
-    internal static PinWindow Pin(PinSettings settings) => new(PinContent.FromImage(Image()), new PinViewState(480, 280, 1, 1, .1), -10000, -10000, () => settings)
+    internal static PinWindow Pin(PinSettings settings)
     {
-        ShowActivated = false,
-        ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000),
-    };
+        var pin = new PinWindow(PinContent.FromImage(Image()), new PinViewState(480, 280, 1, 1, .1),
+            -10000, -10000, () => settings) { ShowActivated = false };
+        pin.ReadWorkArea = _ => OffScreenWorkArea(pin);
+        return pin;
+    }
+
+    private static RectD OffScreenWorkArea(PinWindow pin)
+    {
+        // The fixture's window position is in DIP; work areas use physical pixels.
+        // Keep the ordinary pin inside this synthetic work area at its actual HWND DPI.
+        DpiScale dpi = VisualTreeHelper.GetDpi(pin);
+        return new RectD(-12000 * dpi.DpiScaleX, -12000 * dpi.DpiScaleY,
+            4000 * dpi.DpiScaleX, 4000 * dpi.DpiScaleY);
+    }
 
     internal static BitmapSource Image()
     {

@@ -47,10 +47,14 @@ internal sealed class AnnotationEditorController
     private List<PointD>? _draftPoints;
 
     // The draft pen's own point list, kept equal to _draftPoints by appending each move's point
-    // instead of copying the whole stroke. Null when something else changed the pen's points,
-    // so the next move gives it a fresh copy of the drawn points, as every move used to.
+    // instead of copying the whole stroke. Null when something else changed the pen's points or
+    // the pen shows the Shift straight segment, so the next freehand move gives it a fresh copy
+    // of the drawn points, as every move used to.
     private PenPointCollection? _draftPenPoints;
     private bool _updatingDraftPen;
+
+    // True while the draft pen shows the Shift straight segment instead of the drawn path.
+    private bool _draftPenStraight;
 
     // The text being typed into a live box. Its draft is visible but has no undo entry
     // until its content is committed, so style changes apply directly (see PushProperty).
@@ -124,6 +128,66 @@ internal sealed class AnnotationEditorController
 
     /// <summary>Current stroke thickness applied to new shape/line/pen items.</summary>
     internal double StrokeThickness { get; set; } = 3;
+
+    /// <summary>Narrowest highlighter stroke, in image pixels.</summary>
+    internal const double MinimumHighlighterThickness = 12;
+
+    /// <summary>
+    /// Width of new highlighter strokes, kept apart from <see cref="StrokeThickness"/> so the pen
+    /// and the highlighter each remember their own. Held within 12 to 64; a value that is not a
+    /// number becomes 12.
+    /// </summary>
+    internal double HighlighterThickness
+    {
+        get;
+        set => field = double.IsFinite(value)
+            ? Math.Clamp(value, MinimumHighlighterThickness, SettingsRanges.StrokeThickness.Max) : MinimumHighlighterThickness;
+    } = MinimumHighlighterThickness;
+
+    /// <summary>
+    /// The width the active drawing tool paints with: the highlighter's own width, otherwise the
+    /// shared stroke width. The brush preview and the pointer follow this value.
+    /// </summary>
+    internal double BrushThickness => _tool == EditorTool.Highlighter ? HighlighterThickness : StrokeThickness;
+
+    /// <summary>
+    /// True while a pen or highlighter stroke is being drawn, between the press and the release.
+    /// </summary>
+    internal bool IsDrawingStroke => _gesture == Gesture.PenDraw;
+
+    /// <summary>The widths [ and ] step through, thinnest to thickest.</summary>
+    internal static readonly IReadOnlyList<double> BrushWidthSteps = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64];
+
+    /// <summary>
+    /// The next width from <paramref name="current"/>: the nearest step above it when
+    /// <paramref name="thicker"/>, otherwise the nearest step below it. A width between steps moves
+    /// to the step in that direction; at either end the width stays.
+    /// </summary>
+    /// <param name="minimum">The narrowest width allowed, which a thinner step never goes below.</param>
+    internal static double NextBrushWidth(double current, bool thicker, double minimum = 1)
+    {
+        const double Tolerance = 1e-9;
+        double floor = Math.Max(minimum, BrushWidthSteps[0]);
+        if (!double.IsFinite(current)) return Math.Max(floor, BrushWidthSteps[0]);
+        if (thicker)
+        {
+            foreach (double step in BrushWidthSteps)
+            {
+                if (step > current + Tolerance) return step;
+            }
+
+            return Math.Max(floor, current);
+        }
+
+        for (int index = BrushWidthSteps.Count - 1; index >= 0; index--)
+        {
+            double step = BrushWidthSteps[index];
+            if (step < current - Tolerance) return Math.Max(floor, step);
+        }
+
+        return Math.Max(floor, current);
+    }
+
     internal AnnotationStrokeStyle StrokeStyle { get; private set; }
     internal ArrowHeadStyle ArrowHeads { get; private set; }
 
@@ -154,7 +218,92 @@ internal sealed class AnnotationEditorController
 
     internal bool IsCreatingText { get; private set; }
 
-    internal TextAnnotation? EditingText { get; private set; }
+    internal TextAnnotation? EditingText
+    {
+        get => _editingText;
+        private set
+        {
+            _editingText = value;
+            // A new or finished edit has not shown any live text yet.
+            _liveTextShown = false;
+            LiveTextScroll = null;
+        }
+    }
+
+    private TextAnnotation? _editingText;
+
+    // The caption being edited as its live box reads, kept as one object so the renderer's
+    // caches for it last the whole edit (see LiveTextForPaint).
+    private readonly TextAnnotation _liveText = new();
+    private bool _liveTextShown;
+
+    /// <summary>
+    /// Records what the live text box shows: <paramref name="content"/> laid out as
+    /// <paramref name="layout"/>, the box committing now would store, in the edited caption's font.
+    /// </summary>
+    /// <returns>Whether that differs from what the surface last drew under the box.</returns>
+    internal bool UpdateLiveText(string content, TextLayout layout)
+    {
+        if (EditingText is not { } editing) return false;
+        bool changed = !_liveTextShown
+            || !string.Equals(_liveText.Text, content, StringComparison.Ordinal)
+            || TextLayout.Of(_liveText) != layout
+            || !string.Equals(_liveText.FontFamily, editing.FontFamily, StringComparison.Ordinal)
+            || _liveText.Bold != editing.Bold
+            || _liveText.Italic != editing.Italic
+            || !_liveText.RotationDegrees.Equals(editing.RotationDegrees);
+        _liveText.Text = content;
+        _liveText.FontFamily = editing.FontFamily;
+        _liveText.Bold = editing.Bold;
+        _liveText.Italic = editing.Italic;
+        _liveText.RotationDegrees = editing.RotationDegrees;
+        TextLayout.Apply(_liveText, layout);
+        _liveTextShown = true;
+        return changed;
+    }
+
+    /// <summary>
+    /// The longest caption whose outline is drawn while it is typed. A keystroke traces only the
+    /// glyphs it added or moved (see <see cref="GlyphOutlines"/>), but a change that moves every
+    /// glyph (a new font or size, typing at the start, a width that wraps every line again) traces
+    /// the whole caption (measured on 2026-11-07: about 11 ms for 256 characters, 66 ms for 1,024,
+    /// 3.6 s for 100,000), so past this length such a change would wait longer than a frame for it.
+    /// A longer caption shows its outline once committed and its plate throughout, which costs only
+    /// its layout.
+    /// </summary>
+    internal const int LiveOutlineLimit = 256;
+
+    /// <summary>
+    /// How far the live box has scrolled a caption taller than the canvas, for the surface to draw
+    /// its plate and outline where the box shows the glyphs; <see langword="null"/> while the box
+    /// shows all of it.
+    /// </summary>
+    internal LiveCaptionScroll? LiveTextScroll { get; private set; }
+
+    /// <returns>Whether that differs from what the surface last drew under the box.</returns>
+    internal bool UpdateLiveTextScroll(LiveCaptionScroll? scroll)
+    {
+        if (EditingText is null || Nullable.Equals(scroll, LiveTextScroll)) return false;
+        LiveTextScroll = scroll;
+        return true;
+    }
+
+    /// <summary>
+    /// The caption being edited as its live text box reads (<see cref="UpdateLiveText"/>), in the
+    /// caption's current colour, plate and outline, for the surface to draw the plate and outline
+    /// under the box. <see langword="null"/> until the box reports its text.
+    /// </summary>
+    internal TextAnnotation? LiveTextForPaint()
+    {
+        if (EditingText is not { } editing || !_liveTextShown) return null;
+        // Colour, plate and outline edits that leave the box open apply to the caption itself.
+        _liveText.Foreground = editing.Foreground;
+        _liveText.Background = editing.Background;
+        _liveText.HasOutline = editing.HasOutline && _liveText.Text.Length <= LiveOutlineLimit;
+        _liveText.OutlineStyle = editing.OutlineStyle;
+        _liveText.Opacity = editing.Opacity;
+        return _liveText;
+    }
 
     internal TextAnnotation? BeginSelectedTextEdit() =>
         _selection.Count == 1 && _selected is TextAnnotation text && BeginTextEdit(text) ? text : null;
@@ -605,10 +754,20 @@ internal sealed class AnnotationEditorController
                 }
                 else if (_selected is PolylineAnnotation line && _resizePointsBefore is { } original)
                 {
-                    RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
-                    line.Points = original.Select(p => new PointD(
-                        _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
-                        _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    if (original.Length == 2 && _resizeHandle is ResizeHandle.LineStart or ResizeHandle.LineEnd)
+                    {
+                        int moving = _resizeHandle == ResizeHandle.LineStart ? 0 : 1;
+                        PointD fixedPoint = original[1 - moving];
+                        PointD end = shift ? AnnotationGestureConstraints.Line(fixedPoint, resizePoint) : resizePoint;
+                        line.Points = moving == 0 ? [end, fixedPoint] : [fixedPoint, end];
+                    }
+                    else
+                    {
+                        RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
+                        line.Points = original.Select(p => new PointD(
+                            _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
+                            _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    }
                     RaiseVisual();
                 }
                 else if (_selected is not null)
@@ -620,25 +779,7 @@ internal sealed class AnnotationEditorController
                 break;
             case Gesture.PenDraw:
                 _draftPoints?.Add(point);
-                if (_draftItem is PenAnnotation pen)
-                {
-                    // Appending now raises the points/bounds notifications itself. Guard
-                    // the append too, so it is not mistaken for an external draft edit.
-                    _updatingDraftPen = true;
-                    try
-                    {
-                        if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
-                            own.Add(point);
-                        else
-                            pen.Points = [.. _draftPoints!];
-                        _draftPenPoints = pen.Points;
-                    }
-                    finally
-                    {
-                        _updatingDraftPen = false;
-                    }
-                }
-
+                ShowDraftPen(shift);
                 RaiseVisual();
                 break;
         }
@@ -654,6 +795,8 @@ internal sealed class AnnotationEditorController
                 break;
             case Gesture.PenDraw:
                 if (_draftPoints is not { Count: > 0 } points || points[^1] != point) PointerMove(point, shift);
+                // Shift pressed or released since the last move still decides the stroke.
+                else if (shift != _draftPenStraight) ShowDraftPen(shift);
                 CommitPen();
                 break;
             case Gesture.Resize when _selected is TextAnnotation text:
@@ -744,6 +887,7 @@ internal sealed class AnnotationEditorController
         _draftItem = null;
         _draftPoints = null;
         _draftPenPoints = null;
+        _draftPenStraight = false;
     }
 
     /// <summary>
@@ -987,18 +1131,29 @@ internal sealed class AnnotationEditorController
         }
     }
 
+    /// <summary>
+    /// True when a width edit belongs to the highlighter's own width: the highlighter tool with
+    /// nothing selected, or a selection of only highlighter strokes. Anything else edits the
+    /// width the pen and shapes share.
+    /// </summary>
+    private bool ThicknessEditsHighlighter => _selection.Count == 0
+        ? _tool == EditorTool.Highlighter
+        : _selection.All(item => item is PenAnnotation { IsHighlighter: true });
+
     internal void ApplyStrokeThickness(double thickness)
     {
+        bool highlighter = ThicknessEditsHighlighter;
         // The settings range is the one contract for a stroke width, wherever it is typed.
         thickness = double.IsFinite(thickness)
             ? Math.Clamp(thickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max)
-            : StrokeThickness;
+            : highlighter ? HighlighterThickness : StrokeThickness;
         if ((_selection.Count == 1 && _selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
             || (_selected is null && Tool == EditorTool.Rectangle && StrokeStyle == AnnotationStrokeStyle.ThickDashed))
         {
             thickness = Math.Max(6, thickness);
         }
-        StrokeThickness = thickness;
+        if (highlighter) HighlighterThickness = thickness;
+        else StrokeThickness = thickness;
         ApplySelectionStyle(UiText.Get("Text_6953A4195620"), item => ApplyStrokeThickness(item, thickness));
     }
 
@@ -1137,17 +1292,33 @@ internal sealed class AnnotationEditorController
         bool toggle = _tool == EditorTool.Select && (shift || control);
         if (_tool == EditorTool.Select || editingStep)
         {
-            ResizeHandle handle = toggle ? ResizeHandle.None : HandleAt(point, HandleTolerance);
+            // Shift also constrains endpoint drags, including when held before the press.
+            bool endpointConstraint = shift && !control && _selected is PolylineAnnotation { Points.Count: 2 };
+            // The middle of a short line's body gives way to the item under it (the line itself,
+            // unless something is drawn over it), so the line can still be moved once selected.
+            bool lineBody = !toggle && _selection.Count == 1 && _selected is PolylineAnnotation { Points.Count: 2 } selectedLine
+                && PointerIntentGeometry.InLineMoveZone(selectedLine, point, DipPerPixel, HitTolerance);
+            ResizeHandle handle = (toggle && !endpointConstraint) || lineBody ? ResizeHandle.None : HandleAt(point, HandleTolerance);
             if (handle != ResizeHandle.None)
                 return new(PointerAction.Resize, _selected, handle,
                     PointerIntentGeometry.ResizeCursor(_selected!, handle));
             AnnotationItem? hit = step
                 ? (_selected!.DistanceTo(point) <= HitTolerance ? _selected : null) : HitTest(point);
+            // The gap between a selected caption's glyphs and its frame moves the caption rather
+            // than starting a marquee; an item drawn there still takes its own press.
+            if (hit is null && !step && _selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: false } caption)
+            {
+                PointD local = GeometryMath.Rotate(point, caption.Rect.Center, -caption.RotationDegrees);
+                if (PointerIntentGeometry.SelectionFrame(caption, DipPerPixel).Contains(local)) hit = caption;
+            }
             if (hit is not null)
                 return new(toggle ? PointerAction.ToggleSelection : PointerAction.Move, hit, Cursor: EditorCursorKind.Move);
             if (!step) return new(PointerAction.Marquee);
         }
-        EditorCursorKind cursor = EditorCursorPolicy.Resolve(_tool, default);
+        // A number that cannot be added is not offered: Windows' unavailable pointer says so
+        // before the click, and the status line explains why after it.
+        EditorCursorKind cursor = step && !CanAddStepNumber
+            ? EditorCursorKind.Unavailable : EditorCursorPolicy.Resolve(_tool, default);
         return new(_tool switch
         {
             EditorTool.StepNumber => CanAddStepNumber ? PointerAction.AddStepNumber : PointerAction.None,
@@ -1163,11 +1334,15 @@ internal sealed class AnnotationEditorController
     /// <paramref name="item"/>: a caption's height always follows its text, so its top and
     /// bottom handles are not offered.
     /// </summary>
-    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle) =>
-        (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
-        || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
-            ? ResizeHandle.None
-            : handle;
+    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle)
+    {
+        bool endpoint = handle is ResizeHandle.LineStart or ResizeHandle.LineEnd;
+        if (item is PolylineAnnotation { Points.Count: 2 }) return endpoint ? handle : ResizeHandle.None;
+        if (endpoint) return ResizeHandle.None;
+        return (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
+            || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
+                ? ResizeHandle.None : handle;
+    }
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
@@ -1186,7 +1361,10 @@ internal sealed class AnnotationEditorController
                 _resizePointsBefore = _selected is PolylineAnnotation line ? [.. line.Points] : null;
                 PointD local = _selected is TextAnnotation { RotationDegrees: not 0 } rotated
                     ? GeometryMath.Rotate(point, _transformBefore.Center, -rotated.RotationDegrees) : point;
-                PointD anchor = PointerIntentGeometry.HandlePoint(_transformBefore, handle);
+                PointD anchor = _resizePointsBefore is { Length: 2 } endpoints
+                    && handle is ResizeHandle.LineStart or ResizeHandle.LineEnd
+                        ? endpoints[handle == ResizeHandle.LineStart ? 0 : 1]
+                        : PointerIntentGeometry.HandlePoint(_transformBefore, handle);
                 _resizePointerOffset = new PointD(anchor.X - local.X, anchor.Y - local.Y);
                 return;
             }
@@ -1233,7 +1411,7 @@ internal sealed class AnnotationEditorController
                 IsHighlighter = _tool == EditorTool.Highlighter,
                 Points = _draftPenPoints,
                 Stroke = StrokeColor,
-                StrokeThickness = _tool == EditorTool.Highlighter ? Math.Max(12, StrokeThickness) : StrokeThickness,
+                StrokeThickness = BrushThickness,
             };
             pen.PropertyChanged += OnDraftPenChanged;
             _draftItem = pen;
@@ -1332,6 +1510,44 @@ internal sealed class AnnotationEditorController
         // is still selected for immediate inspector edits; the next press starts fresh.
         SetSelected(draft);
         if (draft is PolylineAnnotation) UserArrowAdded?.Invoke();
+    }
+
+    /// <summary>
+    /// Shows the drawn path on the draft pen or, with <paramref name="straight"/> (Shift), the
+    /// straight segment from the press point to the latest pointer position, snapped to 45 degrees
+    /// like the arrow tool. The drawn path keeps recording underneath, so releasing Shift
+    /// mid-stroke shows it again.
+    /// </summary>
+    private void ShowDraftPen(bool straight)
+    {
+        if (_draftItem is not PenAnnotation pen || _draftPoints is not { Count: > 0 } drawn) return;
+
+        // Assigning or appending raises the points/bounds notifications itself. Guard both,
+        // so neither is mistaken for an external draft edit.
+        _updatingDraftPen = true;
+        try
+        {
+            _draftPenStraight = straight && drawn.Count > 1;
+            if (_draftPenStraight)
+            {
+                pen.Points = [drawn[0], AnnotationGestureConstraints.Line(drawn[0], drawn[^1])];
+                // The pen no longer holds the drawn path; the next freehand move copies it back.
+                _draftPenPoints = null;
+            }
+            else if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
+            {
+                for (int i = own.Count; i < drawn.Count; i++) own.Add(drawn[i]);
+            }
+            else
+            {
+                pen.Points = [.. drawn];
+                _draftPenPoints = pen.Points;
+            }
+        }
+        finally
+        {
+            _updatingDraftPen = false;
+        }
     }
 
     private void CommitPen()
@@ -1709,7 +1925,7 @@ internal sealed class AnnotationEditorController
     internal static ResizeHandle HitTestHandle(RectD bounds, PointD point, double tolerance)
     {
         return PointerIntentGeometry.NearestHandle(Enum.GetValues<ResizeHandle>()
-            .Where(h => h != ResizeHandle.None).Select(h => new SelectionHandle(h,
+            .Where(h => h is not (ResizeHandle.None or ResizeHandle.LineStart or ResizeHandle.LineEnd)).Select(h => new SelectionHandle(h,
                 PointerIntentGeometry.HandlePoint(bounds.Normalized(), h))), point, tolerance);
     }
 
@@ -1739,6 +1955,8 @@ internal enum ResizeHandle
     BottomCenter,
     BottomLeft,
     MiddleLeft,
+    LineStart,
+    LineEnd,
 }
 
 /// <summary>
@@ -1755,6 +1973,13 @@ internal readonly record struct TextLayout(RectD Rect, double FontSize, bool Aut
         text.Rect = layout.Rect;
     }
 }
+
+/// <summary>
+/// How the live box shows a caption taller than the canvas, in image pixels in the caption's own
+/// (unrotated) frame: its text moved up by <paramref name="Offset"/>, seen through the band that
+/// starts <paramref name="Top"/> below the caption's top and is <paramref name="Height"/> tall.
+/// </summary>
+internal readonly record struct LiveCaptionScroll(double Offset, double Top, double Height);
 
 /// <summary>
 /// Records an add for an item that was already inserted into the document during a live

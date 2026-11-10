@@ -34,6 +34,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay", "Surface.Sunken",
         "Surface.Hover", "Surface.Badge", "Surface.BadgeStrong",
         "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent", "Text.Badge",
+        "Text.Warning", "Text.Success",
         "Text.SelectionBackground", "Text.SelectionForeground", "Timeline.LayerText",
         "Accent.Default", "Accent.Hover", "Accent.Pressed", "Accent.Subtle", "Accent.Cool",
         "Border.Subtle", "Border.Focus", "Border.Accent", "Border.Badge", "Overlay.SelectionBorder",

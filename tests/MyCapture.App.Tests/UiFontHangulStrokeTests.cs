@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -50,13 +51,90 @@ public sealed class UiFontHangulStrokeTests
     [Fact]
     public void HintedRasterizationIsWhatDropsTheBar() => StaTestHost.Run(() =>
     {
-        // The settings 4.9.0 shipped, and Display formatting. If this ever stops failing, the font
-        // or WPF changed and the unhinted setting can be reconsidered.
-        Assert.NotEmpty(MissingBars(ThemeFonts.Ui, FontWeights.Normal, 14, 96,
-            TextFormattingMode.Ideal, TextRenderingMode.Grayscale, TextHintingMode.Fixed));
-        Assert.NotEmpty(MissingBars(ThemeFonts.Ui, FontWeights.Normal, 13.5, 96,
-            TextFormattingMode.Display, TextRenderingMode.Grayscale, TextHintingMode.Animated));
+        string? evidence = TestDiagnosticArtifacts.Create("MYCAPTURE_HANGUL_NEGATIVE_EVIDENCE", "hinted-negative-control");
+        var samples = new List<object>();
+        var fonts = new Dictionary<string, object>(StringComparer.Ordinal);
+        // The settings 4.9.0 shipped, and Display formatting. Rasterizer versions can
+        // move the failing Display size (13.5 DIP retains its bar on Windows 10).
+        // Keep the negative control across the same body sizes as the positive test.
+        List<string> fixedMissing = MissingBars(ThemeFonts.Ui, FontWeights.Normal, 14, 96,
+            TextFormattingMode.Ideal, TextRenderingMode.Grayscale, TextHintingMode.Fixed, Capture("ideal-fixed-14"));
+        var displayMissing = new List<string>();
+        foreach (double size in new[] { 9, 9.5, 10.5, 11, 11.5, 12, 13, 13.5, 14, 14.5, 16 })
+            displayMissing.AddRange(MissingBars(ThemeFonts.Ui, FontWeights.Normal, size, 96,
+                TextFormattingMode.Display, TextRenderingMode.Grayscale, TextHintingMode.Animated,
+                Capture("display-animated-" + size.ToString(System.Globalization.CultureInfo.InvariantCulture).Replace('.', '_'))));
+        if (evidence is not null)
+            TestDiagnosticArtifacts.WriteJson(evidence, "font-evidence.json", new
+            {
+                runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
+                requestedFamily = ThemeFonts.Ui.Source, dpi = 96, barRatioThreshold = BarRatio,
+                fixedMissing, displayMissing, fonts, samples,
+            });
+        Assert.NotEmpty(fixedMissing);
+        Assert.NotEmpty(displayMissing);
+
+        Action<TextBlock, BitmapSource, char, int, double>? Capture(string mode) => evidence is null ? null : (label, bitmap, syllable, phase, ratio) =>
+        {
+            string name = $"{mode}-u{(int)syllable:X4}-phase{phase}.png";
+            TestDiagnosticArtifacts.SavePng(evidence, name, bitmap);
+            GlyphRun[] glyphRuns = RenderedGlyphRuns(label).ToArray();
+            foreach (GlyphRun run in glyphRuns)
+            {
+                string uri = run.GlyphTypeface.FontUri.ToString();
+                if (!fonts.ContainsKey(uri)) fonts.Add(uri, ResolvedFontEvidence(run.GlyphTypeface));
+            }
+            samples.Add(new { mode, syllable = syllable.ToString(), phase, ratio, file = name,
+                sha256 = TestDiagnosticArtifacts.HashFile(DiagnosticOutputPaths.Child(evidence, name)),
+                fontSelectionStatus = glyphRuns.Length == 0 ? "unresolved: rendered TextBlock has no observable GlyphRunDrawing" : "observed rendered glyph runs",
+                glyphRuns = glyphRuns.Select(run => new
+                {
+                    fontUri = run.GlyphTypeface.FontUri.ToString(),
+                    characters = run.Characters is null ? null : new string(run.Characters.ToArray()),
+                    glyphIndices = run.GlyphIndices.ToArray(), run.FontRenderingEmSize, run.PixelsPerDip,
+                    baselineX = run.BaselineOrigin.X, baselineY = run.BaselineOrigin.Y,
+                    advanceWidths = run.AdvanceWidths.ToArray(),
+                }).ToArray(),
+            });
+        };
     });
+
+    private static IEnumerable<GlyphRun> RenderedGlyphRuns(Visual visual)
+    {
+        if (VisualTreeHelper.GetDrawing(visual) is { } drawing)
+            foreach (GlyphRun run in GlyphRuns(drawing)) yield return run;
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(visual); index++)
+            if (VisualTreeHelper.GetChild(visual, index) is Visual child)
+                foreach (GlyphRun run in RenderedGlyphRuns(child)) yield return run;
+
+        static IEnumerable<GlyphRun> GlyphRuns(Drawing drawing)
+        {
+            if (drawing is GlyphRunDrawing glyph) yield return glyph.GlyphRun;
+            if (drawing is DrawingGroup group)
+                foreach (Drawing child in group.Children)
+                    foreach (GlyphRun run in GlyphRuns(child)) yield return run;
+        }
+    }
+
+    private static object ResolvedFontEvidence(GlyphTypeface glyph)
+    {
+        string? hash = null, readError = null;
+        try
+        {
+            using Stream stream = glyph.FontUri.IsFile ? File.OpenRead(glyph.FontUri.LocalPath)
+                : Application.GetResourceStream(glyph.FontUri)?.Stream ?? throw new IOException("Resolved font resource stream is unavailable.");
+            hash = Convert.ToHexString(SHA256.HashData(stream));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            readError = error.ToString();
+        }
+        return new
+        {
+            fontUri = glyph.FontUri.ToString(), sha256 = hash, readError,
+            glyphs = BarSyllables.ToDictionary(c => c.ToString(), c => glyph.CharacterToGlyphMap.TryGetValue(c, out ushort id) ? (int?)id : null),
+        };
+    }
 
     [Fact]
     public Task MenusToolTipsPopupsAndNoticesDrawTheUiFontUnhinted() =>
@@ -157,7 +235,8 @@ public sealed class UiFontHangulStrokeTests
     /// shows no row of ink as long as its ㅡ.
     /// </summary>
     internal static List<string> MissingBars(FontFamily family, FontWeight weight, double size, int dpi,
-        TextFormattingMode formatting, TextRenderingMode rendering, TextHintingMode hinting)
+        TextFormattingMode formatting, TextRenderingMode rendering, TextHintingMode hinting,
+        Action<TextBlock, BitmapSource, char, int, double>? capture = null)
     {
         var missing = new List<string>();
         for (int phase = 0; phase < 8; phase++)
@@ -183,6 +262,7 @@ public sealed class UiFontHangulStrokeTests
                 bitmap.Render(host);
                 double ratio = LongestInkRow(bitmap, new Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight),
                     static (bgra, offset) => Luma(bgra, offset) < 160) / (size * dpi / 96);
+                capture?.Invoke(label, bitmap, syllable, phase, ratio);
                 if (ratio < BarRatio) missing.Add($"{syllable} {weight} {size} DIP at {dpi} DPI +{phase}/8 px ({ratio:0.00} em)");
             }
         }
@@ -305,8 +385,9 @@ public sealed class UiFontHangulStrokeTests
                 foreach (int dpi in new[] { 96, 144 })
                 {
                     double scale = dpi / 96d;
-                    var bitmap = new RenderTargetBitmap((int)Math.Ceiling(root.ActualWidth * scale),
-                        (int)Math.Ceiling(root.ActualHeight * scale), dpi, dpi, PixelFormats.Pbgra32);
+                    Size extent = name is "context menu" or "submenu" ? PopupSnapshot.ExtentOf(root) : root.RenderSize;
+                    var bitmap = new RenderTargetBitmap((int)Math.Ceiling(extent.Width * scale),
+                        (int)Math.Ceiling(extent.Height * scale), dpi, dpi, PixelFormats.Pbgra32);
                     bitmap.Render(root);
                     Save(OnBackground(bitmap), directory, $"surface-{slug}-{dpi}dpi.png");
                 }

@@ -246,6 +246,93 @@ public sealed class AnnotationEditorControllerTests
         Assert.True(pen.Points.Count < 21, "Collinear stroke should have been simplified.");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PenAndHighlighter_ShiftDragDrawsAStraightStrokeThatFollowsShift(bool highlighter)
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        c.Tool = highlighter ? EditorTool.Highlighter : EditorTool.Pen;
+        var start = new PointD(100, 200);
+        PointD[] wobble = [new(160, 203), new(240, 196), new(300, 204)];
+
+        c.PointerDown(start, shift: true);
+        var pen = Assert.IsType<PenAnnotation>(Assert.Single(doc.Items));
+        Assert.Equal(highlighter, pen.IsHighlighter);
+
+        // A wobbly underline drawn with Shift is the arrow tool's snapped segment from the press
+        // point: exactly horizontal here.
+        foreach (PointD point in wobble)
+        {
+            c.PointerMove(point, shift: true);
+            Assert.Equal(new[] { start, AnnotationGestureConstraints.Line(start, point) }, pen.Points);
+            Assert.Equal(start.Y, pen.Points[1].Y);
+        }
+
+        // Releasing Shift mid-drag shows the freehand path again, the moves made with Shift included,
+        // and later moves append to it in place again.
+        var free = new PointD(320, 215);
+        c.PointerMove(free);
+        Assert.Equal(new[] { start, wobble[0], wobble[1], wobble[2], free }, pen.Points);
+        PenPointCollection resumed = pen.Points;
+        c.PointerMove(new PointD(330, 220));
+        Assert.Same(resumed, pen.Points);
+        Assert.Equal(6, pen.Points.Count);
+        Assert.Equal(new PointD(330, 220), pen.Points[^1]);
+
+        // Shift again straightens from the press point to the latest position, and the release
+        // with Shift held commits that two-point stroke.
+        var end = new PointD(420, 190);
+        c.PointerMove(end, shift: true);
+        c.PointerUp(end, shift: true);
+        Assert.Same(pen, Assert.Single(doc.Items));
+        Assert.Equal(new[] { start, AnnotationGestureConstraints.Line(start, end) }, pen.Points);
+        Assert.Equal(start.Y, pen.Points[1].Y);
+        Assert.Null(c.Selected);
+
+        // One stroke, one undo step.
+        Assert.Equal(1, undo.UndoCount);
+        Assert.True(undo.Undo());
+        Assert.Empty(doc.Items);
+        Assert.True(undo.Redo());
+        Assert.Same(pen, Assert.Single(doc.Items));
+        Assert.Equal(2, pen.Points.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PenAndHighlighter_ShiftAtReleaseDecidesTheStrokeWithoutAnotherMove(bool highlighter)
+    {
+        AnnotationEditorController c = NewController(out AnnotationDocument doc, out UndoStack undo);
+        c.Tool = highlighter ? EditorTool.Highlighter : EditorTool.Pen;
+
+        // Shift let go before the button, with no move in between: the freehand path is committed.
+        PointD[] curve = [new(100, 100), new(150, 160), new(200, 100)];
+        c.PointerDown(curve[0], shift: true);
+        c.PointerMove(curve[1], shift: true);
+        c.PointerMove(curve[2], shift: true);
+        c.PointerUp(curve[2]);
+        var freehand = Assert.IsType<PenAnnotation>(Assert.Single(doc.Items));
+        Assert.Equal(curve, freehand.Points);
+
+        // Shift pressed just before the release: the straight segment is committed.
+        PointD[] other = [new(100, 300), new(150, 360), new(260, 310)];
+        c.PointerDown(other[0]);
+        c.PointerMove(other[1]);
+        c.PointerMove(other[2]);
+        c.PointerUp(other[2], shift: true);
+        var straight = Assert.IsType<PenAnnotation>(doc.Items[^1]);
+        Assert.Equal(new[] { other[0], new PointD(other[0].X + Math.Sqrt(160 * 160 + 10 * 10), other[0].Y) }, straight.Points);
+        Assert.Equal(2, undo.UndoCount);
+
+        // A Shift click without a drag leaves nothing, like a plain click.
+        c.PointerDown(new PointD(400, 400), shift: true);
+        c.PointerUp(new PointD(400, 400), shift: true);
+        Assert.Equal(2, doc.Items.Count);
+        Assert.Equal(2, undo.UndoCount);
+    }
+
     [Fact]
     public void ClickWithoutDrag_LeavesNoDegenerateShape()
     {

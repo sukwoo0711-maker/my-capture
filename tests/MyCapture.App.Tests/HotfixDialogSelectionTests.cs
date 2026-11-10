@@ -18,7 +18,7 @@ public sealed class HotfixDialogSelectionTests
     public void UnhandledDialogSelectsAndClicksOnlyStandardClose(string language, bool reverseOrder) =>
         WithUnhandledDialog(language, (dialog, row, buttons) =>
         {
-            Assert.Equal([UiText.Get("Dialog.ReportProblem"), UiText.Get("Dialog.Close")],
+            Assert.Equal([UiText.Get("Support_ReportError"), UiText.Get("Dialog.Close")],
                 buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
             Button close = buttons[1];
             if (reverseOrder)
@@ -57,7 +57,7 @@ public sealed class HotfixDialogSelectionTests
                 case "hidden": close.Visibility = Visibility.Hidden; break;
                 case "collapsed": close.Visibility = Visibility.Collapsed; break;
                 case "disabled": close.IsEnabled = false; break;
-                case "wrong label": close.Content = UiText.Get("Dialog.ReportProblem"); break;
+                case "wrong label": close.Content = UiText.Get("Support_ReportError"); break;
                 default: throw new ArgumentOutOfRangeException(nameof(defect));
             }
 

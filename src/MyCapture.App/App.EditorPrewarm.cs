@@ -2,12 +2,14 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
+using MyCapture.App.Gallery;
 
 namespace MyCapture.App;
 
 public partial class App
 {
     private EditorPrewarmScheduler? _editorPrewarm;
+    private EditorPrewarmGalleryGate? _editorPrewarmGallery;
     private DispatcherTimer? _editorPrewarmRetry;
     private bool _imageEditorOpened;
 
@@ -24,11 +26,18 @@ public partial class App
             RetryEditorPrewarmLater,
             () =>
             {
-                try { AnnotationEditorPrewarm.Run(); }
+                try
+                {
+                    using var timing = _libraryFirstPageTiming?.Begin("editor-prewarm");
+                    AnnotationEditorPrewarm.Run();
+                    timing?.Complete();
+                }
                 catch (Exception ex) { _log?.LogDebug(ex, "Image editor prewarm failed"); }
             });
+        _editorPrewarm.SetGalleryVisible(_editorPrewarmGallery?.IsVisible == true);
         // Independent of the selector callback: its early return must not lose this work.
         // A separate idle turn still lets the selector queue its reader prewarm first.
+        _libraryFirstPageTiming?.Queued("editor-prewarm-request");
         _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(RequestEditorPrewarm));
     }
 
@@ -54,6 +63,15 @@ public partial class App
 
     private void ObserveEditorPrewarmWindow(Window window)
     {
+        if (window is GalleryWindow)
+        {
+            _editorPrewarmGallery ??= new EditorPrewarmGalleryGate(
+                visible => _editorPrewarm?.SetGalleryVisible(visible),
+                () => _editorPrewarmRetry?.Stop(),
+                RequestEditorPrewarm);
+            _editorPrewarmGallery.Observe(window);
+            return;
+        }
         if (window is not AnnotationEditorWindow) return;
         _imageEditorOpened = true;
         _editorPrewarmRetry?.Stop();

@@ -44,11 +44,11 @@ internal sealed class EditorScene : TutorialScene
     internal EditorScene(string id, string language) : base(id, language)
     {
         _feature = id["image-".Length..];
-        _image = Fixtures.Checklist(Korean);
+        _image = Fixtures.PurchaseSheet(Korean);
         var region = new RectD(0, 0, _image.PixelWidth, _image.PixelHeight);
         AnnotationDocument? document = _feature is "save" or "copy" ? Finished(_image) : null;
         _window = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image, initialDocument: document,
-            sourceWindowTitle: L("릴리스 준비", "Release prep"));
+            sourceWindowTitle: Fixtures.SheetTitle(Korean));
         _host = new OffscreenWindow(_window, ClientWidth, ClientHeight);
         _editor = _window.Editor;
         // The tool, its name (the catalog's title for this tutorial) and the key the editor shows for it.
@@ -81,7 +81,7 @@ internal sealed class EditorScene : TutorialScene
     private static AnnotationDocument Finished(BitmapSource image)
     {
         var document = AnnotationDocument.CreateFor(image.PixelWidth, image.PixelHeight);
-        Rect item = Fixtures.ChecklistParts.SecondItem;
+        Rect item = Fixtures.PurchaseSheetParts.SecondItem;
         document.Add(new RectangleAnnotation { Rect = new RectD(item.X, item.Y, item.Width, item.Height), Stroke = ColorRgba.FromRgb(0xEF, 0x44, 0x44), StrokeThickness = 3 });
         return document;
     }
@@ -108,11 +108,12 @@ internal sealed class EditorScene : TutorialScene
         (planned.X - _plannedImageOrigin.X) / (_plannedImageUnit.X - _plannedImageOrigin.X),
         (planned.Y - _plannedImageOrigin.Y) / (_plannedImageUnit.Y - _plannedImageOrigin.Y));
 
-    private bool OverCanvas(PointD stage)
+    private bool OverCanvas(PointD stage) => Over((FrameworkElement)_editor.PointerInputElement, stage);
+
+    private bool Over(FrameworkElement element, PointD stage)
     {
-        var viewport = (FrameworkElement)_editor.PointerInputElement;
-        Point local = Viewport(stage);
-        return local.X >= 0 && local.Y >= 0 && local.X <= viewport.ActualWidth && local.Y <= viewport.ActualHeight;
+        Point local = _host.ClientRoot.TranslatePoint(new Point(stage.X - ClientOrigin.X, stage.Y - ClientOrigin.Y), element);
+        return local.X >= 0 && local.Y >= 0 && local.X <= element.ActualWidth && local.Y <= element.ActualHeight;
     }
 
     private FrameworkElement ByAutomationId(string id) =>
@@ -124,7 +125,7 @@ internal sealed class EditorScene : TutorialScene
     {
         var story = new TutorialStoryboard(Image(560, 290));
         story.Hold("open", 1.0);
-        Rect part = Fixtures.ChecklistParts.SecondItem;
+        Rect part = Fixtures.PurchaseSheetParts.SecondItem;
         switch (_feature)
         {
             case "rectangle":
@@ -146,7 +147,7 @@ internal sealed class EditorScene : TutorialScene
                 break;
             case "mosaic":
             case "blur":
-                Rect email = Fixtures.ChecklistParts.Email;
+                Rect email = Fixtures.PurchaseSheetParts.Requesters;
                 ChooseTool(story);
                 Drag(story, Image(email.X, email.Y), Image(email.Right, email.Bottom));
                 break;
@@ -266,7 +267,7 @@ internal sealed class EditorScene : TutorialScene
                 break;
             case "typing":
             case "typed":
-                string full = L("배포 전 확인", "Check before release");
+                string full = L("예산 확인", "Check the budget");
                 _typed = frame.Segment == "typed" ? full : full[..Math.Max(1, full.Length * 2 / 3)];
                 if (ActiveTextBox() is { } box) { box.Text = _typed; box.CaretIndex = box.Text.Length; }
                 break;
@@ -341,11 +342,19 @@ internal sealed class EditorScene : TutorialScene
     {
         if (!_closed && OverCanvas(cursor))
         {
+            // The open text box keeps its own I-beam; the canvas cursor shows only outside it.
+            if (ActiveTextBox() is { } box && Over(box, cursor))
+            {
+                Stage.DrawPointer(dc, cursor, Stage.PointerKind.Beam);
+                return;
+            }
+
             EditorCursorKind kind = _editor.CanvasCursorKind;
             if (EditorCursorPolicy.IsCustom(kind))
             {
                 int size = (int)Math.Round(32 * Stage.Scale);
-                EditorCursorImage image = EditorCursors.Render(kind, size, _steps + 1, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White);
+                EditorCursorImage image = EditorCursors.Render(kind, size, _steps + 1, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White,
+                    EditorCursors.IsBrush(kind) ? _editor.BrushCursorOffset(size, Stage.Scale) : 0);
                 Stage.DrawCursorBitmap(dc, image.Bitmap, new PointD(image.HotSpotX / Stage.Scale, image.HotSpotY / Stage.Scale), cursor);
                 return;
             }
@@ -386,7 +395,7 @@ internal sealed class EditorScene : TutorialScene
         Stage.Text(dc, L("수정한 날짜", "Date modified"), client.X + 470, client.Y + 54, 12, Brushes.Gray);
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x33, 0x38, 0x44)), null, new Rect(client.X + 12, client.Y + 74, client.Width - 24, 1));
         string name = QuickSaveNaming.BuildStem(QuickSaveNaming.DefaultPattern, new DateTimeOffset(2026, 10, 13, 9, 30, 12, TimeSpan.FromHours(9)),
-            L("릴리스 준비", "Release prep")) + ".png";
+            Fixtures.SheetTitle(Korean)) + ".png";
         var row = new Rect(client.X + 12, client.Y + 82, client.Width - 24, 76);
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x2F, 0x3D, 0x5C)), null, row, 4, 4);
         dc.DrawImage(_image, new Rect(row.X + 10, row.Y + 8, 120, 60));
@@ -401,12 +410,12 @@ internal sealed class EditorScene : TutorialScene
         Stage.DrawWindowFrame(dc, client, L("메모", "Notes"));
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xF7)), null, client);
         Fixtures.Text(dc, L("주간 보고", "Weekly report"), client.X + 28, client.Y + 22, 20, Brushes.Black, bold: true);
-        Fixtures.Text(dc, L("체크리스트 진행 상황", "Checklist progress"), client.X + 28, client.Y + 58, 15, Brushes.DimGray);
+        Fixtures.Text(dc, L("장비 구매 요청 현황", "Equipment request status"), client.X + 28, client.Y + 58, 15, Brushes.DimGray);
         if (pasted)
         {
             var image = new Rect(client.X + 28, client.Y + 90, 480, 240);
             dc.DrawImage(_image, image);
-            Rect item = Fixtures.ChecklistParts.SecondItem;
+            Rect item = Fixtures.PurchaseSheetParts.SecondItem;
             double k = image.Width / _image.PixelWidth;
             dc.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)), 3 * k), new Rect(image.X + item.X * k, image.Y + item.Y * k, item.Width * k, item.Height * k));
         }

@@ -14,11 +14,13 @@ namespace MyCapture.Ocr;
 /// </summary>
 internal sealed class OcrModelStore
 {
+    private static readonly TimeSpan DefaultStallTimeout = TimeSpan.FromSeconds(60);
     private readonly AppPaths _paths;
     private readonly HttpClient _http;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Func<Stream, byte[]> _computeHash;
+    private readonly TimeSpan _stallTimeout;
     private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
     internal OcrModelStore(AppPaths paths, ILogger<OcrModelStore> log)
@@ -34,17 +36,21 @@ internal sealed class OcrModelStore
     /// <summary>
     /// Supplies the file hasher so tests can observe verification without changing the catalog.
     /// </summary>
-    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash)
+    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash,
+        TimeSpan? stallTimeout = null)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _computeHash = computeHash ?? throw new ArgumentNullException(nameof(computeHash));
+        _stallTimeout = stallTimeout ?? DefaultStallTimeout;
+        if (_stallTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(stallTimeout), "The stall timeout must be positive.");
     }
 
     internal bool HasRequiredModels => AppArchitecture.SupportsNeuralOcr && OcrModelCatalog.Required.All(IsPresent);
 
-    internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot, file.FileName);
+    internal string PathFor(OcrModelFile file) => ValidateModelPath(Path.Combine(_paths.OcrModelsRoot, file.FileName));
 
     /// <summary>
     /// Checks and prepares one model on a worker, including the initial verification.
@@ -59,7 +65,7 @@ internal sealed class OcrModelStore
         try
         {
             if (IsPresent(file)) return;
-            Directory.CreateDirectory(_paths.OcrModelsRoot);
+            ValidatedFilePaths.CreateDirectory(_paths.OcrModelsRoot);
             await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -74,10 +80,18 @@ internal sealed class OcrModelStore
     /// </summary>
     internal bool IsPresent(OcrModelFile file)
     {
-        string path = Path.GetFullPath(PathFor(file));
+        string path = Path.GetFullPath(Path.Combine(_paths.OcrModelsRoot, file.FileName));
         VerificationState state = VerificationFor(path);
         lock (state)
         {
+            // Recheck even a previously verified file: a directory or leaf can be replaced
+            // by a link without changing the cached length or timestamp.
+            try { _ = ValidateModelPath(path); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                state.Verified = null;
+                return false;
+            }
             try
             {
                 if (!File.Exists(path))
@@ -109,6 +123,11 @@ internal sealed class OcrModelStore
                 }
 
                 // A file changed during verification must be checked again before it is reused.
+                try { _ = ValidateModelPath(path); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return false;
+                }
                 info.Refresh();
                 if (!info.Exists || info.Length != current.Length || info.LastWriteTimeUtc != current.LastWriteTimeUtc)
                 {
@@ -166,6 +185,7 @@ internal sealed class OcrModelStore
             string path = Path.Combine(_paths.OcrModelsRoot, name);
             try
             {
+                _ = ValidateModelPath(path);
                 if (!File.Exists(path)) continue;
                 global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
                 InvalidateVerification(path);
@@ -206,7 +226,7 @@ internal sealed class OcrModelStore
                 return true;
             }
 
-            Directory.CreateDirectory(_paths.OcrModelsRoot);
+            ValidatedFilePaths.CreateDirectory(_paths.OcrModelsRoot);
             long total = OcrModelCatalog.DownloadBytesFor(MyCapture.Core.Settings.OcrQuality.Accurate);
             long completed = 0;
             void ReportFile(long bytes) => progress?.Report(DownloadProgress(completed, bytes, total));
@@ -266,16 +286,26 @@ internal sealed class OcrModelStore
     private async Task DownloadAsync(OcrModelFile file, CancellationToken cancellationToken, Action<long>? progress = null)
     {
         string destination = PathFor(file);
-        string temp = destination + ".download";
+        string temp = ValidateModelPath(destination + ".download");
         InvalidateVerification(destination);
+        // HttpClient.Timeout ends at the headers with ResponseHeadersRead. Bound the wait
+        // for headers and each subsequent network read, like TranslationModelStore.
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        stall.CancelAfter(_stallTimeout);
         try
         {
-            using HttpResponseMessage response = await OpenDownloadAsync(file.Uri, file.ByteLimit, cancellationToken)
+            using HttpResponseMessage response = await OpenDownloadAsync(file.Uri, file.ByteLimit, stall.Token)
                 .ConfigureAwait(false);
-            using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await WriteVerifiedAsync(source, temp, file, cancellationToken, progress).ConfigureAwait(false);
+            using Stream source = await response.Content.ReadAsStreamAsync(stall.Token).ConfigureAwait(false);
+            stall.CancelAfter(Timeout.InfiniteTimeSpan);
+            await WriteVerifiedAsync(source, temp, file, stall, cancellationToken, progress).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             CopyModelFile(temp, destination);
             _log.LogInformation("Stored OCR model {File}", file.FileName);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new HttpRequestException($"The download of OCR model {file.FileName} stalled.", ex);
         }
         finally
         {
@@ -301,10 +331,10 @@ internal sealed class OcrModelStore
         }
     }
 
-    private static async Task WriteVerifiedAsync(Stream source, string temp, OcrModelFile file,
-        CancellationToken cancellationToken, Action<long>? progress = null)
+    private async Task WriteVerifiedAsync(Stream source, string temp, OcrModelFile file,
+        CancellationTokenSource stall, CancellationToken cancellationToken, Action<long>? progress = null)
     {
-        (long length, string hash) = await WriteBoundedAsync(source, temp, file.ByteLimit, cancellationToken, progress)
+        (long length, string hash) = await WriteBoundedAsync(source, temp, file.ByteLimit, stall, cancellationToken, progress)
             .ConfigureAwait(false);
         if (length < file.MinimumBytes || (file.ExpectedBytes is long expected && length != expected))
             throw new IOException($"OCR model was truncated or has an unexpected size: {file.FileName}");
@@ -312,17 +342,23 @@ internal sealed class OcrModelStore
             throw new CryptographicException($"OCR model hash mismatch: {file.FileName}");
     }
 
-    private static async Task<(long Length, string Hash)> WriteBoundedAsync(Stream source, string temp,
-        long cap, CancellationToken cancellationToken, Action<long>? progress = null)
+    private async Task<(long Length, string Hash)> WriteBoundedAsync(Stream source, string temp,
+        long cap, CancellationTokenSource stall, CancellationToken cancellationToken, Action<long>? progress = null)
     {
+        temp = ValidateModelPath(temp);
         using var output = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None,
             64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         byte[] buffer = new byte[64 * 1024];
         long length = 0;
-        int read;
-        while ((read = await source.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) != 0)
+        while (true)
         {
+            // Only waiting for network bytes consumes the stall deadline. Local hashing,
+            // disk writes and progress callbacks remain governed by the caller token.
+            stall.CancelAfter(_stallTimeout);
+            int read = await source.ReadAsync(buffer.AsMemory(), stall.Token).ConfigureAwait(false);
+            stall.CancelAfter(Timeout.InfiniteTimeSpan);
+            if (read == 0) break;
             if (read > cap - length)
                 throw new IOException("OCR download exceeds its byte limit.");
             hash.AppendData(buffer, 0, read);
@@ -330,6 +366,7 @@ internal sealed class OcrModelStore
             length += read;
             progress?.Invoke(length);
         }
+        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
         return (length, Convert.ToHexString(hash.GetHashAndReset()));
     }
 
@@ -345,6 +382,11 @@ internal sealed class OcrModelStore
 
     private bool HasExpectedHash(string path, string expected)
     {
+        try { path = ValidateModelPath(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
         using var stream = File.OpenRead(path);
         byte[] hash = _computeHash(stream);
         string actual = Convert.ToHexString(hash);
@@ -369,6 +411,8 @@ internal sealed class OcrModelStore
         lock (state)
         {
             state.Verified = null;
+            source = ValidateModelPath(source);
+            destination = ValidateModelPath(destination);
             File.Copy(source, destination, overwrite: true);
         }
     }
@@ -380,10 +424,14 @@ internal sealed class OcrModelStore
 
     private readonly record struct VerifiedFile(long Length, DateTime LastWriteTimeUtc, string? ExpectedSha256);
 
-    private static void TryDelete(string path)
+    private string ValidateModelPath(string path) =>
+        ValidatedFilePaths.FileWithinRoot(_paths.OcrModelsRoot, path);
+
+    private void TryDelete(string path)
     {
         try
         {
+            path = ValidateModelPath(path);
             if (File.Exists(path))
             {
                 global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);

@@ -22,7 +22,8 @@ public partial class App
 
     private WelcomeWindow CreateOnboardingWindow(bool replay) => CreatePracticeWindow(replay);
 
-    private WelcomeWindow CreatePracticeWindow(bool replay, bool consent = false, bool featurePractice = false)
+    private WelcomeWindow CreatePracticeWindow(bool replay, bool consent = false, bool featurePractice = false,
+        bool coreShortcutsNotice = false)
     {
         var settings = _settings!;
         var welcome = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
@@ -30,6 +31,7 @@ public partial class App
             {
                 Replay = replay,
                 ShowCoreShortcutsConsent = consent,
+                CoreShortcutsNotice = coreShortcutsNotice,
                 FeaturePractice = featurePractice,
                 StartAtSignIn = replay ? settings.General.LaunchAtLogin : null,
                 UseAccurateOcr = replay ? OcrQualityProfile.UseNeuralModel(settings.Ocr.Quality) : null,
@@ -82,6 +84,12 @@ public partial class App
         };
         welcome.ShortcutChangeRequested += command => HandleShortcutSettingsRequested(ShortcutSettingTarget.ForCommand(command));
         welcome.CoreShortcutsAnswered += accepted => { ApplyPracticeShortcutAnswer(accepted); RefreshShortcuts(); };
+        welcome.CoreShortcutsNoticeAcknowledged += openSettings =>
+        {
+            _coreShortcutsQuestionPending = false;
+            MarkFullPracticePresented();
+            if (openSettings) HandleCoreShortcutSettingsRequested();
+        };
         welcome.LibraryRequested += (_, _) =>
         {
             if (welcome.Session.CaptureId is { } id && _queue?.Find(id) is { } record

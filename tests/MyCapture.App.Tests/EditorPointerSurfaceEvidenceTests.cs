@@ -30,7 +30,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
         var sheet = new DrawingVisual();
         using (DrawingContext dc = sheet.RenderOpen())
         {
-            dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(0, 0, 1000, 600));
+            dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(0, 0, 1000, 800));
             int i = 0;
             foreach (EditorCursorKind kind in Enum.GetValues<EditorCursorKind>())
             {
@@ -47,7 +47,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
                 i++;
             }
         }
-        Save(Render(sheet, 1000, 600), DiagnosticOutputPaths.Child(root, $"cursor-sheet-{phase}.png"));
+        Save(Render(sheet, 1000, 800), DiagnosticOutputPaths.Child(root, $"cursor-sheet-{phase}.png"));
         foreach (double scale in new[] { .5, 1.0 })
         foreach (int width in new[] { 3, 24 })
         foreach (EditorTool tool in new[] { EditorTool.Pen, EditorTool.Highlighter })
@@ -55,6 +55,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
             var (surface, controller) = Surface(scale);
             controller.Tool = tool;
             controller.StrokeThickness = width;
+            controller.HighlighterThickness = width;
             var point = new PointD(160, 120);
             typeof(AnnotationEditorSurface).GetMethod("UpdatePointerPreview", Any)?.Invoke(surface, [point, true]);
             surface.InvalidateVisual();
@@ -65,9 +66,12 @@ public sealed class EditorPointerSurfaceEvidenceTests
                 dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(0, 0, 400, 310));
                 dc.DrawImage(Render(surface, (int)surface.ActualWidth, (int)surface.ActualHeight), new Rect(0, 40, surface.ActualWidth, surface.ActualHeight));
                 Point center = surface.ToSurfacePoint(point);
+                // The pointer as the editor builds it: the pencil beside the footprint, clicking at its centre.
+                int offset = EditorCursors.BrushOffset(32, controller.BrushThickness * surface.DipPerPixel / 2);
                 EditorCursorImage cursor = EditorCursors.Render(tool == EditorTool.Pen ? EditorCursorKind.Pen : EditorCursorKind.Highlighter,
-                    32, 12, Red, EditorCursorStyle.White);
-                dc.DrawImage(cursor.Bitmap, new Rect(center.X - cursor.HotSpotX - .5, 40 + center.Y - cursor.HotSpotY - .5, 32, 32));
+                    32, 12, Red, EditorCursorStyle.White, offset);
+                dc.DrawImage(cursor.Bitmap, new Rect(center.X - cursor.HotSpotX - .5, 40 + center.Y - cursor.HotSpotY - .5,
+                    cursor.Bitmap.PixelWidth, cursor.Bitmap.PixelHeight));
                 Label(dc, $"{tool}, {width}px, {scale:P0}", 12, 8, 16);
             }
             Save(Render(scene, 400, 310), DiagnosticOutputPaths.Child(root, $"brush-{tool}-{width}-{scale * 100:0}-{phase}.png"));
@@ -92,6 +96,8 @@ public sealed class EditorPointerSurfaceEvidenceTests
         var controller = new AnnotationEditorController(AnnotationDocument.CreateFor(320, 240), new UndoStack());
         var surface = new AnnotationEditorSurface(new FrozenFrame(bitmap, rect, null, 0), rect, controller,
             new AnnotationRenderer(new AnnotationImageStore()));
+        // This offscreen visual fixture and its bitmap render targets both use 96 DPI.
+        VisualTreeHelper.SetRootDpi(surface, new DpiScale(1, 1));
         var size = new Size(320 * scale + 32, 240 * scale + 32);
         surface.Measure(size);
         surface.Arrange(new Rect(size));
@@ -138,7 +144,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
             EditorCursorKind.Arrow => 32512, EditorCursorKind.Move => 32646,
             EditorCursorKind.ResizeNorthwestSoutheast => 32642, EditorCursorKind.ResizeNortheastSouthwest => 32643,
             EditorCursorKind.ResizeNorthSouth => 32645, EditorCursorKind.ResizeWestEast => 32644,
-            EditorCursorKind.TextBeam => 32513, EditorCursorKind.Cross => 32515,
+            EditorCursorKind.TextBeam => 32513, EditorCursorKind.Cross => 32515, EditorCursorKind.Unavailable => 32648,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         IntPtr cursor = LoadCursor(IntPtr.Zero, (IntPtr)id);

@@ -34,6 +34,19 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private Brush _muted = null!;
     private Pen _gridPen = null!;
     private Pen _playheadPen = null!;
+    private Brush _surfaceBase = null!;
+    private Pen _playheadHaloPen = null!;
+    // Row headers carry the layer list's icons instead of the letters T and F, which read as a
+    // word of their own next to the row name. The icon is drawn as SymbolIcon draws it.
+    private const double RowHeaderLeft = 8;
+    private const double RowIconGap = 4;
+    // The name may run to 2 DIP short of the track, so a two-digit row name ("텍스트 12",
+    // "Frame 12") still fits beside the icon untrimmed.
+    internal const double RowNameLeft = RowHeaderLeft + SymbolIcon.InlineSize + RowIconGap;
+    internal const double RowNameMaxWidth = LabelWidth - 2 - RowNameLeft;
+    private Geometry? _textIcon;
+    private Geometry? _frameIcon;
+    private Pen _iconPen = null!;
     private readonly Typeface _typeface;
 
     private IReadOnlyList<TimedTextOverlay> _textLayers = [];
@@ -189,7 +202,18 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         _muted = ResolveBrush("Text.Secondary", Color.FromRgb(0x8E, 0x9C, 0xAF));
         _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
         _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Colors.White), 2);
-
+        _surfaceBase = ResolveBrush("Surface.Base", Color.FromRgb(0x0B, 0x0F, 0x17));
+        _playheadHaloPen = FrozenPen(_surfaceBase, _playheadPen.Thickness + (2 * TimelineVisuals.HaloWidth));
+        _textIcon = TryFindResource("Icon.Text") as Geometry;
+        _frameIcon = TryFindResource("Icon.Image") as Geometry;
+        _iconPen = new Pen(_textSecondary, SymbolIcon.GridStrokeThickness)
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+            DashCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round,
+        };
+        if (_iconPen.CanFreeze) _iconPen.Freeze();
     }
 
     internal void Initialize(double durationMs)
@@ -338,7 +362,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             if (_frameLayers.Count == 0)
             {
-                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), timelineWidth);
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), _textIcon, timelineWidth);
                 currentTop += EmptyTrackHeight + Gap;
             }
         }
@@ -353,6 +377,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                     currentTop,
                     LayerTrackHeight,
                     rowLabel,
+                    _textIcon,
                     layer.StartMs,
                     layer.EndMs,
                     OneLine(layer.Text),
@@ -369,7 +394,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             if (_textLayers.Count == 0)
             {
-                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), timelineWidth);
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), _frameIcon, timelineWidth);
                 currentTop += EmptyTrackHeight + Gap;
             }
         }
@@ -384,6 +409,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                     currentTop,
                     LayerTrackHeight,
                     rowLabel,
+                    _frameIcon,
                     layer.StartMs,
                     layer.EndMs,
                     layer.Name,
@@ -414,10 +440,12 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                 PaddingTop + EmptyTrackHeight + Gap + ((EmptyTrackHeight - 14) / 2.0), _muted, TypeScale.Caption, timelineWidth - 24, _track);
         }
 
-        // Playhead
+        // Playhead and pointer lines cross the layer bars; a Surface.Base edge on each side
+        // keeps them apart from a bar of a similar colour.
         if (_playheadMs >= _viewport.ViewStartMs && _playheadMs <= _viewport.ViewEndMs)
         {
             double playheadX = LabelWidth + _viewport.MsToPx(_playheadMs, timelineWidth);
+            dc.DrawLine(_playheadHaloPen, new Point(playheadX, 0), new Point(playheadX, height));
             dc.DrawLine(_playheadPen, new Point(playheadX, 0), new Point(playheadX, height));
         }
         double? marker = _snapGuide?.TimeMs ?? _hoverMs;
@@ -425,7 +453,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind) : _hoverLocal ? HoverText : null;
             _marker.Draw(this, dc, LabelWidth + _viewport.MsToPx(marker.Value, timelineWidth), height,
-                LabelWidth, width, _textSecondary, _background, _textSecondary, label, _markerLabelTop);
+                LabelWidth, width, _textSecondary, _background, _textSecondary, label, _markerLabelTop, halo: _surfaceBase);
         }
     }
 
@@ -434,11 +462,32 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double top,
         double height,
         string label,
+        Geometry? icon,
         double timelineWidth)
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, TypeScale.Caption, LabelWidth - 12);
+        DrawRowHeader(dc, top, height, label, icon);
+    }
+
+    /// <summary>
+    /// The row's icon, as the layer list draws it beside each layer, then its name in the
+    /// <see cref="RowNameMaxWidth"/> left beside it.
+    /// </summary>
+    private void DrawRowHeader(DrawingContext dc, double top, double height, string label, Geometry? icon)
+    {
+        const double iconSize = SymbolIcon.InlineSize;
+        if (icon is not null)
+        {
+            double scale = iconSize / SymbolIcon.GridSize;
+            var place = new MatrixTransform(scale, 0, 0, scale, RowHeaderLeft, top + ((height - iconSize) / 2.0));
+            place.Freeze();
+            dc.PushTransform(place);
+            dc.DrawGeometry(null, _iconPen, icon);
+            dc.Pop();
+        }
+
+        DrawText(dc, label, RowNameLeft, top + ((height - 14) / 2.0), _textSecondary, TypeScale.Caption, RowNameMaxWidth);
     }
 
     private void DrawLayerRow(
@@ -446,6 +495,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double top,
         double height,
         string rowLabel,
+        Geometry? icon,
         double startMs,
         double endMs,
         string itemLabel,
@@ -456,7 +506,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, TypeScale.Caption, LabelWidth - 12);
+        DrawRowHeader(dc, top, height, rowLabel, icon);
 
         var bar = GetBarRect(startMs, endMs, top + ((height - BarHeight) / 2.0), LabelWidth + timelineWidth);
         if (bar.IsEmpty) return;

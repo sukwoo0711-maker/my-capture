@@ -11,7 +11,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class PinTextSelectionViewTests
+public sealed partial class PinTextSelectionViewTests
 {
     [Fact]
     public void SelectedCodeLineAndMultipleLinesKeepOriginalEndings() => StaTestHost.Run(() =>
@@ -56,7 +56,10 @@ public sealed class PinTextSelectionViewTests
         Assert.Equal(font, textBox.FontFamily.Source);
         Assert.Equal(16, textBox.FontSize);
         Assert.Equal(24, TextBlock.GetLineHeight(textBox));
-        Assert.Equal(new Thickness(24, 20, 24, 20), textBox.Padding);
+        // The TextBox's own inset completes the picture's 24 DIP padding.
+        const double inset = TextBoxLayout.ContentInsetDip;
+        Assert.Equal(new Thickness(24 - inset, 20, 24 - inset, 20), textBox.Padding);
+        Assert.Equal(LineStackingStrategy.BlockLineHeight, TextBlock.GetLineStackingStrategy(textBox));
         Assert.True(textBox.IsReadOnly);
         Assert.Equal(ScrollBarVisibility.Auto, textBox.VerticalScrollBarVisibility);
         Assert.Equal(ScrollBarVisibility.Auto, textBox.HorizontalScrollBarVisibility);
@@ -64,7 +67,54 @@ public sealed class PinTextSelectionViewTests
         view.SetZoom(2);
         Assert.Equal(32, textBox.FontSize);
         Assert.Equal(48, TextBlock.GetLineHeight(textBox));
-        Assert.Equal(new Thickness(48, 40, 48, 40), textBox.Padding);
+        Assert.Equal(new Thickness(48 - inset, 40, 48 - inset, 40), textBox.Padding);
+    });
+
+    /// <summary>
+    /// Selection mode lays the original text over the picture it replaces. The glyphs stay where
+    /// the picture drew them, and a line that fits the picture does not scroll. A TextBox draws its
+    /// text 2 DIP inside its content host and stacks lines from the font's ascent: that moved the
+    /// text 2 DIP right and 2 DIP up (4 DIP at zoom 2), and the 4 DIP it lost made a one-line pin
+    /// show both scroll bars over its last letters.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0, 1.0)]
+    [InlineData(1.25, 1.0)]
+    [InlineData(1.5, 1.0)]
+    [InlineData(1.0, 2.0)]
+    [InlineData(1.5, 2.0)]
+    public void SelectableTextStaysOnThePictureGlyphsWithoutScrolling(double scale, double zoom) => StaTestHost.Run(() =>
+    {
+        var code = new PinCodeDocument("#define MAX_LEN 256\r\nreturn value;", [], "#1E1E1E", "#DCDCDC");
+        string widest = WidestFraction(Enumerable.Range(1, 40).Select(index => $"Check item {index} of the release list"));
+        string[] texts = ["배포 전에 태그와 패키지 이름을 확인합니다.", widest, "first\tvalue\r\nsecond line"];
+        PinContent[] contents =
+        [
+            .. texts.Select(text => PinContent.FromText(ClipboardTextRenderer.Render(text, false), text, false)),
+            PinContent.FromCode(ClipboardCodeRenderer.Render(code), code.DisplayText, code),
+        ];
+        foreach (PinContent content in contents)
+        {
+            string name = $"\"{content.OriginalText}\" at {scale:0.##}x, zoom {zoom}";
+            BitmapSource picture = content.RenderedAt(scale * zoom).Image;
+            var view = new PinTextSelectionView(content) { UseLayoutRounding = true, SnapsToDevicePixels = true };
+            view.SetZoom(zoom);
+            double width = content.LayoutWidthDip * zoom, height = content.LayoutHeightDip * zoom;
+            VisualTreeHelper.SetRootDpi(view, new DpiScale(scale, scale));
+            view.Measure(new Size(width, height));
+            view.Arrange(new Rect(0, 0, width, height));
+            view.UpdateLayout();
+
+            var host = Assert.IsType<ScrollViewer>(view.TextBox!.Template.FindName("PART_ContentHost", view.TextBox));
+            Assert.True(host.ComputedHorizontalScrollBarVisibility == Visibility.Collapsed
+                && host.ComputedVerticalScrollBarVisibility == Visibility.Collapsed,
+                $"{name}: the text fits the picture, yet the selection shows scroll bars ({host.ExtentWidth:0.##} DIP in {host.ViewportWidth:0.##}).");
+            var selection = new RenderTargetBitmap(picture.PixelWidth, picture.PixelHeight, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+            selection.Render(view);
+            Int32Rect expected = InkBounds(picture), actual = InkBounds(selection);
+            Assert.True(Math.Abs(actual.X - expected.X) <= 1 && Math.Abs(actual.Y - expected.Y) <= 1,
+                $"{name}: the selectable text starts at ({actual.X}, {actual.Y}) px, the picture's at ({expected.X}, {expected.Y}) px.");
+        }
     });
 
     [Theory]
@@ -84,7 +134,8 @@ public sealed class PinTextSelectionViewTests
         Assert.Equal("Consolas", textBox.FontFamily.Source);
         Assert.Equal(15 * zoom, textBox.FontSize);
         Assert.Equal(23 * zoom, TextBlock.GetLineHeight(textBox));
-        Assert.Equal(new Thickness(24 * zoom, 20 * zoom, 24 * zoom, 20 * zoom), textBox.Padding);
+        const double inset = TextBoxLayout.ContentInsetDip;
+        Assert.Equal(new Thickness(24 * zoom - inset, 20 * zoom, 24 * zoom - inset, 20 * zoom), textBox.Padding);
         Assert.Equal(Color.FromRgb(0x1E, 0x1E, 0x1E), Assert.IsType<SolidColorBrush>(view.Background).Color);
         Assert.Same(view.Background, textBox.Background);
         view.SelectAll();
@@ -105,7 +156,13 @@ public sealed class PinTextSelectionViewTests
     [Fact]
     public void TransparentRoundedCornerSamplesContentPadding() => StaTestHost.Run(() =>
     {
-        BitmapSource bitmap = ClipboardTextRenderer.Render("sample", false);
+        // Text cards drawn before 2026-11 had transparent rounded corners; restored ones still may.
+        var visual = new DrawingVisual();
+        using (DrawingContext drawing = visual.RenderOpen())
+            drawing.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0xFC, 0xFC, 0xFD)), null, new Rect(0, 0, 240, 80), 10, 10);
+        var bitmap = new RenderTargetBitmap(240, 80, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
         var view = new PinTextSelectionView(PinContent.FromText(bitmap, "sample", false));
         Color background = Assert.IsType<SolidColorBrush>(view.Background).Color;
         Assert.Equal(Color.FromRgb(0xFC, 0xFC, 0xFD), background);
@@ -121,6 +178,9 @@ public sealed class PinTextSelectionViewTests
         var view = new PinTextSelectionView(content);
         Assert.Null(view.TextBox);
         Assert.NotNull(view.TableGrid);
+        // Cells draw the picture's device-pixel lines; DataGrid must not add its own edges.
+        Assert.Equal(DataGridGridLinesVisibility.None, view.TableGrid.GridLinesVisibility);
+        Assert.Equal(Color.FromRgb(0xD1, 0xD5, 0xDB), Assert.IsType<SolidColorBrush>(ClipboardTextRenderer.TableGridLineBrush).Color);
         Assert.Null(view.SelectedOriginalText);
         view.SelectCells(1, 0, 1, 0);
         Assert.Equal("line\tbreak", view.SelectedOriginalText);
@@ -224,7 +284,12 @@ public sealed class PinTextSelectionViewTests
         string original = string.Join("\r\n", Enumerable.Range(0, PinTableSelection.MaxRows + 2).Select(index => $"row{index}\tvalue"));
         var view = new PinTextSelectionView(PinContent.FromTablePicture(Image(), original));
         Assert.Equal(PinTableSelection.MaxRows, view.TableGrid!.Items.Count);
-        Assert.Contains(view.Children.OfType<TextBlock>(), block => block.Text.Contains("Ctrl+A", StringComparison.Ordinal));
+        TextBlock notice = Assert.Single(view.Children.OfType<TextBlock>(), block => block.Text.Contains("Ctrl+A", StringComparison.Ordinal));
+        // The notice is interface text: the UI font, not the table's content font.
+        object font = notice.ReadLocalValue(TextBlock.FontFamilyProperty);
+        Assert.Equal("ResourceReferenceExpression", font.GetType().Name);
+        Assert.Equal("Font.Ui", font.GetType().GetProperty("ResourceKey")?.GetValue(font));
+        Assert.Equal(MyCapture.App.Themes.ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(notice));
         view.SelectAll();
         Assert.Equal(original, view.SelectedOriginalText);
         Assert.Equal(PinTableSelection.MaxRows * 2, view.TableGrid.SelectedCells.Count);
@@ -289,6 +354,42 @@ public sealed class PinTextSelectionViewTests
 
     private static PinTextSelectionView TextView(string original) =>
         new(PinContent.FromText(Image(), original, false));
+
+    /// <summary>The line whose measured width lies just under a whole DIP, the tightest fit.</summary>
+    private static string WidestFraction(IEnumerable<string> candidates) => candidates.MaxBy(text =>
+    {
+        var formatted = new FormattedText(text, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            ClipboardTextRenderer.TextTypeface, MyCapture.App.Themes.TypeScale.Content.PlainText, Brushes.Black, 1);
+        double width = formatted.WidthIncludingTrailingWhitespace;
+        return width - Math.Floor(width);
+    })!;
+
+    /// <summary>The device-pixel bounds of the pixels that clearly differ from the paper colour.</summary>
+    private static Int32Rect InkBounds(BitmapSource image)
+    {
+        var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int width = bgra.PixelWidth, height = bgra.PixelHeight, stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        bgra.CopyPixels(pixels, stride, 0);
+        int paper = (4 * stride) + (width / 2 * 4);
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = (y * stride) + (x * 4);
+                int distance = Math.Abs(pixels[i] - pixels[paper]) + Math.Abs(pixels[i + 1] - pixels[paper + 1])
+                    + Math.Abs(pixels[i + 2] - pixels[paper + 2]);
+                if (pixels[i + 3] < 255 || distance < 240) continue;
+                left = Math.Min(left, x);
+                top = Math.Min(top, y);
+                right = Math.Max(right, x);
+                bottom = Math.Max(bottom, y);
+            }
+        }
+        Assert.True(right >= left, "The image has text.");
+        return new Int32Rect(left, top, right - left + 1, bottom - top + 1);
+    }
 
     private static void Layout(FrameworkElement element)
     {

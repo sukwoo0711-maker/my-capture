@@ -160,8 +160,11 @@ internal sealed class PracticeGuideScene : TutorialScene
             _editor!.Editor.PracticeTarget = target;
             Require(_guide.Notify(new(PracticeEventKind.EditorReady, target.SessionId,
                 RecordId: target.RecordId, EditorId: target.EditorId)), "The guide rejected the loaded editor.");
-            Require(_guide.Session.Step == PracticeStep.A4 && _guide.TryNowButton.Visibility == Visibility.Collapsed
-                && _guide.ReplayButton.Visibility == Visibility.Visible, "The guide did not hide its external-action button while retaining replay.");
+            // Since 4.12.1 the primary button stays in place as a disabled "in the editor" label
+            // while the step waits in the editor, instead of disappearing.
+            Require(_guide.Session.Step == PracticeStep.A4 && _guide.TryNowButton.Visibility == Visibility.Visible
+                && !_guide.TryNowButton.IsEnabled && !_guide.TryNowButton.IsDefault
+                && _guide.ReplayButton.Visibility == Visibility.Visible, "The guide did not turn its external-action button into a waiting label while retaining replay.");
         };
         _guideHost = Host(_guide, 624, 720);
         Stage.Pump(50);
@@ -644,13 +647,10 @@ internal sealed class PracticeGuideScene : TutorialScene
             _menu!.UpdateLayout();
             // Render at the enlarged resolution, then crop around the real command. The
             // pointer target above uses this same source-to-scene transform.
-            BitmapSource menu = OffscreenWindow.SnapshotElement(_menu, _menu.ActualWidth, _menu.ActualHeight,
-                LibraryMenuScale, opaque: false);
-            var target = new Rect(_menuOrigin, new Size(_menuCrop.Width * LibraryMenuScale, _menuCrop.Height * LibraryMenuScale));
-            dc.PushClip(new RectangleGeometry(target));
-            dc.DrawImage(menu, new Rect(_menuOrigin.X - _menuCrop.X * LibraryMenuScale,
-                _menuOrigin.Y - _menuCrop.Y * LibraryMenuScale, _menu.ActualWidth * LibraryMenuScale,
-                _menu.ActualHeight * LibraryMenuScale));
+            OffscreenWindow.PopupSnapshot menu = OffscreenWindow.SnapshotPopup(_menu, LibraryMenuScale);
+            dc.PushClip(new RectangleGeometry(menu.CropBoundsAt(_menuCrop, _menuOrigin, LibraryMenuScale)));
+            dc.DrawImage(menu.Bitmap, menu.BoundsAt(new Point(_menuOrigin.X - _menuCrop.X * LibraryMenuScale,
+                _menuOrigin.Y - _menuCrop.Y * LibraryMenuScale), LibraryMenuScale));
             dc.Pop();
         }
         if (_editorShown) Stage.DrawWindow(dc, _editorHost!.Snapshot(), EditorOrigin, _editor!.Title);

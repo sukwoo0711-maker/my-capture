@@ -28,6 +28,26 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
     public void EverySingleTypeConfigurationHasOneRowAtTheAcceptedWindowWidth(string language, int width) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
+        AssertEverySingleTypeConfigurationHasOneRow(language, width);
+    });
+
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("ko-KR")]
+    public void TheDefaultEditorWindowKeepsEverySingleTypeConfigurationOnOneRow(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        // The width a real 1000-DIP editor window leaves its editor inside the window frame.
+        double client;
+        using (EditorWindowHost window = EditorWindowHost.Create(Solid(900, 520, 0x30)))
+            client = window.Editor.ActualWidth;
+        Assert.InRange(client, 900, 1000);
+        output.WriteLine($"{language}: editor width inside a 1000-DIP editor window = {client:0.###} DIP.");
+        AssertEverySingleTypeConfigurationHasOneRow(language, client);
+    });
+
+    private void AssertEverySingleTypeConfigurationHasOneRow(string language, double width)
+    {
         using var host = new InspectorContractHost(width);
         // Windows clamps even this offscreen window to the display's maximum tracking size, so
         // a small CI screen can make it narrower than requested. That only reduces the available
@@ -65,7 +85,7 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
         Assert.True(failures.Count == 0, $"{language}: {failures.Count} single-type configurations exceed the one-row budget at {width} DIP (window {windowWidth:0.###}). {string.Join("; ", failures)}");
         if (width == 1053)
             Assert.True(smallestHeadroom >= 32, $"{language}: only {smallestHeadroom:0.###} DIP headroom in a {windowWidth:0.###}-DIP window (widest {widestName}, {widest:0.###} DIP); at least 32 DIP is required for font and display variation.");
-    });
+    }
 
     [Theory]
     [InlineData("ko-KR")]
@@ -381,7 +401,7 @@ internal sealed class InspectorContractHost : IDisposable
     private readonly Func<bool>? _sourceTitle = AnnotationEditorPreferences.ReadShowSourceWindowTitle;
     private readonly bool? _animations = FluidMotion.AnimationsEnabledOverrideForTest;
 
-    internal InspectorContractHost(double width = 1000)
+    internal InspectorContractHost(double width = 1000, Action<Window>? beforeShow = null)
     {
         AnnotationEditorPreferences.Read = () => new AnnotationDefaults { LastTool = "Select", StrokeThickness = 3 };
         AnnotationEditorPreferences.Write = _ => { };
@@ -398,14 +418,23 @@ internal sealed class InspectorContractHost : IDisposable
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
             Left = -6000, Top = -6000, ShowActivated = false, ShowInTaskbar = false,
         };
-        Window.Show();
-        VisualTreeHelper.SetRootDpi(Window, new DpiScale(1, 1));
-        foreach (UIElement element in Descendants(Window).Prepend(Window).OfType<UIElement>())
+        try
         {
-            element.InvalidateMeasure();
-            element.InvalidateArrange();
+            beforeShow?.Invoke(Window);
+            Window.Show();
+            VisualTreeHelper.SetRootDpi(Window, new DpiScale(1, 1));
+            foreach (UIElement element in Descendants(Window).Prepend(Window).OfType<UIElement>())
+            {
+                element.InvalidateMeasure();
+                element.InvalidateArrange();
+            }
+            Settle();
         }
-        Settle();
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     internal Window Window { get; }

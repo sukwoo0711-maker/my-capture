@@ -1,4 +1,5 @@
 using MyCapture.App.Themes;
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 using System.Windows;
@@ -31,32 +32,34 @@ internal static class ClipboardTextRenderer
     private const int PlainLineHeight = 24;
     private const int MaxPlainPreviewCharacters = 16_384;
 
-    private const int TableMargin = 16;
-    private const int TableRowHeight = 34;
-    private const double TableFontSize = TypeScale.Content.TableText;
-    private const int TableHorizontalPadding = 12;
-    private const int TableVerticalPadding = 7;
-    private const int MinimumColumnWidth = 72;
-    private const int MaximumColumnWidth = 320;
-    private const int MaxTableRows = 24;
-    private const int MaxTableColumns = 12;
+    internal const int TableMargin = 16;
+    internal const int TableRowHeight = 34;
+    internal const double TableFontSize = TypeScale.Content.TableText;
+    internal const int TableHorizontalPadding = 12;
+    internal const int TableVerticalPadding = 7;
+    internal const int MinimumColumnWidth = 72;
+    internal const int MaximumColumnWidth = 320;
+    internal const int MaxTableRows = 24;
+    internal const int MaxTableColumns = 12;
     private const int MaxCellPreviewCharacters = 160;
     private const int MaxTableInspectedCharacters = 65_536;
 
     private static readonly CultureInfo TextCulture = CultureInfo.GetCultureInfo("ko-KR");
-    private static readonly Typeface TextTypeface = new(
+    internal static readonly Typeface TextTypeface = new(
         new FontFamily("Segoe UI"),
         FontStyles.Normal,
         FontWeights.Normal,
         FontStretches.Normal);
 
     private static readonly Brush CardBackground = FrozenBrush(0xFF, 0xFC, 0xFC, 0xFD);
-    private static readonly Brush TableBackground = FrozenBrush(0xFF, 0xFF, 0xFF, 0xFF);
-    private static readonly Brush AlternateRowBackground = FrozenBrush(0xFF, 0xF8, 0xFA, 0xFC);
-    private static readonly Brush TextForeground = FrozenBrush(0xFF, 0x1F, 0x29, 0x37);
-    private static readonly Pen CardBorder = FrozenPen(0xFF, 0xCB, 0xD5, 0xE1);
-    private static readonly Pen GridLine = FrozenPen(0xFF, 0xD1, 0xD5, 0xDB);
-    private static readonly Pen GridBorder = FrozenPen(0xFF, 0x9C, 0xA3, 0xAF);
+    internal static readonly Brush TableBackground = FrozenBrush(0xFF, 0xFF, 0xFF, 0xFF);
+    internal static readonly Brush AlternateRowBackground = FrozenBrush(0xFF, 0xF8, 0xFA, 0xFC);
+    internal static readonly Brush TextForeground = FrozenBrush(0xFF, 0x1F, 0x29, 0x37);
+    internal static readonly Pen GridLine = FrozenPen(0xFF, 0xD1, 0xD5, 0xDB);
+    internal static readonly Pen GridBorder = FrozenPen(0xFF, 0x9C, 0xA3, 0xAF);
+
+    /// <summary>The colour of the lines between a table picture's cells.</summary>
+    internal static Brush TableGridLineBrush => GridLine.Brush;
 
     /// <summary>
     /// Renders <paramref name="sourceText"/> as a frozen bitmap. The input string is never
@@ -120,12 +123,12 @@ internal static class ClipboardTextRenderer
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            double halfPixel = 0.5 / scale;
-            var bounds = new Rect(halfPixel, halfPixel, width - (1 / scale), height - (1 / scale));
-            if (borderless)
-                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
-            else
-                drawing.DrawRoundedRectangle(CardBackground, DevicePixelPen(CardBorder, scale), bounds, 10, 10);
+            // The card fills its whole rectangle, as the table, code, Markdown and translation
+            // pictures do, so the pin's outline is its only edge and follows the window's corners.
+            // A card with its own rounded border left transparent corners: the desktop showed
+            // through them inside a square Windows 10 pin, a second arc appeared inside a Windows 11
+            // pin's outline, and they turned black wherever a copied bitmap's alpha is dropped.
+            drawing.DrawRectangle(borderless ? Brushes.White : CardBackground, null, PixelBounds(width, height, scale));
             if (text is not null)
             {
                 drawing.DrawText(text, new Point(PlainHorizontalPadding, PlainVerticalPadding));
@@ -148,7 +151,7 @@ internal static class ClipboardTextRenderer
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            drawing.DrawRectangle(CardBackground, null, new Rect(0, 0, width, height));
+            drawing.DrawRectangle(CardBackground, null, PixelBounds(width, height, scale));
             var tableBounds = new Rect(
                 TableMargin + 0.5,
                 TableMargin + 0.5,
@@ -197,13 +200,7 @@ internal static class ClipboardTextRenderer
             string value = columnIndex < row.Count ? row[columnIndex] : string.Empty;
             if (value.Length > 0)
             {
-                double availableWidth = Math.Max(1, columnWidth - (TableHorizontalPadding * 2));
-                FormattedText text = CreateFormattedText(
-                    value,
-                    TableFontSize,
-                    availableWidth,
-                    TableRowHeight - (TableVerticalPadding * 2),
-                    singleLine: true);
+                FormattedText text = CreateTableCellText(value, columnWidth);
                 double textTop = rowTop + ((TableRowHeight - text.Height) / 2);
                 drawing.DrawText(text, new Point(left + TableHorizontalPadding, textTop));
             }
@@ -245,10 +242,48 @@ internal static class ClipboardTextRenderer
             new Rect(left, top, right - left, bottom - top));
     }
 
-    private static int[] MeasureColumnWidths(TablePreview preview)
+    private static int[] MeasureColumnWidths(TablePreview preview) =>
+        MeasureColumnWidths(preview.Rows, preview.ColumnCount, fitColumns: true);
+
+    /// <summary>
+    /// A table cell's one-line text. A value with line breaks (a quoted spreadsheet cell) shows
+    /// them as spaces, so a one-line cell does not hide everything after its first line, or show
+    /// nothing for a value that starts with one, and a value that does not fit ends with an
+    /// ellipsis. The value itself, which copying uses, keeps its line breaks.
+    /// </summary>
+    internal static FormattedText CreateTableCellText(string value, double columnWidth) =>
+        CreateFormattedText(SingleLine(value), TableFontSize, Math.Max(1, columnWidth - (TableHorizontalPadding * 2)),
+            TableRowHeight - (TableVerticalPadding * 2), singleLine: true);
+
+    // Every character WPF's line formatting breaks at; CRLF becomes one space.
+    private static readonly SearchValues<char> LineBreaks = SearchValues.Create("\r\n\u000B\u000C\u0085\u2028\u2029");
+
+    internal static string SingleLine(string value)
     {
-        var widths = Enumerable.Repeat(MinimumColumnWidth, preview.ColumnCount).ToArray();
-        foreach (IReadOnlyList<string> row in preview.Rows)
+        int first = value.AsSpan().IndexOfAny(LineBreaks);
+        if (first < 0) return value;
+        var line = new StringBuilder(value.Length);
+        line.Append(value, 0, first);
+        for (int index = first; index < value.Length; index++)
+        {
+            char current = value[index];
+            if (!LineBreaks.Contains(current))
+            {
+                line.Append(current);
+                continue;
+            }
+            if (current == '\r' && index + 1 < value.Length && value[index + 1] == '\n') index++;
+            line.Append(' ');
+        }
+        return line.ToString();
+    }
+
+    internal static int[] MeasureColumnWidths(IReadOnlyList<IReadOnlyList<string>> rows, int columnCount,
+        bool fitColumns, Dictionary<string, int>? measured = null)
+    {
+        measured ??= new(StringComparer.Ordinal);
+        var widths = Enumerable.Repeat(MinimumColumnWidth, columnCount).ToArray();
+        foreach (IReadOnlyList<string> row in rows.Take(MaxTableRows))
         {
             int cellCount = Math.Min(row.Count, widths.Length);
             for (int columnIndex = 0; columnIndex < cellCount; columnIndex++)
@@ -258,21 +293,19 @@ internal static class ClipboardTextRenderer
                     continue;
                 }
 
-                FormattedText text = CreateFormattedText(
-                    row[columnIndex],
-                    TableFontSize,
-                    MaximumColumnWidth - (TableHorizontalPadding * 2),
-                    TableRowHeight - (TableVerticalPadding * 2),
-                    singleLine: true);
-                int preferred = (int)Math.Ceiling(
-                    Math.Min(
-                        MaximumColumnWidth,
+                string value = row[columnIndex];
+                if (!measured.TryGetValue(value, out int preferred))
+                {
+                    FormattedText text = CreateTableCellText(value, MaximumColumnWidth);
+                    preferred = (int)Math.Ceiling(Math.Min(MaximumColumnWidth,
                         text.WidthIncludingTrailingWhitespace + (TableHorizontalPadding * 2)));
+                    measured.Add(value, preferred);
+                }
                 widths[columnIndex] = Math.Max(widths[columnIndex], preferred);
             }
         }
 
-        FitColumns(widths, MaxBitmapWidth - (TableMargin * 2));
+        if (fitColumns) FitColumns(widths, MaxBitmapWidth - (TableMargin * 2));
         return widths;
     }
 
@@ -351,7 +384,7 @@ internal static class ClipboardTextRenderer
         return string.Concat(sourceText.AsSpan(0, length), "\u2026");
     }
 
-    private static TablePreview ParseTablePreview(string sourceText)
+    internal static TablePreview ParseTablePreview(string sourceText)
     {
         var rows = new List<IReadOnlyList<string>>(MaxTableRows);
         var row = new List<string>(MaxTableColumns);
@@ -412,7 +445,11 @@ internal static class ClipboardTextRenderer
             inspectedCharacters++;
         }
 
-        if (rows.Count < MaxTableRows)
+        // A line break that ends the text closes the last row, as a spreadsheet range copy ends
+        // with CRLF; it does not start an empty one. PinTableSelection, which the selection view
+        // shows, reads the text the same way, so the picture and the view have the same rows.
+        bool endsWithLineBreak = index == sourceText.Length && index > 0 && sourceText[index - 1] is '\r' or '\n';
+        if (rows.Count < MaxTableRows && !endsWithLineBreak)
         {
             if (index < sourceText.Length && logicalColumn < MaxTableColumns)
             {
@@ -455,6 +492,15 @@ internal static class ClipboardTextRenderer
         row.Add(wasTruncated ? string.Concat(value, "\u2026") : value);
     }
 
+    /// <summary>
+    /// The DIP rectangle that covers every device pixel <see cref="RenderFrozen"/> gives a picture of
+    /// <paramref name="width"/> by <paramref name="height"/> DIPs. The pixel size rounds up, so a
+    /// background drawn to the DIP size alone left the last column and row half transparent at
+    /// fractional scales.
+    /// </summary>
+    internal static Rect PixelBounds(int width, int height, double scale) =>
+        new(0, 0, Math.Ceiling(width * scale) / scale, Math.Ceiling(height * scale) / scale);
+
     internal static BitmapSource RenderFrozen(DrawingVisual visual, int width, int height, double scale)
     {
         // Integer pixel extents round outward. At fractional scales BitmapSource.Width can
@@ -479,10 +525,10 @@ internal static class ClipboardTextRenderer
         }
     }
 
-    private static double SnapLine(double position, double scale) =>
+    internal static double SnapLine(double position, double scale) =>
         (Math.Floor(position * scale) + 0.5) / scale;
 
-    private static Pen DevicePixelPen(Pen source, double scale)
+    internal static Pen DevicePixelPen(Pen source, double scale)
     {
         if (scale == 1) return source;
         var pen = new Pen(source.Brush, 1 / scale);
@@ -504,7 +550,7 @@ internal static class ClipboardTextRenderer
         return pen;
     }
 
-    private readonly record struct TablePreview(
+    internal readonly record struct TablePreview(
         IReadOnlyList<IReadOnlyList<string>> Rows,
         int ColumnCount);
 }

@@ -206,7 +206,8 @@ internal sealed class OcrTranslationPanel : Grid
     private FrameworkElement BuildItem(TranslatedBlock result, int index)
     {
         string number = result.Block.Number.ToString(UiText.Culture);
-        var row = new Grid { Margin = new Thickness(12, 0, 12, 0) };
+        // The numbers start on the same line as the heading and the messages above the list.
+        var row = new Grid { Margin = new Thickness(16, 0, 12, 0) };
         // A fixed number column keeps every original aligned, whether its number has one digit or three.
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -235,9 +236,10 @@ internal sealed class OcrTranslationPanel : Grid
         var translation = new TextBox
         {
             Text = result.Translation.Text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
-            Template = FlatTextTemplate, Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Body,
-            // The theme's text field padding and height would indent the translation under its original.
-            Padding = new Thickness(0), MinHeight = 0,
+            // The theme's text field padding and height, and the TextBox's own inset, would indent the
+            // translation under its original; the margin also keeps its wrapping width the column's.
+            Template = FlatTextTemplate, FontSize = TypeScale.Body, Padding = new Thickness(0), MinHeight = 0,
+            Margin = new Thickness(-TextBoxLayout.ContentInsetDip, 4, -TextBoxLayout.ContentInsetDip, 0),
         };
         InputMethod.SetIsInputMethodEnabled(translation, false);
         translation.GotKeyboardFocus += (_, _) => _selectionOwner = translation;
@@ -251,7 +253,7 @@ internal sealed class OcrTranslationPanel : Grid
         if (result.Translation.NeedsReview)
         {
             var warning = new TextBlock { Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap };
-            warning.SetResourceReference(TextBlock.ForegroundProperty, "State.Warning");
+            warning.SetResourceReference(TextBlock.ForegroundProperty, "Text.Warning");
             KoreanWordWrap.Show(warning, string.Join("\n", ReviewNotes(result.Translation)));
             texts.Children.Add(warning);
         }

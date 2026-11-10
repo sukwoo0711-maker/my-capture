@@ -61,7 +61,6 @@ internal sealed partial class PinWindow : Window
     private const double FrameClipInsetDip = 0.5;
 
     private PinContent _content;
-    private BitmapSource _image => _content.Image;
     private readonly PinContentKind _contentKind;
     private readonly string? _originalText;
     private readonly PinViewState _state;
@@ -110,6 +109,8 @@ internal sealed partial class PinWindow : Window
     private bool _isClosed;
     private bool _closeStarted;
     private bool _windowClosed;
+    // The exit has ended and its close waits for the dispatcher.
+    private bool _exitClosePending;
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
     private MenuItem? _showOnlyItem;
@@ -164,7 +165,7 @@ internal sealed partial class PinWindow : Window
 
         _imageElement = new Image
         {
-            Source = _image,
+            Source = _content.Display,
             Stretch = Stretch.Fill,
             IsHitTestVisible = false,
         };
@@ -204,17 +205,28 @@ internal sealed partial class PinWindow : Window
         AutomationProperties.SetName(_feedbackDismiss, UiText.Get("Feedback.Dismiss"));
         _feedbackDismiss.Click += (_, _) => DismissFeedback();
         DockPanel.SetDock(_feedbackDismiss, Dock.Right);
+        // A translation's message carries its progress bar under the text.
+        DockPanel.SetDock(_translationStrip, Dock.Bottom);
         _feedback = new Border
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(8, 0, 8, 8),
-            Padding = new Thickness(10, 5, 10, 5),
+            // The hover bar's one-DIP Border.Subtle outline keeps the message apart from a light
+            // picture; the padding gives that DIP back, so the size and text position stay put
+            // up to the border's device-pixel rounding (at 150% it takes two pixels, as the bar's does).
+            Padding = new Thickness(9, 4, 9, 4),
+            BorderThickness = new Thickness(1),
+            BorderBrush = ThemeBrushes.Follow("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             CornerRadius = new CornerRadius(6),
             Background = ThemeBrushes.Follow("Surface.Floating", Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
-            Child = new DockPanel { Children = { _feedbackDismiss, _feedbackText } },
+            Child = new DockPanel { Children = { _feedbackDismiss, _translationStrip, _feedbackText } },
             Visibility = Visibility.Collapsed,
         };
+        // The message is the pin's own interface text, so it takes the UI font and text settings
+        // of the hover bar above it. The pin window itself keeps the system font for its content.
+        _feedback.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
+        ThemeFonts.ApplyText(_feedback);
 
         // Image-first chrome: one continuous one-DIP outline matching the host's window corners
         // rests in a quiet accent tone and turns opaque on hover or while the pin is active
@@ -233,7 +245,11 @@ internal sealed partial class PinWindow : Window
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
         _imageElement.Clip = _imageClip;
-        _imageElement.SizeChanged += (_, args) => UpdateImageClip(args.NewSize);
+        _imageElement.SizeChanged += (_, args) =>
+        {
+            UpdateImageClip(args.NewSize);
+            ShowDisplayAt(args.NewSize, VisualTreeHelper.GetDpi(this));
+        };
         var outline = new Border
         {
             BorderThickness = new Thickness(FrameThicknessDip),
@@ -602,6 +618,9 @@ internal sealed partial class PinWindow : Window
     internal (string Text, FeedbackKind Kind, bool Dismissible) FeedbackForTest =>
         (KoreanWordWrap.Strip(_feedbackText.Text), _feedbackKind, _feedbackDismiss.Visibility == Visibility.Visible);
 
+    /// <summary>Test hook: the bottom message's surface.</summary>
+    internal FrameworkElement FeedbackSurfaceForTest => _feedback;
+
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);
 
@@ -846,6 +865,8 @@ internal sealed partial class PinWindow : Window
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         RerenderAt(newDpi.DpiScaleX, _liveZooming ? newDpi.DpiScaleX : ZoomRasterScale(newDpi.DpiScaleX, _state.Zoom));
+        // A picture keeps its DIP size, so only its device size changes.
+        ShowDisplayAt(_imageElement.RenderSize, newDpi);
         base.OnDpiChanged(oldDpi, newDpi);
         _clickThroughHandle?.Place();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => _clickThroughHandle?.Place()));
@@ -873,12 +894,25 @@ internal sealed partial class PinWindow : Window
         ClipboardCache.Clear();
         _content = rendered;
         _markdownSourceContent = renderedSource;
-        _imageElement.Source = DisplayContent.Image;
+        _imageElement.Source = DisplayContent.Display;
         UpdateImageRasterLayout();
         if (notify) ViewStateChanged?.Invoke();
     }
 
     internal void SimulateDpiChangeForTest(double scale) => RerenderForDisplayScale(scale);
+
+    /// <summary>Shows the displayed content as it should look at the image element's device size.</summary>
+    private void ShowDisplayAt(Size element, DpiScale dpi)
+    {
+        if (_isClosed) return;
+        ImageSource display = DisplayContent.DisplayAt(new Size(element.Width * dpi.DpiScaleX, element.Height * dpi.DpiScaleY));
+        if (!ReferenceEquals(_imageElement.Source, display)) _imageElement.Source = display;
+    }
+
+    internal ImageSource? ImageSourceForTest => _imageElement.Source;
+
+    /// <summary>The shown content as a bitmap: a picture translation's flattened copy.</summary>
+    internal BitmapSource DisplayedImageForTest => _content.Image;
 
     private void UpdateImageRasterLayout()
     {
@@ -944,7 +978,7 @@ internal sealed partial class PinWindow : Window
         if (!FluidMotion.AnimationsEnabled || !IsVisible || _handle == IntPtr.Zero
             || !ExcludeLeavingPinFromCapture(_handle))
         {
-            Close();
+            CloseReleasingBuffers();
             return;
         }
 
@@ -959,16 +993,70 @@ internal sealed partial class PinWindow : Window
         _hoverBar?.Leave();
     }
 
-    /// <summary>Ends a playing exit now (close all, app exit): the window closes at once.</summary>
-    internal void CompleteExit() => FluidMotion.CompleteExit(this);
+    /// <summary>
+    /// Ends a playing exit now (close all, app exit): the window closes at once, after the frame that
+    /// releases the closed pins' buffers when <paramref name="releaseBuffers"/> asks for it.
+    /// </summary>
+    internal void CompleteExit(bool releaseBuffers = true)
+    {
+        FluidMotion.CompleteExit(this);
+        if (_exitClosePending) CloseNow(releaseBuffers);
+    }
 
     /// <summary>Whether the pin has closed but its exit is still on the screen.</summary>
     internal bool IsLeaving => FluidMotion.IsExiting(this);
 
-    // The exit's deferred close; the window may already have been closed directly meanwhile.
+    // The exit's deferred close; the window may already have been closed directly meanwhile. The exit
+    // ends inside WPF's render pass, where the resize that releases the buffers would render re-entrantly,
+    // so the close follows on the dispatcher with the pin already transparent.
     private void CloseLeftWindow()
     {
-        if (!_windowClosed) Close();
+        if (_windowClosed || _exitClosePending) return;
+        _chrome.Opacity = 0;
+        _exitClosePending = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            if (_exitClosePending) CloseNow(releaseBuffers: true);
+        });
+    }
+
+    private void CloseNow(bool releaseBuffers)
+    {
+        _exitClosePending = false;
+        if (_windowClosed) return;
+        if (releaseBuffers) PresentReleaseFrame();
+        Close();
+    }
+
+    /// <summary>Whether this pin can still present the frame that releases closed pins' buffers.</summary>
+    internal bool CanPresentReleaseFrame => !_windowClosed && _handle != IntPtr.Zero && IsVisible;
+
+    /// <summary>Starts the close (lists, history, placement) while the window stays for a later close.</summary>
+    internal void BeginClose() => StartClosing();
+
+    /// <summary>Closes the window after the frame that releases the closed pins' buffers.</summary>
+    internal void CloseReleasingBuffers()
+    {
+        StartClosing();
+        CloseNow(releaseBuffers: true);
+    }
+
+    /// <summary>
+    /// WPF destroys a closed layered window's swap chain, which holds a buffer the size of the pin, only when a
+    /// visible window presents a later frame, and once the last pin has closed none may; released bitmap
+    /// textures wait one frame more. Resizing a layered window makes WPF render and present a frame before the
+    /// resize returns, so the closing pin shows two transparent frames, of one and two pixels, and every buffer
+    /// released before them goes with them.
+    /// </summary>
+    private void PresentReleaseFrame()
+    {
+        if (!CanPresentReleaseFrame || Dispatcher.HasShutdownStarted) return;
+        // A reveal or hide fade would otherwise hold the opacity above zero for these frames.
+        _chrome.BeginAnimation(OpacityProperty, null);
+        _chrome.Opacity = 0;
+        _imageElement.Source = null;
+        // A resize to the size the window already has presents nothing, so the second frame takes another size.
+        if (WindowStyleFacade.ResizeSquare(_handle, 1)) WindowStyleFacade.ResizeSquare(_handle, 2);
     }
 
     // Everything a close changes happens here, once, at its start: an exit only delays pixels.
@@ -984,6 +1072,7 @@ internal sealed partial class PinWindow : Window
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
+        ReleaseTranslationProgress();
         _ctrlClickTimer.Stop();
         _zoomSettleTimer.Stop();
         _hoverHideTimer.Stop();
@@ -1733,7 +1822,9 @@ internal sealed partial class PinWindow : Window
         ShowFeedback(
             mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"),
             FeedbackKind.Progress);
-        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, DisplayContent.Image, SourcePageUrl));
+        BitmapSource image = TranslationSourceContent.Kind == PinContentKind.Image
+            ? TranslationSourceContent.Image : DisplayContent.Image;
+        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, image, SourcePageUrl));
     }
 
     private double AdjustOpacity(double delta)
@@ -2034,6 +2125,8 @@ internal sealed partial class PinWindow : Window
             _feedback.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
+        _feedbackShowsTranslation = kind == FeedbackKind.Progress && text == _translationProgressLine;
+        SyncTranslationStrip();
         // Every message restarts the countdown, so the latest text gets its full display time.
         _feedbackCountdown.Start(FeedbackTiming.DisplayTime(kind, overContent: true));
         if (announce && IsVisible) AnnounceFeedback(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
@@ -2066,6 +2159,9 @@ internal sealed partial class PinWindow : Window
         int generation = ++_feedbackGeneration;
         _feedbackKind = FeedbackKind.Echo;
         _feedbackDismiss.Visibility = Visibility.Collapsed;
+        // A fading message keeps its height; its bar stops at once.
+        _feedbackShowsTranslation = false;
+        _translationStrip.Hide(keepSpace: true);
         _feedback.BeginAnimation(UIElement.OpacityProperty, null);
         if (immediate || !FluidMotion.AnimationsEnabled || _isClosed)
         {
@@ -2282,6 +2378,7 @@ internal sealed partial class PinWindow : Window
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
+        ReleaseTranslationProgress();
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
         _zoomSettleTimer.Stop();

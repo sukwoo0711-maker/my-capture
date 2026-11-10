@@ -274,10 +274,10 @@ public sealed class EditorKeysTests
 
     internal static TextBox ColorInput(AnnotationEditorControl editor)
     {
-        if (!editor.CustomColorPopupForTest.IsOpen)
+        if (!editor.IsCustomColorFlyoutOpenForTest)
             editor.CustomColorButtonForTest.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         editor.UpdateLayout();
-        Assert.True(editor.CustomColorPopupForTest.IsOpen);
+        Assert.True(editor.IsCustomColorFlyoutOpenForTest);
         Assert.Equal(UiText.Get("Tools.CustomColor"), AutomationProperties.GetName(editor.CustomColorInputForTest));
         return editor.CustomColorInputForTest;
     }
@@ -309,7 +309,8 @@ public sealed class EditorKeysTests
 
         public AnnotationEditorControl Editor => Window.Editor;
 
-        public static EditorWindowHost Create(BitmapSource? bitmap = null, AnnotationDocument? document = null)
+        public static EditorWindowHost Create(BitmapSource? bitmap = null, AnnotationDocument? document = null,
+            Action<AnnotationEditorWindow>? beforeShow = null)
         {
             bitmap ??= Solid(640, 360, 0x30);
             var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
@@ -319,13 +320,22 @@ public sealed class EditorKeysTests
                 Left = -4000, Top = -4000, Width = 1000, Height = 640,
                 ShowActivated = false, ShowInTaskbar = false,
             };
-            // Keep every requested fixture width available even on a small CI desktop;
-            // the scope stays attached through later resizes and detaches when closed.
-            _ = new WindowTrackSizeScope(window, new Size(4096, 2160));
-            window.Show();
-            window.UpdateLayout();
-            window.Editor.Focus();
-            return new EditorWindowHost(window);
+            try
+            {
+                beforeShow?.Invoke(window);
+                // Keep every requested fixture width available even on a small CI desktop;
+                // the scope stays attached through later resizes and detaches when closed.
+                _ = new WindowTrackSizeScope(window, new Size(4096, 2160));
+                window.Show();
+                window.UpdateLayout();
+                window.Editor.Focus();
+                return new EditorWindowHost(window);
+            }
+            catch
+            {
+                window.Close();
+                throw;
+            }
         }
 
         public void Dispose() => Window.Close();

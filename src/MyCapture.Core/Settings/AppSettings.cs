@@ -63,15 +63,15 @@ public sealed class AppSettings : IJsonOnDeserializing
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>
 /// <remarks>
 /// The initialisers are the chords earlier versions shipped with, which an older settings file
-/// without a property reads back. A new installation assigns region capture, region recording
-/// and clipboard pin shortcuts (<see cref="NewInstallDefaults"/>).
+/// without a property reads back. A new installation assigns region capture, region recording,
+/// library and pin shortcuts with priority over other programs (<see cref="NewInstallDefaults"/>).
 /// </remarks>
 public sealed class HotkeySettings
 {
     /// <summary>Claims assigned core chords even when another program registered them first.</summary>
     public bool ForceCoreShortcuts { get; set; }
 
-    /// <summary>The one-time core-shortcut question was answered; not edited in Settings.</summary>
+    /// <summary>The core shortcuts were assigned for a new installation or the one-time question was answered.</summary>
     public bool CoreShortcutsAsked { get; set; }
 
     public Hotkey ScrollingCapture { get; set; } = Hotkey.None;
@@ -325,6 +325,12 @@ public sealed class AnnotationDefaults
     public ColorRgba StrokeColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
 
     public double StrokeThickness { get; set; } = 3;
+
+    /// <summary>
+    /// Width of the highlighter, in image pixels. Pen and shapes share <see cref="StrokeThickness"/>;
+    /// the highlighter keeps its own so setting one never moves the other.
+    /// </summary>
+    public double HighlighterThickness { get; set; } = 12;
 
     public ColorRgba TextColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
 

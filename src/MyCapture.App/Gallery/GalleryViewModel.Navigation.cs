@@ -84,11 +84,12 @@ public sealed partial class GalleryViewModel
     /// <summary>
     /// Every capture in the library, like the other view counts. The root lists the captures
     /// outside folders and reaches the rest through its folder cards, so this is what it holds.
+    /// Captures still leaving for the Recycle Bin no longer count.
     /// </summary>
-    public int AllItemsCount => _controller.Count;
-    public int ImageCount => _controller.Records.Count(record => record.IsImage);
-    public int VideoCount => _controller.Records.Count(record => record.IsVideo);
-    public int KeptCount => _controller.Records.Count(record => record.IsManuallyPinned);
+    public int AllItemsCount => PresentCount;
+    public int ImageCount => PresentRecords.Count(record => record.IsImage);
+    public int VideoCount => PresentRecords.Count(record => record.IsVideo);
+    public int KeptCount => PresentRecords.Count(record => record.IsManuallyPinned);
 
     public bool IsAllItemsView => _scope.IsAll && _filter == GalleryFilter.All && _selectedTag is null;
     public bool IsImagesView => _scope.IsAll && _filter == GalleryFilter.Images;
@@ -129,7 +130,7 @@ public sealed partial class GalleryViewModel
     /// "전체 71개 중 12개" only when a search, view or location hides part of the library. Captures
     /// inside the folder cards shown count as reachable, so the library root never reports one.
     /// </summary>
-    public bool ShowResultCount => ReachableCount != _controller.Count;
+    public bool ShowResultCount => ReachableCount != PresentCount;
 
     /// <summary>
     /// True when the view would list <paramref name="record"/> without a search term: browsing,
@@ -210,6 +211,14 @@ public sealed partial class GalleryViewModel
         }
         return steps;
     }
+
+    /// <summary>
+    /// What the location header names, written the way a group heading writes a location: the steps after the
+    /// library root joined like a folder path ("Root / Nested", or an opened date "2026-10-11"). Null while no
+    /// location header is shown.
+    /// </summary>
+    private string? LocationHeading() =>
+        ShowLocationHeader ? string.Join(" / ", BuildBreadcrumb().Skip(1).Select(step => step.Name)) : null;
 
     private void RefreshNavigation()
     {

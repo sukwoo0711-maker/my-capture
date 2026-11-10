@@ -19,14 +19,26 @@ internal enum EditorCursorKind
     /// <summary>System I-beam: the text tool places a caret where it clicks.</summary>
     TextBeam,
 
-    /// <summary>System crosshair: rectangle, ellipse and arrow drag from the exact pixel.</summary>
+    /// <summary>System crosshair: what every custom tool cursor becomes under a high-contrast theme.</summary>
     Cross,
 
-    /// <summary>Central locator; the surface shows the actual circular pen footprint.</summary>
+    /// <summary>System unavailable pointer: the step-number tool when no further number can be added.</summary>
+    Unavailable,
+
+    /// <summary>
+    /// The pen icon beside the brush, its nib touching the upper-right edge of the footprint; the
+    /// hot spot is the footprint's centre, where the surface shows the actual circular pen footprint.
+    /// </summary>
     Pen,
 
-    /// <summary>Central locator; the surface shows the actual circular highlighter footprint.</summary>
+    /// <summary>
+    /// The edit icon beside the brush, its nib touching the upper-right edge of the footprint; the
+    /// hot spot is the footprint's centre, where the surface shows the actual circular highlighter footprint.
+    /// </summary>
     Highlighter,
+
+    /// <summary>Crosshair of the editor's own, drawn so it stays visible on any capture: rectangle, ellipse and arrow drag from the exact pixel.</summary>
+    Crosshair,
 
     /// <summary>Crosshair with the number the next click adds.</summary>
     StepNumber,
@@ -56,9 +68,11 @@ internal readonly record struct EditorPointerTarget(
 /// <summary>Chooses the canvas cursor from the active tool and what is under the pointer.</summary>
 /// <remarks>
 /// Kept free of WPF so the mapping is testable on its own. Like Paint and Snipping Tool,
-/// shape tools keep the system crosshair for pixel-exact starts and selection keeps the system
-/// move and resize arrows; tools whose result is not a dragged outline show their own icon so
-/// the active tool is visible where the user is looking.
+/// shape tools use a crosshair for pixel-exact starts and selection keeps the system move and
+/// resize arrows; the shape crosshair is the editor's own drawing, because the system one inverts
+/// the pixels under a single-pixel line and disappears on a mid-grey capture. Tools whose result
+/// is not a dragged outline show their own icon so the active tool is visible where the user is
+/// looking.
 /// </remarks>
 internal static class EditorCursorPolicy
 {
@@ -85,6 +99,8 @@ internal static class EditorCursorPolicy
                 ResizeHandle.TopRight or ResizeHandle.BottomLeft => EditorCursorKind.ResizeNortheastSouthwest,
                 ResizeHandle.TopCenter or ResizeHandle.BottomCenter => EditorCursorKind.ResizeNorthSouth,
                 ResizeHandle.MiddleLeft or ResizeHandle.MiddleRight => EditorCursorKind.ResizeWestEast,
+                // Endpoint orientation is resolved with the selected line by PointerIntentGeometry.
+                ResizeHandle.LineStart or ResizeHandle.LineEnd => EditorCursorKind.ResizeWestEast,
                 _ when target.OverAnnotation => EditorCursorKind.Move,
                 _ => EditorCursorKind.Arrow,
             },
@@ -96,7 +112,7 @@ internal static class EditorCursorPolicy
             EditorTool.Mosaic => EditorCursorKind.Mosaic,
             EditorTool.Blur => EditorCursorKind.Blur,
             EditorTool.Image => EditorCursorKind.Image,
-            _ => EditorCursorKind.Cross,
+            _ => EditorCursorKind.Crosshair,
         };
     }
 

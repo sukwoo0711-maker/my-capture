@@ -25,6 +25,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
+    private NativeCaptureOverlay? _nativeOverlay;
+    internal bool UseNativeDibSelector { get; set; } = true;
+    internal NativeSelectorChromeStrategy NativeChromeStrategy { get; set; } = NativeSelectorChromeStrategy.Retained;
+    internal NativeCaptureOverlay? NativeOverlayForProbe => _nativeOverlay;
+    internal Func<RectD, bool, bool, NativeCaptureOverlay> CreateNativeSelector { get; set; } =
+        (bounds, abortOnFocusLoss, showMagnifier) => new(bounds, abortOnFocusLoss, showMagnifier);
+    internal Action<NativeCaptureOverlay> ShowNativeSelector { get; set; } = native => native.Show();
+    private SelectorPresentation? _nativePresentation;
+    private bool _startingNative;
+    private bool _handlingNativeFailure;
+    private bool _practiceCancellationIssued;
     private AnnotationEditorWindow? _activeEditor;
     private CaptureOverlayCoordinator? _editorScreenCapture;
     private bool _isOpeningEditor;
@@ -144,6 +155,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
     internal Func<bool>? RequiresCaptureExclusion { get; set; }
     internal Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
+    internal Func<IntPtr, bool> ApplyNativeCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
     internal event Action<Exception>? TransitionFailed;
 
     private void PrepareWindow(Window window)
@@ -157,8 +169,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Raised when the complete selector/editor session has ended.</summary>
     internal event EventHandler? OverlayClosed;
     internal event Action? SessionStarted;
-    private readonly Dictionary<CaptureOverlayWindow, PracticeCaptureTarget> _practiceSelectors = [];
-    private readonly HashSet<CaptureOverlayWindow> _practiceSelections = [];
+    private readonly Dictionary<object, PracticeCaptureTarget> _practiceSelectors = [];
+    private readonly HashSet<object> _practiceSelections = [];
     private PracticeCaptureTarget? _persistingPracticeCapture;
 
     internal bool OwnsPracticeCapture(PracticeCaptureTarget? target) => target is { } capture &&
@@ -168,18 +180,19 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
     internal bool IsActive => !_disposed &&
-        (_preparation is not null || _activeOverlay is not null || _activeEditor is not null || _isOpeningEditor || _editorScreenCapture is not null);
+        (_preparation is not null || _activeOverlay is not null || _nativeOverlay is not null || _activeEditor is not null || _isOpeningEditor || _editorScreenCapture is not null);
 
     internal Task LastTransitionForTest { get; private set; } = Task.CompletedTask;
     internal Task LastPreparationForTest { get; private set; } = Task.CompletedTask;
 
     internal ScreenCaptureEngine Engine => _captureEngine;
-    internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
+    internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _nativeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
     internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
     internal void ConfirmSelectionAsPin()
     {
         VerifyDispatcherAccess();
         if (_disposed || _editorScreenCapture is not null || _activeEditor is not null) return;
+        _nativeOverlay?.ConfirmSelectionAsPin();
         _activeOverlay?.ConfirmSelectionAsPin();
     }
     internal Task WaitForPresentationDismissalAsync() =>
@@ -275,6 +288,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         VerifyDispatcherAccess();
         if (_editorScreenCapture is { } nested) return nested.BringSelectorForward();
+        if (!_disposed && _nativeOverlay is { IsVisible: true } native) { native.Activate(); return true; }
         if (_disposed || _activeOverlay is not { IsVisible: true } overlay) return false;
         _ = overlay.Activate();
         return true;
@@ -301,7 +315,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
 
         // Until the selector shows its frozen frame, the preparation ignores new requests.
-        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
+        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true } && _nativeOverlay is not { IsVisible: true }))
         {
             _log.LogInformation("Capture ignored while a frame or selection is being prepared");
             return;
@@ -309,6 +323,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
         // The text capture command over an open selector switches it to text mode.
         if (textCapture && _activeOverlay is { TextCaptureAvailable: true } open) open.TextCaptureMode = true;
+        if (textCapture && _nativeOverlay is { TextCaptureAvailable: true } native) native.TextCaptureMode = true;
 
         if (ActivateCurrent())
         {
@@ -324,6 +339,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             TextCapture = textCapture && TextCaptureRequested is not null,
             PracticeTarget = practiceTarget,
         };
+        _practiceCancellationIssued = false;
         _preparation = preparation;
         SessionStarted?.Invoke();
         _log.LogInformation("Capture frame acquisition requested");
@@ -350,6 +366,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             preparation.Cancelled = true;
             CancelPractice(preparation.PracticeTarget);
             _preparation = null;
+            EndSessionIfIdle();
             throw;
         }
     }
@@ -385,6 +402,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             ShowShortcutHints = ShowShortcutHints,
             RequiresCaptureExclusion = RequiresCaptureExclusion,
             ApplyCaptureExclusion = ApplyCaptureExclusion,
+            ApplyNativeCaptureExclusion = ApplyNativeCaptureExclusion,
+            UseNativeDibSelector = UseNativeDibSelector,
+            NativeChromeStrategy = NativeChromeStrategy,
+            CreateNativeSelector = CreateNativeSelector,
+            ShowNativeSelector = ShowNativeSelector,
             TextCaptureRequested = TextCaptureRequested,
             SelectorActionRequested = SelectorActionRequested,
             CanRepeatLastRegion = CanRepeatLastRegion,
@@ -443,6 +465,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 SelectorTimeline.Mark?.Invoke("grab-done");
                 if (!acquired.Bitmap.IsFrozen)
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
+                SelectorTimeline.Mark?.Invoke("source-frame-ready");
                 return acquired;
             }, ReadPageUrls,
                 () => _readWindowCandidates(preparation.DesktopBounds),
@@ -532,6 +555,33 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             if (_disposed || preparation.Cancelled) { CancelPractice(preparation.PracticeTarget); return false; }
             if (failure is not null) throw failure;
             FrozenFrame acquired = frame ?? throw new InvalidOperationException("Capture acquisition returned no frame.");
+            if (_nativeOverlay is { } native)
+            {
+                SelectorPresentation presentation = _nativePresentation!;
+                presentation.Frame = acquired;
+                presentation.SourceWindows = preparation.SourceWindows;
+                presentation.SourceDetails = confirmedWindows;
+                try
+                {
+                    _startingNative = true;
+                    // Recording may have started while the frame was being acquired.
+                    native.RequireCaptureExclusion = RequiresCaptureExclusion?.Invoke() == true;
+                    native.Prepare(ApplyNativeCaptureExclusion);
+                    native.SourceWindows = preparation.SourceWindows;
+                    if (confirmedWindows is not null) native.AwaitSourceDetails(confirmedWindows);
+                    native.AttachFrame(acquired);
+                    ShowNativeSelector(native);
+                }
+                catch (Exception error)
+                {
+                    if (_disposed || preparation.Cancelled) native.Close();
+                    else FallBackToWpf(presentation, error);
+                }
+                finally { _startingNative = false; }
+                if (ReferenceEquals(_nativeOverlay, native) && native.IsClosed)
+                    OnNativeOverlayClosed(native, EventArgs.Empty);
+                return _nativeOverlay?.IsVisible == true || _activeOverlay?.IsVisible == true;
+            }
             if (_activeOverlay is { } overlay)
             {
                 // Geometry, z-order and titles are final; page and application details may still be read.
@@ -553,6 +603,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
             ShowOverlay(acquired.ScreenBounds, abortOnFocusLoss: false, showMagnifier: false, preparation.Elapsed, acquired,
                 preparation.ShowSelectionGrid);
+            if (_nativeOverlay is { } shownNative)
+            {
+                if (confirmedWindows is not null) shownNative.AwaitSourceDetails(confirmedWindows);
+                if (_nativePresentation is { } presentation) presentation.SourceDetails = confirmedWindows;
+                return shownNative.IsVisible;
+            }
             if (_activeOverlay is not { } shown) return false;
             if (confirmedWindows is not null) shown.AwaitSourceDetails(confirmedWindows);
             return true;
@@ -561,6 +617,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         {
             _log.LogError(ex, "Could not prepare the capture overlay");
             CancelPractice(preparation.PracticeTarget);
+            _nativeOverlay?.Close();
             _activeOverlay?.Close();
             TransitionFailed?.Invoke(ex);
             return false;
@@ -580,52 +637,87 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         FrozenFrame? frame,
         bool showSelectionGrid)
     {
-        var overlay = frame is null
-            ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier, showSelectionGrid: showSelectionGrid)
-            : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
-        SelectorTimeline.Mark?.Invoke("window-constructed");
-        _activeOverlay = overlay;
-        if (_preparation?.PracticeTarget is { } practice) _practiceSelectors[overlay] = practice;
-        overlay.SourceWindows = _preparation?.SourceWindows ?? [];
-        overlay.DetectWindows = AutoDetectWindows();
-        overlay.ShowShortcutHints = ShowShortcutHints();
-        overlay.CopyColorText = CopyColorText;
-        overlay.ColorCopied = feedback =>
+        var presentation = new SelectorPresentation(screenBounds, abortOnFocusLoss, showMagnifier, elapsed, showSelectionGrid)
         {
-            if (!_disposed) ColorCopied?.Invoke(feedback);
+            Frame = frame,
+            PracticeTarget = _preparation?.PracticeTarget,
+            SourceWindows = _preparation?.SourceWindows ?? [],
+            TextCapture = _preparation?.TextCapture == true,
         };
-        overlay.ReadColorFormat = ReadColorFormat;
-        overlay.TextCaptureAvailable = TextCaptureRequested is not null;
-        overlay.TextCaptureMode = _preparation?.TextCapture == true;
-        // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
-        overlay.ShowModeBar = true;
-        overlay.CanRepeatLastRegion = CanRepeatLastRegion;
-        overlay.OffersOtherActions = SelectorActionRequested is not null;
-        overlay.ShowStartGuide = ClaimStartGuide();
-        overlay.ClaimKeyPanel = ClaimKeyPanel;
-        overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
-        // F3 pins the chosen region (ConfirmSelectionAsPin), except while an editor is open for a retake.
-        overlay.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
-        overlay.SelectionCompleted += OnOverlaySelectionCompleted;
-        overlay.ActionRequested += OnOverlayActionRequested;
+        if (UseNativeDibSelector)
+        {
+            try
+            {
+                _startingNative = true;
+                ShowNativeOverlay(presentation);
+            }
+            catch (Exception error)
+            {
+                if (_disposed || _preparation?.Cancelled == true) _nativeOverlay?.Close();
+                else FallBackToWpf(presentation, error);
+            }
+            finally { _startingNative = false; }
+            if (_nativeOverlay is { IsClosed: true } closed) OnNativeOverlayClosed(closed, EventArgs.Empty);
+            return;
+        }
+        ShowWpfOverlay(presentation);
+    }
+
+    private void ShowWpfOverlay(SelectorPresentation presentation)
+    {
+        RectD screenBounds = presentation.Bounds;
+        FrozenFrame? frame = presentation.Frame;
+        var overlay = new CaptureOverlayWindow(screenBounds, presentation.AbortOnFocusLoss,
+            presentation.ShowMagnifier, showSelectionGrid: presentation.ShowSelectionGrid);
+        _activeOverlay = overlay;
+        if (presentation.PracticeTarget is { } practice) _practiceSelectors[overlay] = practice;
         overlay.Closed += OnOverlayClosed;
-        overlay.ContentRendered += OnFirstRendered;
         void OnFirstRendered(object? sender, EventArgs args)
         {
             overlay.ContentRendered -= OnFirstRendered;
-            if (_practiceSelectors.TryGetValue(overlay, out var practice))
+            if (!presentation.PracticeReady && _practiceSelectors.TryGetValue(overlay, out var practice))
+            {
+                presentation.PracticeReady = true;
                 PracticeSignals.Publish(new(PracticeEventKind.SelectorReady, practice.SessionId, practice.RequestId));
-            _log.LogInformation("Capture overlay first rendered after {Elapsed:0.0}ms", elapsed.Elapsed.TotalMilliseconds);
+            }
+            _log.LogInformation("Capture overlay first rendered after {Elapsed:0.0}ms", presentation.Elapsed.Elapsed.TotalMilliseconds);
         }
-
-        _log.LogInformation(
-            "Opening free-region selector across virtual desktop ({Width}x{Height})",
-            (int)screenBounds.Width,
-            (int)screenBounds.Height);
 
         try
         {
+            SelectorTimeline.Mark?.Invoke("window-constructed");
+            overlay.SourceWindows = presentation.SourceWindows;
+            if (presentation.SourceDetails is { } sourceDetails) overlay.AwaitSourceDetails(sourceDetails);
+            overlay.DetectWindows = AutoDetectWindows();
+            overlay.ShowShortcutHints = ShowShortcutHints();
+            overlay.CopyColorText = CopyColorText;
+            overlay.ColorCopied = feedback =>
+            {
+                if (!_disposed) ColorCopied?.Invoke(feedback);
+            };
+            overlay.ReadColorFormat = ReadColorFormat;
+            overlay.TextCaptureAvailable = TextCaptureRequested is not null;
+            overlay.TextCaptureMode = presentation.TextCapture;
+            // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
+            overlay.ShowModeBar = true;
+            overlay.CanRepeatLastRegion = CanRepeatLastRegion;
+            overlay.OffersOtherActions = SelectorActionRequested is not null;
+            overlay.ShowStartGuide = ClaimStartGuide();
+            overlay.ClaimKeyPanel = ClaimKeyPanel;
+            overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
+            // F3 pins the chosen region (ConfirmSelectionAsPin), except while an editor is open for a retake.
+            overlay.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
+            overlay.SelectionCompleted += OnOverlaySelectionCompleted;
+            overlay.ActionRequested += OnOverlayActionRequested;
+            overlay.ContentRendered += OnFirstRendered;
+
+            _log.LogInformation(
+                "Opening free-region selector across virtual desktop ({Width}x{Height})",
+                (int)screenBounds.Width,
+                (int)screenBounds.Height);
+
             bool excluded = ApplyCaptureExclusion(overlay);
+            if (_disposed || _preparation?.Cancelled == true || !ReferenceEquals(_activeOverlay, overlay)) return;
             CaptureWindowExclusion.RecordResult(overlay, excluded);
             SelectorTimeline.Mark?.Invoke("hwnd-created-exclusion-applied");
             if (RequiresCaptureExclusion?.Invoke() == true && !excluded)
@@ -635,15 +727,139 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
             if (frame is not null)
             {
+                overlay.AttachFrame(frame);
                 overlay.Show();
             }
+            if (overlay.IsVisible) _ = overlay.Activate();
         }
         catch
         {
+            bool cancelled = _disposed || _preparation?.Cancelled == true || !ReferenceEquals(_activeOverlay, overlay);
             overlay.Close();
+            if (cancelled) return;
             throw;
         }
-        if (overlay.IsVisible) _ = overlay.Activate();
+    }
+
+    private void ShowNativeOverlay(SelectorPresentation presentation)
+    {
+        _nativePresentation = presentation;
+        var native = CreateNativeSelector(presentation.Bounds, presentation.AbortOnFocusLoss, presentation.ShowMagnifier);
+        _nativeOverlay = native;
+        native.ChromeStrategy = NativeChromeStrategy;
+        native.RequireCaptureExclusion = RequiresCaptureExclusion?.Invoke() == true;
+        native.SourceWindows = presentation.SourceWindows;
+        if (presentation.SourceDetails is { } sourceDetails) native.AwaitSourceDetails(sourceDetails);
+        native.CopyColorText = CopyColorText;
+        native.ColorCopied = feedback => { if (!_disposed) ColorCopied?.Invoke(feedback); };
+        native.ReadColorFormat = ReadColorFormat;
+        native.TextCaptureAvailable = TextCaptureRequested is not null;
+        native.TextCaptureMode = presentation.TextCapture;
+        native.DetectWindows = AutoDetectWindows();
+        native.OffersOtherActions = SelectorActionRequested is not null;
+        native.CanRepeatLastRegion = CanRepeatLastRegion;
+        native.ShowSelectionGrid = presentation.ShowSelectionGrid;
+        if (presentation.PracticeTarget is { } practice) _practiceSelectors[native] = practice;
+        native.ShowStartGuide = ClaimStartGuide();
+        native.ClaimKeyPanel = ClaimKeyPanel;
+        native.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
+        native.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
+        native.SelectionCompleted += OnOverlaySelectionCompleted;
+        native.InputReady += OnNativeInputReady;
+        native.ActionRequested += OnOverlayActionRequested;
+        native.Failed += OnNativeFailed;
+        native.Closed += OnNativeOverlayClosed;
+        native.Prepare(ApplyNativeCaptureExclusion);
+        if (presentation.Frame is { } frame) { native.AttachFrame(frame); ShowNativeSelector(native); }
+    }
+
+    private void OnNativeOverlayClosed(object? sender, EventArgs args)
+    {
+        if (sender is NativeCaptureOverlay native)
+        {
+            // Show closes its HWND before throwing. Its caller still owns the same capture
+            // until it either finishes startup or installs the WPF replacement.
+            if (_startingNative && ReferenceEquals(_nativeOverlay, native)) return;
+            if (_practiceSelectors.Remove(native, out var practice) && !_practiceSelections.Remove(native))
+                CancelPractice(practice);
+            NoteForegroundDismissal(native.CaptureExcluded);
+            native.SelectionCompleted -= OnOverlaySelectionCompleted;
+            native.InputReady -= OnNativeInputReady;
+            native.ActionRequested -= OnOverlayActionRequested;
+            native.Failed -= OnNativeFailed;
+            native.Closed -= OnNativeOverlayClosed;
+            if (ReferenceEquals(_nativeOverlay, native)) { _nativeOverlay = null; _nativePresentation = null; }
+        }
+        EndSessionIfIdle();
+    }
+
+    private void OnNativeInputReady(object? sender, EventArgs args)
+    {
+        if (sender is NativeCaptureOverlay native)
+        {
+            native.InputReady -= OnNativeInputReady;
+            if (_practiceSelectors.TryGetValue(native, out var practice))
+            {
+                if (_nativePresentation is { } presentation) presentation.PracticeReady = true;
+                PracticeSignals.Publish(new(PracticeEventKind.SelectorReady, practice.SessionId, practice.RequestId));
+            }
+        }
+    }
+
+    private void OnNativeFailed(Exception error)
+    {
+        if (_nativePresentation is not { } presentation) return;
+        if (_disposed || _preparation?.Cancelled == true) return;
+        _handlingNativeFailure = true;
+        try { FallBackToWpf(presentation, error); }
+        catch (Exception failure)
+        {
+            _log.LogError(failure, "Could not show the fallback capture overlay");
+            CancelPractice(presentation.PracticeTarget);
+            _activeOverlay?.Close();
+            TransitionFailed?.Invoke(failure);
+        }
+        finally
+        {
+            _handlingNativeFailure = false;
+            EndSessionIfIdle();
+        }
+    }
+
+    private void FallBackToWpf(SelectorPresentation presentation, Exception error)
+    {
+        _log.LogWarning(error, "Native capture selector failed; using the WPF selector for this capture");
+        if (_nativeOverlay is { } native)
+        {
+            if (native.Frame is not null) presentation.TextCapture = native.TextCaptureMode;
+            native.SelectionCompleted -= OnOverlaySelectionCompleted;
+            native.InputReady -= OnNativeInputReady;
+            native.ActionRequested -= OnOverlayActionRequested;
+            native.Failed -= OnNativeFailed;
+            native.Closed -= OnNativeOverlayClosed;
+            _practiceSelectors.Remove(native);
+            _practiceSelections.Remove(native);
+            _nativeOverlay = null;
+            native.Close();
+        }
+        _nativePresentation = null;
+        ShowWpfOverlay(presentation);
+    }
+
+    private sealed class SelectorPresentation(RectD bounds, bool abortOnFocusLoss, bool showMagnifier,
+        Stopwatch elapsed, bool showSelectionGrid)
+    {
+        internal RectD Bounds { get; } = bounds;
+        internal bool AbortOnFocusLoss { get; } = abortOnFocusLoss;
+        internal bool ShowMagnifier { get; } = showMagnifier;
+        internal bool ShowSelectionGrid { get; } = showSelectionGrid;
+        internal Stopwatch Elapsed { get; } = elapsed;
+        internal FrozenFrame? Frame { get; set; }
+        internal PracticeCaptureTarget? PracticeTarget { get; init; }
+        internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
+        internal Task<IReadOnlyList<WindowCandidate>>? SourceDetails { get; set; }
+        internal bool TextCapture { get; set; }
+        internal bool PracticeReady { get; set; }
     }
 
     internal bool StartWithSelection(FrozenFrame frame, RectD region) =>
@@ -700,7 +916,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             }
         }
 
-        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
+        if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true } && _nativeOverlay is not { IsVisible: true }))
         {
             _log.LogInformation("Advanced capture ignored while the previous selection is being persisted");
             return false;
@@ -745,7 +961,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
         if (_preparation is { } preparation) preparation.Cancelled = true;
         _openingEditorCts?.Cancel();
-        if (_activeOverlay is not null)
+        if (_nativeOverlay is not null)
+        {
+            _nativeOverlay.Close();
+        }
+        else if (_activeOverlay is not null)
         {
             _activeOverlay.Close();
         }
@@ -783,6 +1003,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool ActivateCurrent()
     {
         if (_editorScreenCapture is { } nested) return nested.ActivateCurrent();
+        if (_nativeOverlay is { } native) { native.Activate(); return true; }
         Window? active = _activeEditor ?? (Window?)_activeOverlay;
         if (active is null)
         {
@@ -800,8 +1021,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private async void OnOverlaySelectionCompleted(object? sender, CaptureSelectionCompletedEventArgs e)
     {
-        if (sender is CaptureOverlayWindow selector && _practiceSelectors.TryGetValue(selector, out var practice))
-        { e.PracticeTarget = practice; _practiceSelections.Add(selector); }
+        if (sender is not null && _practiceSelectors.TryGetValue(sender, out var practice))
+        { e.PracticeTarget = practice; _practiceSelections.Add(sender); }
         if (e.TextCapture && TextCaptureRequested is { } textCapture)
         {
             CancelPractice(e.PracticeTarget);
@@ -966,10 +1187,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         EditingCompleted?.Invoke(this, e);
     }
 
-    private static void CancelPractice(PracticeCaptureTarget? target)
+    private void CancelPractice(PracticeCaptureTarget? target)
     {
-        if (target is { } capture)
+        if (target is { } capture && !_practiceCancellationIssued)
+        {
+            _practiceCancellationIssued = true;
             PracticeSignals.Publish(new(PracticeEventKind.CaptureCancelled, capture.SessionId, capture.RequestId));
+        }
     }
 
     private void OnEditorCancelled(object? sender, EventArgs e) =>
@@ -982,7 +1206,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (sender is CaptureOverlayWindow overlay)
         {
             if (_practiceSelectors.Remove(overlay, out var practice) && !_practiceSelections.Remove(overlay))
-                PracticeSignals.Publish(new(PracticeEventKind.CaptureCancelled, practice.SessionId, practice.RequestId));
+                CancelPractice(practice);
             NoteForegroundDismissal(CaptureWindowExclusion.WasApplied(overlay));
             overlay.SelectionCompleted -= OnOverlaySelectionCompleted;
             overlay.ActionRequested -= OnOverlayActionRequested;
@@ -1020,7 +1244,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private void EndSessionIfIdle()
     {
-        if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor && _editorScreenCapture is null)
+        if (!_disposed && !_handlingNativeFailure && _preparation is null && _activeOverlay is null && _nativeOverlay is null && _activeEditor is null && !_isOpeningEditor && _editorScreenCapture is null)
         {
             OverlayClosed?.Invoke(this, EventArgs.Empty);
             // A command chosen on the selector starts on a later turn, after the session has ended:

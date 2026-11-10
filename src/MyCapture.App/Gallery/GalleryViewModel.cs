@@ -31,9 +31,24 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private readonly int _decodePixelWidth;
     private readonly Dictionary<Guid, GalleryItemViewModel> _tileCache = [];
     private readonly LinkedList<Guid> _thumbnailRecency = new();
+    /// <summary>
+    /// Captures whose deletion is under way. The view drops them at once, while their files are
+    /// still moving to the Recycle Bin, so a large delete never leaves blank cards on screen.
+    /// </summary>
+    private readonly HashSet<Guid> _leaving = [];
     private bool _thumbnailLoadingEnabled = true;
     private GalleryThumbnailLoader? _thumbnailLoader;
     private Dispatcher? _thumbnailDispatcher;
+    private Func<CaptureRecord, Func<string>>? _thumbnailPathRequestFactory;
+
+    internal void ConfigureAsyncThumbnailPathRequests(Func<CaptureRecord, Func<string>> factory)
+    {
+        _thumbnailDispatcher?.VerifyAccess();
+        _thumbnailPathRequestFactory = factory;
+        if (_thumbnailLoader is { } loader && _thumbnailDispatcher is { } dispatcher)
+            foreach (GalleryItemViewModel tile in _tileCache.Values)
+                tile.ConfigureAsyncLoading(loader, dispatcher, factory);
+    }
 
     internal void EnableAsyncThumbnailLoading(Dispatcher dispatcher, GalleryThumbnailLoader? loader = null)
     {
@@ -41,7 +56,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         _thumbnailDispatcher = dispatcher;
         _thumbnailLoader = loader ?? new GalleryThumbnailLoader();
         foreach (GalleryItemViewModel tile in _tileCache.Values)
-            tile.ConfigureAsyncLoading(_thumbnailLoader, dispatcher);
+            tile.ConfigureAsyncLoading(_thumbnailLoader, dispatcher, _thumbnailPathRequestFactory);
     }
     internal const long ThumbnailCacheBudgetBytes = 16L * 1024 * 1024;
     internal long CachedThumbnailBytes => _tileCache.Values.Sum(tile => tile.CachedThumbnailBytes);
@@ -166,6 +181,29 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         int decodePixelWidth,
         Func<DateTimeOffset>? clock = null,
         Func<int>? imageRetentionHours = null)
+        : this(controller, thumbnailPathResolver, decodePixelWidth, clock, imageRetentionHours, refreshImmediately: true)
+    {
+    }
+
+    // Retained for explicit deferred-projection regression coverage. The App uses the eager constructor.
+    // Keep the public constructor eager for callers that inspect or preselect tiles.
+    internal static GalleryViewModel CreateForWindow(
+        GalleryController controller,
+        Func<CaptureRecord, string> thumbnailPathResolver,
+        int decodePixelWidth,
+        Func<DateTimeOffset>? clock = null,
+        Func<int>? imageRetentionHours = null) =>
+        new(controller, thumbnailPathResolver, decodePixelWidth, clock, imageRetentionHours, refreshImmediately: false);
+
+    internal bool NeedsInitialRefresh { get; private set; } = true;
+
+    private GalleryViewModel(
+        GalleryController controller,
+        Func<CaptureRecord, string> thumbnailPathResolver,
+        int decodePixelWidth,
+        Func<DateTimeOffset>? clock,
+        Func<int>? imageRetentionHours,
+        bool refreshImmediately)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
@@ -175,7 +213,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
         Groups = new ReadOnlyObservableCollection<GalleryGroupViewModel>(_groups);
         Rows = new ReadOnlyObservableCollection<GalleryRow>(_rows);
-        Refresh();
+        if (refreshImmediately) Refresh();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -218,7 +256,25 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public bool IsEmpty => _groups.Count == 0;
 
     /// <summary>True when the queue itself is empty (as opposed to a search with no hits).</summary>
-    public bool QueueIsEmpty => _controller.Count == 0;
+    /// <remarks>Captures still leaving for the Recycle Bin already count as gone.</remarks>
+    public bool QueueIsEmpty => PresentCount == 0;
+
+    /// <summary>
+    /// The library's captures as the view counts them. Captures still leaving for the Recycle Bin
+    /// already count as gone, so every count drops together with their cards instead of when
+    /// their files finish moving.
+    /// </summary>
+    private IEnumerable<CaptureRecord> PresentRecords => _leaving.Count == 0
+        ? _controller.Records
+        : _controller.Records.Where(record => !_leaving.Contains(record.Id));
+
+    private int PresentCount => _leaving.Count == 0 ? _controller.Count : PresentRecords.Count();
+
+    /// <summary>Hides these captures from the next refresh on, while their deletion runs.</summary>
+    internal void SetLeaving(IEnumerable<Guid> ids) => _leaving.UnionWith(ids);
+
+    /// <summary>Ends <see cref="SetLeaving"/>: a capture the deletion kept shows again at the next refresh.</summary>
+    internal void ClearLeaving(IEnumerable<Guid> ids) => _leaving.ExceptWith(ids);
 
     public int VisibleCount => _groups.Sum(group => group.Items.Count);
 
@@ -229,7 +285,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     /// </summary>
     internal int ReachableCount => VisibleCount + _groups.Sum(group => group.Folders.Sum(card => card.CaptureCount));
 
-    public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, _controller.Count);
+    public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, PresentCount);
     public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery || _folderIsEmpty
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.NoCaptures" : "Library.Empty.NoResults");
 
@@ -266,8 +322,10 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     {
         get
         {
-            string count = UiText.Format("Text_B6D9CAB382C8", _controller.Count);
-            string storage = FormatBytes(_controller.TotalBytes);
+            string count = UiText.Format("Text_B6D9CAB382C8", PresentCount);
+            long leavingBytes = _leaving.Count == 0 ? 0
+                : _controller.Records.Where(record => _leaving.Contains(record.Id)).Sum(record => record.TotalBytes);
+            string storage = FormatBytes(Math.Max(0, _controller.TotalBytes - leavingBytes));
             string pins = _controller.IsOverCapacityDueToPins
                 ? UiText.Get("Text_F1A864DCBEC4")
                 : string.Empty;
@@ -286,7 +344,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         IsRefreshingFolderTree = true;
         try { RefreshFolderTree(); }
         finally { IsRefreshingFolderTree = false; }
-        CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false).ToArray();
+        CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false)
+            .Where(record => !_leaving.Contains(record.Id)).ToArray();
         _folderIsEmpty = HasFolderScope && candidates.Length == 0;
         _searchCandidateCount = candidates.Count(record => MatchesMediaFilter(record) && MatchesTagFilter(record));
         // Browsing shows a location like File Explorer: its folder cards and only the captures
@@ -302,6 +361,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         FolderCardIndex? folderIndex = null;
         var badges = new Dictionary<Guid, (string Name, string Path)?>();
         bool hasFolderReason = false;
+        // An opened folder's or date's group is headed by the location, which the location header already names.
+        string? locationHeading = LocationHeading();
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -309,7 +370,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             var tiles = new List<GalleryItemViewModel>(group.Records.Count);
             foreach (CaptureRecord record in group.Records)
             {
-                if (!MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
+                if (_leaving.Contains(record.Id) || !MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
                 GalleryItemViewModel tile = GetOrCreateTile(record);
                 tile.SetSearchMatch(HasSearchQuery, searchMatchFields.GetValueOrDefault(record.Id));
                 // Only a capture listed outside its own folder carries the badge; while browsing
@@ -323,8 +384,10 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
             GalleryFolderCardViewModel[] cards = group.Folders.Count == 0 ? []
                 : group.Folders.Select(folder => GetOrUpdateFolderCard(folder,
-                    folderIndex ??= new FolderCardIndex(_controller.Queue), seenFolders)).ToArray();
-            if (tiles.Count > 0 || cards.Length > 0) _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards));
+                    folderIndex ??= new FolderCardIndex(_controller.Queue, _leaving), seenFolders)).ToArray();
+            if (tiles.Count > 0 || cards.Length > 0)
+                _groups.Add(new GalleryGroupViewModel(group.Group.Heading, tiles, cards)
+                    { ShowsHeading = !GalleryGroupViewModel.RepeatsLocation(group.Group.Heading, locationHeading) });
         }
 
         foreach (Guid stale in _folderCards.Keys.Where(id => !seenFolders.Contains(id)).ToList())
@@ -373,6 +436,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(SummaryText));
         RefreshNavigation();
         RefreshTags();
+        NeedsInitialRefresh = false;
     }
 
     internal void SetMetadataMinimumTrackWidths(double full, double compact, double fullFolderReason = 0, double compactFolderReason = 0)
@@ -511,7 +575,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             FolderFileName = _controller.Queue.GetExportFileName,
         };
         if (_thumbnailLoader is not null && _thumbnailDispatcher is not null)
-            tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher);
+            tile.ConfigureAsyncLoading(_thumbnailLoader, _thumbnailDispatcher, _thumbnailPathRequestFactory);
         tile.SetThumbnailLoadingEnabled(_thumbnailLoadingEnabled);
         tile.ThumbnailAccessed = OnThumbnailAccessed;
         _tileCache[record.Id] = tile;
@@ -556,6 +620,20 @@ public sealed class GalleryGroupViewModel
     }
 
     public string Heading { get; }
+
+    /// <summary>
+    /// False when <see cref="Heading"/> only repeats the location header above the list (an opened folder or
+    /// date), which already names it; the rows then start with the group's folder cards and captures.
+    /// </summary>
+    public bool ShowsHeading { get; init; } = true;
+
+    /// <summary>
+    /// True when <paramref name="heading"/> is the same text as <paramref name="location"/>, what the location
+    /// header names (null while none is shown). A group with any other heading, such as one day's group under a
+    /// wider location, keeps its heading row.
+    /// </summary>
+    internal static bool RepeatsLocation(string heading, string? location) =>
+        location is not null && string.Equals(heading, location, StringComparison.Ordinal);
 
     public IReadOnlyList<GalleryItemViewModel> Items { get; }
 
