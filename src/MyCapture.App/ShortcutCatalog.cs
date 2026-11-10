@@ -62,6 +62,8 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.QuickAccess, "Activate", Key.Q, "Alt+Q", ModifierKeys.Alt);
         Add(ShortcutScope.QuickAccess, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.QuickAccess, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
+        Add(ShortcutScope.QuickAccess, "Menu", Key.Apps, "Menu");
+        Add(ShortcutScope.QuickAccess, "Menu", Key.F10, "Shift+F10", ModifierKeys.Shift);
         Add(ShortcutScope.Ocr, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.Ocr, "Export", Key.S, "Ctrl+S", ModifierKeys.Control);
         Add(ShortcutScope.Ocr, "Close", Key.Escape, "Esc");
@@ -173,7 +175,7 @@ internal static class ShortcutCatalog
                 Row("Shortcuts.CropMove10", "LeftFast", "RightFast", "UpFast", "DownFast")],
             ShortcutScope.QuickAccess => [Row("QuickAccess.Copy", "Copy"), Row("QuickAccess.Edit", "Edit"),
                 Row("QuickAccess.Pin", "Pin"), Row("QuickAccess.Save", "Save"), Row("QuickAccess.CopyText", "CopyText"),
-                Row("Dialog.Close", "Close"), Row("QuickAccess.Title", "Activate")],
+                Row("Dialog.Close", "Close"), Row("QuickAccess.Title", "Activate"), Row("Shortcuts.ContextMenu", "Menu")],
             ShortcutScope.Selector => [Row("ColorPick_HelpLabel", "Color"), Row("TextCapture_HelpToggle", "Text"),
                 Row("CaptureRatio_HelpLabel", "Ratio"), Row("Shortcuts.CaptureConfirm", "Confirm"),
                 Row("Shortcuts.CaptureCancel", "Cancel"), Row("Shortcuts.CaptureAll", "SelectAll"),
