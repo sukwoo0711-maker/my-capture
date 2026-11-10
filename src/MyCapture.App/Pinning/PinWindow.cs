@@ -18,6 +18,7 @@ using MyCapture.Core.Pin;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
+using MyCapture.Ocr;
 using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Pinning;
@@ -132,7 +133,8 @@ internal sealed partial class PinWindow : Window
         double initialLeft,
         double initialTop,
         Func<PinSettings>? settings = null,
-        IPinDragInput? dragInput = null)
+        IPinDragInput? dragInput = null,
+        Func<BitmapSource, CancellationToken, Task<OcrResult>>? recognizeSelection = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
@@ -143,6 +145,7 @@ internal sealed partial class PinWindow : Window
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _settings = settings ?? (static () => new PinSettings());
         _dragInput = dragInput ?? NativePinDragInput.Instance;
+        RecognizeSelection = recognizeSelection;
 
         Title = UiText.Get("Text_03151E566E1D");
         WindowStyle = WindowStyle.None;
@@ -1063,6 +1066,8 @@ internal sealed partial class PinWindow : Window
     private void StartClosing()
     {
         if (_closeStarted) return;
+        if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
+        PinTextCopyService.Forget(TranslationSourceContent.Image);
         _closeStarted = true;
         // Snapshot while the native window still exists and nothing has moved it.
         ClosedPlacement = CaptureClosedPlacement();
@@ -1468,7 +1473,7 @@ internal sealed partial class PinWindow : Window
                 e.Handled = true;
                 break;
 
-            case Key.Escape when IsTextSelectionMode:
+            case Key.Escape when IsTextSelectionMode || IsRecognizingSelection:
                 LeaveTextSelection();
                 e.Handled = true;
                 break;
@@ -1505,7 +1510,12 @@ internal sealed partial class PinWindow : Window
                 break;
 
             case Key.Left or Key.Right or Key.Up or Key.Down when IsTextSelectionMode:
-                if (_textSelection!.TableGrid is not null)
+                if (_textSelection!.ImageSelection is { } imageSelection)
+                {
+                    imageSelection.Move(e.Key, shift);
+                    e.Handled = true;
+                }
+                else if (_textSelection.TableGrid is not null)
                 {
                     _textSelection.MoveCell(e.Key, shift);
                     e.Handled = true;
@@ -1553,21 +1563,31 @@ internal sealed partial class PinWindow : Window
 
     private void ToggleTextSelection()
     {
-        if (IsTextSelectionMode)
+        if (_isClosed) return;
+        if (IsTextSelectionMode || IsRecognizingSelection)
         {
             LeaveTextSelection();
             return;
         }
         if (DisplayContent.OriginalText is null)
         {
+            if (RecognizeSelection is not null)
+            {
+                SelectionWork = EnterImageSelectionAsync();
+                return;
+            }
             ShowFeedback(UiText.Get("Pin_SelectTextImageHint"), FeedbackKind.Result);
             return;
         }
 
+        EnterTextSelection(new PinTextSelectionView(DisplayContent));
+    }
+
+    private void EnterTextSelection(PinTextSelectionView selection)
+    {
         _ctrlClickTimer.Stop();
         EndDrag();
         HideHoverBar();
-        var selection = new PinTextSelectionView(DisplayContent);
         var clip = new RectangleGeometry(ImageClipBounds(new Size(Width, Height)),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
@@ -1586,6 +1606,7 @@ internal sealed partial class PinWindow : Window
 
     private void LeaveTextSelection(bool restoreFocus = true)
     {
+        CancelSelectionRecognition();
         CancelPendingProgress();
         if (_textSelection is null) return;
         _chrome.Children.Remove(_textSelection);
@@ -1765,6 +1786,12 @@ internal sealed partial class PinWindow : Window
         {
             ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
             OriginalTextCopyRequested?.Invoke(this, selection);
+            return;
+        }
+        if (_textSelection?.ImageSelection is { } imageSelection)
+        {
+            ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
+            OriginalTextCopyRequested?.Invoke(this, imageSelection.Selection.AllText);
             return;
         }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
@@ -2190,8 +2217,11 @@ internal sealed partial class PinWindow : Window
 
     // ----- Context menu -----
 
+    internal int ContextMenuBuildCountForTest { get; private set; }
+
     private void BuildContextMenu()
     {
+        ContextMenuBuildCountForTest++;
         var menu = new ContextMenu();
         _selectTextItem = null;
 
@@ -2228,14 +2258,8 @@ internal sealed partial class PinWindow : Window
         {
             menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
         }
-        if (DisplayContent.OriginalText is not null)
-        {
-            _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
-                (_, _) => ToggleTextSelection(), inputGestureText: "F2");
-            _selectTextItem.IsCheckable = true;
-            _selectTextItem.IsChecked = IsTextSelectionMode;
-            menu.Items.Add(_selectTextItem);
-        }
+        int selectTextIndex = menu.Items.Count;
+        RefreshTextSelectionMenuItem(menu, selectTextIndex);
         // Every key sits in the right-hand column; the names carry no key text.
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100%", (_, _) => ResetZoomCentered(), inputGestureText: "0"));
@@ -2280,12 +2304,33 @@ internal sealed partial class PinWindow : Window
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
         menu.Opened += (_, _) =>
         {
+            RefreshTextSelectionMenuItem(menu, selectTextIndex);
             RefreshRestoreClosedMenuItem();
             RefreshShowOnlyMenuItem();
         };
 
         ContextMenu = menu;
         if (_textSelection is not null) _textSelection.ContextMenu = menu;
+    }
+
+    private void RefreshTextSelectionMenuItem(ContextMenu menu, int index)
+    {
+        if (DisplayContent.OriginalText is not null || RecognizeSelection is not null)
+        {
+            if (_selectTextItem is null)
+            {
+                _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
+                    (_, _) => ToggleTextSelection(), inputGestureText: "F2");
+                _selectTextItem.IsCheckable = true;
+                menu.Items.Insert(index, _selectTextItem);
+            }
+            _selectTextItem.IsChecked = IsTextSelectionMode;
+        }
+        else if (_selectTextItem is not null)
+        {
+            menu.Items.Remove(_selectTextItem);
+            _selectTextItem = null;
+        }
     }
 
     /// <summary>

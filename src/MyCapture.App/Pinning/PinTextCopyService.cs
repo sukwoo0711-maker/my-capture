@@ -9,6 +9,8 @@ internal static class PinTextCopyService
 {
     private static readonly ConditionalWeakTable<BitmapSource, RecognitionMemory> Memories = new();
 
+    internal static void Forget(BitmapSource image) => Memories.Remove(image);
+
     internal static Task<bool> CopyOriginalAsync(string originalText, Func<string, Task<bool>> copyText) =>
         copyText(originalText);
 
@@ -33,10 +35,18 @@ internal static class PinTextCopyService
         Func<string, Task<bool>> copyText,
         OcrRequest request)
     {
-        RecognitionMemory memory = Memories.GetValue(image, static _ => new RecognitionMemory());
-        string? text = await memory.GetTextAsync(image, ocr, request);
-        return text is not null && await copyText(text);
+        OcrResult result = await RecognizeAsync(image, ocr, request);
+        return result.HasText && await copyText(result.Text);
     }
+
+    internal static Task<OcrResult> RecognizeAsync(BitmapSource image, IOcrService ocr,
+        OcrSettings settings, CancellationToken cancellationToken = default) =>
+        RecognizeAsync(image, ocr, OcrRequestFactory.FromBitmap(image, settings), cancellationToken);
+
+    internal static Task<OcrResult> RecognizeAsync(BitmapSource image, IOcrService ocr,
+        OcrRequest request, CancellationToken cancellationToken = default) =>
+        Memories.GetValue(image, static _ => new RecognitionMemory())
+            .GetResultAsync(image, ocr, request, cancellationToken);
 
     private sealed class RecognitionMemory
     {
@@ -44,35 +54,65 @@ internal static class PinTextCopyService
         private readonly List<Recognition> _pending = [];
         private Recognition? _current;
 
-        internal Task<string?> GetTextAsync(BitmapSource image, IOcrService ocr, OcrRequest request)
+        internal Task<OcrResult> GetResultAsync(BitmapSource image, IOcrService ocr, OcrRequest request,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Recognition recognition;
+            bool start;
             lock (_gate)
             {
                 if (_current is not null && _current.Key.Matches(request))
-                    return _current.Completion.Task;
-
-                // A settings change can leave another recognition in flight. Reuse it if
-                // the user switches back before it finishes, without retaining old results.
-                recognition = _pending.Find(item => item.Key.Matches(request))
-                    ?? new Recognition(new RecognitionKey(request));
+                    recognition = _current;
+                else
+                    recognition = _pending.Find(item => item.Key.Matches(request))
+                        ?? new Recognition(new RecognitionKey(request));
                 _current = recognition;
-                if (_pending.Contains(recognition)) return recognition.Completion.Task;
-                _pending.Add(recognition);
+                start = !recognition.Started;
+                if (start)
+                {
+                    recognition.Started = true;
+                    _pending.Add(recognition);
+                }
+                recognition.Readers++;
             }
 
-            // Publish the task before starting OCR, including synchronously completing OCR.
-            _ = RecognizeAsync(recognition, ocr, recognition.Key.CreateRequest(image));
-            return recognition.Completion.Task;
+            // The optional translation preview callback is request-local, never retained in a
+            // completed cache entry. Recovery itself is part of the key, not the callback.
+            // Register cancellation before calling an engine which may prepare synchronously.
+            Task<OcrResult> waiting = AwaitResultAsync(recognition, cancellationToken);
+            if (start) _ = RecognizeAsync(recognition, ocr,
+                recognition.Key.CreateRequest(image, request.BeforeLatinRecovery));
+            return waiting;
+        }
+
+        private async Task<OcrResult> AwaitResultAsync(Recognition recognition, CancellationToken token)
+        {
+            try { return await recognition.Completion.Task.WaitAsync(token).ConfigureAwait(false); }
+            finally
+            {
+                lock (_gate)
+                {
+                    if (--recognition.Readers == 0 && !recognition.Finished)
+                    {
+                        _pending.Remove(recognition);
+                        if (ReferenceEquals(_current, recognition)) _current = null;
+                        // Cancel only when the last consumer leaves. Copy/translation may still
+                        // need a recognition whose selection view was dismissed.
+                        recognition.Cancellation.Cancel();
+                    }
+                }
+            }
         }
 
         private async Task RecognizeAsync(Recognition recognition, IOcrService ocr, OcrRequest request)
         {
             try
             {
-                OcrResult result = await ocr.RecognizeAsync(request).ConfigureAwait(false);
+                recognition.Cancellation.Token.ThrowIfCancellationRequested();
+                OcrResult result = await ocr.RecognizeAsync(request, recognition.Cancellation.Token).ConfigureAwait(false);
                 Finish(recognition, result.HasText);
-                recognition.Completion.SetResult(result.HasText ? result.Text : null);
+                recognition.Completion.SetResult(result);
             }
             catch (OperationCanceledException ex)
             {
@@ -90,8 +130,10 @@ internal static class PinTextCopyService
         {
             lock (_gate)
             {
+                recognition.Finished = true;
                 _pending.Remove(recognition);
                 if (!remember && ReferenceEquals(_current, recognition)) _current = null;
+                recognition.Cancellation.Dispose();
             }
         }
     }
@@ -99,12 +141,15 @@ internal static class PinTextCopyService
     private sealed class Recognition(RecognitionKey key)
     {
         internal RecognitionKey Key { get; } = key;
-        internal TaskCompletionSource<string?> Completion { get; } =
+        internal bool Started { get; set; }
+        internal bool Finished { get; set; }
+        internal int Readers { get; set; }
+        internal CancellationTokenSource Cancellation { get; } = new();
+        internal TaskCompletionSource<OcrResult> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    // Snapshot the effective request, not the mutable settings object. Keep only text
-    // and recognition options after completion; the weak-table value need not hold pixels.
+    // Snapshot effective options. Completed entries retain text/boxes, never pixels or engines.
     private sealed class RecognitionKey(OcrRequest request)
     {
         private readonly string[] _languages = request.PreferredLanguages.ToArray();
@@ -114,6 +159,7 @@ internal static class PinTextCopyService
         private readonly bool _useNeuralModel = request.UseNeuralModel;
         private readonly bool _localCorrection = request.LocalCorrection;
         private readonly bool _useSuperResolution = request.UseSuperResolution;
+        private readonly bool _recoverLatinIntrusions = request.RecoverLatinIntrusions;
 
         internal bool Matches(OcrRequest other) =>
             _upscale.Equals(other.UpscaleFactor)
@@ -122,10 +168,14 @@ internal static class PinTextCopyService
             && _useNeuralModel == other.UseNeuralModel
             && _localCorrection == other.LocalCorrection
             && _useSuperResolution == other.UseSuperResolution
+            && _recoverLatinIntrusions == other.RecoverLatinIntrusions
             && _languages.SequenceEqual(other.PreferredLanguages, StringComparer.Ordinal);
 
-        internal OcrRequest CreateRequest(BitmapSource image) =>
-            OcrRequest.FromBitmap(image, _upscale, _languages, _searchRotated,
+        internal OcrRequest CreateRequest(BitmapSource image, Action<OcrResult>? beforeRecovery)
+        {
+            OcrRequest snapshot = OcrRequest.FromBitmap(image, _upscale, _languages, _searchRotated,
                 _enhanceContrast, _useNeuralModel, _localCorrection, _useSuperResolution);
+            return _recoverLatinIntrusions ? snapshot.WithLatinRecovery(beforeRecovery) : snapshot;
+        }
     }
 }
