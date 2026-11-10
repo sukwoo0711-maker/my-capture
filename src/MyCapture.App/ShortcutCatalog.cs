@@ -103,6 +103,8 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Selector, "Color", Key.C, "Shift+C", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Text", Key.T, "T");
         Add(ShortcutScope.Selector, "Text", Key.T, "Shift+T", ModifierKeys.Shift);
+        Add(ShortcutScope.Selector, "Freeform", Key.F, "F");
+        Add(ShortcutScope.Selector, "Freeform", Key.F, "Shift+F", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Ratio", Key.R, "R");
         Add(ShortcutScope.Selector, "Ratio", Key.R, "Shift+R", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Confirm", Key.Enter, "Enter");
@@ -175,7 +177,7 @@ internal static class ShortcutCatalog
                 Row("QuickAccess.Pin", "Pin"), Row("QuickAccess.Save", "Save"), Row("QuickAccess.CopyText", "CopyText"),
                 Row("Dialog.Close", "Close"), Row("QuickAccess.Title", "Activate")],
             ShortcutScope.Selector => [Row("ColorPick_HelpLabel", "Color"), Row("TextCapture_HelpToggle", "Text"),
-                Row("CaptureRatio_HelpLabel", "Ratio"), Row("Shortcuts.CaptureConfirm", "Confirm"),
+                Row("CaptureFreeform_KeyHelp", "Freeform"), Row("CaptureRatio_HelpLabel", "Ratio"), Row("Shortcuts.CaptureConfirm", "Confirm"),
                 Row("Shortcuts.CaptureCancel", "Cancel"), Row("Shortcuts.CaptureAll", "SelectAll"),
                 Row("Shortcuts.SelectionMove1", "Move"), Row("Shortcuts.SelectionMove10", "MoveFast"),
                 Row("Shortcuts.SelectionResize1", "Resize"), Row("Shortcuts.SelectionResize10", "ResizeFast")],

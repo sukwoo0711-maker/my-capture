@@ -697,6 +697,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             };
             overlay.ReadColorFormat = ReadColorFormat;
             overlay.TextCaptureAvailable = TextCaptureRequested is not null;
+            overlay.FreeformUnavailableReason = presentation.TextCapture ? UiText.Get("CaptureFreeform_Text") : null;
             overlay.TextCaptureMode = presentation.TextCapture;
             // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
             overlay.ShowModeBar = true;
@@ -754,6 +755,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.ColorCopied = feedback => { if (!_disposed) ColorCopied?.Invoke(feedback); };
         native.ReadColorFormat = ReadColorFormat;
         native.TextCaptureAvailable = TextCaptureRequested is not null;
+        native.FreeformUnavailableReason = presentation.TextCapture ? UiText.Get("CaptureFreeform_Text") : null;
         native.TextCaptureMode = presentation.TextCapture;
         native.DetectWindows = AutoDetectWindows();
         native.OffersOtherActions = SelectorActionRequested is not null;

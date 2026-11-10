@@ -62,7 +62,8 @@ internal sealed class ResidentProbeOptions
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
-         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements"];
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements",
+         "selector-freeform", "selector-freeform-once"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -178,6 +179,8 @@ internal sealed class ResidentProbeOptions
             throw new ArgumentException("Choose selector-wpf or a native selector variant, not both.");
         if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
             throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
+        if (variants.Contains("selector-freeform") && variants.Contains("selector-freeform-once"))
+            throw new ArgumentException("Choose every-capture or first-capture freeform measurement, not both.");
         return variants;
     }
 }

@@ -5616,4 +5616,38 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>클릭: 요소 캡처 · 휠: 범위 조절</value></data>
   <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>클릭: 요소 텍스트 복사 · 휠: 범위 조절</value></data>
   <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · 휠: 요소 선택</value></data>
+  <data name="CaptureFreeform_Name" xml:space="preserve">
+    <value>자유형</value>
+  </data>
+  <data name="CaptureFreeform_Help" xml:space="preserve">
+    <value>포인터로 영역을 그려 캡처합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Drawing" xml:space="preserve">
+    <value>포인터로 자유형 그리기 · 놓으면 캡처</value>
+  </data>
+  <data name="CaptureFreeform_KeyHelp" xml:space="preserve">
+    <value>자유형 전환 · 포인터로 그리기</value>
+  </data>
+  <data name="CaptureFreeform_Unavailable" xml:space="preserve">
+    <value>이 선택 화면에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Text" xml:space="preserve">
+    <value>텍스트 복사에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Color" xml:space="preserve">
+    <value>색상 복사에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Recording" xml:space="preserve">
+    <value>녹화 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Scrolling" xml:space="preserve">
+    <value>스크롤 캡처 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Delay" xml:space="preserve">
+    <value>예약 캡처 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Editor" xml:space="preserve">
+    <value>편집 중 추가 캡처는 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Discard" xml:space="preserve"><value>그린 윤곽 취소</value></data>
 </root>
