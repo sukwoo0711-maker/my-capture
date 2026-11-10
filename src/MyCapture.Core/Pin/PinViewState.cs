@@ -59,15 +59,39 @@ public sealed class PinViewState
     /// <summary>Whether the pin is currently hidden by a global hide-all toggle.</summary>
     public bool IsHidden { get; set; }
 
+    public bool IsCollapsed { get; private set; }
+    private double _expandedOpacity;
+    public double ExpandedOpacity => IsCollapsed ? _expandedOpacity : Opacity;
+
+    /// <summary>Collapse changes only the viewport. Expansion restores its original presentation.</summary>
+    public void SetCollapsed(bool collapsed)
+    {
+        if (IsCollapsed == collapsed) return;
+        if (collapsed) _expandedOpacity = Opacity;
+        else Opacity = _expandedOpacity;
+        IsCollapsed = collapsed;
+    }
+
+    public (double Width, double Height) ThumbnailSize
+    {
+        get
+        {
+            double scale = Math.Max(96 / Math.Max(ImageWidthDip, ImageHeightDip),
+                32 / Math.Min(ImageWidthDip, ImageHeightDip));
+            return (Math.Min(160, ImageWidthDip * scale), Math.Min(160, ImageHeightDip * scale));
+        }
+    }
+
     /// <summary>Current window width in DIP at the active zoom.</summary>
-    public double WidthDip => Math.Max(1.0, ImageWidthDip * Zoom);
+    public double WidthDip => IsCollapsed ? ThumbnailSize.Width : Math.Max(1.0, ImageWidthDip * Zoom);
 
     /// <summary>Current window height in DIP at the active zoom.</summary>
-    public double HeightDip => Math.Max(1.0, ImageHeightDip * Zoom);
+    public double HeightDip => IsCollapsed ? ThumbnailSize.Height : Math.Max(1.0, ImageHeightDip * Zoom);
 
     /// <summary>Applies a wheel/keyboard zoom step and returns the resulting zoom.</summary>
     public double ApplyZoomStep(int notches)
     {
+        if (IsCollapsed) return Zoom;
         Zoom = PinGeometry.StepZoom(Zoom, notches, _zoomStep);
         return Zoom;
     }
@@ -75,6 +99,7 @@ public sealed class PinViewState
     /// <summary>Sets an absolute zoom, clamped.</summary>
     public double SetZoom(double zoom)
     {
+        if (IsCollapsed) return Zoom;
         Zoom = PinGeometry.ClampZoom(zoom);
         return Zoom;
     }
@@ -82,6 +107,7 @@ public sealed class PinViewState
     /// <summary>Resets to 1:1 (100%).</summary>
     public double ResetZoom()
     {
+        if (IsCollapsed) return Zoom;
         Zoom = 1.0;
         return Zoom;
     }

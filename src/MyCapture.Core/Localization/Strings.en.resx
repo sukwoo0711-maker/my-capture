@@ -5614,4 +5614,18 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="Pin_Collapse" xml:space="preserve"><value>Collapse</value></data>
+  <data name="Pin_Expand" xml:space="preserve"><value>Expand</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+Double-click</value></data>
+  <data name="Pin_CollapsedTip" xml:space="preserve"><value>Double-click to expand the pin.</value></data>
+  <data name="Tray_PinCollapsed" xml:space="preserve"><value>Collapsed</value></data>
+  <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>Snap to edges and other pins while dragging</value></data>
+  <data name="Pin_CollapseToggle" xml:space="preserve"><value>Collapse or expand pin</value></data>
+  <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>Expand collapsed pin</value></data>
+  <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>Double-click</value></data>
+  <data name="Pin_SnapBypass" xml:space="preserve"><value>Move without snapping</value></data>
+  <data name="Pin_ShiftDragGesture" xml:space="preserve"><value>Shift+Drag</value></data>
+  <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>Zoom · stop at 100%</value></data>
+  <data name="Pin_ZoomGesture" xml:space="preserve"><value>Wheel / + / -</value></data>
+  <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+double-click collapses or expands the pin. Hold Shift while dragging to bypass snapping. Wheel and + or - zoom steps stop once at 100%.</value></data>
 </root>

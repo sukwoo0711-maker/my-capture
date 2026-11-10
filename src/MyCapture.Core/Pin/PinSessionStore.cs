@@ -30,7 +30,9 @@ public sealed record PinSessionPin(
     string? SourceDocumentPath = null,
     string? SourceAppName = null,
     string? SourceAppExecutablePath = null,
-    string? SourceWindowTitle = null);
+    string? SourceWindowTitle = null,
+    bool IsCollapsed = false,
+    double? CollapsedOpacity = null);
 
 /// <param name="PngBytes">Null reuses this content's previously saved PNG.</param>
 /// <param name="ProtectionPending">The saved image could not be decrypted and must be kept for a later retry.</param>
@@ -829,6 +831,7 @@ public sealed class PinSessionStore
         && double.IsFinite(pin.ImageHeightDip) && pin.ImageHeightDip > 0
         && double.IsFinite(pin.Zoom) && pin.Zoom > 0
         && double.IsFinite(pin.Opacity) && pin.Opacity is >= 0 and <= 1
+        && (pin.CollapsedOpacity is not { } collapsedOpacity || double.IsFinite(collapsedOpacity) && collapsedOpacity is >= 0 and <= 1)
         && HasValidRenderingMetadata(pin)
         && (pin.Placement is not { } placement || (IsFinite(placement.Bounds) && IsFinite(placement.DisplayBounds)));
 

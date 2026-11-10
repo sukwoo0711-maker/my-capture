@@ -67,6 +67,7 @@ internal static class SettingsSectionCatalog
         new("BlurRadius", SettingsSection.Editing, null, "G07", null),
         new("RestoreOpenPinsOnLaunch", SettingsSection.Pins, null, "G08", null),
         new("CloseOnDoubleClick", SettingsSection.Pins, null, null, null),
+        new("SnapWhileDragging", SettingsSection.Pins, null, null, null),
         new("InitialOpacity", SettingsSection.Pins, null, null, null),
         new("ZoomStep", SettingsSection.Pins, "PinHistoryExpander", null, null),
         new("ClosedWindowRestoreLimit", SettingsSection.Pins, "PinHistoryExpander", "G08", null),

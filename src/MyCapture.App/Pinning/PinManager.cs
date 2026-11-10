@@ -171,7 +171,8 @@ internal sealed partial class PinManager
         double Zoom,
         double Opacity,
         PinClosedPlacement? Placement,
-        long OpenedOrder = 0, Guid LogicalPracticeId = default);
+        long OpenedOrder = 0, Guid LogicalPracticeId = default,
+        bool IsCollapsed = false, double? CollapsedOpacity = null);
 
     private sealed record EncodedClosedPin(
         Task<EncodedPinContent> Content,
@@ -279,9 +280,10 @@ internal sealed partial class PinManager
             pin.TranslationSourceView.Width,
             pin.TranslationSourceView.Height,
             pin.TranslationSourceView.Zoom,
-            pin.State.Opacity,
+            pin.State.ExpandedOpacity,
             pin.GetCurrentPlacement(),
-            openingAge[pin])).ToArray();
+            openingAge[pin], IsCollapsed: pin.State.IsCollapsed,
+            CollapsedOpacity: pin.State.IsCollapsed ? pin.State.Opacity : null)).ToArray();
     }
 
     /// <summary>Number of open pins.</summary>
@@ -420,7 +422,7 @@ internal sealed partial class PinManager
             settings.InitialOpacity,
             settings.ZoomStep);
 
-        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, recognizeSelection: RecognizeSelection);
+        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
         if (screenOrigin is { } origin)
             pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
@@ -531,8 +533,10 @@ internal sealed partial class PinManager
             closed.Opacity,
             _settings().ZoomStep);
 
+        state.SetCollapsed(closed.IsCollapsed);
+        if (closed.IsCollapsed && closed.CollapsedOpacity is { } opacity) state.SetOpacity(opacity);
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings, recognizeSelection: RecognizeSelection);
+        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
         if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {
@@ -625,12 +629,20 @@ internal sealed partial class PinManager
         return (left, top, null, scale);
     }
 
+    internal Func<IPinDragInput>? CreateDragInputForTest { get; set; }
+
     private void AttachAndShow(PinWindow pin, bool activate, bool landing = true)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.HideRequested += (_, _) => pin.HidePin();
         pin.ShowOnlyRequested += (_, _) => ShowOnlyPin(pin);
         pin.CanShowOnlyPin = () => _pins.Any(other => other != pin && !other.IsClosed && !other.State.IsHidden);
+        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsVisible)
+            .Select(other =>
+            {
+                var bounds = other.PhysicalBounds;
+                return new PinSnap.Target(new RectD(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top));
+            }).ToArray();
         pin.HiddenStateChanged += NotifyOpenPinsChanged;
         pin.CopyRequested += OnPinCopyRequested;
         pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
