@@ -240,25 +240,31 @@ jobs:
           Assert-PublishArchitecture -PublishRoot (Join-Path $PWD 'artifacts/ci-arm64/publish') -Architecture arm64
       # The hosted ARM64 image starts with its own windows over the desktop: a full-screen, topmost
       # "Microsoft account" prompt (WWAHost, the whole 1024x768 screen) that owns the foreground,
-      # the Search flyout (SearchHost, topmost) that takes the foreground once the prompt has gone,
-      # and a terminal the image opens for wsl.exe. They cover the windows the capture, recording
-      # and input tests put on screen. Only these three named image windows are closed, on a
-      # throwaway runner; nothing in the product or the tests changes. The next step reports the
-      # desktop afterwards.
+      # and sometimes a terminal the image opens for wsl.exe. Once the prompt has gone the Search
+      # flyout (SearchHost, topmost, 800x684) takes the foreground; stopping its host only makes it
+      # come back, so it is dismissed with Escape as a person would. These cover the windows the
+      # capture, recording and input tests put on screen. Only the two named image processes are
+      # stopped, on a throwaway runner; nothing in the product or the tests changes. The next step
+      # reports the desktop afterwards.
       - name: Clear the image's own windows from the runner desktop
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: powershell
         run: |
-          foreach ($name in 'WWAHost', 'SearchHost', 'WindowsTerminal') {
+          foreach ($name in 'WWAHost', 'WindowsTerminal') {
               foreach ($prompt in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
                   Write-Host "Closing $name $($prompt.Id): '$($prompt.MainWindowTitle)'"
                   Stop-Process -Id $prompt.Id -Force -ErrorAction SilentlyContinue
               }
           }
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 4
+          $keys = New-Object -ComObject WScript.Shell
+          foreach ($attempt in 1..2) {
+              $keys.SendKeys('{ESC}')
+              Start-Sleep -Seconds 2
+          }
           (New-Object -ComObject Shell.Application).MinimizeAll()
           Start-Sleep -Seconds 2
-          foreach ($name in 'WWAHost', 'SearchHost', 'WindowsTerminal') {
+          foreach ($name in 'WWAHost', 'WindowsTerminal') {
               Write-Host "$name processes left: $(@(Get-Process -Name $name -ErrorAction SilentlyContinue).Count)"
           }
       # Diagnostics only; nothing here changes the runner. The first run failed on what this image

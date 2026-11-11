@@ -436,13 +436,16 @@ public sealed class ReleaseVersionContractTests
         int probe = job.IndexOf("dotnet run --file build/tools/runner-desktop-probe.cs", StringComparison.Ordinal);
         Assert.True(probe >= 0, "The ARM64 runner desktop probe is missing.");
         Assert.True(probe < job.IndexOf(@".\build\run-packaged-self-tests.ps1", StringComparison.Ordinal));
-        // The image's own windows (sign-in prompt, Search flyout, the wsl.exe terminal) cover every
-        // fixture window, so they are closed before the desktop is described and before anything is
-        // put on screen. Only those three names are stopped, in one place.
+        // The image's own windows (sign-in prompt, the wsl.exe terminal, then the Search flyout) cover
+        // every fixture window, so they are closed before the desktop is described and before
+        // anything is put on screen. Only the two named processes are stopped, in one place; the
+        // Search flyout is dismissed with Escape because its host restarts and shows it again.
         int prompt = job.IndexOf("Stop-Process -Id $prompt.Id", StringComparison.Ordinal);
         Assert.True(prompt >= 0 && prompt < probe, "The image's windows must be closed before the desktop is described.");
-        Assert.Equal(3, job.Split("foreach ($name in 'WWAHost', 'SearchHost', 'WindowsTerminal')", StringSplitOptions.None).Length);
+        Assert.Equal(3, job.Split("foreach ($name in 'WWAHost', 'WindowsTerminal')", StringSplitOptions.None).Length);
         Assert.Equal(2, job.Split("Stop-Process", StringSplitOptions.None).Length);
+        int escape = job.IndexOf("SendKeys('{ESC}')", StringComparison.Ordinal);
+        Assert.True(escape > prompt && escape < probe, "The Search flyout is dismissed after the prompt has gone and before the description.");
         Assert.Contains("tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0", job[probe..], StringComparison.Ordinal);
         foreach (string evidence in new[] { "LongPathsEnabled", "BitBucket", "Get-WinUserLanguageList", "GraphicsCaptureSession", "WWAHost.exe" })
             Assert.Contains(evidence, job, StringComparison.Ordinal);
