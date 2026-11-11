@@ -1720,6 +1720,9 @@ This cannot be undone.</value>
   <data name="Pin_SelectText" xml:space="preserve">
     <value>Select text</value>
   </data>
+  <data name="Pin_SelectTextRecognizing" xml:space="preserve">
+    <value>Recognizing text…</value>
+  </data>
   <data name="Pin_SelectTextStarted" xml:space="preserve">
     <value>Select text: drag to choose, then press Ctrl+C. Press Esc to finish.</value>
   </data>
