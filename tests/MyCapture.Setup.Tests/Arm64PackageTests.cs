@@ -45,19 +45,22 @@ public sealed class Arm64PackageTests
         // Setup finds a running MyCapture by its main module path. In the arm64 package setup is
         // an emulated x64 process and the application is native, so the read must cross that
         // boundary: cmd.exe started from the system folder by a 64-bit process is native.
-        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), "/d /c set /p unused=")
-        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true };
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), "/d /c echo ready& set /p unused=")
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true };
         using (var child = Process.Start(start))
         {
             try
             {
-                string? path = null; Exception? last = null;
                 // The read is about a process that is running, as the application is when setup looks
-                // for it. One that has only just started has no settled module list yet: .NET Framework
-                // then throws Win32Exception, returns no main module, or returns the first module the
-                // loader has listed so far (ntdll.dll). All three were seen on the x64 runner, so wait
-                // until the image itself is listed. Setup treats an unreadable or other executable as
-                // "not this application" (AppProcesses.Stop).
+                // for it, so the child first reports that it has run a command.
+                Assert.Equal("ready", child.StandardOutput.ReadLine());
+                string? path = null; Exception? last = null;
+                // Even then .NET Framework's module snapshot of a young process can be incomplete: it
+                // throws Win32Exception, returns no main module, a module without its details
+                // (NullReferenceException inside FileName) or the first module the loader had listed
+                // (ntdll.dll). Each was seen on the hosted runners, so read until the image itself is
+                // listed. Setup treats an unreadable or other executable as "not this application"
+                // (AppProcesses.Stop).
                 bool IsCommandProcessor() => path != null && string.Equals(Path.GetFileName(path), "cmd.exe", StringComparison.OrdinalIgnoreCase);
                 for (int attempt = 0; attempt < 50 && !IsCommandProcessor(); attempt++)
                 {
@@ -67,8 +70,11 @@ public sealed class Arm64PackageTests
                         ProcessModule? module = child.MainModule;
                         path = module?.FileName;
                     }
-                    catch (System.ComponentModel.Win32Exception e) { last = e; }
-                    catch (InvalidOperationException e) { last = e; }
+                    catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is InvalidOperationException || e is NullReferenceException)
+                    {
+                        last = e;
+                        path = null;
+                    }
                     if (!IsCommandProcessor()) Thread.Sleep(100);
                 }
                 Assert.True(path != null, "The main module of a system process could not be read: " + last);
