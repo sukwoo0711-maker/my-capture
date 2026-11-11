@@ -89,20 +89,55 @@ dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:P
 
 정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 5.3.0 -Architecture x64` 다음 `build/package.ps1 -Version 5.3.0 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/5.3.0/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.
 
+## Windows ARM64 네이티브판
+
+`win-arm64` 프로필은 ARM64 PC에서 에뮬레이션 없이 실행하는 판을 만듭니다. AI OCR과 로컬 번역을 포함하며 ONNX Runtime, SkiaSharp, WebView2 로더는 각 패키지의 `win-arm64` 네이티브 파일을 씁니다. 지원 하한은 ARM64 PC에서 x64판을 실행할 때와 같은 Windows 11(build 22000)입니다.
+
+x64 PC에서 교차 빌드합니다. ReadyToRun 코드도 x64 PC에서 arm64용으로 컴파일합니다.
+
+```powershell
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-arm64 --self-contained true -p:Platform=arm64 -p:PublishProfile=win-arm64-self-contained -o '<새 arm64 출력 폴더>'
+```
+
+x64 PC는 arm64 실행 파일을 시작할 수 없으므로 self-test와 패키지 자체 검사는 ARM64 PC와 CI의 `arm64-native` 작업에서 실행합니다. x64 PC에서는 `build/publish-architecture.ps1`의 `Assert-PublishArchitecture`가 게시 폴더의 모든 PE 파일 헤더를 읽어, 네이티브 파일과 ReadyToRun 이미지가 대상 아키텍처용인지 확인합니다. `build/package.ps1`은 세 아키텍처 모두에서 ZIP을 만들기 전에 이 검사를 실행합니다.
+
+```powershell
+. .\build\publish-architecture.ps1
+Assert-PublishArchitecture -PublishRoot '<arm64 출력 폴더>' -Architecture arm64
+```
+
+정식 패키지는 깨끗한 커밋에서 x64 패키지를 만든 다음 `build/package.ps1 -Version <버전> -Architecture arm64`로 만들며 산출물은 `artifacts/release/<버전>/win-arm64`에 저장됩니다. x86 패키지와의 순서는 상관없습니다. 파일 이름은 `MyCapture-<버전>-win-arm64-setup.exe`, `MyCapture-<버전>-win-arm64-portable.zip`, `installer-manifest-win-arm64.json`, `release-manifest-win-arm64.json`, `SHA256SUMS-win-arm64.txt`, `README-OFFLINE-win-arm64.txt`입니다. arm64 자산을 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 `-IncludeArm64`를 전달합니다.
+
+- 설치기 `MyCaptureSetup.exe`는 arm64 패키지에서도 x64 .NET Framework 4.8 프로그램입니다. ARM64 네이티브 프로세스에는 .NET Framework 4.8.1이 필요하기 때문입니다. Windows 11 on ARM은 x64 패키지의 설치기와 같은 방식으로 이를 에뮬레이션으로 실행합니다. 설치기는 arm64 패키지를 ARM64 PC에만 설치하고, 다른 PC에서는 종료 코드 11로 끝납니다.
+- x64 PC에서 패키징하면 IExpress 추출기도 x64이며, ARM64 Windows 11이 에뮬레이션으로 실행합니다.
+- 앱 안 업데이트는 실행 중인 프로세스의 아키텍처로 자산을 고릅니다. ARM64 PC에서 x64판을 쓰는 설치는 계속 `win-x64` 설치 파일을 받습니다. arm64판은 `win-arm64` 설치 파일과 `SHA256SUMS-win-arm64.txt`만 받으며, 이 자산이 없는 릴리스에서는 업데이트를 제안하지 않습니다.
+- Microsoft Store 패키지는 x64입니다. `build/package-store.ps1`은 arm64 패키지를 만들지 않습니다.
+
+플랫폼을 지정하지 않으면 모든 빌드 PC에서 x64로 빌드합니다. ARM64 PC에서 테스트를 네이티브로 실행할 때는 `-p:Platform=arm64`를 붙입니다. 설치기와 설치기 테스트는 이 플랫폼에서도 x64로 빌드합니다.
+
+```powershell
+dotnet test tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj -c Release -p:Platform=arm64
+dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release -p:Platform=arm64 --filter "FullyQualifiedName!~GitHubUpdateServiceTests.DownloadedSessionPassesActualInstallerPathGuard"
+dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release
+```
+
+제외한 테스트는 x64 설치기 어셈블리를 Windows 기본 PowerShell에 올립니다. ARM64 Windows의 기본 PowerShell은 ARM64 프로세스라 x64 어셈블리를 올릴 수 없습니다. CI의 `arm64-native` 작업(`windows-11-arm` 러너)은 위 세 명령, arm64 publish와 아키텍처 검사, 패키지 self-test 8종을 실행합니다.
+
 ## 릴리스 크기와 Windows API 보존
 
-두 self-contained Release publish 프로필은 `MyCaptureTrimWindowsProjection=true`로 `Microsoft.Windows.SDK.NET.dll`만 링크합니다. 애플리케이션·.NET·WPF·`WinRT.Runtime.dll`의 컴파일과 ReadyToRun 설정은 유지합니다. 개발 빌드와 테스트 빌드에는 적용하지 않습니다. Store·패키지 식별·시작 작업 및 COM 경계에서 사용하는 형식은 모든 멤버를 보존합니다. 보존 목록은 `build/WindowsProjectionRoots.xml`입니다.
+세 self-contained Release publish 프로필은 `MyCaptureTrimWindowsProjection=true`로 `Microsoft.Windows.SDK.NET.dll`만 링크합니다. 애플리케이션·.NET·WPF·`WinRT.Runtime.dll`의 컴파일과 ReadyToRun 설정은 유지합니다. 개발 빌드와 테스트 빌드에는 적용하지 않습니다. Store·패키지 식별·시작 작업 및 COM 경계에서 사용하는 형식은 모든 멤버를 보존합니다. 보존 목록은 `build/WindowsProjectionRoots.xml`입니다.
 
 ILLink 버전과 패키지 해시는 `build/WindowsProjectionTrim.targets`에 고정합니다. 애플리케이션의 PackageReference나 trim analyzer를 켜지 않습니다.
 
 고정 버전은 `global.json`이 고르는 SDK의 런타임 버전과 같게 둡니다(SDK 10.0.400의 런타임은 10.0.11). 링커는 publish가 SDK의 `dotnet`으로 시작하는 도구이고, 자기 패치보다 낮은 런타임에서는 시작되지 않기 때문입니다. `build/package.ps1`은 사용자별 SDK를 PATH 맨 앞에 두므로, 고정 버전이 그 SDK의 런타임보다 새로우면 패키징이 멈춥니다. 이 경우 publish는 이유를 적은 오류를 냅니다. `global.json`의 SDK를 올릴 때 고정 버전과 해시도 함께 올립니다(계약 시험이 둘을 한 쌍으로 확인합니다).
 
-- 프로필로 직접 publish할 때는 준비 단계가 없습니다. 복원이 고정한 버전의 ILLink 패키지를 NuGet 캐시에 내려받고(참조하지 않고 받기만 하는 `PackageDownload`), publish는 NuGet이 그 패키지 옆에 적어 둔 SHA-512가 고정값과 같을 때만 링커를 실행합니다. 패키지가 fallback 폴더에 이미 있으면 복원은 그것을 그대로 두므로, publish는 NuGet 패키지 폴더를 모두 찾아봅니다. `--no-restore`로 publish하려면 같은 속성으로 먼저 복원해 둡니다. CI의 x86 publish가 이 경로입니다.
+- 프로필로 직접 publish할 때는 준비 단계가 없습니다. 복원이 고정한 버전의 ILLink 패키지를 NuGet 캐시에 내려받고(참조하지 않고 받기만 하는 `PackageDownload`), publish는 NuGet이 그 패키지 옆에 적어 둔 SHA-512가 고정값과 같을 때만 링커를 실행합니다. 패키지가 fallback 폴더에 이미 있으면 복원은 그것을 그대로 두므로, publish는 NuGet 패키지 폴더를 모두 찾아봅니다. `--no-restore`로 publish하려면 같은 속성으로 먼저 복원해 둡니다. CI의 x86·arm64 publish가 이 경로입니다.
 - `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 캐시의 패키지는 NuGet이 적어 둔 SHA-512가 고정값과 같을 때만 씁니다. 캐시에 없거나 값이 다르면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증하고 `MYCAPTURE_PROJECTION_LINKER_PATH`로 넘깁니다. 이 변수가 있으면 복원은 패키지를 받지 않습니다.
 
 ```powershell
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishProfile=win-x64-self-contained -o '<새 x64 출력 폴더>'
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 --self-contained true -p:Platform=x86 -p:PublishProfile=win-x86-self-contained -o '<새 x86 출력 폴더>'
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-arm64 --self-contained true -p:Platform=arm64 -p:PublishProfile=win-arm64-self-contained -o '<새 arm64 출력 폴더>'
 ```
 
 진단용 원본 SDK와 비교하려면 같은 명령에 **`-p:MyCaptureTrimWindowsProjection=false`**를 추가하고 별도의 새 출력 폴더를 사용합니다. 이 진단 publish는 SDK 크기 제한을 적용하지 않지만 정식 패키징은 제한을 다시 검사하므로 원본 SDK를 실수로 출하할 수 없습니다. 출력 파일을 덮어 섞지 마십시오.
@@ -117,11 +152,11 @@ build\tools\size-report.cmd "<원본 publish>" "<축소 publish>" --verify-only-
 
 ## 디버거 지원 파일과 고객 덤프 분석
 
-두 아키텍처의 Release publish에는 다음 디버거 지원 파일을 포함하지 않습니다. CLR 실행에 필요한 `coreclr.dll`, `hostfxr.dll`, `hostpolicy.dll` 등은 유지합니다.
+모든 아키텍처의 Release publish에는 다음 디버거 지원 파일을 포함하지 않습니다. CLR 실행에 필요한 `coreclr.dll`, `hostfxr.dll`, `hostpolicy.dll` 등은 유지합니다.
 
 - `mscordaccore.dll`: 디버거가 CLR 내부 자료를 읽는 DAC(Data Access Component).
 - `mscordaccore_<아키텍처>_<아키텍처>_<런타임 빌드>.dll`: 같은 DAC의 버전 식별 이름.
 - `mscordbi.dll`: 관리 코드 디버깅 지원 인터페이스.
-- `Microsoft.DiaSymReader.Native.amd64.dll` 또는 `.x86.dll`: 디버거의 네이티브 심볼 판독 지원.
+- `Microsoft.DiaSymReader.Native.amd64.dll`, `.x86.dll` 또는 `.arm64.dll`: 디버거의 네이티브 심볼 판독 지원.
 
 앱 실행·OCR·녹화에는 필요하지 않지만, 고객 PC에서 앱 폴더만으로 관리 코드 디버깅이나 덤프 분석을 수행할 수는 없습니다. 덤프 파일 생성 자체는 유지됩니다. 분석 담당자는 덤프와 정확한 배포 버전·아키텍처·`coreclr.dll` 파일 버전 및 모듈 식별 정보를 함께 보존합니다. 분석 PC에서 WinDbg/SOS 등 대상 아키텍처를 지원하는 도구와 Microsoft 심볼 서버(`https://msdl.microsoft.com/download/symbols`)를 사용하고, **덤프의 CLR 런타임 빌드와 정확히 일치하는 DAC**를 내려받습니다. 제품 버전이나 .NET 주 버전만 같은 DAC를 대신 사용하지 않습니다. 분석 도구의 심볼 캐시를 통해 DAC를 로드하고, SOS에서 CLR 버전과 DAC 일치 여부를 확인한 뒤 스택·힙을 분석합니다. 분석 PC가 오프라인이면 연결된 분석 PC에서 해당 DAC·심볼을 미리 확보해 전달합니다. 디버거와 심볼은 제품 설치 폴더에 재배포하지 않습니다.

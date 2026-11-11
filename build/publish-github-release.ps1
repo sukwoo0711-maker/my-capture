@@ -12,7 +12,8 @@ param(
     # A test build stays a stable release but leaves 'Latest', which the in-app update check
     # reads, on the previous version.
     [switch]$NotLatest,
-    [switch]$IncludeX86
+    [switch]$IncludeX86,
+    [switch]$IncludeArm64
 )
 
 Set-StrictMode -Version 2.0
@@ -23,9 +24,12 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $artifactRoot = Join-Path $repoRoot "artifacts\release\$Version"
 $tag = "v$Version"
-$required = @(Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86)
+$required = @(Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64)
 $files = @($required | ForEach-Object {
-    $assetRoot = if ($_.Contains('win-x86')) { Join-Path $artifactRoot 'win-x86' } else { $artifactRoot }
+    # package.ps1 writes x64 to the version folder and every other architecture to its own subfolder.
+    $assetRoot = if ($_.Contains('win-x86')) { Join-Path $artifactRoot 'win-x86' }
+        elseif ($_.Contains('win-arm64')) { Join-Path $artifactRoot 'win-arm64' }
+        else { $artifactRoot }
     $path = Join-Path $assetRoot $_
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
         throw "Refusing to publish $tag without required local asset: $_"
@@ -66,5 +70,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "GitHub release create failed for $tag."
 }
 
-& (Join-Path $PSScriptRoot 'verify-github-release.ps1') -Tag $tag -Repository $Repository -IncludeX86:$IncludeX86
+& (Join-Path $PSScriptRoot 'verify-github-release.ps1') -Tag $tag -Repository $Repository -IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64
 Write-Output "PUBLISHED=$tag"

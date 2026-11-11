@@ -11,10 +11,13 @@ public sealed class WindowsProjectionReleaseContractTests
     [Theory]
     [InlineData("x64", "Release", null, "true")]
     [InlineData("x86", "Release", null, "true")]
+    [InlineData("arm64", "Release", null, "true")]
     [InlineData("x64", "Release", "false", "false")]
     [InlineData("x86", "Release", "false", "false")]
+    [InlineData("arm64", "Release", "false", "false")]
     [InlineData("x64", "Debug", null, "false")]
     [InlineData("x86", "Debug", null, "false")]
+    [InlineData("arm64", "Debug", null, "false")]
     public void ReleaseProfile_OnlyLinksProjectionAndHonorsDiagnosticOverride(
         string architecture, string configuration, string? trimOverride, string expected)
     {
@@ -199,6 +202,7 @@ public sealed class WindowsProjectionReleaseContractTests
     [Theory]
     [InlineData("Release", "x64", null, null, true)]
     [InlineData("Release", "x86", null, null, true)]
+    [InlineData("Release", "arm64", null, null, true)]
     [InlineData("Release", "x86", "false", null, false)]
     [InlineData("Debug", "x86", null, null, false)]
     [InlineData("Release", null, null, null, false)]

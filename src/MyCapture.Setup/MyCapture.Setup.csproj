@@ -10,6 +10,12 @@
     <ApplicationIcon>../MyCapture.App/Assets/app.ico</ApplicationIcon>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'arm64'">
+    <!-- Setup runs on the in-box .NET Framework 4.8, and a native ARM64 process needs 4.8.1. The
+         arm64 package therefore carries the x64 setup, which Windows 11 on ARM runs under
+         emulation exactly as it does for the x64 package. -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />

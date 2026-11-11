@@ -303,6 +303,13 @@ public sealed class ReleaseVersionContractTests
                      "release-manifest-win-x86.json",
                      "SHA256SUMS-win-x86.txt",
                      "README-OFFLINE-win-x86.txt",
+                     // Required only when a release carries the native ARM64 build (-IncludeArm64).
+                     "MyCapture-$Version-win-arm64-setup.exe",
+                     "MyCapture-$Version-win-arm64-portable.zip",
+                     "installer-manifest-win-arm64.json",
+                     "release-manifest-win-arm64.json",
+                     "SHA256SUMS-win-arm64.txt",
+                     "README-OFFLINE-win-arm64.txt",
                  })
         {
             Assert.Contains(name, required, StringComparison.Ordinal);
@@ -312,6 +319,10 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("Get-RequiredReleaseAssetNames -Version $version -IncludeX86:$IncludeX86", verify, StringComparison.Ordinal);
         Assert.Contains("Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
         Assert.Contains("-Tag $tag -Repository $Repository -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
+        Assert.Contains("-IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64)", verify, StringComparison.Ordinal);
+        Assert.Contains("-IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64)", publish, StringComparison.Ordinal);
+        Assert.Contains("-Tag $tag -Repository $Repository -IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64", publish, StringComparison.Ordinal);
+        Assert.Contains("Join-Path $artifactRoot 'win-arm64'", publish, StringComparison.Ordinal);
         Assert.Contains("releases/tags/", verify, StringComparison.Ordinal);
         Assert.Contains("NO_COLOR", verify, StringComparison.Ordinal);
         Assert.Contains(".draft", verify, StringComparison.Ordinal);
@@ -346,15 +357,15 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        // Three jobs (build and tests, x86, Recycle Bin canary), each with the same three actions.
-        Assert.Equal(9, actions.Length);
+        // Four jobs (build and tests, x86, native ARM64, Recycle Bin canary), each with the same three actions.
+        Assert.Equal(12, actions.Length);
         Assert.Equal(
             Enumerable.Repeat(new[]
             {
                 "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                 "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
                 "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-            }, 3).SelectMany(job => job).ToArray(),
+            }, 4).SelectMany(job => job).ToArray(),
             actions.Select(action => action.Trim()["uses:".Length..]
                 .Split([' ', '#'], StringSplitOptions.RemoveEmptyEntries)[0]).ToArray());
         foreach (string action in actions)
@@ -379,5 +390,44 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("package-ecosystem: github-actions", dependabot, StringComparison.Ordinal);
         Assert.Contains("interval: weekly", dependabot, StringComparison.Ordinal);
         Assert.Contains("version-update:semver-patch", dependabot, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContinuousIntegration_RunsTheNativeArm64BuildOnAnArm64Runner()
+    {
+        string workflow = Read(".github/workflows/ci.yml").Replace("\r\n", "\n", StringComparison.Ordinal);
+        int start = workflow.IndexOf("\n  arm64-native:\n", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The native ARM64 job is missing.");
+        int end = workflow.IndexOf("\n  recycle-bin-canary:\n", start, StringComparison.Ordinal);
+        string job = end > start ? workflow[start..end] : workflow[start..];
+
+        // x64 runners can build arm64 but cannot start it; only this runner executes the result.
+        Assert.Contains("runs-on: windows-11-arm", job, StringComparison.Ordinal);
+        Assert.Contains("$env:PROCESSOR_ARCHITECTURE -cne 'ARM64'", job, StringComparison.Ordinal);
+        foreach (string project in new[] { "MyCapture.Core.Tests", "MyCapture.App.Tests" })
+        {
+            Assert.Contains(
+                $"dotnet test tests/{project}/{project}.csproj -c Release -p:Platform=arm64 --no-build",
+                job, StringComparison.Ordinal);
+        }
+
+        // The setup is x64 in the arm64 package, so its tests stay x64 and run under emulation.
+        Assert.Contains(
+            "dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release --no-build",
+            job, StringComparison.Ordinal);
+        Assert.Contains(
+            "-r win-arm64 --self-contained true -p:Platform=arm64 -p:PublishProfile=win-arm64-self-contained",
+            job, StringComparison.Ordinal);
+        Assert.Contains("Assert-PublishArchitecture -PublishRoot", job, StringComparison.Ordinal);
+        Assert.Contains(
+            @".\build\run-packaged-self-tests.ps1 -PublishRoot artifacts/ci-arm64/publish",
+            job, StringComparison.Ordinal);
+
+        // The whole suite runs natively. The single exclusion is named, and nothing may fail quietly.
+        Assert.Equal(2, job.Split("FullyQualifiedName", StringSplitOptions.None).Length);
+        Assert.Contains(
+            "--filter \"FullyQualifiedName!~GitHubUpdateServiceTests.DownloadedSessionPassesActualInstallerPathGuard\"",
+            job, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error", job, StringComparison.Ordinal);
     }
 }

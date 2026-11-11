@@ -8,7 +8,10 @@ public sealed class X86ArchitectureTests
     [InlineData("x64", "win-x64", true)]
     [InlineData("x86", "win-x64", false)]
     [InlineData("x64", "win-x86", false)]
-    [InlineData("arm64", "win-arm64", false)]
+    [InlineData("arm64", "win-arm64", true)]
+    [InlineData("arm64", "win-x64", false)]
+    [InlineData("x64", "win-arm64", false)]
+    [InlineData("arm", "win-arm", false)]
     public void ManifestRequiresMatchingSupportedArchitecture(string architecture, string runtime, bool valid)
     {
         var manifest = SetupContractsTests.Manifest();
@@ -27,6 +30,13 @@ public sealed class X86ArchitectureTests
     [InlineData("x86", 19045, 0xaa64, 11)]
     [InlineData("x86", 22000, 0xaa64, 0)]
     [InlineData("x64", 22000, 0xaa64, 0)]
+    [InlineData("arm64", 22000, 0xaa64, 0)]
+    [InlineData("arm64", 26100, 0xaa64, 0)]
+    [InlineData("arm64", 19045, 0xaa64, 11)]
+    [InlineData("arm64", 22000, 0x8664, 11)]
+    [InlineData("arm64", 19045, 0x8664, 11)]
+    [InlineData("arm64", 22000, 0x014c, 11)]
+    [InlineData("arm64", 19044, 0xaa64, 10)]
     [InlineData("other", 22000, 0x8664, 11)]
     public void HostChecksPackageArchitecture(string architecture, int build, int native, int error)
     {

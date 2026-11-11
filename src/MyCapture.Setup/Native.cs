@@ -47,8 +47,10 @@ public static class WindowsHost
         }
         catch (System.Security.SecurityException) { }
         catch (UnauthorizedAccessException) { }
+        // The Windows version is judged before the native machine is queried, so this first pass
+        // assumes a machine the package accepts.
         Validate(Environment.OSVersion.Platform == PlatformID.Win32NT, Environment.OSVersion.Version.Major,
-            build, installation, 0x8664, manifest.MinimumWindowsBuild, manifest.Architecture);
+            build, installation, (ushort)(manifest.Architecture == "arm64" ? 0xAA64 : 0x8664), manifest.MinimumWindowsBuild, manifest.Architecture);
         ushort native;
         try
         {
@@ -64,8 +66,11 @@ public static class WindowsHost
         if (!windows || major < 10 || build < Math.Max(19045, minimum) ||
             installation.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0 || installation.IndexOf("Nano", StringComparison.OrdinalIgnoreCase) >= 0)
             throw new SetupException(10, "Windows 10 version 22H2 (build 19045) or later with Desktop Experience is required; detected " + build + " " + installation + ".");
-        if ((architecture != "x64" && architecture != "x86") ||
+        // ARM64 Windows 11 emulates the x64 and x86 packages. The arm64 package is native there and
+        // runs nowhere else; this x64 setup needs the same emulation, so its floor is the same.
+        if ((architecture != "x64" && architecture != "x86" && architecture != "arm64") ||
             (native != 0x8664 && native != 0xAA64 && !(architecture == "x86" && native == 0x014c)) ||
+            (architecture == "arm64" && native != 0xAA64) ||
             (native == 0xAA64 && build < 22000))
             throw new SetupException(11, "The package architecture requires matching Windows or supported Windows 11 ARM64 emulation.");
     }

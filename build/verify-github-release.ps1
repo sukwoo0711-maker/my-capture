@@ -4,7 +4,8 @@ param(
     [string]$Tag,
 
     [string]$Repository = 'sukwoo0711-maker/my-capture',
-    [switch]$IncludeX86
+    [switch]$IncludeX86,
+    [switch]$IncludeArm64
 )
 
 Set-StrictMode -Version 2.0
@@ -19,7 +20,7 @@ if ($Tag -notmatch '^v(?<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))
 }
 
 $version = $Matches['version']
-$required = @(Get-RequiredReleaseAssetNames -Version $version -IncludeX86:$IncludeX86)
+$required = @(Get-RequiredReleaseAssetNames -Version $version -IncludeX86:$IncludeX86 -IncludeArm64:$IncludeArm64)
 
 $draft = (gh api "repos/$Repository/releases/tags/$Tag" --jq '.draft').Trim()
 if ($LASTEXITCODE -ne 0) {
