@@ -68,6 +68,11 @@ internal sealed class NativePinHost : IDisposable
         window.OpacityShown = _pin.OnNativeOpacityShown;
         window.MotionReady = _pin.OnNativeMotionReady;
         window.MotionStarted = _pin.OnNativeMotionStarted;
+        // The pin's own readers, as its WPF drag uses them: other pins whichever host they use, and the work areas.
+        window.SnapEnabled = () => _pin.SnapWhileDragging;
+        window.SnapTargetReader = () => _pin.ReadSnapTargets();
+        window.SnapDisplayReader = () => _pin.ReadSnapDisplays();
+        window.SnapBypass = () => ReadModifiers().HasFlag(ModifierKeys.Shift);
     }
 
     internal NativePinWindow Window { get; }
@@ -110,6 +115,10 @@ internal sealed class NativePinHost : IDisposable
         Window.PressHandler = static _ => true;
         Window.ContextMenuRequested = static _ => { };
         Window.CloseRequested = static () => { };
+        Window.SnapEnabled = null;
+        Window.SnapTargetReader = null;
+        Window.SnapDisplayReader = null;
+        Window.SnapBypass = null;
         Window.ActiveChanged = null;
         Window.GestureEnded = null;
         Window.UserZoomChanged = null;

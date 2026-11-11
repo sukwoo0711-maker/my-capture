@@ -77,6 +77,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MyCapture.App.Accessibility.ScreenReaderState? _screenReader;
     private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
@@ -289,6 +290,9 @@ public partial class App : Application
             () => _settings!.Pin,
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
+        // The message window is the hotkey service's own; the reader state only listens to it.
+        _screenReader = new MyCapture.App.Accessibility.ScreenReaderState(_services.GetRequiredService<NativeMessageWindow>());
+        _pins.AttachScreenReader(_screenReader);
         _pins.PinCreated += ShowFirstPinTip;
         _pins.PinCreated += OnPinCreatedForStoreRating;
         // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
@@ -552,6 +556,7 @@ public partial class App : Application
                 _recorder?.RefreshWatermarkSettings(updated.Recording.Watermark);
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
+                _pins?.ApplySettings();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },

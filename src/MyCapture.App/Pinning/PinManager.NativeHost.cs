@@ -11,10 +11,40 @@ internal sealed partial class PinManager
     private static int _nativeFailureLogged;
 
     /// <summary>
-    /// Whether a screen reader runs. Increment 1 leaves the hook (default: none); the reader's own
-    /// state and its change notification come with increment 4 (design section 6).
+    /// Whether a screen reader runs; the app points it at its <see cref="Accessibility.ScreenReaderState"/>.
+    /// The default is no screen reader.
     /// </summary>
     internal Func<bool> ScreenReaderActive { get; set; } = static () => false;
+
+    /// <summary>Reads the app's screen reader flag, and moves every native pin to WPF when it turns on.</summary>
+    internal void AttachScreenReader(Accessibility.ScreenReaderState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ScreenReaderActive = () => state.Active;
+        state.Changed += active => { if (active) SwitchNativePins(PinSwitchReason.ScreenReader); };
+    }
+
+    /// <summary>
+    /// The pin settings changed. Turning the lightweight setting off moves every open native pin to WPF at
+    /// once; turning it on only affects pins opened or reopened afterwards.
+    /// </summary>
+    internal void ApplySettings()
+    {
+        if (!_settings().LightweightImagePins) SwitchNativePins(PinSwitchReason.SettingOff);
+    }
+
+    private void SwitchNativePins(PinSwitchReason reason)
+    {
+        foreach (PinWindow pin in _pins.ToArray())
+        {
+            if (!pin.IsNativeHosted) continue;
+            try { pin.SwitchToWpf(reason); }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                _log.LogWarning(error, "Could not move a lightweight pin to the standard pin ({Reason})", reason);
+            }
+        }
+    }
 
     /// <summary>A native pin's move or resize ended; the app reclaims idle memory as after a WPF pin's mouse-up.</summary>
     internal event Action? InteractionEnded;

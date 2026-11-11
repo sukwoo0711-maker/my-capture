@@ -55,6 +55,8 @@ internal sealed partial class PinWindow
 
     internal bool CloseOnDoubleClick => _settings().CloseOnDoubleClick;
 
+    internal bool SnapWhileDragging => _settings().SnapWhileDragging;
+
     /// <summary>Hands the pin to <paramref name="host"/> before it is first shown.</summary>
     internal void UseNativeHost(NativePinHost host)
     {

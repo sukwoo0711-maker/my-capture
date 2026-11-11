@@ -74,6 +74,10 @@ internal sealed class NativePinWindow : IDisposable
     private Point _gesturePointer, _lastGesturePointer, _gestureAnchorDip;
     private RectD _gestureBounds;
     private bool _gestureMoved;
+    // Snapping while a pin moves (#259): read once when the move starts, as the WPF drag does.
+    private IReadOnlyList<PinSnap.Target> _snapTargets = [];
+    private IReadOnlyList<PinDisplayArea> _snapDisplays = [];
+    private bool _snapping;
     // The screens' physical rectangles that bound what the pin holds; read again on WM_DISPLAYCHANGE.
     private RectD[]? _screens;
     // The edge-flicker guard (WM_DPICHANGED): the scale the last change left, when it happened, whether
@@ -1337,6 +1341,33 @@ internal sealed class NativePinWindow : IDisposable
         _ = NativePinWindowInterop.SetCapture(Handle);
         _dragging = NativePinWindowInterop.GetCapture() == Handle;
         if (!_dragging) _resizeEdge = PinResizeEdge.None;
+        _snapping = _dragging && _resizeEdge == PinResizeEdge.None && SnapEnabled?.Invoke() == true;
+        if (_snapping)
+        {
+            _snapTargets = SnapTargetReader?.Invoke() ?? [];
+            _snapDisplays = SnapDisplayReader?.Invoke() ?? [];
+        }
+    }
+
+    /// <summary>Whether a move snaps to other pins and the work area (the pin setting); null means never.</summary>
+    internal Func<bool>? SnapEnabled { get; set; }
+
+    /// <summary>The other pins' whole-surface rectangles, read once when a move starts.</summary>
+    internal Func<IReadOnlyList<PinSnap.Target>>? SnapTargetReader { get; set; }
+
+    /// <summary>The displays a move snaps to the work area of, read once when a move starts.</summary>
+    internal Func<IReadOnlyList<PinDisplayArea>>? SnapDisplayReader { get; set; }
+
+    /// <summary>Whether Shift is held, which bypasses snapping.</summary>
+    internal Func<bool>? SnapBypass { get; set; }
+
+    // The whole surface moves, not the part the screens show: the pin's edges are what meet the others.
+    private (double Left, double Top) Snap(double left, double top)
+    {
+        if (!_snapping) return (left, top);
+        RectD snapped = PinSnap.Calculate(new RectD(left, top, PixelWidth, PixelHeight), _snapDisplays, _snapTargets,
+            SnapBypass?.Invoke() == true);
+        return (snapped.Left, snapped.Top);
     }
 
     /// <summary>Starts a move from a press on a window over the pin (its readout), at a screen point.</summary>
@@ -1362,6 +1393,7 @@ internal sealed class NativePinWindow : IDisposable
         {
             double left = _gestureBounds.Left + dx, top = _gestureBounds.Top + dy;
             if (_product) (left, top) = KeepGrabbable(left, top, PixelWidth, PixelHeight);
+            (left, top) = Snap(left, top);
             MovePhysical(left, top);
         }
         else
@@ -1390,6 +1422,7 @@ internal sealed class NativePinWindow : IDisposable
             ApplyDpiChange(held, new Point(_left + _view.Left, _top + _view.Top));
         if (wasDragging && !wasResizing && _gestureMoved) _heldDpi = null;
         _dragging = false; _resizeEdge = PinResizeEdge.None;
+        _snapping = false; _snapTargets = []; _snapDisplays = [];
         if (Handle != IntPtr.Zero && NativePinWindowInterop.GetCapture() == Handle) _ = NativePinWindowInterop.ReleaseCapture();
         if (wasResizing && !IsClosed && !_closing) ForceSettle();
         if (notify && wasDragging && !IsClosed && !_closing) GestureEnded?.Invoke(_gestureMoved, resized);

@@ -106,6 +106,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     private int _lastDragCursorX = int.MinValue;
     private int _lastDragCursorY = int.MinValue;
     private ModifierKeys _lastDragModifiers;
+    /// <summary>The desktop a drag keeps the pin grabbable inside; tests drag on an off-screen stand-in.</summary>
+    internal Func<RectD>? DragDesktopForTest { get; set; }
     private IReadOnlyList<PinSnap.Target> _snapTargets = [];
     private IReadOnlyList<PinDisplayArea> _snapDisplays = [];
     internal Func<IReadOnlyList<PinSnap.Target>> ReadSnapTargets { get; set; } = static () => [];
@@ -1406,7 +1408,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
                     Cursor = ResizeCursor(_resizeEdge);
                 }
                 _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
-                _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
+                _dragDesktop = DragDesktopForTest?.Invoke() ?? MonitorEnumerator.GetVirtualDesktopBounds();
                 _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
                 if (_resizeEdge == PinResizeEdge.None && _settings().SnapWhileDragging)
                 {
