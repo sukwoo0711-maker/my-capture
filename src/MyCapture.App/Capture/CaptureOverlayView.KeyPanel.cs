@@ -121,6 +121,7 @@ internal sealed partial class CaptureOverlayView
     internal void EndSelection()
     {
         _ended = true;
+        _elements?.Dispose(); _elements = null; CreateElementSource = null;
         ReleaseKeyPanel();
     }
 

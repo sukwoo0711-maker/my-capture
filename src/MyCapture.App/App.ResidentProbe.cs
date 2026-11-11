@@ -277,6 +277,8 @@ public partial class App
         if (native is null && overlay is null) throw new InvalidOperationException("The selector did not open.");
         recorder.Track(name, "selector window", (object?)native ?? overlay);
         recorder.Track(name, "selector frame", native?.Frame ?? (overlay?.Content as CaptureOverlayView)?.Frame);
+        Action? restoreElementPointer = s_residentProbe?.Has("selector-elements") == true
+            ? await ProbeElementStepAsync(recorder, name, native, overlay?.Content as CaptureOverlayView) : null;
 
         long selected = 0;
         double cardMs = -1;
@@ -330,6 +332,7 @@ public partial class App
             finally
             {
                 CompositionTarget.Rendering -= rendering;
+                restoreElementPointer?.Invoke(); restoreElementPointer = null;
             }
             recorder.Time(name + ": selection → card shown", cardMs);
             recorder.Track(name, "card", _quickAccess);
@@ -341,6 +344,7 @@ public partial class App
         }
         finally
         {
+            restoreElementPointer?.Invoke();
             if (receiptMarks is not null) ReceiptTimeline.Mark = previousReceiptMark;
         }
         if (receiptMarks is not null)
@@ -353,6 +357,52 @@ public partial class App
         _quickAccess?.RequestClose();
         await ProbeWaitAsync(() => _quickAccess is null && _overlay?.IsActive != true && _capturePersistenceTask.IsCompleted,
             10_000, "card closed");
+    }
+
+    private async Task<Action> ProbeElementStepAsync(ResidentProbeRecorder recorder, string name,
+        NativeCaptureOverlay? native, CaptureOverlayView? view)
+    {
+        await ProbeWaitAsync(() => native?.IsReady ?? view?.FirstFramePresentedForTest == true, 10_000, "element input ready");
+        FrozenFrame frame = native?.Frame ?? view!.Frame!;
+        IReadOnlyList<WindowCandidate> windows = native?.SourceWindows ?? view!.WindowCandidates;
+        WindowCandidate window = windows.FirstOrDefault(w => w.ProcessId != 0 && w.ProcessId != Environment.ProcessId
+            && ElementGeometryBounds.Intersect(w.ScreenBounds, frame.ScreenBounds) is { Width: >= 8, Height: >= 8 })
+            ?? throw new InvalidOperationException("The element probe needs a visible window of another process inside the frozen frame.");
+        PointD point = ElementGeometryBounds.Intersect(window.ScreenBounds, frame.ScreenBounds).Center;
+        Func<PointD> previousPointer = native?.ReadCursor ?? view!.ReadCursor;
+        Func<PointD, bool> previousPlacement = native?.PlaceCursor ?? view!.PlaceCursor;
+        Action<string>? previousMark = SelectorTimeline.Mark;
+        var marks = new List<(string Stage, double Ms)>();
+        long started = Stopwatch.GetTimestamp();
+        SelectorTimeline.Mark = stage =>
+        {
+            previousMark?.Invoke(stage);
+            if (stage.StartsWith("element-", StringComparison.Ordinal) || stage.StartsWith("selector-", StringComparison.Ordinal))
+                lock (marks) marks.Add((stage, Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+        };
+        void Restore()
+        {
+            SelectorTimeline.Mark = previousMark;
+            if (native is not null) { native.ReadCursor = previousPointer; native.PlaceCursor = previousPlacement; }
+            else { view!.ReadCursor = previousPointer; view.PlaceCursor = previousPlacement; }
+            lock (marks) foreach (var mark in marks) recorder.Time(name + ": " + mark.Stage, mark.Ms);
+        }
+        try
+        {
+            // Substitute the reader only. No SetCursorPos, mouse injection or real pointer movement.
+            if (native is not null) { native.ReadCursor = () => point; native.PlaceCursor = _ => false; }
+            else { view!.ReadCursor = () => point; view.PlaceCursor = _ => false; }
+            if (!(native?.StepElement(1) ?? view!.StepElement(1)))
+                throw new InvalidOperationException("The element probe could not step into the hovered window.");
+            await ProbeWaitAsync(() => !(native?.ElementPending ?? view!.ElementPending), 2_000, "element lookup returned");
+            recorder.Time(name + ": element step complete at depth " + (native?.ElementDepth ?? view!.ElementDepth),
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return Restore;
+        }
+        catch
+        {
+            Restore(); throw;
+        }
     }
 
     /// <summary>

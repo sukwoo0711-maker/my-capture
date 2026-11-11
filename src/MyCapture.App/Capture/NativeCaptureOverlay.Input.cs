@@ -227,6 +227,8 @@ internal sealed partial class NativeCaptureOverlay
                 FocusChrome(modifiers == ModifierKeys.Shift); return true;
             case Key.Escape: Close(); return true;
             case Key.Enter: ConfirmCurrent(); return true;
+            case Key.PageDown when modifiers == ModifierKeys.None: return StepElement(1);
+            case Key.PageUp when modifiers == ModifierKeys.None: return StepElement(-1);
             case Key.A when modifiers.HasFlag(ModifierKeys.Control):
                 ResetRefitCycle(); _selectedWindow = null; ClearHover(); SetSelection(FrameBounds); return true;
             case Key.R when RatioAvailable && modifiers is ModifierKeys.None or ModifierKeys.Shift:
@@ -342,10 +344,11 @@ internal sealed partial class NativeCaptureOverlay
             if (_hoverWindow is { } window)
                 _hoverRegion = WindowDetectHitTest.ResolveRegion(window, SourceWindows, pointer, _bounds, ReadMonitors, out _hoverWholeMonitor);
         }
+        TrackElements(pointer);
         UpdateReveal();
     }
 
-    private void ClearHover() { _hoverWindow = null; _hoverRegion = null; _hoverWholeMonitor = false; }
+    private void ClearHover() { _elements?.Reset(); _hoverWindow = null; _hoverRegion = null; _hoverWholeMonitor = false; }
 
     private bool IsWindowClick(PointD point)
     {

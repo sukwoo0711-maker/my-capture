@@ -589,6 +589,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _released = true;
         ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
         _ended = true;
+        _elements?.Dispose(); _elements = null; CreateElementSource = null;
         EndPointerInteraction();
         _feedbackScheduler.Dispose();
         _toastTimer?.Stop();
@@ -724,6 +725,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return false;
         }
 
+        region = TrackElements(window, region, screenPoint);
+        if (HoverElement) wholeMonitor = false;
         bool changed = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window)
             || _hoverWholeMonitor != wholeMonitor;
         _hoverWindow = window;
@@ -734,6 +737,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void ClearHover()
     {
+        _elements?.Reset();
         if (_hoverRegion is null && _hoverWindow is null) return;
         _hoverWindow = null;
         _hoverRegion = null;
@@ -1272,8 +1276,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
         SelectionRatio ratio = ActiveRatio;
         if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != shownHover || _drawnHoverTarget != hover
-            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode || _drawnRatio != ratio)
+            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode || _drawnRatio != ratio
+            || _drawnElementHint != ElementWheelHint || _drawnElement != HoverElement)
         {
+            _drawnElementHint = ElementWheelHint; _drawnElement = HoverElement;
             _drawnRatio = ratio;
             _drawnSelection = _selection;
             _drawnHover = shownHover;
@@ -1561,6 +1567,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         RectD pixels = target.ToPixelBounds();
         // The same words as the status above and the mode bar: what a click does in this mode.
         string label = UiText.Get(ClickKey(wholeMonitor));
+        if (!wholeMonitor && !HoverElement && ElementWheelHint) label += UiText.Get("CaptureGuide2_ElementWheelHint");
         (int Width, int Height) captured = ((int)pixels.Width, (int)pixels.Height);
         // A glide redraws the tab on every frame; its words are laid out once per target.
         if (_tabLabelText is null || _tabSizeText is null || _tabTextSize != captured
@@ -1969,7 +1976,9 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>What a click on a highlighted window or monitor does in the current mode.</summary>
-    private string ClickKey(bool wholeMonitor) => (_textCaptureMode, wholeMonitor) switch
+    private string ClickKey(bool wholeMonitor) => HoverElement && !wholeMonitor
+        ? (_textCaptureMode ? "CaptureGuide2_ClickElementText" : "CaptureGuide2_ClickElement")
+        : (_textCaptureMode, wholeMonitor) switch
     {
         (true, true) => "CaptureGuide2_ClickMonitorText",
         (true, false) => "CaptureGuide2_ClickWindowText",
@@ -2228,6 +2237,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _dragAnchor = point;
+        _elements?.Stop();
         _selectedWindow = null;
         _dragBeyondClick = false;
         ResetRefitCycle();
@@ -2329,7 +2339,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 return;
             }
 
-            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space) return;
+            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space or Key.PageUp or Key.PageDown) return;
         }
 
         switch (key)
@@ -2343,9 +2353,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 UpdatePointer();
                 return;
             case Key.Enter:
-                ConfirmSelection();
+                ConfirmHoveredOrSelected();
                 e.Handled = true;
                 return;
+            case Key.PageDown when modifiers == ModifierKeys.None:
+                e.Handled = StepElement(1); return;
+            case Key.PageUp when modifiers == ModifierKeys.None:
+                e.Handled = StepElement(-1); return;
             case Key.A when modifiers.HasFlag(ModifierKeys.Control):
                 ResetRefitCycle();
                 _selection = FrameBounds;

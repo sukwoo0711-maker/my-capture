@@ -5611,4 +5611,9 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>Wheel</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>Select an element in the window (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>Click: Capture element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>Click: Copy text from element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · Wheel: Select element</value></data>
 </root>

@@ -62,7 +62,7 @@ internal sealed class ResidentProbeOptions
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
-         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib"];
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds

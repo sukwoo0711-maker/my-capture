@@ -63,6 +63,8 @@ internal sealed class CaptureKeyPanel : Border
         {
             if (context.CanDrag) Add(UiText.Get("CaptureKeyPanel.Drag"), "CaptureKeyPanel.Region");
             if (context.WindowDetection) Add(UiText.Get("CaptureKeyPanel.Click"), "CaptureKeyPanel.Window");
+            if (context.WindowDetection && !context.HasSelection)
+                Add(UiText.Get("CaptureKeyPanel.ElementKeys"), "CaptureKeyPanel.ElementDepth");
             if (context.HasSelection)
             {
                 Add("← ↑ → ↓", "CaptureKeyPanel.Move");
