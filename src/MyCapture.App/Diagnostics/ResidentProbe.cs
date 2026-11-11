@@ -53,8 +53,10 @@ internal sealed class ResidentProbeOptions
     /// The old <c>prewarm-readers</c> flag is accepted as a no-op since warming is now the default;
     /// <c>no-reader-prewarm</c> wins when both are supplied. <c>legacy-capture-settle</c>,
     /// <c>no-idle-gc</c>, <c>legacy-flight-bounds</c> and <c>no-private-working-set</c> isolate the
-    /// corresponding performance changes. <c>selector-breakdown</c> adds dispatcher tracing and a
-    /// blocking render-thread flush before selection; <c>receipt-breakdown</c> records receipt marks.
+    /// corresponding performance changes. <c>selector-breakdown</c> adds dispatcher tracing; the WPF
+    /// path also blocks on a render-thread flush before selection. <c>receipt-breakdown</c> records receipt marks.
+    /// <c>legacy-guide-write</c> restores immediate idle guide writes; <c>selector-show-owned</c> omits
+    /// the native chrome show restack.
     /// These diagnostic variants change workload or timing and are never used for the release table.
     /// </summary>
     internal static readonly string[] KnownVariants =
@@ -62,7 +64,8 @@ internal sealed class ResidentProbeOptions
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
-         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib"];
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib",
+         "legacy-guide-write", "selector-show-owned"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -176,6 +179,8 @@ internal sealed class ResidentProbeOptions
         int chromeVariants = variants.Count(variant => variant.StartsWith("selector-chrome-", StringComparison.OrdinalIgnoreCase));
         if (variants.Contains("selector-wpf") && (variants.Contains("selector-native-dib") || chromeVariants != 0))
             throw new ArgumentException("Choose selector-wpf or a native selector variant, not both.");
+        if (variants.Contains("selector-wpf") && variants.Contains("selector-show-owned"))
+            throw new ArgumentException("Native selector experiments cannot be combined with selector-wpf.");
         if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
             throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
         return variants;

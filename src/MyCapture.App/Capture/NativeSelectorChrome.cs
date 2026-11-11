@@ -174,6 +174,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-start");
         _owner = owner;
         if (owner.ChromeStrategy != NativeSelectorChromeStrategy.Parallel) owner.PrepareVisualFeedback();
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-feedback-ready");
         CachePointerAreas(owner);
         if (_magnifierAdornment is { } magnifier && owner.Frame is { } frame)
         {
@@ -181,6 +182,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 : new FormatConvertedBitmap(frame.Bitmap, PixelFormats.Bgr32, null, 0);
             magnifier.Bind(frame.PixelWidth, frame.PixelHeight, _pointerAreas, _scale);
         }
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-magnifier-ready");
         _rendered = false;
         _showingWindows = false;
         _guideVisible = true;
@@ -192,22 +194,29 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         Size barSize = MeasureBar();
         _barWindow.Width = barSize.Width;
         _barWindow.Height = barSize.Height;
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-bar-measured");
         _pendingFrames.Clear();
         AllCaptureExcluded = true;
         foreach (Window window in _windows)
         {
+            MarkWindow(window, "bind-start");
             new WindowInteropHelper(window).Owner = owner.Handle;
+            MarkWindow(window, "owner-set");
             if (window.Content is null) window.Content = _content[window];
+            MarkWindow(window, "content-attached");
             // Exclusion is re-applied on every lease, before any of these HWNDs can be shown.
             bool excluded = CaptureWindowExclusion.TryApply(window);
+            MarkWindow(window, "exclusion-applied");
             AllCaptureExcluded &= excluded;
             if (requireExclusion && !excluded) throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             CaptureWindowExclusion.DisableTransitions(window);
             if (!_deferredWindows.Contains(window)) _pendingFrames.Add(window);
+            MarkWindow(window, "bind-complete");
         }
         Place(_barWindow, _workArea.Left + (_workArea.Width - barSize.Width * _scale) / 2, _workArea.Top + 12 * _scale, Placement.Layout);
         if (_guideWindow is { } guide)
             Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, Placement.Layout);
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-layout-complete");
         Update(owner.ReadCursor(), Int32Rect.Empty);
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-complete");
     }
@@ -231,6 +240,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
 
     private Window Create(FrameworkElement content, double width, double height, bool interactive)
     {
+        // A plain Window, not a derived class: WPF applies the implicit Window style (UI font and
+        // text rendering, Themes/Controls.xaml) only to Window itself.
         var window = new Window
         {
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
@@ -462,7 +473,9 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         if (SelectorTimeline.Mark is not { } mark) return;
         string name = ReferenceEquals(window, _barWindow) ? "bar"
             : ReferenceEquals(window, _sizeWindow) ? "size"
-            : ReferenceEquals(window, _guideWindow) ? "guide" : "magnifier";
+            : ReferenceEquals(window, _guideWindow) ? "guide"
+            : ReferenceEquals(window, _magnifierWindow) ? "magnifier"
+            : ReferenceEquals(window, _keyPanelWindow) ? "key-panel" : "start-guide";
         mark($"native-chrome-{name}-{phase}");
     }
 
@@ -680,7 +693,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         // moves (about 110 a second), WPF's input queue never emptied and Input-priority work such as
         // ContentRendered starved. Owned chrome already stays above the background, so after the one
         // topmost placement in Show, following the pointer only moves, and not at all when unchanged.
-            if (placement == Placement.Show) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
+            if (placement == Placement.Show && _owner?.SkipChromeShowRestackForProbe != true)
+                PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
             else PhysicalWindowPositioner.MoveAndResize(geometry.Handle, geometry.Bounds);
             // Crossing the seam can change the HWND's composition DPI inside SetWindowPos. Its content
             // compensation must use that final DPI, including when test monitor geometry is injected.

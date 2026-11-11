@@ -485,6 +485,7 @@ public partial class App : Application
             _services.GetRequiredService<ILoggerFactory>(),
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.SelectorClosed += () => _captureGuideWrites?.NotifySelectorClosed();
         _recorder.RecordingSaved = saved => _storeRating?.RecordCapture(saved);
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.FrameCaptureService = _videoFrameCapture;
