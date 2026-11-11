@@ -54,6 +54,20 @@ internal sealed class NativePinEdgeCache
         return cache;
     }
 
+    /// <summary>Puts the pixels under the outline back as they were before it was composited.</summary>
+    internal unsafe void Restore(IntPtr destination)
+    {
+        if (destination == IntPtr.Zero) throw new ArgumentException("A destination buffer is required.", nameof(destination));
+        foreach (NativePinRaster.EdgeRun run in _chrome.Runs)
+        {
+            var row = new Span<byte>((byte*)destination + ((long)run.Y * _stride) + (run.X * 4), run.Length * 4);
+            _raw.AsSpan(run.RawOffset, row.Length).CopyTo(row);
+        }
+    }
+
+    /// <summary>The part of the surface the cached strips belong to.</summary>
+    internal NativePinRaster.View Area => _chrome.Area;
+
     internal unsafe double Redraw(IntPtr destination, Color outline)
     {
         if (destination == IntPtr.Zero) throw new ArgumentException("A destination buffer is required.", nameof(destination));

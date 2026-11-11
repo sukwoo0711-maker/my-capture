@@ -64,7 +64,7 @@ internal sealed class ResidentProbeOptions
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
          "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib",
          "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
-         "pin-native-full", "pin-light", "pin-switch"];
+         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -190,6 +190,11 @@ internal sealed class ResidentProbeOptions
         if (variants.Contains("pin-switch") && variants.Overlaps(
             ["pin-native", "pin-light", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
             throw new ArgumentException("pin-switch is its own check of the lightweight pin's switch; choose it alone.");
+        if (variants.Contains("pin-zoom") && variants.Overlaps(
+            ["pin-native", "pin-native-full", "pin-light", "pin-switch", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
+            throw new ArgumentException("pin-zoom is its own zoom and move measurement of one lightweight pin; choose it alone (with pin-hold-whole or pin-move-live).");
+        if ((variants.Contains("pin-hold-whole") || variants.Contains("pin-move-live")) && !variants.Contains("pin-zoom"))
+            throw new ArgumentException("pin-hold-whole and pin-move-live change what pin-zoom measures; choose them together with pin-zoom.");
         if (variants.Contains("pin-native-full") && !variants.Contains("pin-native"))
             throw new ArgumentException("pin-native-full selects pin-native's whole-surface live frames; choose it together with pin-native.");
         return variants;

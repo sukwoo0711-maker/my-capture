@@ -19,24 +19,41 @@ internal static class NativePinResampler
 
     internal static void Write(NativePinPixelSource.Lease source, IntPtr destination, int width, int height,
         int stride, bool highQuality, double contentScale, CancellationToken cancellationToken = default) =>
-        Write(new NativeRows(source), destination, width, height, stride, highQuality, contentScale, cancellationToken);
+        Write(new NativeRows(source), destination, NativePinRaster.View.Whole(width, height), stride, highQuality,
+            contentScale, cancellationToken);
+
+    /// <summary>
+    /// Writes only <paramref name="view"/> of the surface into a destination that holds that view.
+    /// Each written pixel is computed exactly as the whole surface's pixel at the same place (the same
+    /// coefficients, sums and rounding), so a clipped frame is byte-identical to that part of a whole one.
+    /// </summary>
+    internal static void Write(NativePinPixelSource.Lease source, IntPtr destination, NativePinRaster.View view,
+        int stride, bool highQuality, double contentScale, CancellationToken cancellationToken = default) =>
+        Write(new NativeRows(source), destination, view, stride, highQuality, contentScale, cancellationToken);
 
     private static unsafe void Write(IRows readable, IntPtr destination, int width, int height,
+        int stride, bool highQuality, double contentScale, CancellationToken cancellationToken) =>
+        Write(readable, destination, NativePinRaster.View.Whole(width, height), stride, highQuality, contentScale, cancellationToken);
+
+    private static unsafe void Write(IRows readable, IntPtr destination, NativePinRaster.View view,
         int stride, bool highQuality, double contentScale, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (contentScale == 1 && readable.Width == width && readable.Height == height)
+        view.Validate();
+        int width = view.Width, height = view.Height;
+        if (contentScale == 1 && readable.Width == view.SurfaceWidth && readable.Height == view.SurfaceHeight)
         {
             for (int y = 0; y < height; y++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                readable.Row(y).CopyTo(new Span<byte>((byte*)destination + ((long)y * stride), width * 4));
+                readable.Row(y + view.Top).Slice(view.Left * 4, width * 4)
+                    .CopyTo(new Span<byte>((byte*)destination + ((long)y * stride), width * 4));
             }
             return;
         }
 
-        var horizontal = new Axis(readable.Width, width, contentScale, highQuality, cancellationToken);
-        var vertical = new Axis(readable.Height, height, contentScale, highQuality, cancellationToken);
+        var horizontal = new Axis(readable.Width, view.SurfaceWidth, view.Left, width, contentScale, highQuality, cancellationToken);
+        var vertical = new Axis(readable.Height, view.SurfaceHeight, view.Top, height, contentScale, highQuality, cancellationToken);
         var rows = new RowCache(readable, horizontal, width, Math.Min(readable.Height, vertical.Taps), vertical.Taps, cancellationToken);
         for (int y = 0; y < height; y++)
         {
@@ -116,7 +133,10 @@ internal static class NativePinResampler
         internal float[] Weights { get; }
         internal int Taps { get; }
 
-        internal Axis(int sourceSize, int destinationSize, double contentScale, bool highQuality, CancellationToken cancellationToken)
+        // Coefficients for the outputs [offset, offset + count) of a destination axis of destinationSize;
+        // index i holds output offset + i, computed as the whole axis computes it.
+        internal Axis(int sourceSize, int destinationSize, int offset, int count, double contentScale, bool highQuality,
+            CancellationToken cancellationToken)
         {
             double actualSize = destinationSize * contentScale;
             double origin = (destinationSize - actualSize) / 2;
@@ -124,25 +144,26 @@ internal static class NativePinResampler
             double lowPassScale = Math.Min(1, ratio);
             double support = highQuality ? 3 / lowPassScale : 1;
             Taps = highQuality ? checked((int)Math.Ceiling(support * 2) + 1) : 2;
-            First = new int[destinationSize];
-            Weights = new float[checked(destinationSize * Taps)];
-            for (int output = 0; output < destinationSize; output++)
+            First = new int[count];
+            Weights = new float[checked(count * Taps)];
+            for (int index = 0; index < count; index++)
             {
-                if ((output & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                int output = offset + index;
                 double position = ((output + .5 - origin) / ratio) - .5;
                 int first = highQuality ? (int)Math.Ceiling(position - support) : (int)Math.Floor(position);
-                First[output] = first;
+                First[index] = first;
                 double total = 0;
                 for (int tap = 0; tap < Taps; tap++)
                 {
                     double weight = highQuality ? Lanczos((position - first - tap) * lowPassScale)
                         : tap == 0 ? 1 - (position - first) : position - first;
-                    Weights[(output * Taps) + tap] = (float)weight;
+                    Weights[(index * Taps) + tap] = (float)weight;
                     total += weight;
                 }
                 // Every coefficient footprint has at least one sample. Normalize edge-clamped
                 // weights as well so a constant (including partial-alpha) source stays constant.
-                for (int tap = 0; tap < Taps; tap++) Weights[(output * Taps) + tap] /= (float)total;
+                for (int tap = 0; tap < Taps; tap++) Weights[(index * Taps) + tap] /= (float)total;
             }
         }
 

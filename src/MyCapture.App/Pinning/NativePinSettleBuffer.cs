@@ -77,8 +77,9 @@ internal sealed class NativePinSettleBuffer : IDisposable
     private static extern bool CloseHandle(IntPtr handle);
 }
 
+/// <summary>A finished worker picture of <paramref name="View"/> of the surface (the part the pin holds at rest).</summary>
 internal sealed record NativePinSettleFrame(NativePinSettleBuffer Buffer, NativePinEdgeCache Edges,
-    int Generation, double RasterMilliseconds) : IDisposable
+    int Generation, double RasterMilliseconds, NativePinRaster.View View) : IDisposable
 {
     public void Dispose() => Buffer.Dispose();
 }

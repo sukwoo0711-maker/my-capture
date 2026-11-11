@@ -133,11 +133,17 @@ public sealed class PinNativeViewportTests(ITestOutputHelper output)
             }
     }
 
-    [Fact]
-    public void LiveZoomDrawsOnlyThePartInsideTheClipAndTheSettledPictureIsTheWholeSurfaceAgain() => StaTestHost.Run(() =>
+    // Design section 7: with the screen-bounded rest on (the default) the settled picture holds the same part
+    // of the surface as the live frame, at full quality; off, it is the whole surface again, as before.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LiveZoomDrawsOnlyThePartInsideTheClipAndTheSettledPictureHoldsWhatTheScreenCanShow(bool boundedRest) => StaTestHost.Run(() =>
     {
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        bool previousRest = NativePinWindow.ScreenBoundedRest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
+        NativePinWindow.ScreenBoundedRest = boundedRest;
         BitmapSource picture = PinNativeTestImages.Picture(96, 64, transparent: true);
         using var pin = new NativePinWindow(picture, -20000, -20000);
         try
@@ -175,15 +181,29 @@ public sealed class PinNativeViewportTests(ITestOutputHelper output)
 
             release.Set();
             PinNativeSpeedTestWait.Complete(pin.WaitForSettledAsync());
-            Assert.False(pin.IsDisplayClipped);
             Assert.False(pin.IsLiveZooming);
-            Assert.Equal(pin.Bounds, pin.DisplayedBounds);
-            Assert.Equal(pin.Bounds, WindowRectangle(pin.Handle));
-            Assert.Equal(192L * 128 * 4, pin.DisplayBytes);
+            Assert.Equal(new RectD(-20000, -20000, 192, 128), pin.Bounds);
             Assert.Equal(pin.DisplayBytes, pin.DisplaySectionBytes);
             Assert.Equal(0, pin.WorkerBufferCount);
             Assert.Equal(1, NativePinWindow.LiveDibCount);
-            Assert.Equal(PinNativeTestImages.Native(picture, 2, 1, AppTheme.Glass).Pixels, pin.CopyDisplayPixels());
+            byte[] settled = PinNativeTestImages.Native(picture, 2, 1, AppTheme.Glass).Pixels;
+            if (boundedRest)
+            {
+                var held = new NativePinRaster.View(0, 0, 120, 80, 192, 128);
+                Assert.True(pin.IsDisplayClipped);
+                Assert.Equal(new RectD(-20000, -20000, 120, 80), pin.DisplayedBounds);
+                Assert.Equal(pin.DisplayedBounds, WindowRectangle(pin.Handle));
+                Assert.Equal(120L * 80 * 4, pin.DisplayBytes);
+                AssertSamePart(settled, 192, pin.CopyDisplayPixels(), held, "settled part");
+            }
+            else
+            {
+                Assert.False(pin.IsDisplayClipped);
+                Assert.Equal(pin.Bounds, pin.DisplayedBounds);
+                Assert.Equal(pin.Bounds, WindowRectangle(pin.Handle));
+                Assert.Equal(192L * 128 * 4, pin.DisplayBytes);
+                Assert.Equal(settled, pin.CopyDisplayPixels());
+            }
             Assert.Null(pin.LastPresentError);
         }
         finally
@@ -191,6 +211,7 @@ public sealed class PinNativeViewportTests(ITestOutputHelper output)
             pin.Close();
             PinNativeSpeedTestWait.Complete(pin.DrainAsync());
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
+            NativePinWindow.ScreenBoundedRest = previousRest;
         }
     });
 
@@ -386,7 +407,9 @@ public sealed class PinNativeViewportTests(ITestOutputHelper output)
             if (settleBeforeClose)
             {
                 PinNativeSpeedTestWait.Complete(pin.WaitForSettledAsync());
-                Assert.False(pin.IsDisplayClipped);
+                // The settled picture holds what the stand-in screen can show, as the live frame did.
+                Assert.Equal(pin.IsDisplayClipped, pin.Bounds != pin.DisplayedBounds);
+                Assert.True(pin.DisplayBytes <= 110L * 75 * 4, "A settled picture never holds more than the screen.");
                 Assert.Equal(pin.DisplayBytes, pin.DisplaySectionBytes);
                 Assert.Equal(0, pin.WorkerBufferCount);
             }

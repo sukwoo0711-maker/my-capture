@@ -112,6 +112,13 @@ internal sealed partial class PinWindow
             bar = new PinHoverBar(Provenance);
             PinHoverBar created = bar;
             WireHoverBar(bar, static () => t_nativeBarPin);
+            // The bar's own scale changed (it crossed to another monitor): its pixel size changed with it.
+            // Windows applies its suggested rectangle around this event, so the place follows once it has.
+            bar.DpiChanged += (_, _) =>
+            {
+                t_nativeBarPin?.PlaceHoverBar();
+                created.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, static () => t_nativeBarPin?.PlaceHoverBar());
+            };
             bar.Closed += (_, _) =>
             {
                 if (!ReferenceEquals(t_nativeBar, created)) return;
@@ -212,6 +219,13 @@ internal sealed partial class PinWindow
         surface.MouseEnter += (_, _) => _hoverHideTimer.Stop();
         surface.MouseLeave += (_, _) => ScheduleHoverBarHide();
         surface.SizeChanged += (_, _) => PlaceFeedbackSurface();
+        // It lays itself out at its own monitor's scale; crossing to another one changes its pixel size.
+        // Windows applies its suggested rectangle around this event, so the place follows once it has.
+        surface.DpiChanged += (_, _) =>
+        {
+            PlaceFeedbackSurface();
+            surface.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, PlaceFeedbackSurface);
+        };
         return surface;
     }
 
@@ -221,7 +235,8 @@ internal sealed partial class PinWindow
         IntPtr handle = new WindowInteropHelper(surface).Handle;
         if (handle == IntPtr.Zero) return;
         surface.UpdateLayout();
-        double scale = host.Window.DpiScale;
+        // Its pixels follow the scale it lays itself out at, which can differ from the pin's for a moment.
+        double scale = VisualTreeHelper.GetDpi(surface).DpiScaleX;
         RectD target = PinFeedbackSurface.Place(host.Window.Bounds, surface.ActualWidth * scale, surface.ActualHeight * scale);
         try { PhysicalWindowPositioner.Move(handle, target); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)

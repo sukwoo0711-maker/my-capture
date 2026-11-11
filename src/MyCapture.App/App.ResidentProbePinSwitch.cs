@@ -29,6 +29,9 @@ public partial class App
         var cases = new (string Name, int Notches, bool Settle)[]
         {
             ("switch-100", 0, true), ("switch-259-mid-wheel", 10, false), ("switch-259-settled", 10, true),
+            // Larger than the screen at rest: the native window holds only the visible part (design section 7),
+            // and the WPF window must still take the whole surface.
+            ("switch-800-settled", 22, true),
         };
         var results = new List<object>();
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
@@ -94,6 +97,7 @@ public partial class App
 
         IntPtr nativeHandle = native.Handle;
         RectD nativeRect = WindowRect(nativeHandle);
+        RectD nativeWhole = native.Bounds;
         RectD region = ClipToScreen(new RectD(nativeRect.Left - SwitchMargin, nativeRect.Top - SwitchMargin,
             nativeRect.Width + (2 * SwitchMargin), nativeRect.Height + (2 * SwitchMargin)));
         using ScreenCaptureEngine.CaptureSession session = engine.CreateSession(region, includeCursor: false);
@@ -179,6 +183,9 @@ public partial class App
             WpfAfter = wpfAfter,
             SameRectangleAtRetire = nativeAtRetire == wpfAtRetire,
             SameRectangleAfter = nativeRect == wpfAfter,
+            // The surface the native window showed part of, and whether the WPF window took all of it.
+            NativeWholeSurface = nativeWhole,
+            WholeSurfaceMatchesWpfAfter = nativeWhole == wpfAfter,
             WpfDirectlyBelowNativeAtRetire = wpfHandle != IntPtr.Zero && below == wpfHandle,
             Frames = rows,
         };

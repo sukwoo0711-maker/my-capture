@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Primitives;
 
 namespace MyCapture.App.Pinning;
 
@@ -44,15 +45,23 @@ internal static class NativePinRaster
 
     internal static double RenderCached(NativePinPixelSource.Lease source, IntPtr destination, int width, int height,
         int stride, double dpiScale, Color outline, double cornerRadiusDip, bool highQuality,
+        out NativePinEdgeCache edges, double contentScale = 1, CancellationToken cancellationToken = default) =>
+        RenderCached(source, destination, View.Whole(width, height), stride, dpiScale, outline, cornerRadiusDip,
+            highQuality, out edges, contentScale, cancellationToken);
+
+    /// <summary>The destination holds only <paramref name="view"/> of the surface, at the view's size.</summary>
+    internal static double RenderCached(NativePinPixelSource.Lease source, IntPtr destination, View view,
+        int stride, double dpiScale, Color outline, double cornerRadiusDip, bool highQuality,
         out NativePinEdgeCache edges, double contentScale = 1, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
-        ValidateTarget(destination, width, height, stride);
+        view.Validate();
+        ValidateTarget(destination, view.Width, view.Height, stride);
         ValidateChrome(dpiScale, cornerRadiusDip, contentScale);
         cancellationToken.ThrowIfCancellationRequested();
         long started = Stopwatch.GetTimestamp();
-        NativePinResampler.Write(source, destination, width, height, stride, highQuality, contentScale, cancellationToken);
-        edges = NativePinEdgeCache.CaptureAndApply(destination, width, height, stride, dpiScale, outline,
+        NativePinResampler.Write(source, destination, view, stride, highQuality, contentScale, cancellationToken);
+        edges = NativePinEdgeCache.CaptureAndApply(destination, view, stride, dpiScale, outline,
             cornerRadiusDip, contentScale, cancellationToken);
         return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
@@ -63,17 +72,26 @@ internal static class NativePinRaster
     /// </summary>
     internal static double RenderPrepared(NativePinPixelSource.Lease source, IntPtr destination,
         int width, int height, int stride, Color outline, bool highQuality, Chrome preparedCoverage,
+        out NativePinEdgeCache edges, CancellationToken cancellationToken = default) =>
+        RenderPrepared(source, destination, View.Whole(width, height), stride, outline, highQuality,
+            preparedCoverage, out edges, cancellationToken);
+
+    /// <summary>The worker's picture of <paramref name="view"/>; the coverage was prepared for the same view.</summary>
+    internal static double RenderPrepared(NativePinPixelSource.Lease source, IntPtr destination,
+        View view, int stride, Color outline, bool highQuality, Chrome preparedCoverage,
         out NativePinEdgeCache edges, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(preparedCoverage);
-        ValidateTarget(destination, width, height, stride);
-        preparedCoverage.ValidateDimensions(width, height, stride);
+        view.Validate();
+        ValidateTarget(destination, view.Width, view.Height, stride);
+        preparedCoverage.ValidateDimensions(view.Width, view.Height, stride);
+        if (preparedCoverage.Area != view) throw new ArgumentException("Prepared coverage must be for the same view.", nameof(view));
         cancellationToken.ThrowIfCancellationRequested();
         long started = Stopwatch.GetTimestamp();
-        NativePinResampler.Write(source, destination, width, height, stride, highQuality,
+        NativePinResampler.Write(source, destination, view, stride, highQuality,
             preparedCoverage.ContentScale, cancellationToken);
-        edges = NativePinEdgeCache.CapturePreparedAndApply(destination, width, height, stride,
+        edges = NativePinEdgeCache.CapturePreparedAndApply(destination, view.Width, view.Height, stride,
             preparedCoverage, outline, cancellationToken);
         return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
@@ -155,6 +173,56 @@ internal static class NativePinRaster
                 : new((int)(x0 - left), (int)(y0 - top), (int)(x1 - x0), (int)(y1 - y0), surfaceWidth, surfaceHeight);
         }
 
+        /// <summary>
+        /// The part a pin holds of its surface at <paramref name="left"/>, <paramref name="top"/>: the surface
+        /// cut to the bounding box of the screens it touches (all screens when it touches none). A pin wholly
+        /// on one screen and not larger than it keeps its whole surface; a larger one never holds more than
+        /// the screens around it can show, whatever its zoom.
+        /// </summary>
+        internal static View Held(int left, int top, int surfaceWidth, int surfaceHeight, IReadOnlyList<RectD> screens)
+        {
+            ArgumentNullException.ThrowIfNull(screens);
+            if (screens.Count == 0) return Whole(surfaceWidth, surfaceHeight);
+            double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+            void Extend(RectD screen)
+            {
+                x0 = Math.Min(x0, screen.Left); y0 = Math.Min(y0, screen.Top);
+                x1 = Math.Max(x1, screen.Left + screen.Width); y1 = Math.Max(y1, screen.Top + screen.Height);
+            }
+            foreach (RectD screen in screens)
+                if (screen.Left < (long)left + surfaceWidth && left < screen.Left + screen.Width
+                    && screen.Top < (long)top + surfaceHeight && top < screen.Top + screen.Height)
+                    Extend(screen);
+            if (x1 < x0)
+            {
+                // Off every screen (a monitor went away): nothing shows, so the whole surface is held while it
+                // is no larger than all the screens together, and only that much of its top-left otherwise.
+                foreach (RectD screen in screens) Extend(screen);
+                long boxWidth = Math.Max(1, (long)Math.Ceiling(x1) - (long)Math.Floor(x0));
+                long boxHeight = Math.Max(1, (long)Math.Ceiling(y1) - (long)Math.Floor(y0));
+                return (long)surfaceWidth * surfaceHeight <= boxWidth * boxHeight ? Whole(surfaceWidth, surfaceHeight)
+                    : new(0, 0, (int)Math.Min(surfaceWidth, boxWidth), (int)Math.Min(surfaceHeight, boxHeight), surfaceWidth, surfaceHeight);
+            }
+            return Clip(left, top, surfaceWidth, surfaceHeight, (long)Math.Floor(x0), (long)Math.Floor(y0),
+                (long)Math.Ceiling(x1), (long)Math.Ceiling(y1));
+        }
+
+        /// <summary>Whether this view holds every pixel of <paramref name="other"/> (same surface).</summary>
+        internal bool Contains(View other) => SurfaceWidth == other.SurfaceWidth && SurfaceHeight == other.SurfaceHeight
+            && Left <= other.Left && Top <= other.Top
+            && (long)Left + Width >= (long)other.Left + other.Width && (long)Top + Height >= (long)other.Top + other.Height;
+
+        /// <summary>The surface pixels both views hold, as a view of the same surface; null when they share none.</summary>
+        internal View? Intersect(View other)
+        {
+            int x0 = Math.Max(Left, other.Left), y0 = Math.Max(Top, other.Top);
+            int x1 = Math.Min(Left + Width, other.Left + other.Width), y1 = Math.Min(Top + Height, other.Top + other.Height);
+            return x1 <= x0 || y1 <= y0 || SurfaceWidth != other.SurfaceWidth || SurfaceHeight != other.SurfaceHeight
+                ? null : new View(x0, y0, x1 - x0, y1 - y0, SurfaceWidth, SurfaceHeight);
+        }
+
+        internal long Pixels => (long)Width * Height;
+
         internal void Validate()
         {
             if (SurfaceWidth < 1 || SurfaceHeight < 1 || Width < 1 || Height < 1 || Left < 0 || Top < 0
@@ -174,6 +242,8 @@ internal static class NativePinRaster
         /// <summary>The buffer's size; its rows and runs are in the buffer's own coordinates.</summary>
         internal int Width { get; }
         internal int Height { get; }
+        /// <summary>The part of the surface this coverage was prepared for.</summary>
+        internal View Area { get; }
         internal double ContentScale { get; }
 
         internal Chrome(int width, int height, int stride, double dpiScale, double cornerRadiusDip,
@@ -192,7 +262,7 @@ internal static class NativePinRaster
         view.Validate();
         if (stride < checked(view.Width * 4)) throw new ArgumentOutOfRangeException(nameof(stride));
         _stride = stride;
-        Width = view.Width; Height = view.Height; ContentScale = contentScale;
+        Width = view.Width; Height = view.Height; Area = view; ContentScale = contentScale;
         int width = view.SurfaceWidth, height = view.SurfaceHeight;
         // PinWindow scales the whole chrome around its centre during exit. The image is clipped
         // half a DIP inside the outline; the one-DIP outline overlays the image, not an inset image.

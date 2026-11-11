@@ -529,8 +529,11 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         bar.Compact = bar.NeedsCompact(_native is null ? Width : _state.WidthDip, _labeledHoverBarWidth);
         bar.UpdateLayout();
         double scale = AnchorScale;
+        // The shared bar of native pins lays itself out at its own monitor's scale, which differs from the
+        // pin's while one of them has just crossed; its pixels follow its own scale, the gap the pin's.
+        double barScale = _native is null ? scale : VisualTreeHelper.GetDpi(bar).DpiScaleX;
         RectD target = PinHoverBar.Place(AnchorBounds,
-            bar.ActualWidth * scale, bar.ActualHeight * scale, ReadWorkArea(anchor), scale);
+            bar.ActualWidth * barScale, bar.ActualHeight * barScale, ReadWorkArea(anchor), scale);
         try
         {
             PhysicalWindowPositioner.Move(barHandle, target);

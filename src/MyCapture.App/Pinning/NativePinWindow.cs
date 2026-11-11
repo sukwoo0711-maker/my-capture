@@ -22,10 +22,12 @@ namespace MyCapture.App.Pinning;
 /// closed-pin history. Windows composition can still retain its own system/GPU backing surfaces.
 /// HWND/GDI operations and displayed-pixel writes belong to the creating STA. A single
 /// cancellable worker fills only its own fresh section before the STA adopts that section.
-/// At rest the DIB and the HWND are the whole surface. While the size is changing they are only
-/// the part of it that can be on a screen (<see cref="LiveViewportEnabled"/>), so one notch costs
-/// what is visible rather than what the zoom makes of the picture; <see cref="Bounds"/>,
-/// <see cref="PixelWidth"/> and <see cref="PixelHeight"/> always describe the whole surface.
+/// The DIB and the HWND hold only the part of the surface that the screens around it can show
+/// (<see cref="NativePinRaster.View.Held"/>): while the size is changing (<see cref="LiveViewportEnabled"/>)
+/// and at rest (<see cref="ScreenBoundedRest"/>), so neither a notch nor a settled picture costs what
+/// the zoom makes of the picture. For a pin on one screen and not larger than it that part is the whole
+/// surface. <see cref="Bounds"/>, <see cref="PixelWidth"/> and <see cref="PixelHeight"/> always
+/// describe the whole surface.
 /// </summary>
 internal sealed class NativePinWindow : IDisposable
 {
@@ -69,9 +71,18 @@ internal sealed class NativePinWindow : IDisposable
     private long _landingStarted, _revealStarted, _exitStarted, _colorStarted, _hideStarted, _findStarted, _opacityStarted, _holdStarted;
     private double _motionOpacity = 1, _exitStartOpacity = 1, _hideStartOpacity = 1, _opacityFrom = 1,
         _contentScale = 1, _gestureDpi, _gestureZoom;
-    private Point _gesturePointer;
+    private Point _gesturePointer, _lastGesturePointer, _gestureAnchorDip;
     private RectD _gestureBounds;
     private bool _gestureMoved;
+    // The screens' physical rectangles that bound what the pin holds; read again on WM_DISPLAYCHANGE.
+    private RectD[]? _screens;
+    // The edge-flicker guard (WM_DPICHANGED): the scale the last change left, when it happened, whether
+    // the pin has moved since, and whether a change is being applied right now.
+    private double _dpiLeftScale;
+    private long _dpiChangedAt;
+    private bool _movedSinceDpiChange = true, _dpiChanging;
+    // A scale Windows gave that the guard held back; a move that ends applies it.
+    private double? _heldDpi;
     private PinResizeEdge _resizeEdge;
     private Color _baseColor, _colorFrom, _colorTo, _outlineColor;
     private Brush? _accent = new SolidColorBrush(PinFrameColor.FallbackAccent), _neutral = new SolidColorBrush(PinFrameColor.FallbackNeutral);
@@ -134,6 +145,8 @@ internal sealed class NativePinWindow : IDisposable
             if (product && (ReadWindowScaleForTest is { } read ? read(Handle) : WindowScale(Handle)) is { } actual
                 && Math.Abs(actual - DpiScale) > 1e-9)
                 DpiScale = actual;
+            WindowDpiScale = DpiScale;
+            _screens = ReadScreens();
             _ready = true;
             bool exactSize = DesiredWidth == source.Width && DesiredHeight == source.Height;
             Render(highQuality: exactSize);
@@ -222,18 +235,51 @@ internal sealed class NativePinWindow : IDisposable
     internal int PixelWidth => _dib is null ? 0 : _view.SurfaceWidth;
     internal int PixelHeight => _dib is null ? 0 : _view.SurfaceHeight;
     internal int Stride => _dib?.Stride ?? 0;
-    /// <summary>The bytes of the display DIB as it is now: the whole surface at rest, the visible part in a live frame.</summary>
+    /// <summary>The bytes of the display DIB as it is now: the part of the surface the pin holds.</summary>
     internal long DisplayBytes => _dib?.ByteLength ?? 0;
     internal RectD Bounds => new(_left, _top, PixelWidth, PixelHeight);
-    /// <summary>The HWND's rectangle: <see cref="Bounds"/> at rest, its visible part in a live frame.</summary>
+    /// <summary>The HWND's rectangle: the part of <see cref="Bounds"/> the pin holds (all of it on one screen).</summary>
     internal RectD DisplayedBounds => new(_left + _view.Left, _top + _view.Top, _dib?.Width ?? 0, _dib?.Height ?? 0);
     internal bool IsDisplayClipped => _dib is not null && !_view.IsWhole;
     // Bare UpdateLayeredWindow plus DwmFlush on the measuring PC (3440x1440, 120 Hz), size changing
     // on every call: whole surface 25 ms at 4288x2412, 51 ms at 6248x3515, 84 ms at 10024x5639;
     // the part on the monitor 8 ms at every one of those sizes, 17 ms while that part still grows.
     internal static bool LiveViewportEnabled { get; set; } = true;
-    /// <summary>Stands in for the virtual screen as the live frames' clip; tests keep their windows off every screen.</summary>
+    /// <summary>
+    /// The settled picture holds only what the screens around the pin can show (design section 7). Off,
+    /// it is the whole zoomed surface, as before; the resident probe measures both in one build.
+    /// </summary>
+    internal static bool ScreenBoundedRest { get; set; } = true;
+    /// <summary>
+    /// The most newly visible pixels a move of a settled, clipped pin draws at full quality on this thread
+    /// (measured about 95 ns a pixel with the outline, so about 9 ms; the present of a screen-wide picture adds
+    /// about 5 ms). More than that, and the move shows a live frame and settles after it ends.
+    /// </summary>
+    internal static long ReholdPixelLimit { get; set; } = 96 * 1024;
+    /// <summary>
+    /// Stands in for the screens: the clip of live frames and of the settled picture. Tests keep their
+    /// windows off every screen.
+    /// </summary>
     internal RectD? LiveClipForTest { get; set; }
+    /// <summary>The scale Windows last gave this window (WM_DPICHANGED); it can differ from <see cref="DpiScale"/>.</summary>
+    internal double WindowDpiScale { get; private set; }
+    internal int DpiChangeCount { get; private set; }
+    /// <summary>Scale changes not applied: a change back that the pin's own new size caused.</summary>
+    internal int IgnoredDpiChangeCount { get; private set; }
+    /// <summary>The scale an ignored change asked for, applied when the current move ends.</summary>
+    internal double? HeldDpiScale => _heldDpi;
+    /// <summary>How long a change back to the scale just left counts as the edge flicker, if the pin has not moved.</summary>
+    internal const double DpiFlipWindowMilliseconds = 500;
+    internal double LastMoveMilliseconds { get; private set; }
+    /// <summary>The last move of a settled, clipped pin drew a live frame (and settles after the move) rather than strips.</summary>
+    internal bool LastMoveDrewLive { get; private set; }
+    /// <summary>The pixels the last move of a settled pin newly needed (drawn as strips, or shown by a live frame).</summary>
+    internal long LastMoveFreshPixels { get; private set; }
+    internal int ReholdCount { get; private set; }
+    internal long LastReholdPixels { get; private set; }
+    internal double LastReholdMilliseconds { get; private set; }
+    /// <summary>The part of <see cref="LastReholdMilliseconds"/> spent on the outline of the new part.</summary>
+    internal double LastReholdOutlineMilliseconds { get; private set; }
     internal int RasterCount { get; private set; }
     internal int PresentCount { get; private set; }
     internal int MotionTickCount { get; private set; }
@@ -402,6 +448,7 @@ internal sealed class NativePinWindow : IDisposable
         // The state's step may land where it started (a limit); a WPF pin then only shows the readout.
         if (user && Math.Abs(Zoom - old) < 1e-9) return;
         long started = Stopwatch.GetTimestamp();
+        if (user) _movedSinceDpiChange = true;
         InvalidateSettle();
         Point anchor = anchorPhysical ?? new Point(_left, _top);
         (double left, double top) = PinGeometry.AnchorTopLeftForZoom(_left, _top, old, Zoom, anchor.X, anchor.Y);
@@ -503,16 +550,31 @@ internal sealed class NativePinWindow : IDisposable
     {
         VerifyOpen();
         int left = Coordinate(x), top = Coordinate(y);
-        if (IsDisplayClipped)
+        long started = Stopwatch.GetTimestamp();
+        LastMoveDrewLive = false;
+        // A live frame holds only what was visible where it was drawn; a settled picture holds what the
+        // screens around it could show. Either way, what it holds may not cover the part visible at the
+        // new place, and that part is drawn before the window moves there.
+        NativePinRaster.View held = default;
+        bool draw = IsLiveZooming ? IsDisplayClipped
+            : !_view.Contains(held = RestView(left, top, PixelWidth, PixelHeight));
+        LastMoveFreshPixels = draw && !IsLiveZooming ? held.Pixels - (_view.Intersect(held)?.Pixels ?? 0) : 0;
+        if (draw)
         {
-            // A live frame holds only what was visible where it was drawn. Draw what is visible
-            // at the new place; the settled picture that follows is the whole surface again.
             _left = left; _top = top;
-            Render(highQuality: false);
+            if (IsLiveZooming) Render(highQuality: false);
+            else if (!TryRehold(held))
+            {
+                // A jump rather than a drag step: a live frame now, the full-quality picture once the moves stop.
+                Render(highQuality: false);
+                InvalidateSettle();
+                BeginLiveZoom();
+                LastMoveDrewLive = true;
+            }
             if (IsVisible) Present();
             else PlaceHidden("SetWindowPos(move)");
         }
-        else if (!NativePinWindowInterop.SetWindowPos(Handle, IntPtr.Zero, left, top, 0, 0,
+        else if (!NativePinWindowInterop.SetWindowPos(Handle, IntPtr.Zero, left + _view.Left, top + _view.Top, 0, 0,
             NativePinWindowInterop.NoSize | NativePinWindowInterop.NoActivate | NativePinWindowInterop.NoZOrder))
             ThrowNative("SetWindowPos(move)");
         // SetWindowPos may synchronously dispatch WM_DPICHANGED, whose suggested
@@ -520,8 +582,89 @@ internal sealed class NativePinWindow : IDisposable
         // of overwriting that reentrant adjustment with the original request.
         if (!NativePinWindowInterop.GetWindowRect(Handle, out var actual)) ThrowNative("GetWindowRect(move)");
         _left = actual.Left - _view.Left; _top = actual.Top - _view.Top;
-        // Ordinary movement uses the retained image; only a DPI change rerasterizes.
+        LastMoveMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         BoundsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Brings the part a settled picture holds to <paramref name="next"/>: the pixels both hold stay (moved
+    /// inside the DIB, or copied into one of the new size) and only the newly visible part is drawn, at full
+    /// quality, so the result is the settled picture of <paramref name="next"/> byte for byte. Returns false,
+    /// changing nothing, when more is new than <see cref="ReholdPixelLimit"/> allows on this thread.
+    /// </summary>
+    private unsafe bool TryRehold(NativePinRaster.View next)
+    {
+        if (_dib is not { } current || _edges is null || Source is not { } source) return false;
+        NativePinRaster.View old = _view;
+        NativePinRaster.View? shared = old.Intersect(next);
+        long fresh = next.Pixels - (shared?.Pixels ?? 0);
+        if (fresh > ReholdPixelLimit) return false;
+        long started = Stopwatch.GetTimestamp();
+        // The kept pixels are taken without the outline; it is composited again for the new part below.
+        _edges.Restore(current.Bits);
+        bool inPlace = next.Width == old.Width && next.Height == old.Height;
+        NativePinWindowDib target = inPlace ? current : new NativePinWindowDib(next.Width, next.Height);
+        try
+        {
+            if (shared is { } both)
+            {
+                int rows = both.Height;
+                long bytes = both.Width * 4L;
+                int fromY = both.Top - old.Top, toY = both.Top - next.Top;
+                byte* from = (byte*)current.Bits + ((both.Left - old.Left) * 4L);
+                byte* to = (byte*)target.Bits + ((both.Left - next.Left) * 4L);
+                // Inside one buffer, rows that move down are copied from the last one up.
+                bool lastFirst = inPlace && toY > fromY;
+                for (int i = 0; i < rows; i++)
+                {
+                    int row = lastFirst ? rows - 1 - i : i;
+                    Buffer.MemoryCopy(from + ((long)(fromY + row) * current.Stride),
+                        to + ((long)(toY + row) * target.Stride), bytes, bytes);
+                }
+            }
+            using var lease = source.AcquireLease();
+            foreach (NativePinRaster.View part in Uncovered(next, shared))
+            {
+                var at = (IntPtr)((byte*)target.Bits + ((long)(part.Top - next.Top) * target.Stride) + ((part.Left - next.Left) * 4L));
+                NativePinResampler.Write(lease, at, part, target.Stride, highQuality: true, _contentScale);
+            }
+        }
+        catch
+        {
+            if (!inPlace) target.Dispose();
+            throw;
+        }
+        if (!inPlace)
+        {
+            current.Dispose();
+            _dib = target;
+        }
+        _view = next;
+        long outline = Stopwatch.GetTimestamp();
+        _edges = NativePinEdgeCache.CaptureAndApply(target.Bits, next, target.Stride, DpiScale, _outlineColor,
+            WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build), _contentScale);
+        LastReholdOutlineMilliseconds = Stopwatch.GetElapsedTime(outline).TotalMilliseconds;
+        RasterCount++;
+        ReholdCount++;
+        LastReholdPixels = fresh;
+        LastReholdMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        return true;
+    }
+
+    // The parts of `next` outside `shared` (which lies inside it): full-width bands above and below, then
+    // the columns beside it.
+    private static List<NativePinRaster.View> Uncovered(NativePinRaster.View next, NativePinRaster.View? shared)
+    {
+        if (shared is not { } s) return [next];
+        var parts = new List<NativePinRaster.View>(4);
+        int w = next.SurfaceWidth, h = next.SurfaceHeight;
+        int right = next.Left + next.Width, bottom = next.Top + next.Height;
+        int sharedRight = s.Left + s.Width, sharedBottom = s.Top + s.Height;
+        if (s.Top > next.Top) parts.Add(new(next.Left, next.Top, next.Width, s.Top - next.Top, w, h));
+        if (sharedBottom < bottom) parts.Add(new(next.Left, sharedBottom, next.Width, bottom - sharedBottom, w, h));
+        if (s.Left > next.Left) parts.Add(new(next.Left, s.Top, s.Left - next.Left, s.Height, w, h));
+        if (sharedRight < right) parts.Add(new(sharedRight, s.Top, right - sharedRight, s.Height, w, h));
+        return parts;
     }
 
     /// <summary>A move a pin makes (drag, probe): part of the pin stays on the desktop to grab.</summary>
@@ -574,6 +717,74 @@ internal sealed class NativePinWindow : IDisposable
         if (IsVisible) Present();
         else PlaceHidden("SetWindowPos(DPI)");
         ForceSettle();
+        BoundsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// WM_DPICHANGED at <paramref name="suggested"/> (the HWND's suggested top-left). A change back to the
+    /// scale the last change left, before the pin has moved and within <see cref="DpiFlipWindowMilliseconds"/>,
+    /// is the pin's own new size putting its centre over the other monitor (the edge flicker): it is not
+    /// applied, nor is a change that arrives while one is being applied. A move that ends with Windows'
+    /// scale still different applies it then (<see cref="EndGesture"/>).
+    /// </summary>
+    private void OnDpiChanged(double scale, Point suggested)
+    {
+        if (!double.IsFinite(scale) || scale <= 0) return;
+        WindowDpiScale = scale;
+        if (Math.Abs(scale - DpiScale) < 1e-9) { _heldDpi = null; return; }
+        bool flipBack = Math.Abs(scale - _dpiLeftScale) < 1e-9 && !_movedSinceDpiChange
+            && Stopwatch.GetElapsedTime(_dpiChangedAt).TotalMilliseconds < DpiFlipWindowMilliseconds;
+        if (_dpiChanging || flipBack) { IgnoredDpiChangeCount++; _heldDpi = scale; return; }
+        ApplyDpiChange(scale, suggested);
+    }
+
+    private void ApplyDpiChange(double scale, Point suggested)
+    {
+        (_left, _top) = ScaledTopLeft(scale, suggested);
+        _heldDpi = null;
+        _dpiLeftScale = DpiScale;
+        _dpiChangedAt = Stopwatch.GetTimestamp();
+        _movedSinceDpiChange = false;
+        DpiChangeCount++;
+        _dpiChanging = true;
+        try { SetDpiScale(scale); }
+        finally { _dpiChanging = false; }
+        // A move in progress continues from here: the pointer keeps its place on the picture.
+        if (_dragging && _resizeEdge == PinResizeEdge.None)
+        {
+            _gesturePointer = _lastGesturePointer;
+            _gestureBounds = Bounds;
+        }
+    }
+
+    // The surface's top-left at a new scale. During a move the point under the pointer stays under it (in
+    // DIP of the picture), so the pin neither jumps nor drifts as it crosses; otherwise Windows' suggestion
+    // places the HWND, which starts inside the surface when the pin holds only part of it.
+    private (int Left, int Top) ScaledTopLeft(double scale, Point suggested)
+    {
+        if (_dragging && _resizeEdge == PinResizeEdge.None)
+            return (Coordinate(_lastGesturePointer.X - (_gestureAnchorDip.X * scale)),
+                Coordinate(_lastGesturePointer.Y - (_gestureAnchorDip.Y * scale)));
+        double ratio = scale / DpiScale;
+        return (Coordinate(suggested.X - Math.Round(_view.Left * ratio)), Coordinate(suggested.Y - Math.Round(_view.Top * ratio)));
+    }
+
+    // WM_DISPLAYCHANGE: a monitor came, went or changed size, so what the screens can show changed too.
+    private void OnDisplayChanged()
+    {
+        _screens = ReadScreens();
+        if (_dib is null || IsClosed || IsExiting) return;
+        NativePinRaster.View next = IsLiveZooming ? LiveView(PixelWidth, PixelHeight) : RestView(_left, _top, PixelWidth, PixelHeight);
+        if (next == _view) return;
+        if (IsLiveZooming) Render(highQuality: false);
+        else if (!TryRehold(next))
+        {
+            InvalidateSettle();
+            Render(highQuality: false);
+            ForceSettle();
+        }
+        if (IsVisible) Present();
+        else PlaceHidden("SetWindowPos(display)");
         BoundsChanged?.Invoke();
     }
 
@@ -653,7 +864,7 @@ internal sealed class NativePinWindow : IDisposable
     {
         NativePinPixelSource source = Source ?? throw new ObjectDisposedException(nameof(NativePinWindow));
         int width = DesiredWidth, height = DesiredHeight;
-        NativePinRaster.View view = highQuality ? NativePinRaster.View.Whole(width, height) : LiveView(width, height);
+        NativePinRaster.View view = highQuality ? RestView(_left, _top, width, height) : LiveView(width, height);
         long allocating = Stopwatch.GetTimestamp();
         if (_dib is null || _dib.Width != view.Width || _dib.Height != view.Height)
         {
@@ -666,7 +877,7 @@ internal sealed class NativePinWindow : IDisposable
         using var lease = source.AcquireLease();
         double radius = WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build);
         if (highQuality)
-            LastRasterMilliseconds = NativePinRaster.RenderCached(lease, _dib.Bits, width, height, _dib.Stride,
+            LastRasterMilliseconds = NativePinRaster.RenderCached(lease, _dib.Bits, view, _dib.Stride,
                 DpiScale, _outlineColor, radius, true, out _edges, _contentScale);
         else
         {
@@ -686,15 +897,35 @@ internal sealed class NativePinWindow : IDisposable
 
     // The part of the surface that a live frame draws: what lies on the virtual screen. A pin's
     // surface grows with its zoom (a 4K picture at 259% is 213 MB) while the screen does not.
-    private NativePinRaster.View LiveView(int width, int height)
+    private NativePinRaster.View LiveView(int width, int height) => LiveView(_left, _top, width, height);
+
+    private NativePinRaster.View LiveView(int left, int top, int width, int height)
     {
         if (!LiveViewportEnabled) return NativePinRaster.View.Whole(width, height);
-        if (LiveClipForTest is { } clip)
-            return NativePinRaster.View.Clip(_left, _top, width, height, (long)Math.Floor(clip.Left),
-                (long)Math.Floor(clip.Top), (long)Math.Ceiling(clip.Right), (long)Math.Ceiling(clip.Bottom));
+        if (ScreenBoundedRest || LiveClipForTest is not null) return ScreenView(left, top, width, height);
         long screenLeft = NativePinWindowInterop.GetSystemMetrics(76), screenTop = NativePinWindowInterop.GetSystemMetrics(77);
-        return NativePinRaster.View.Clip(_left, _top, width, height, screenLeft, screenTop,
+        return NativePinRaster.View.Clip(left, top, width, height, screenLeft, screenTop,
             screenLeft + NativePinWindowInterop.GetSystemMetrics(78), screenTop + NativePinWindowInterop.GetSystemMetrics(79));
+    }
+
+    /// <summary>The part of the surface a settled picture holds at <paramref name="left"/>, <paramref name="top"/>.</summary>
+    private NativePinRaster.View RestView(int left, int top, int width, int height) =>
+        ScreenBoundedRest ? ScreenView(left, top, width, height) : NativePinRaster.View.Whole(width, height);
+
+    // What the screens around the surface can show: the bounding box of the monitors it touches (all of them
+    // when it touches none), so a pin across two monitors keeps both parts. Tests stand in one rectangle.
+    private NativePinRaster.View ScreenView(int left, int top, int width, int height)
+    {
+        if (LiveClipForTest is { } clip)
+            return NativePinRaster.View.Clip(left, top, width, height, (long)Math.Floor(clip.Left),
+                (long)Math.Floor(clip.Top), (long)Math.Ceiling(clip.Right), (long)Math.Ceiling(clip.Bottom));
+        return NativePinRaster.View.Held(left, top, width, height, _screens ??= ReadScreens());
+    }
+
+    private static RectD[] ReadScreens()
+    {
+        try { return MonitorEnumerator.GetAll().Select(m => m.Bounds).ToArray(); }
+        catch (Win32Exception) { return []; }
     }
 
     private void Present()
@@ -788,12 +1019,15 @@ internal sealed class NativePinWindow : IDisposable
         _settleRequested = false;
         var lease = Source!.AcquireLease();
         int width = DesiredWidth, height = DesiredHeight, generation = RequestedGeneration;
+        // The settled picture holds what the screens around the pin can show (the whole surface when
+        // ScreenBoundedRest is off), wherever the pin is when the render starts.
+        NativePinRaster.View view = RestView(_left, _top, width, height);
         // Coverage was prepared on this STA for the same live geometry. Passing only
         // its immutable numeric tables avoids creating WPF Dispatchers on pool threads.
-        // A clipped live frame prepared only its visible strips; the settled picture needs
-        // the whole outline, built here once per settle (about 1 to 3 ms), never per notch.
-        var coverage = _view.IsWhole ? _edges!.PreparedCoverage
-            : new NativePinRaster.Chrome(width, height, checked(width * 4), DpiScale,
+        // When the live frame held another part, the settled outline is built here once per settle
+        // (about 1 to 3 ms), never per notch.
+        var coverage = _edges is { } prepared && prepared.Area == view ? prepared.PreparedCoverage
+            : new NativePinRaster.Chrome(view, checked(view.Width * 4), DpiScale,
                 WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build), 1);
         Color outline = _outlineColor;
         Action<CancellationToken>? testGate = BeforeSettleRasterForTest;
@@ -807,14 +1041,14 @@ internal sealed class NativePinWindow : IDisposable
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    buffer = new NativePinSettleBuffer(width, height);
+                    buffer = new NativePinSettleBuffer(view.Width, view.Height);
                     work.BufferAllocated(buffer.ByteLength);
                     testGate?.Invoke(token);
                     token.ThrowIfCancellationRequested();
-                    double elapsed = NativePinRaster.RenderPrepared(lease, buffer.Pointer, width, height, buffer.Stride,
+                    double elapsed = NativePinRaster.RenderPrepared(lease, buffer.Pointer, view, buffer.Stride,
                         outline, true, coverage, out var edges, cancellationToken: token);
                     token.ThrowIfCancellationRequested();
-                    return new NativePinSettleFrame(buffer, edges, generation, elapsed);
+                    return new NativePinSettleFrame(buffer, edges, generation, elapsed, view);
                 }
                 catch { buffer?.Dispose(); throw; }
             }
@@ -848,17 +1082,29 @@ internal sealed class NativePinWindow : IDisposable
         try
         {
             if (work.Error is not null) throw work.Error;
-            if (frame is not null && !IsClosed && !IsExiting && frame.Generation == RequestedGeneration)
+            // The pin may have moved while the worker drew (a drag during the live zoom). A picture that
+            // no longer covers the part to hold is completed here when little is missing, else drawn again.
+            NativePinRaster.View now = frame is null ? default : RestView(_left, _top, frame.View.SurfaceWidth, frame.View.SurfaceHeight);
+            bool covers = frame is null || frame.View.Contains(now);
+            if (frame is not null && !covers
+                && now.Pixels - (frame.View.Intersect(now)?.Pixels ?? 0) > ReholdPixelLimit
+                && !IsClosed && !IsExiting && frame.Generation == RequestedGeneration)
+            {
+                _settleRequested = true;
+            }
+            else if (frame is not null && !IsClosed && !IsExiting && frame.Generation == RequestedGeneration)
             {
                 _dib?.Dispose(); _dib = null;
                 _dib = new NativePinWindowDib(frame.Buffer);
-                _view = NativePinRaster.View.Whole(_dib.Width, _dib.Height);
+                _view = frame.View;
                 _edges = frame.Edges;
                 // Theme/hover may have changed while the immutable picture was rendered.
                 _edges.Redraw(_dib.Bits, _outlineColor);
+                if (!covers) TryRehold(now);
                 LastRasterMilliseconds = frame.RasterMilliseconds;
                 RasterCount++;
                 if (IsVisible) Present();
+                else PlaceHidden("SetWindowPos(settle)");
                 // ULW can synchronously dispatch DPI changes or invoke a Presented
                 // observer that requests another size. Such a request remains live.
                 if (frame.Generation == RequestedGeneration)
@@ -1084,7 +1330,8 @@ internal sealed class NativePinWindow : IDisposable
     {
         if (State.IsClickThrough || IsExiting || IsHiding) return;
         EndGesture();
-        _gesturePointer = pointer; _gestureBounds = Bounds; _gestureZoom = Zoom; _gestureDpi = DpiScale;
+        _gesturePointer = _lastGesturePointer = pointer; _gestureBounds = Bounds; _gestureZoom = Zoom; _gestureDpi = DpiScale;
+        _gestureAnchorDip = new Point((pointer.X - _left) / DpiScale, (pointer.Y - _top) / DpiScale);
         _gestureMoved = false;
         _resizeEdge = control ? PinResizeEdge.None : EdgeAt(local);
         _ = NativePinWindowInterop.SetCapture(Handle);
@@ -1109,6 +1356,8 @@ internal sealed class NativePinWindow : IDisposable
         double dx = pointer.X - _gesturePointer.X, dy = pointer.Y - _gesturePointer.Y;
         if (dx == 0 && dy == 0 && !_gestureMoved) return;
         _gestureMoved = true;
+        _lastGesturePointer = pointer;
+        _movedSinceDpiChange = true;
         if (_resizeEdge == PinResizeEdge.None)
         {
             double left = _gestureBounds.Left + dx, top = _gestureBounds.Top + dy;
@@ -1135,6 +1384,11 @@ internal sealed class NativePinWindow : IDisposable
         bool wasDragging = _dragging;
         bool wasResizing = _dragging && _resizeEdge != PinResizeEdge.None;
         bool resized = wasResizing && Math.Abs(Zoom - _gestureZoom) >= 1e-9;
+        // A scale Windows gave during the move and the flicker guard held back applies where the move ends.
+        if (wasDragging && !wasResizing && _gestureMoved && !IsClosed && !_closing && !IsExiting && _dib is not null
+            && _heldDpi is { } held && Math.Abs(held - DpiScale) > 1e-9)
+            ApplyDpiChange(held, new Point(_left + _view.Left, _top + _view.Top));
+        if (wasDragging && !wasResizing && _gestureMoved) _heldDpi = null;
         _dragging = false; _resizeEdge = PinResizeEdge.None;
         if (Handle != IntPtr.Zero && NativePinWindowInterop.GetCapture() == Handle) _ = NativePinWindowInterop.ReleaseCapture();
         if (wasResizing && !IsClosed && !_closing) ForceSettle();
@@ -1216,16 +1470,27 @@ internal sealed class NativePinWindow : IDisposable
             case 0x007B when ContextMenuRequested is { } menu: // WM_CONTEXTMENU: -1,-1 from the keyboard.
                 menu(lparam.ToInt64() == -1 || unchecked((int)lparam.ToInt64()) == -1 ? null : MessagePoint(lparam));
                 return IntPtr.Zero;
-            case 0x02E0:
+            case 0x02E0: // WM_DPICHANGED.
             {
                 var suggested = Marshal.PtrToStructure<NativePinWindowInterop.Rect>(lparam);
-                double scale = (wparam.ToInt64() & 0xFFFF) / 96d;
-                // The suggestion places the HWND, which in a live frame starts inside the surface.
-                double ratio = scale / DpiScale;
-                _left = suggested.Left - (int)Math.Round(_view.Left * ratio);
-                _top = suggested.Top - (int)Math.Round(_view.Top * ratio);
-                SetDpiScale(scale); return IntPtr.Zero;
+                OnDpiChanged((wparam.ToInt64() & 0xFFFF) / 96d, new Point(suggested.Left, suggested.Top));
+                return IntPtr.Zero;
             }
+            case 0x02E4 when lparam != IntPtr.Zero: // WM_GETDPISCALEDSIZE: the size the pin will have, not a linear guess.
+            {
+                double scale = (wparam.ToInt64() & 0xFFFF) / 96d;
+                if (scale <= 0) break;
+                (int left, int top) = ScaledTopLeft(scale, new Point(_left + _view.Left, _top + _view.Top));
+                int width = Math.Max(1, checked((int)Math.Round(State.WidthDip * scale)));
+                int height = Math.Max(1, checked((int)Math.Round(State.HeightDip * scale)));
+                NativePinRaster.View held = RestView(left, top, width, height);
+                Marshal.WriteInt32(lparam, 0, held.Width);
+                Marshal.WriteInt32(lparam, 4, held.Height);
+                return new IntPtr(1);
+            }
+            case 0x007E: // WM_DISPLAYCHANGE: the screens (and so what the pin holds) may have changed.
+                OnDisplayChanged();
+                break;
         }
         return NativePinWindowInterop.DefWindowProcW(Handle, message, wparam, lparam);
     }
