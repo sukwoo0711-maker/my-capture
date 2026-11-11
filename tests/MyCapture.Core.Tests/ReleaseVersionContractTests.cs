@@ -429,5 +429,18 @@ public sealed class ReleaseVersionContractTests
             "--filter \"FullyQualifiedName!~GitHubUpdateServiceTests.DownloadedSessionPassesActualInstallerPathGuard\"",
             job, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error", job, StringComparison.Ordinal);
+
+        // A read-only desktop description runs before the packaged self-tests and the suites, so a
+        // failure can be told apart from the image (render tier, software effects, foreground owner,
+        // input locale, long paths and Recycle Bin, capture and encoder availability).
+        int probe = job.IndexOf("dotnet run --file build/tools/runner-desktop-probe.cs", StringComparison.Ordinal);
+        Assert.True(probe >= 0, "The ARM64 runner desktop probe is missing.");
+        Assert.True(probe < job.IndexOf(@".\build\run-packaged-self-tests.ps1", StringComparison.Ordinal));
+        Assert.Contains("tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0", job[probe..], StringComparison.Ordinal);
+        foreach (string evidence in new[] { "LongPathsEnabled", "BitBucket", "Get-WinUserLanguageList", "GraphicsCaptureSession", "WWAHost.exe" })
+            Assert.Contains(evidence, job, StringComparison.Ordinal);
+        string tool = Read("build/tools/runner-desktop-probe.cs");
+        foreach (string property in new[] { "#:property PlatformTarget=AnyCPU", "#:property UseAppHost=false" })
+            Assert.Contains(property, tool, StringComparison.Ordinal);
     }
 }

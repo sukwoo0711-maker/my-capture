@@ -238,6 +238,34 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           . .\build\publish-architecture.ps1
           Assert-PublishArchitecture -PublishRoot (Join-Path $PWD 'artifacts/ci-arm64/publish') -Architecture arm64
+      # Diagnostics only; nothing here changes the runner. The first run failed on what this image
+      # differs in: WPF effects through RenderTargetBitmap, a WWAHost window that owned the
+      # foreground over the capture fixtures, the tray, and long-path Recycle Bin moves.
+      - name: Describe the ARM64 runner desktop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          $probeBuild = Join-Path $env:RUNNER_TEMP 'runner-desktop-probe'
+          dotnet run --file build/tools/runner-desktop-probe.cs --artifacts-path $probeBuild -- (Join-Path $PWD 'tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $fileSystem = Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -ErrorAction SilentlyContinue
+          Write-Host "PROBE long paths: LongPathsEnabled=$($fileSystem.LongPathsEnabled); TEMP=$env:TEMP; workspace=$PWD"
+          foreach ($volume in @(Get-ChildItem -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume' -ErrorAction SilentlyContinue)) {
+              $bin = Get-ItemProperty -LiteralPath $volume.PSPath
+              Write-Host "PROBE recycle bin $($volume.PSChildName): MaxCapacity=$($bin.MaxCapacity) MB, NukeOnDelete=$($bin.NukeOnDelete)"
+          }
+          foreach ($drive in @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=3')) {
+              Write-Host "PROBE volume $($drive.DeviceID): $($drive.FileSystem), $([math]::Round($drive.FreeSpace / 1GB, 1)) of $([math]::Round($drive.Size / 1GB, 1)) GB free"
+          }
+          $languages = @(Get-WinUserLanguageList | ForEach-Object { "$($_.LanguageTag) [$($_.InputMethodTips -join ',')]" })
+          Write-Host "PROBE languages: $($languages -join '; '); system locale $((Get-WinSystemLocale).Name); culture $((Get-Culture).Name)"
+          try {
+              $null = [Windows.Graphics.Capture.GraphicsCaptureSession, Windows.Graphics.Capture, ContentType = WindowsRuntime]
+              Write-Host "PROBE graphics capture: IsSupported=$([Windows.Graphics.Capture.GraphicsCaptureSession]::IsSupported())"
+          } catch { Write-Host "PROBE graphics capture: $($_.Exception.Message)" }
+          foreach ($process in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='WWAHost.exe' OR Name='explorer.exe' OR Name='ShellExperienceHost.exe' OR Name='StartMenuExperienceHost.exe'")) {
+              Write-Host "PROBE process $($process.Name) $($process.ProcessId) session $($process.SessionId): $($process.CommandLine)"
+          }
       - name: Run the eight packaged self-tests natively
         if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
         shell: powershell

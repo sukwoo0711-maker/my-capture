@@ -26,6 +26,14 @@ internal static class UpdatePaths
 
     internal static string ChecksumName => ChecksumNameFor(AppArchitecture.Name);
 
+    /// <summary>
+    /// The in-flight download keeps a fixed short name: the installer name carries up to three
+    /// ten-digit version parts and the architecture, and with a ".downloading" suffix the win-arm64
+    /// name reached MAX_PATH under a long device TEMP. The file lives only inside one staging call
+    /// (it is moved to <see cref="InstallerName"/> or deleted), so Setup and cleanup never read it.
+    /// </summary>
+    internal const string DownloadingInstallerName = "installer.downloading";
+
     /// <summary>The x64 release keeps the unsuffixed checksum file it has always published.</summary>
     internal static string ChecksumNameFor(string architecture) => architecture switch
     {
