@@ -52,11 +52,20 @@ public sealed class Arm64PackageTests
             try
             {
                 string? path = null; Exception? last = null;
-                // A process that has only just started may not have its module list yet.
+                // A process that has only just started may not have its module list yet: .NET Framework
+                // then throws Win32Exception, or returns no main module at all (seen on the x64 runner).
+                // Setup itself treats an unreadable executable as "not this application" (AppProcesses.Stop).
                 for (int attempt = 0; attempt < 50 && path == null; attempt++)
                 {
-                    try { child.Refresh(); path = child.MainModule.FileName; }
-                    catch (System.ComponentModel.Win32Exception e) { last = e; Thread.Sleep(100); }
+                    try
+                    {
+                        child.Refresh();
+                        ProcessModule? module = child.MainModule;
+                        path = module?.FileName;
+                    }
+                    catch (System.ComponentModel.Win32Exception e) { last = e; }
+                    catch (InvalidOperationException e) { last = e; }
+                    if (path == null) Thread.Sleep(100);
                 }
                 Assert.True(path != null, "The main module of a system process could not be read: " + last);
                 Assert.Equal("cmd.exe", Path.GetFileName(path), ignoreCase: true);
