@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Interop;
@@ -75,6 +76,12 @@ public sealed record FrozenFrame(
 /// code.
 /// </para>
 /// <para>
+/// A display in HDR mode is the exception to "GDI only": its 8-bit GDI picture cannot hold what
+/// the display shows, so a still capture reads that display once more in scRGB through Desktop
+/// Duplication and writes the converted pixels over the GDI copy (<see cref="HdrStillCapture"/>).
+/// Displays without HDR, recording, and any HDR read that fails or is late keep the GDI copy.
+/// </para>
+/// <para>
 /// Every returned bitmap is frozen. The capture overlay is created after the frame is
 /// acquired and the frame is handed across threads to be encoded; an unfrozen
 /// <see cref="BitmapSource"/> would be bound to the acquiring thread and throw on
@@ -85,12 +92,45 @@ public sealed class ScreenCaptureEngine
 {
     private static readonly IntPtr HgdiError = new(-1);
 
+    // Read once: the switch is a diagnostic for a whole run, and the capture path stays free of it.
+    private static readonly HdrCaptureMode EnvironmentHdrMode = HdrCaptureModeSelection.FromEnvironment();
+
     private readonly ILogger<ScreenCaptureEngine> _log;
+    private int _hdrReadLogged;
+    private int _hdrProblemLogged;
 
     public ScreenCaptureEngine(ILogger<ScreenCaptureEngine> log)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
+
+    /// <summary>
+    /// Diagnostic override of the HDR correction for this engine; <see langword="null"/> follows
+    /// <see cref="HdrCaptureModeSelection.EnvironmentVariable"/>, which defaults to
+    /// <see cref="HdrCaptureMode.Auto"/>.
+    /// </summary>
+    public HdrCaptureMode? HdrMode { get; set; }
+
+    /// <summary>
+    /// Treatment of pixels brighter than SDR white. Captures use the default; diagnostics set the
+    /// soft knee to render the comparison picture.
+    /// </summary>
+    public HdrToneOperator HdrToneOperator { get; set; }
+
+    /// <summary>The D3D device an HDR read keeps for the next one is alive. It is shared by every engine.</summary>
+    public static bool HoldsHdrDevice => HdrDesktopReader.HasKeptDevice;
+
+    /// <summary>
+    /// Releases the D3D device kept between HDR reads now instead of after its idle period; the next
+    /// HDR capture creates one again. Returns false when a read still uses it.
+    /// </summary>
+    public static bool ReleaseHdrDevice() => HdrDesktopReader.ReleaseKeptDevice();
+
+    /// <summary>
+    /// Step timings of the last HDR read that ended after its capture had stopped waiting for it,
+    /// returned once; <see langword="null"/> when there is none. Diagnostic: they show which step was slow.
+    /// </summary>
+    public static IReadOnlyList<HdrOutputRead>? TakeLateHdrRead() => HdrDesktopReader.TakeLateRead();
 
     private static bool IsInvalidGdiHandle(IntPtr handle) =>
         handle == IntPtr.Zero || handle == HgdiError;
@@ -105,6 +145,9 @@ public sealed class ScreenCaptureEngine
     /// first 3440x1440 capture take 827ms while subsequent captures took 21-51ms.
     /// A one-pixel capture performs the same initialisation without allocating a
     /// full frame, and is started in the background as soon as the tray app launches.
+    /// A display in HDR mode gets a one-pixel capture of its own, so the D3D device and the
+    /// conversion table its captures need exist before the first hotkey; a system without
+    /// HDR pays one more display-configuration query here and nothing else.
     /// </remarks>
     public double Prewarm()
     {
@@ -113,6 +156,25 @@ public sealed class ScreenCaptureEngine
         _ = CaptureRegion(
             new RectD(monitor.Bounds.Left, monitor.Bounds.Top, 1, 1),
             includeCursor: false);
+        if ((HdrMode ?? EnvironmentHdrMode) == HdrCaptureMode.Auto)
+        {
+            foreach (HdrDisplayState display in HdrDisplayDetector.Detect())
+            {
+                if (!display.IsHdrActive || string.Equals(display.DeviceName, monitor.DeviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (MonitorInfo other in MonitorEnumerator.GetAll())
+                {
+                    if (string.Equals(other.DeviceName, display.DeviceName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _ = CaptureRegion(new RectD(other.Bounds.Left, other.Bounds.Top, 1, 1), includeCursor: false);
+                    }
+                }
+            }
+        }
+
         stopwatch.Stop();
 
         _log.LogDebug("Capture pipeline prewarmed in {Elapsed:0.0}ms", stopwatch.Elapsed.TotalMilliseconds);
@@ -159,11 +221,21 @@ public sealed class ScreenCaptureEngine
     /// <summary>
     /// Captures an arbitrary virtual-desktop rectangle.
     /// </summary>
-    public BitmapSource CaptureRegion(RectD screenBounds, bool includeCursor)
+    public BitmapSource CaptureRegion(RectD screenBounds, bool includeCursor) =>
+        CaptureRegion(screenBounds, includeCursor, out _);
+
+    /// <summary>
+    /// Captures an arbitrary virtual-desktop rectangle and reports what the HDR correction did.
+    /// </summary>
+    /// <param name="hdr">
+    /// <see langword="null"/> when the capture touched no display that needed the correction, which
+    /// is every capture on a system without HDR.
+    /// </param>
+    public BitmapSource CaptureRegion(RectD screenBounds, bool includeCursor, out HdrCaptureReport? hdr)
     {
         // BitBlt straight into a DIB section: its memory already holds top-down BGRX rows, so the
         // frame is copied once into the frozen bitmap instead of read back with GetDIBits first.
-        return CaptureRegionToDibSection(screenBounds, includeCursor)
+        return CaptureRegionToDibSection(screenBounds, includeCursor, out hdr)
             ?? CaptureRegionCore(screenBounds, includeCursor, ToBitmapSource);
     }
 
@@ -171,8 +243,9 @@ public sealed class ScreenCaptureEngine
     /// The still-capture path. Returns null only when GDI cannot create the DIB section, and the
     /// caller then uses the compatible-bitmap readback.
     /// </summary>
-    private BitmapSource? CaptureRegionToDibSection(RectD screenBounds, bool includeCursor)
+    private BitmapSource? CaptureRegionToDibSection(RectD screenBounds, bool includeCursor, out HdrCaptureReport? hdr)
     {
+        hdr = null;
         RectD pixels = screenBounds.ToPixelBounds();
         int width = Math.Max(1, (int)pixels.Width);
         int height = Math.Max(1, (int)pixels.Height);
@@ -221,6 +294,9 @@ public sealed class ScreenCaptureEngine
                     $"BitBlt failed with Win32 error {Marshal.GetLastWin32Error()}.");
             }
 
+            // Before the cursor, which is drawn over the corrected pixels as it is over the others.
+            hdr = CorrectHdrDisplays(bits, width, height, originX, originY);
+
             if (includeCursor)
             {
                 DrawCursor(memoryDc, originX, originY, width, height);
@@ -248,6 +324,79 @@ public sealed class ScreenCaptureEngine
             }
 
             NativeMethods.ReleaseDC(desktopWindow, screenDc);
+        }
+    }
+
+    /// <summary>
+    /// Writes the converted scRGB read of HDR displays over their part of the GDI copy. Never
+    /// throws: whatever goes wrong, the section still holds the GDI copy and the capture goes on.
+    /// </summary>
+    private HdrCaptureReport? CorrectHdrDisplays(IntPtr bits, int width, int height, int originX, int originY)
+    {
+        HdrCaptureMode mode = HdrMode ?? EnvironmentHdrMode;
+        if (mode == HdrCaptureMode.Off)
+        {
+            return null;
+        }
+
+        try
+        {
+            HdrCaptureReport? report = HdrStillCapture.Apply(bits, width, height, originX, originY, mode, HdrToneOperator);
+            if (report is not null)
+            {
+                LogHdrReport(report);
+            }
+
+            return report;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (Interlocked.Exchange(ref _hdrProblemLogged, 1) == 0)
+            {
+                _log.LogWarning(ex, "HDR colour correction failed; the capture keeps the GDI copy");
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>The first corrected capture and the first failed or late read are logged; later ones only at debug level.</summary>
+    private void LogHdrReport(HdrCaptureReport report)
+    {
+        foreach (HdrOutputRead output in report.Outputs)
+        {
+            if (output.Applied)
+            {
+                if (Interlocked.Exchange(ref _hdrReadLogged, 1) == 0)
+                {
+                    _log.LogInformation(
+                        "HDR display {Device} read in scRGB and converted (SDR white {WhiteNits:0} nits, read {ReadMs:0.0}ms)",
+                        output.DeviceName, output.SdrWhiteNits, report.ReadMs);
+                }
+            }
+            else if (output.Outcome is HdrReadOutcome.Failed or HdrReadOutcome.TimedOut
+                && Interlocked.Exchange(ref _hdrProblemLogged, 1) == 0)
+            {
+                _log.LogWarning(
+                    "HDR display {Device} kept the GDI copy: {Reason} (waited {ReadMs:0.0}ms)",
+                    output.DeviceName, output.Detail, report.ReadMs);
+            }
+            else
+            {
+                _log.LogDebug("HDR display {Device} kept the GDI copy: {Reason}", output.DeviceName, output.Detail);
+            }
+        }
+
+        // A read that was too late for its capture still ended; its timings name the slow step.
+        if (HdrDesktopReader.TakeLateRead() is { } late)
+        {
+            foreach (HdrOutputRead output in late)
+            {
+                _log.LogInformation(
+                    "An HDR read of {Device} ended after its capture stopped waiting ({Outcome}): output {FindMs:0.0}ms, device {DeviceMs:0.0}ms, duplicate {DuplicateMs:0.0}ms, frame {FrameMs:0.0}ms, copy {CopyMs:0.0}ms, convert {ConvertMs:0.0}ms",
+                    output.DeviceName, output.Outcome, output.FindOutputMs, output.DeviceMs, output.DuplicateMs,
+                    output.AcquireMs, output.CopyMs, output.ConvertMs);
+            }
         }
     }
 

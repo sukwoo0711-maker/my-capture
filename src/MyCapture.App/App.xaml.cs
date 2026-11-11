@@ -2431,6 +2431,13 @@ public partial class App : Application
                 CaptureSelfTest.Run);
         }
 
+        int hdrIndex = FindSwitch(args, HdrCaptureSelfTest.CommandLineSwitch);
+        if (hdrIndex >= 0)
+        {
+            string outputDirectory = OutputDirectoryAfter(args, hdrIndex, "mycapture-hdr-capture");
+            return RunSelfTest(outputDirectory, HdrCaptureSelfTest.ReportName, HdrCaptureSelfTest.Run);
+        }
+
         int shellIndex = FindSwitch(args, ShellSelfTest.CommandLineSwitch);
         if (shellIndex >= 0)
         {
