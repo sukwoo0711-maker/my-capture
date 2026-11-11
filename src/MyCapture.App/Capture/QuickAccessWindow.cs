@@ -398,6 +398,7 @@ internal sealed partial class QuickAccessWindow : Window
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
+        InitializeCardMenu(excludeFromCapture);
         ConstrainToWorkArea(_targetMonitor);
         // The implicit Window style, which carries the shared entrance, does not reach a subclass.
         // A card receiving a flying capture replaces it with its own fade (PrepareLanding).
@@ -837,7 +838,7 @@ internal sealed partial class QuickAccessWindow : Window
     internal void Advance(TimeSpan time, bool interacting)
     {
         // A failure keeps the card until the user closes it or a retry succeeds.
-        if (IsKept || interacting || IsHeldForFailure || _ratingRequestRunning) return;
+        if (IsKept || interacting || IsHeldForFailure || _ratingRequestRunning || _cardMenu?.IsOpen == true) return;
         // The countdown runs from the moment the card shows, but a card still waiting for its saved
         // capture or for the copy's result stays at the end of it until they arrive (BindCapture,
         // ReportInitialCopy), which leave at least the hold after a result.

@@ -141,6 +141,15 @@ internal sealed class GalleryFolderExportService
         return GalleryExportFiles.RelativeChild(batch, plan.Entries[0].RelativePath);
     }
 
+    /// <summary>Like single drag-out, but disk work cannot hold up a menu's caller.</summary>
+    internal async Task<string> PreparePersistentSingleAsync(CaptureRecord record)
+    {
+        using IDisposable lease = _queue.AcquireEvictionLease(record.Id);
+        GalleryFolderExportPlan plan = FitStagingPlan(BuildCapturePlan([record]));
+        string batch = await Task.Run(() => Stage(plan, CancellationToken.None));
+        return GalleryExportFiles.RelativeChild(batch, plan.Entries[0].RelativePath);
+    }
+
     private GalleryFolderExportPlan FitStagingPlan(GalleryFolderExportPlan plan) =>
         GalleryExportPathBudget.Fit(plan, Path.Combine(_stagingRoot,
             GalleryExportFiles.FolderBatchPrefix + new string('0', 32)).Length);

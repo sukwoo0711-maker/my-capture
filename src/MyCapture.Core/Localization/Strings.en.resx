@@ -5611,4 +5611,12 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="OpenWith.Menu" xml:space="preserve"><value>Open with</value></data>
+  <data name="OpenWith.Choose" xml:space="preserve"><value>Choose another app…</value></data>
+  <data name="OpenWith.Loading" xml:space="preserve"><value>Loading</value></data>
+  <data name="OpenWith.Preparing" xml:space="preserve"><value>Preparing file</value></data>
+  <data name="OpenWith.Opened" xml:space="preserve"><value>Sent to app</value></data>
+  <data name="OpenWith.Failed" xml:space="preserve"><value>Could not open the app. {0}</value></data>
+  <data name="OpenWith.Unavailable" xml:space="preserve"><value>The selected app is unavailable.</value></data>
+  <data name="OpenWith.AccessDenied" xml:space="preserve"><value>Access to the file was denied.</value></data>
 </root>
