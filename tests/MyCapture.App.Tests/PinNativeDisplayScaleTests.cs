@@ -238,18 +238,20 @@ public sealed class PinNativeDisplayScaleTests
     [InlineData(1.5)]
     public void TheSwitchOfAPinLargerThanTheScreenTakesTheWholeSurface(double scale) => RunHosted(() =>
     {
-        PinWindow pin = HostedPin(240, 160);
+        // The pin starts 300 x 200 away from the right-bottom corner of the 1600 x 1000 stand-in screen, so 200%
+        // already overflows it on the right and bottom. The surface stays at most 720 x 480: Windows does not let
+        // a WPF window grow past the real virtual screen, and the CI desktop is 1024 x 768.
+        PinWindow pin = HostedPin(240, 160, left: -10700, top: -11200);
         try
         {
             NativePinWindow native = pin.NativeWindowForTest!;
             if (scale != 1) SendDpiChanged(native.Handle, (int)(96 * scale), native.DisplayedBounds);
             Assert.Equal(scale, native.DpiScale);
-            // 240 x 160 at 800% overflows the 1600 x 1000 stand-in screen on the right and bottom.
-            native.SetZoom(8);
+            native.SetZoom(2);
             PinNativeSpeedTestWait.Complete(native.WaitForSettledAsync());
             Assert.True(native.IsDisplayClipped);
             RectD whole = native.Bounds;
-            Assert.Equal(Math.Round(240 * 8 * scale), whole.Width);
+            Assert.Equal(Math.Round(240 * 2 * scale), whole.Width);
             Assert.True(native.DisplayedBounds.Width < whole.Width);
 
             Rect expected = PinWindow.SwitchGeometry(whole, scale);
@@ -344,16 +346,16 @@ public sealed class PinNativeDisplayScaleTests
         PinNativeSpeedTestWait.Complete(pin.DrainAsync());
     }
 
-    private static PinWindow HostedPin(int width = 160, int height = 100)
+    private static PinWindow HostedPin(int width = 160, int height = 100, int left = -11900, int top = -11900)
     {
         BitmapSource picture = PinNativeTestImages.Picture(width, height);
         PinContent content = PinContent.FromImage(picture);
         var settings = new PinSettings { LightweightImagePins = true };
-        var pin = new PinWindow(content, new PinViewState(width, height, 1, 1, .1), -11900, -11900, () => settings)
+        var pin = new PinWindow(content, new PinViewState(width, height, 1, 1, .1), left, top, () => settings)
         {
             ReadWorkArea = static _ => OffscreenArea,
         };
-        NativePinHost host = NativePinHost.Create(pin, content, -11900, -11900, 1);
+        NativePinHost host = NativePinHost.Create(pin, content, left, top, 1);
         pin.UseNativeHost(host);
         host.Window.LiveClipForTest = OffscreenArea;
         pin.Present();
