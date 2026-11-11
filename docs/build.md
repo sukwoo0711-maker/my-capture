@@ -95,8 +95,10 @@ dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:P
 
 ILLink 버전과 패키지 해시는 `build/WindowsProjectionTrim.targets`에 고정합니다. 애플리케이션의 PackageReference나 trim analyzer를 켜지 않습니다.
 
-- 프로필로 직접 publish할 때는 준비 단계가 없습니다. 복원이 고정한 버전의 ILLink 패키지를 NuGet 캐시에 내려받고(참조하지 않고 받기만 하는 `PackageDownload`), publish는 NuGet이 그 패키지 옆에 적어 둔 SHA-512가 고정값과 같을 때만 링커를 실행합니다. `--no-restore`로 publish하려면 같은 속성으로 먼저 복원해 둡니다. CI의 x86 publish가 이 경로입니다.
-- `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 캐시에 없으면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증하고 `MYCAPTURE_PROJECTION_LINKER_PATH`로 넘깁니다. 이 변수가 있으면 복원은 패키지를 받지 않습니다.
+고정 버전은 `global.json`이 고르는 SDK의 런타임 버전과 같게 둡니다(SDK 10.0.400의 런타임은 10.0.11). 링커는 publish가 SDK의 `dotnet`으로 시작하는 도구이고, 자기 패치보다 낮은 런타임에서는 시작되지 않기 때문입니다. `build/package.ps1`은 사용자별 SDK를 PATH 맨 앞에 두므로, 고정 버전이 그 SDK의 런타임보다 새로우면 패키징이 멈춥니다. 이 경우 publish는 이유를 적은 오류를 냅니다. `global.json`의 SDK를 올릴 때 고정 버전과 해시도 함께 올립니다(계약 시험이 둘을 한 쌍으로 확인합니다).
+
+- 프로필로 직접 publish할 때는 준비 단계가 없습니다. 복원이 고정한 버전의 ILLink 패키지를 NuGet 캐시에 내려받고(참조하지 않고 받기만 하는 `PackageDownload`), publish는 NuGet이 그 패키지 옆에 적어 둔 SHA-512가 고정값과 같을 때만 링커를 실행합니다. 패키지가 fallback 폴더에 이미 있으면 복원은 그것을 그대로 두므로, publish는 NuGet 패키지 폴더를 모두 찾아봅니다. `--no-restore`로 publish하려면 같은 속성으로 먼저 복원해 둡니다. CI의 x86 publish가 이 경로입니다.
+- `build/package.ps1`은 `build/prepare-projection-linker.ps1`으로 도구를 준비합니다. 캐시의 패키지는 NuGet이 적어 둔 SHA-512가 고정값과 같을 때만 씁니다. 캐시에 없거나 값이 다르면 고정 패키지를 임시 폴더에 받아 SHA-512를 검증하고 `MYCAPTURE_PROJECTION_LINKER_PATH`로 넘깁니다. 이 변수가 있으면 복원은 패키지를 받지 않습니다.
 
 ```powershell
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishProfile=win-x64-self-contained -o '<새 x64 출력 폴더>'

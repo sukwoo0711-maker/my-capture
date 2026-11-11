@@ -26,8 +26,13 @@ if ($LASTEXITCODE -ne 0) { throw 'The NuGet package cache could not be located.'
 $cacheLine = @($cacheLines | Where-Object { $_ -cmatch '^global-packages: .+$' })
 if ($cacheLine.Count -ne 1) { throw 'The NuGet package cache response was ambiguous.' }
 $cache = $cacheLine[0].Substring('global-packages: '.Length).Trim()
-$cachedLinker = Join-Path $cache "microsoft.net.illink.tasks\$version\tools\net\illink.dll"
-if (Test-Path -LiteralPath $cachedLinker -PathType Leaf) {
+$cachedPack = Join-Path $cache "microsoft.net.illink.tasks\$version"
+$cachedLinker = Join-Path $cachedPack 'tools\net\illink.dll'
+# NuGet writes the Base64 SHA-512 of the .nupkg it installed next to the package. A cached pack
+# without that record, or with another hash, is not used; the pinned download below replaces it.
+$cachedHashPath = Join-Path $cachedPack "microsoft.net.illink.tasks.$version.nupkg.sha512"
+$cachedSha512 = if (Test-Path -LiteralPath $cachedHashPath -PathType Leaf) { [IO.File]::ReadAllText($cachedHashPath).Trim() } else { '' }
+if ((Test-Path -LiteralPath $cachedLinker -PathType Leaf) -and $cachedSha512 -ceq $expectedSha512) {
     $env:MYCAPTURE_PROJECTION_LINKER_PATH = $cachedLinker
     Write-Host "Using cached projection linker: $cachedLinker"
     return

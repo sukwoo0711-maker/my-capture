@@ -149,12 +149,21 @@ public sealed class WindowsProjectionReleaseContractTests
         XElement properties = Assert.Single(targets.Root!.Elements("PropertyGroup"));
         string version = properties.Element("MyCaptureProjectionLinkerVersion")!.Value;
         byte[] digest = Convert.FromBase64String(properties.Element("MyCaptureProjectionLinkerPackageSha512")!.Value);
-        Assert.Equal("10.0.12", version);
+        // The linker is a framework-dependent tool started with the SDK's own dotnet. It cannot start
+        // on an older runtime patch than its own, so the pin is the runtime of the SDK in global.json
+        // (SDK 10.0.400 carries runtime 10.0.11). When global.json moves, move this pair together.
+        using (JsonDocument global = JsonDocument.Parse(File.ReadAllText(PathFor("global.json"))))
+            Assert.Equal("10.0.400", global.RootElement.GetProperty("sdk").GetProperty("version").GetString());
+        Assert.Equal("10.0.11", version);
         Assert.Equal(64, digest.Length);
         string prepare = File.ReadAllText(PathFor("build/prepare-projection-linker.ps1"));
         Assert.Contains("$actualSha512 -cne $expectedSha512", prepare, StringComparison.Ordinal);
         Assert.True(prepare.IndexOf("$actualSha512 -cne $expectedSha512", StringComparison.Ordinal)
             < prepare.IndexOf("Expand-Archive -LiteralPath", StringComparison.Ordinal));
+        // A pack already in the NuGet cache is used only when NuGet's own record of its hash is the pin.
+        Assert.Contains("-and $cachedSha512 -ceq $expectedSha512) {", prepare, StringComparison.Ordinal);
+        Assert.True(prepare.IndexOf("-and $cachedSha512 -ceq $expectedSha512) {", StringComparison.Ordinal)
+            < prepare.IndexOf("$env:MYCAPTURE_PROJECTION_LINKER_PATH = $cachedLinker", StringComparison.Ordinal));
         Assert.Contains("$env:MYCAPTURE_PROJECTION_LINKER_PATH = $cachedLinker", prepare, StringComparison.Ordinal);
         Assert.DoesNotContain("PackageReference", targets.Descendants().Select(element => element.Name.LocalName));
         Assert.DoesNotContain(targets.Descendants(), element => element.Name.LocalName is "PublishTrimmed" or "EnableTrimAnalyzer");
@@ -165,6 +174,26 @@ public sealed class WindowsProjectionReleaseContractTests
         Assert.Equal("[$(MyCaptureProjectionLinkerVersion)]", (string?)download.Attribute("Version"));
         Assert.Contains(targets.Descendants("Error"), error => ((string?)error.Attribute("Condition") ?? string.Empty)
             .Contains("'$(_ProjectionLinkerPackSha512)' != '$(MyCaptureProjectionLinkerPackageSha512)'", StringComparison.Ordinal));
+        // Restore may leave the pack in a fallback folder instead of the packages folder.
+        Assert.Contains(targets.Descendants("_ProjectionPackageFolder"),
+            folder => (string?)folder.Attribute("Include") == "$(NuGetPackageFolders)");
+        // A linker newer than the SDK's runtime is refused by name instead of dying with exit 150.
+        Assert.Contains(targets.Descendants("Error"), error => ((string?)error.Attribute("Condition") ?? string.Empty)
+            .Contains("VersionGreaterThan('$(MyCaptureProjectionLinkerVersion)', '$(BundledNETCoreAppPackageVersion)')", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PinnedLinker_IsNotNewerThanTheRuntimeOfTheSdkThatRunsThePublish()
+    {
+        using JsonDocument evaluation = Evaluate("Release", "x64", null, null,
+            "-getProperty:MyCaptureProjectionLinkerVersion,BundledNETCoreAppPackageVersion");
+        JsonElement properties = evaluation.RootElement.GetProperty("Properties");
+        var linker = Version.Parse(properties.GetProperty("MyCaptureProjectionLinkerVersion").GetString()!);
+        string bundled = properties.GetProperty("BundledNETCoreAppPackageVersion").GetString()!;
+        // A preview SDK reports "10.0.0-rc.1…"; only the numeric part decides whether the tool can start.
+        var runtime = Version.Parse(bundled.Split('-')[0]);
+        Assert.True(linker <= runtime, $"ILLink {linker} cannot start on the SDK's runtime {bundled}.");
+        Assert.Equal(runtime.Major, linker.Major);
     }
 
     [Theory]
@@ -182,7 +211,7 @@ public sealed class WindowsProjectionReleaseContractTests
         using JsonDocument evaluation = Evaluate(configuration, architecture, trimOverride, preparedLinker, "-getItem:PackageDownload");
         string[] downloads = evaluation.RootElement.GetProperty("Items").GetProperty("PackageDownload").EnumerateArray()
             .Select(item => item.GetProperty("Identity").GetString() + " " + item.GetProperty("Version").GetString()).ToArray();
-        if (expected) Assert.Equal(["Microsoft.NET.ILLink.Tasks [10.0.12]"], downloads);
+        if (expected) Assert.Equal(["Microsoft.NET.ILLink.Tasks [10.0.11]"], downloads);
         else Assert.Empty(downloads);
     }
 
