@@ -62,7 +62,31 @@ internal sealed partial class PinWindow
         if (_native is not null || _handle != IntPtr.Zero || _isClosed)
             throw new InvalidOperationException("Only a pin that has not been shown can take a native host.");
         _native = host;
+        DropPictureCopy(host);
     }
+
+    // Design 9, increment 5: an opaque picture keeps one copy, the native source. The never-shown WPF image
+    // element lets go of the bitmap too; the switch to WPF builds it again (SwitchToWpf).
+    private void DropPictureCopy(NativePinHost host)
+    {
+        if (_content.Kind != PinContentKind.Image || _content.HasOverlay || _content.OriginalText is not null) return;
+        if (host.Window.Source is not { } source) return;
+        if (_content.Picture.TryDrop(source) || _content.Picture.IsBitmapDropped) _imageElement.Source = null;
+    }
+
+    /// <summary>The pin keeps only its native source, without a bitmap of its picture.</summary>
+    internal bool IsPictureBitmapDropped => _content.Picture.IsBitmapDropped;
+
+    // The WPF window shows the picture again: the bitmap is built once and kept for the rest of the pin's life.
+    private void KeepPictureForWpf()
+    {
+        if (!_content.Picture.IsBitmapDropped && _imageElement.Source is not null) return;
+        _content.Picture.Keep();
+        _imageElement.Source = DisplayContent.Display;
+    }
+
+    // After the native window has gone the picture's bitmap is its one copy again.
+    private void ReleaseNativePictureSource() => _content.Picture.ReleaseSource();
 
     /// <summary>Shows the pin for the first time: the WPF window, or the native one.</summary>
     internal void Present()
@@ -151,6 +175,7 @@ internal sealed partial class PinWindow
         _switchPlacementPending = true;
         try
         {
+            KeepPictureForWpf();
             IntPtr wpf = new WindowInteropHelper(this).EnsureHandle();
             if (hidden)
             {
@@ -231,6 +256,7 @@ internal sealed partial class PinWindow
         // An activation Windows refused leaves the outline of an inactive pin.
         if (_chromeActive && !IsActive) SetChromeActive(false);
         host.Dispose();
+        ReleaseNativePictureSource();
         _switchWasActive = false;
         if (_isClosed) { _afterHostSwitch.Clear(); return; }
         HostSwitched?.Invoke(_switchReason);
@@ -266,6 +292,7 @@ internal sealed partial class PinWindow
         CloseFeedbackSurface();
         HandOverOwnedWindows();
         host.Dispose();
+        ReleaseNativePictureSource();
     }
 
     private void DisposeNativeHost()

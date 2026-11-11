@@ -666,7 +666,7 @@ internal sealed partial class PinManager
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
         pin.HostSwitched += reason => _log.LogInformation("Pin host switched to WPF ({Reason})", reason);
-        pin.NativeHostFailed += error => LogNativeFailureOnce(error, pin.PinnedContent.Image);
+        pin.NativeHostFailed += error => LogNativeFailureOnce(error, pin.PinnedContent);
         pin.NativeInteractionEnded += OnPinInteractionEnded;
         AttachTranslation(pin);
 
@@ -742,7 +742,10 @@ internal sealed partial class PinManager
 
         PinViewState state = pin.State;
         PinContent content = pin.PinnedContent;
-        byte[]? cached = content.EncodedPng ?? pin.ClipboardCache.TryGetEncoded(content.Image, content.SourcePageUrl);
+        // A copy's PNG is keyed by the bitmap it encoded; a picture kept only as a native source has no bitmap
+        // to look up unless one built for a copy is still alive, and building one here would only cost time.
+        byte[]? cached = content.EncodedPng ?? (content.ImageIfPresent is { } image
+            ? pin.ClipboardCache.TryGetEncoded(image, content.SourcePageUrl) : null);
         // The task owns the frozen source only until PNG encoding finishes. Its result has no
         // bitmap/window references; closing order is reserved before any background work completes.
         Func<PinContent, byte[]?, EncodedPinContent> encode = EncodeClosedForTest ?? EncodedPinContent.Encode;

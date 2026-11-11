@@ -84,9 +84,16 @@ internal sealed class NativePinHost : IDisposable
         ArgumentNullException.ThrowIfNull(pin);
         ArgumentNullException.ThrowIfNull(content);
         if (CreateFailureForTest is { } fail) throw fail();
-        NativePinPixelSource source = NativePinPixelSource.FromBitmap(content.Image);
-        NativePinWindow window = new(source, pin.State, leftPhysical, topPhysical, dpiScale <= 0 ? 1 : dpiScale,
-            ThemeService.Current, pin.FrameAccentBrush, pin.FrameNeutralBrush, UiText.Get("Text_03151E566E1D"));
+        // A picture that already keeps only its native source (a content reopened again) shares it.
+        NativePinPixelSource source = (content.HasOverlay ? null : content.Picture.ShareSource())
+            ?? NativePinPixelSource.FromBitmap(content.Image);
+        NativePinWindow window;
+        try
+        {
+            window = new(source, pin.State, leftPhysical, topPhysical, dpiScale <= 0 ? 1 : dpiScale,
+                ThemeService.Current, pin.FrameAccentBrush, pin.FrameNeutralBrush, UiText.Get("Text_03151E566E1D"));
+        }
+        catch { source.Dispose(); throw; }
         try { return new NativePinHost(pin, window); }
         catch { window.Dispose(); throw; }
     }

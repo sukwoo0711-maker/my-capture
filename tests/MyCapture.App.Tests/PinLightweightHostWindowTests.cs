@@ -301,6 +301,10 @@ public sealed class PinLightweightHostWindowTests
     public void ASwitchDuringLandingAndLiveZoomEndsEveryTransitionAtItsFinalValue() => Run(animations: true, () =>
     {
         var manager = Manager(new PinSettings { LightweightImagePins = true, InitialOpacity = .8 });
+        // Sources of earlier closed dropped pins go with their finalizers; let them go before the count.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
         int workers = NativePinWindow.LiveWorkerBufferCount, sources = NativePinPixelSource.LiveAllocationCount;
         try
         {

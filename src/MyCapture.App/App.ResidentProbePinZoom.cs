@@ -108,7 +108,8 @@ public partial class App
         NativePinWindow native)
     {
         using Process process = Process.GetCurrentProcess();
-        System.Windows.Media.Imaging.BitmapSource image = pin.PinnedContent.Image;
+        // Read from the picture's size: reading the bitmap of a picture kept as its native source would build one.
+        PinContent content = pin.PinnedContent;
         recorder.ObservePin(scenario, 1, label, new
         {
             native.Zoom, native.DpiScale, SurfaceWidth = native.PixelWidth, SurfaceHeight = native.PixelHeight,
@@ -116,7 +117,7 @@ public partial class App
             Held = native.DisplayedBounds, native.IsDisplayClipped, native.IsLiveZooming,
             // Every part the pin holds, by section.
             SourceBytes = native.Source?.ByteLength ?? 0,
-            ContentImageBytes = (long)image.PixelWidth * image.PixelHeight * 4,
+            ContentImageBytes = pin.IsPictureBitmapDropped ? 0 : (long)content.PixelWidth * content.PixelHeight * 4,
             native.DisplayBytes, native.DisplaySectionBytes, native.DisplayPrivateBytes,
             native.EdgeCacheBytes, native.WorkerSectionBytes,
             NativePinWindow.LiveWorkerBufferBytes, NativePinWindow.LiveDisplaySectionBytes,

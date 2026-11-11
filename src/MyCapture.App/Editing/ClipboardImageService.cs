@@ -202,22 +202,26 @@ internal static class ClipboardImageService
         return copy;
     }
 
-    /// <summary>One pin's PNG, released on image replacement or close; clipboard tokens are never cached.</summary>
+    /// <summary>
+    /// One pin's PNG, released on image replacement or close; clipboard tokens are never cached. The bitmap
+    /// that keys it is held weakly: a lightweight pin builds its bitmap for a copy and keeps none, so a strong
+    /// key would keep that whole bitmap alive. A pin that holds its bitmap keeps the key alive itself.
+    /// </summary>
     internal sealed class PngCache : IDisposable
     {
         private readonly object _gate = new();
-        private BitmapSource? _image;
+        private WeakReference<BitmapSource>? _image;
         private string? _sourceUrl;
         private byte[]? _bytes;
         private int _generation;
         private bool _disposed;
 
-        internal int ByteCount { get { lock (_gate) return _bytes?.Length ?? 0; } }
+        internal int ByteCount { get { lock (_gate) return KeyAlive() ? _bytes?.Length ?? 0 : 0; } }
 
         internal byte[]? TryGetEncoded(BitmapSource image, string? sourceUrl)
         {
             lock (_gate)
-                return !_disposed && ReferenceEquals(image, _image) && sourceUrl == _sourceUrl ? _bytes : null;
+                return !_disposed && IsKey(image) && sourceUrl == _sourceUrl ? _bytes : null;
         }
 
         internal byte[] GetOrEncode(BitmapSource image, string? sourceUrl, Func<BitmapSource, string?, byte[]> encode)
@@ -225,7 +229,7 @@ internal static class ClipboardImageService
             int generation;
             lock (_gate)
             {
-                if (!_disposed && ReferenceEquals(image, _image) && sourceUrl == _sourceUrl && _bytes is { } cached)
+                if (!_disposed && IsKey(image) && sourceUrl == _sourceUrl && _bytes is { } cached)
                     return cached;
                 generation = _generation;
             }
@@ -236,12 +240,24 @@ internal static class ClipboardImageService
                 // Closing or rerendering during an encode must not retain the old payload.
                 if (!_disposed && generation == _generation)
                 {
-                    _image = image;
+                    _image = new WeakReference<BitmapSource>(image);
                     _sourceUrl = sourceUrl;
                     _bytes = bytes;
                 }
             }
             return bytes;
+        }
+
+        private bool IsKey(BitmapSource image) => _image is { } key && key.TryGetTarget(out BitmapSource? held) && ReferenceEquals(held, image);
+
+        // The payload goes with its bitmap: no later bitmap can be that instance again.
+        private bool KeyAlive()
+        {
+            if (_image is null || _image.TryGetTarget(out _)) return _image is not null;
+            _image = null;
+            _sourceUrl = null;
+            _bytes = null;
+            return false;
         }
 
         internal void Clear()

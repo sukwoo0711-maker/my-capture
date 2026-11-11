@@ -64,7 +64,7 @@ internal sealed class ResidentProbeOptions
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
          "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib",
          "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
-         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live"];
+         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -195,6 +195,8 @@ internal sealed class ResidentProbeOptions
             throw new ArgumentException("pin-zoom is its own zoom and move measurement of one lightweight pin; choose it alone (with pin-hold-whole or pin-move-live).");
         if ((variants.Contains("pin-hold-whole") || variants.Contains("pin-move-live")) && !variants.Contains("pin-zoom"))
             throw new ArgumentException("pin-hold-whole and pin-move-live change what pin-zoom measures; choose them together with pin-zoom.");
+        if (variants.Contains("pin-reopen") && !variants.Contains("pin-light"))
+            throw new ArgumentException("pin-reopen closes and reopens pin-light's pins; choose it together with pin-light.");
         if (variants.Contains("pin-native-full") && !variants.Contains("pin-native"))
             throw new ArgumentException("pin-native-full selects pin-native's whole-surface live frames; choose it together with pin-native.");
         return variants;

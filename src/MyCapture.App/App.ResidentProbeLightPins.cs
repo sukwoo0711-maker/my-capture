@@ -60,6 +60,8 @@ public partial class App
             previous = Sample("dwell", count, previous, width, height, zoom);
             await ProbeLightPinInteractionsAsync(recorder, scenario, _pins.SnapshotOpenPinWindows().Last(), count, Sample);
             previous = Sample("after-interactions", count, previous, width, height, zoom);
+            if (options.Has("pin-reopen"))
+                previous = await ProbeReopenLightPinsAsync(options, recorder, scenario, windows, previous, Sample);
         }
         finally
         {
@@ -99,6 +101,59 @@ public partial class App
         if (!released) throw new InvalidOperationException("Lightweight pin resources did not return to their baseline.");
         await recorder.AuditAsync(scenario + " closed", force: true);
         Sample("audit", 0, previous, width, height, zoom);
+    }
+
+    // pin-reopen: every pin closed into the closed history and reopened from it. The reopened picture is a PNG
+    // decoded on a pool thread, as a session restore after a restart decodes it.
+    private async Task<ResidentProbePinMemory.Map> ProbeReopenLightPinsAsync(ResidentProbeOptions options,
+        ResidentProbeRecorder recorder, string scenario, List<NativePinWindow> windows, ResidentProbePinMemory.Map previous,
+        Func<string, int, ResidentProbePinMemory.Map?, int, int, double, ResidentProbePinMemory.Map> sample)
+    {
+        if (_pins is null) throw new InvalidOperationException("Pins unavailable.");
+        PinPicture first = _pins.SnapshotOpenPinWindows()[0].PinnedContent.Picture;
+        (int width, int height) = (first.PixelWidth, first.PixelHeight);
+        double zoom = options.Has("pin-150") ? 1.5 : 1;
+        foreach (PinWindow open in _pins.SnapshotOpenPinWindows()) open.CloseWithExit();
+        await ProbeWaitAsync(() => !Windows.OfType<PinWindow>().Any(), 15_000, "all pins closed for the reopen");
+        await _pins.LastClosedEncodingForTest;
+        await ProbeWaitAsync(() => !_pins.IsInteractionActive, 15_000, "closed pin encodes completed before the reopen");
+        foreach (NativePinWindow window in windows) await window.DrainAsync();
+        windows.Clear();
+        int remembered = _pins.ClosedCount;
+        await Task.Delay(options.Quick ? 2000 : 5000);
+        previous = sample("closed-for-reopen", 0, previous, width, height, zoom);
+        int reopened = 0;
+        while (_pins.CanRestoreClosed)
+        {
+            PinWindow? pin = await _pins.RestoreLastClosedAsync();
+            if (pin is null) break;
+            reopened++;
+            NativePinWindow? native = pin.NativeWindowForTest;
+            if (native is not null)
+            {
+                windows.Add(native);
+                await ProbeWaitAsync(() => !native.IsLanding, 10_000, "reopened lightweight pin landing finished");
+                ThrowNativePinError(native);
+            }
+            await Task.Delay(300);
+            PinPicture picture = pin.PinnedContent.Picture;
+            recorder.ObservePin(scenario, reopened, "reopened", new
+            {
+                pin.IsNativeHosted, PictureBitmapDropped = pin.IsPictureBitmapDropped, Format = picture.Format.ToString(),
+                picture.PixelWidth, picture.PixelHeight, PictureRebuilds = PinPicture.RebuildCount,
+                SourceBytes = native?.Source?.ByteLength ?? 0,
+            });
+            recorder.Track(scenario, "reopened pin " + reopened, pin);
+        }
+        await Task.Delay(options.Quick ? 2000 : 5000);
+        previous = sample("reopened", reopened, previous, width, height, zoom);
+        recorder.ObservePin(scenario, 0, "reopen", new
+        {
+            Remembered = remembered, Reopened = reopened,
+            Native = _pins.SnapshotOpenPinWindows().Count(pin => pin.IsNativeHosted),
+            Dropped = _pins.SnapshotOpenPinWindows().Count(pin => pin.IsPictureBitmapDropped),
+        });
+        return previous;
     }
 
     private async Task<NativePinWindow> ProbeOpenLightPinAsync(ResidentProbeOptions options, ResidentProbeRecorder recorder,
@@ -185,7 +240,8 @@ public partial class App
             });
             recorder.Track(scenario, "pin " + index, pin);
             recorder.Track(scenario, "native pin " + index, native);
-            recorder.Track(scenario, "source " + index, pin.PinnedContent.Image);
+            // The bitmap the pin was opened with: a lightweight opaque picture lets it go (design 9, increment 5).
+            recorder.Track(scenario, "source " + index, source);
         }
         finally
         {
@@ -207,10 +263,12 @@ public partial class App
                 new(submitted, Stopwatch.GetElapsedTime(zoomStarted).TotalMilliseconds, null));
         }
         await Task.Delay(300);
-        BitmapSource image = pin.PinnedContent.Image;
+        // From the picture's size: reading its bitmap would build one when only the native source is kept.
+        PinPicture picture = pin.PinnedContent.Picture;
         recorder.ObservePin(scenario, index, "geometry", new
         {
-            image.PixelWidth, image.PixelHeight, image.DpiX, image.DpiY,
+            picture.PixelWidth, picture.PixelHeight, picture.DpiX, picture.DpiY,
+            PictureBitmapDropped = pin.IsPictureBitmapDropped, PictureRebuilds = PinPicture.RebuildCount,
             pin.PinnedContent.LayoutWidthDip, pin.PinnedContent.LayoutHeightDip,
             native.Zoom, PhysicalWidth = native.PixelWidth, PhysicalHeight = native.PixelHeight,
             SourceBytes = native.Source?.ByteLength ?? 0, native.DisplayBytes, native.DisplaySectionBytes,

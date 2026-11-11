@@ -144,7 +144,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
-        _mermaidMonitorScale = content.Image.DpiX / 96;
+        _mermaidMonitorScale = (content.HasOverlay ? content.Image.DpiX : content.Picture.DpiX) / 96;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -971,7 +971,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     /// <summary>Shows the displayed content as it should look at the image element's device size.</summary>
     private void ShowDisplayAt(Size element, DpiScale dpi)
     {
-        if (_isClosed) return;
+        // A native-hosted pin's image element stays empty: its picture may be the native source alone.
+        if (_isClosed || _native is not null) return;
         if (_state.IsCollapsed) { ShowThumbnail(dpi); return; }
         _thumbnail = null;
         _thumbnailContent = null;
@@ -1151,7 +1152,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     {
         if (_closeStarted) return;
         if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
-        PinTextCopyService.Forget(TranslationSourceContent.Image);
+        // Recognized text is remembered per bitmap instance; a picture without one has nothing to forget.
+        if (TranslationSourceContent.ImageIfPresent is { } recognized) PinTextCopyService.Forget(recognized);
         _closeStarted = true;
         // Snapshot while the native window still exists and nothing has moved it.
         ClosedPlacement = CaptureClosedPlacement();

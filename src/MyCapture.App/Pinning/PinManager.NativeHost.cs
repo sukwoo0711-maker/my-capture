@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
@@ -38,16 +37,16 @@ internal sealed partial class PinManager
         {
             // The pin keeps its WPF window, exactly as with the setting off.
             host?.Dispose();
-            LogNativeFailureOnce(error, content.Image);
+            LogNativeFailureOnce(error, content);
         }
     }
 
     // One warning per process, however many pins fail: the exception type and the picture size, never content.
-    private void LogNativeFailureOnce(Exception error, BitmapSource image)
+    private void LogNativeFailureOnce(Exception error, PinContent content)
     {
         if (Interlocked.Exchange(ref _nativeFailureLogged, 1) != 0) return;
         _log.LogWarning("Lightweight pin unavailable, using the standard pin: {Error} for {Width}x{Height}",
-            error.GetType().Name, image.PixelWidth, image.PixelHeight);
+            error.GetType().Name, content.PixelWidth, content.PixelHeight);
     }
 
     private void OnPinInteractionEnded()
