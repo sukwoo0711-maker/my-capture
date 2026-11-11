@@ -104,21 +104,6 @@ internal sealed partial class PinWindow
         return new PinClosedPlacement(bounds, monitor.DeviceName, monitor.Bounds);
     }
 
-    // Click-through on: the recovery handle and its hint are WPF windows (increment 2 anchors them
-    // natively), so the pin moves first. Off: the style and state change in place.
-    private bool RouteNativeClickThrough(bool enabled)
-    {
-        if (_native is not { } host)
-        {
-            if (_retiringNative is not null) FinishHostSwitch();
-            return false;
-        }
-        if (enabled) return SwitchToWpf(PinSwitchReason.ClickThrough, () => ApplyClickThrough(true));
-        if (!host.Window.IsClosed) host.Window.SetClickThrough(false);
-        else _state.SetClickThrough(false);
-        return true;
-    }
-
     /// <summary>
     /// Moves a native pin to its WPF window (design section 4): same object, bounds and z-order slot;
     /// <paramref name="then"/> runs on the WPF window once the native window has gone. A closing pin
@@ -135,6 +120,9 @@ internal sealed partial class PinWindow
         }
         NativePinWindow native = host.Window;
         host.Detach();
+        // The shared hover bar and the tooltip belong to native pins; the WPF window has its own.
+        ReleaseNativeHoverBar(leaving: false);
+        HideNativeToolTip();
         if (native.IsClosed)
         {
             // Nothing to hand over; the pin closes with its window (OnNativeClosed).
@@ -172,6 +160,11 @@ internal sealed partial class PinWindow
             }
             // 3. Directly below the native window in the topmost band, then shown without a reveal.
             PlaceBelow(wpf, native.Handle);
+            MoveFeedbackToChromeForSwitch();
+            // The first WPF frame shows the outline the native window shows (active or under the pointer).
+            _chromeActive = _switchWasActive;
+            _chromeHover = native.IsPointerOver;
+            UpdateChromeColor(animate: false);
             _skipRevealOnce = true;
             ShowActivated = false;
             ContentRendered += OnSwitchContentRendered;
@@ -228,12 +221,15 @@ internal sealed partial class PinWindow
         StopSwitchWaits();
         _retiringNative = null;
         BeforeNativeRetiredForTest?.Invoke(host.Window.IsClosed ? IntPtr.Zero : host.Window.Handle, _handle);
+        HandOverNativeSurfaces();
         bool activate = _switchWasActive && !_isClosed && IsVisible;
         if (activate)
         {
             if (ActivateAfterSwitchForTest is { } activateForTest) activateForTest(this);
             else Activate();
         }
+        // An activation Windows refused leaves the outline of an inactive pin.
+        if (_chromeActive && !IsActive) SetChromeActive(false);
         host.Dispose();
         _switchWasActive = false;
         if (_isClosed) { _afterHostSwitch.Clear(); return; }
@@ -267,6 +263,8 @@ internal sealed partial class PinWindow
         _retiringNative = null;
         _afterHostSwitch.Clear();
         _switchWasActive = false;
+        CloseFeedbackSurface();
+        HandOverOwnedWindows();
         host.Dispose();
     }
 
@@ -287,6 +285,7 @@ internal sealed partial class PinWindow
         if (_isClosed || ContextMenu is not { } menu) return;
         menu.PlacementTarget = this;
         menu.Placement = screenPoint is null ? PlacementMode.Center : PlacementMode.MousePoint;
+        menu.HorizontalOffset = menu.VerticalOffset = 0;
         menu.IsOpen = true;
     }
 
@@ -322,6 +321,8 @@ internal sealed partial class PinWindow
         // As EndDrag: the session records the place, the practice records a resize.
         ViewStateChanged?.Invoke();
         if (resized) NotifyPractice(PracticeEventKind.PinResized);
+        // As EndDrag: the bar comes back while the pointer is still over the pin.
+        if (_native is { Window.IsPointerOver: true }) ShowHoverBar();
         NativeInteractionEnded?.Invoke();
     }
 
@@ -339,6 +340,8 @@ internal sealed partial class PinWindow
     internal void OnNativeUserOpacityChanged(double target)
     {
         if (_isClosed) return;
+        // The message is part of the pin: it takes the pin's opacity.
+        if (_feedbackSurface is { } surface) surface.Opacity = target;
         ViewStateChanged?.Invoke();
         NotifyPractice(PracticeEventKind.OpacityChanged, target);
     }
@@ -374,6 +377,13 @@ internal sealed partial class PinWindow
     // ----- Resident probe access (diagnostics only; no product path calls these) -----
 
     internal Image ResidentProbeImage => _imageElement;
+
+    /// <summary>The probe's hover: what the native window does when the pointer enters it.</summary>
+    internal void ResidentProbeHover()
+    {
+        if (_native is not null) OnNativeHoverChanged(true);
+        else ShowHoverBar();
+    }
     internal bool ResidentProbeLandingActive => _native is { } host ? host.Window.IsLanding : _landingClock is not null;
     internal bool ResidentProbeBusy => _native is { } native
         ? native.Window.IsLanding || native.Window.IsLiveZooming || native.Window.IsDragging

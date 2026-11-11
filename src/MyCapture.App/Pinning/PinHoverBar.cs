@@ -332,6 +332,13 @@ internal sealed class PinHoverBar : Window
             menu.HorizontalOffset = origin.X;
             menu.VerticalOffset = origin.Y + 2;
         }
+        else if (keyboard)
+        {
+            // A native-hosted pin is not a WPF owner; the menu opens under its button instead.
+            menu.PlacementTarget = OpacityButton;
+            menu.Placement = PlacementMode.Bottom;
+            menu.VerticalOffset = 2;
+        }
         menu.Closed += (_, _) => { if (ReferenceEquals(_opacityMenu, menu)) _opacityMenu = null; OpacityMenuClosed?.Invoke(); };
         _opacityMenu = menu;
         menu.Opened += (_, _) =>

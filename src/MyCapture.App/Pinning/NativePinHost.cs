@@ -3,17 +3,16 @@ using MyCapture.App.Themes;
 
 namespace MyCapture.App.Pinning;
 
-/// <summary>What a key does on a native pin in increment 1.</summary>
+/// <summary>What a key does on a native pin.</summary>
 internal enum NativePinKeyAction
 {
     /// <summary>Not a pin key: the native host passes it on and stays.</summary>
     None,
-    Close,
-    ZoomIn,
-    ZoomOut,
-    ResetZoom,
 
-    /// <summary>A pin key that only the WPF host handles yet: switch, then replay the key there.</summary>
+    /// <summary>A pin key the pin runs on the native host, through the same handler as its WPF window.</summary>
+    Handle,
+
+    /// <summary>A key for a feature only the WPF host has (text selection): switch, then replay the key there.</summary>
     Switch,
 }
 
@@ -23,14 +22,14 @@ internal enum NativePinPressAction
     /// <summary>Move, or resize at an edge.</summary>
     Gesture,
 
-    /// <summary>A Ctrl single click: focus only, as on a WPF pin.</summary>
-    Ignore,
+    /// <summary>A Ctrl single click: focus and the copy debounce, as on a WPF pin.</summary>
+    CtrlClick,
 
     /// <summary>A plain double-click with the close-on-double-click setting.</summary>
     Close,
 
-    /// <summary>Ctrl+double-click: recognize text on the WPF host.</summary>
-    SwitchRecognize,
+    /// <summary>Ctrl+double-click: recognize text (or copy a pin's original text), on the native host.</summary>
+    Recognize,
 
     /// <summary>Shift+double-click: fold on the WPF host.</summary>
     SwitchFold,
@@ -39,7 +38,7 @@ internal enum NativePinPressAction
 /// <summary>
 /// Presents a <see cref="PinWindow"/> through one <see cref="NativePinWindow"/>. The pin stays the
 /// logical pin (state, identity, events); this host turns the native window's input into pin
-/// commands and asks the pin to move to its WPF window for anything increment 1 does not draw natively.
+/// commands and asks the pin to move to its WPF window for the features only that window has.
 /// The WPF window of a native-hosted pin is never shown, so it has no HwndSource or render target.
 /// </summary>
 internal sealed class NativePinHost : IDisposable
@@ -53,7 +52,7 @@ internal sealed class NativePinHost : IDisposable
         Window = window ?? throw new ArgumentNullException(nameof(window));
         window.KeyHandler = OnKey;
         window.PressHandler = OnPress;
-        window.ContextMenuRequested = point => _pin.SwitchToWpf(PinSwitchReason.ContextMenu, () => _pin.OpenContextMenuAfterSwitch(point));
+        window.ContextMenuRequested = point => { if (!_pin.IsClosed) _pin.OpenNativeContextMenu(point); };
         window.CloseRequested = () => _pin.Close();
         window.ActiveChanged = _pin.OnNativeActiveChanged;
         window.GestureEnded = _pin.OnNativeGestureEnded;
@@ -62,6 +61,13 @@ internal sealed class NativePinHost : IDisposable
         window.UserOpacityChanged = _pin.OnNativeUserOpacityChanged;
         window.Closed = _pin.OnNativeClosed;
         window.Failed = _pin.OnNativeFailed;
+        window.BoundsChanged = _pin.OnNativeBoundsChanged;
+        window.ShownChanged = _pin.OnNativeShownChanged;
+        window.HoverChanged = _pin.OnNativeHoverChanged;
+        window.ZoomShown = _pin.OnNativeZoomShown;
+        window.OpacityShown = _pin.OnNativeOpacityShown;
+        window.MotionReady = _pin.OnNativeMotionReady;
+        window.MotionStarted = _pin.OnNativeMotionStarted;
     }
 
     internal NativePinWindow Window { get; }
@@ -102,6 +108,13 @@ internal sealed class NativePinHost : IDisposable
         Window.UserZoomChanged = null;
         Window.Settled = null;
         Window.UserOpacityChanged = null;
+        Window.BoundsChanged = null;
+        Window.ShownChanged = null;
+        Window.HoverChanged = null;
+        Window.ZoomShown = null;
+        Window.OpacityShown = null;
+        Window.MotionReady = null;
+        Window.MotionStarted = null;
         // Failed stays: a closing pin whose exit fails still has to close its window.
     }
 
@@ -113,20 +126,22 @@ internal sealed class NativePinHost : IDisposable
         if (!Window.IsClosed) Window.Dispose();
     }
 
-    /// <summary>The increment-1 key table. Keys that increment 2 draws natively switch for now.</summary>
+    /// <summary>
+    /// The key table. Every key a picture pin's WPF window handles runs natively through the same
+    /// handler (<see cref="PinWindow.HandleKey"/>); F2 opens text selection, which only the WPF host has.
+    /// </summary>
     internal static NativePinKeyAction RouteKey(Key key, ModifierKeys modifiers)
     {
         bool ctrl = modifiers.HasFlag(ModifierKeys.Control);
         return key switch
         {
-            Key.Escape or Key.Delete => NativePinKeyAction.Close,
-            Key.Add or Key.OemPlus => NativePinKeyAction.ZoomIn,
-            Key.Subtract or Key.OemMinus => NativePinKeyAction.ZoomOut,
-            Key.D0 or Key.NumPad0 => NativePinKeyAction.ResetZoom,
             Key.F2 => NativePinKeyAction.Switch,
-            Key.O when modifiers == ModifierKeys.None => NativePinKeyAction.Switch,
-            Key.Left or Key.Right or Key.Up or Key.Down => NativePinKeyAction.Switch,
-            Key.C or Key.S when ctrl => NativePinKeyAction.Switch,
+            Key.Escape or Key.Delete => NativePinKeyAction.Handle,
+            Key.Add or Key.OemPlus or Key.Subtract or Key.OemMinus => NativePinKeyAction.Handle,
+            Key.D0 or Key.NumPad0 => NativePinKeyAction.Handle,
+            Key.O when modifiers == ModifierKeys.None => NativePinKeyAction.Handle,
+            Key.Left or Key.Right or Key.Up or Key.Down => NativePinKeyAction.Handle,
+            Key.C or Key.S when ctrl => NativePinKeyAction.Handle,
             _ => NativePinKeyAction.None,
         };
     }
@@ -137,7 +152,7 @@ internal sealed class NativePinHost : IDisposable
         bool twice = press.Clicks >= 2;
         // PinWindow.HandleCollapseDoubleClick runs first, in the preview pass.
         if (twice && press.Shift) return NativePinPressAction.SwitchFold;
-        if (press.Control) return twice ? NativePinPressAction.SwitchRecognize : NativePinPressAction.Ignore;
+        if (press.Control) return twice ? NativePinPressAction.Recognize : NativePinPressAction.CtrlClick;
         if (twice && closeOnDoubleClick) return NativePinPressAction.Close;
         return NativePinPressAction.Gesture;
     }
@@ -149,10 +164,9 @@ internal sealed class NativePinHost : IDisposable
         ModifierKeys modifiers = ReadModifiers();
         switch (RouteKey(key, modifiers))
         {
-            case NativePinKeyAction.Close: _pin.CloseWithExit(); return true;
-            case NativePinKeyAction.ZoomIn: Window.StepZoom(1); return true;
-            case NativePinKeyAction.ZoomOut: Window.StepZoom(-1); return true;
-            case NativePinKeyAction.ResetZoom: Window.ResetZoom(); return true;
+            case NativePinKeyAction.Handle:
+                _pin.OnNativeInput();
+                return _pin.HandleKey(key, modifiers);
             case NativePinKeyAction.Switch:
                 _pin.SwitchToWpf(PinSwitchReason.Key, () => _pin.ReplayKeyAfterSwitch(key, modifiers));
                 return true;
@@ -163,17 +177,19 @@ internal sealed class NativePinHost : IDisposable
     private bool OnPress(NativePinPress press)
     {
         if (_pin.IsClosed) return true;
+        _pin.OnNativeInput();
         switch (RoutePress(press, _pin.CloseOnDoubleClick))
         {
-            case NativePinPressAction.Ignore: return true;
+            case NativePinPressAction.CtrlClick: _pin.OnNativeCtrlClick(); return true;
             case NativePinPressAction.Close: _pin.CloseWithExit(); return true;
-            case NativePinPressAction.SwitchRecognize:
-                _pin.SwitchToWpf(PinSwitchReason.Gesture, _pin.RecognizeAfterSwitch);
-                return true;
+            case NativePinPressAction.Recognize: _pin.OnNativeCtrlDoubleClick(); return true;
             case NativePinPressAction.SwitchFold:
                 _pin.SwitchToWpf(PinSwitchReason.Gesture, _pin.ToggleCollapsed);
                 return true;
-            default: return false;
+            default:
+                // As a WPF pin's drag start: the bar steps aside while the pin moves.
+                _pin.OnNativeGestureStarting();
+                return false;
         }
     }
 

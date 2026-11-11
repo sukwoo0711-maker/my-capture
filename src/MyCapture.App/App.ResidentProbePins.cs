@@ -22,14 +22,15 @@ public partial class App
             await ProbeNativePinMemoryAsync(options, recorder, scenario);
             return;
         }
-        if (options.Has("pin-light"))
+        if (options.Has("pin-switch") || options.Has("pin-light"))
         {
             // The product setting, on for this diagnostic process only and never saved.
             bool lightweight = _settings!.Pin.LightweightImagePins;
             _settings.Pin.LightweightImagePins = true;
             try
             {
-                if (scenario == "pin-text") await ProbePinMemoryCoreAsync(options, recorder, scenario, pinDiagnostics);
+                if (options.Has("pin-switch")) await ProbeLightPinSwitchAsync(options, recorder, scenario);
+                else if (scenario == "pin-text") await ProbePinMemoryCoreAsync(options, recorder, scenario, pinDiagnostics);
                 else await ProbeLightPinMemoryAsync(options, recorder, scenario, pinDiagnostics);
             }
             finally { _settings.Pin.LightweightImagePins = lightweight; }

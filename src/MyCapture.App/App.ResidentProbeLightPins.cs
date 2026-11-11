@@ -38,7 +38,7 @@ public partial class App
             MemoryAccounting = "As pin-native, plus the PinContent BitmapSource that every product pin keeps.",
             FrameEndpoint = "Successful UpdateLayeredWindow submission then DwmFlush return; composition completion bound, not physical scan-out.",
             LiveCandidate = NativePinWindow.LiveMode.ToString(),
-            Missing = new[] { "hover bar", "landing ornament", "snap while dragging", "zoom/opacity readout" },
+            Missing = new[] { "snap while dragging" },
             InitialZoom = "100% source pixels at initial monitor DPI; 150% applied after landing.",
         });
         ResidentProbePinMemory.Map Sample(string phase, int open, ResidentProbePinMemory.Map? before, int pixelWidth,
@@ -110,7 +110,7 @@ public partial class App
         NativePinWindow? native = null;
         var intervals = new List<double>();
         long? lastSubmission = null;
-        long created = 0;
+        long created = 0, returned = 0, ornamentCreated = 0, ornamentRendered = 0, firstLanding = 0, secondLanding = 0;
         var firstVisible = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
         void Submitted()
         {
@@ -118,9 +118,20 @@ public partial class App
             long now = Stopwatch.GetTimestamp();
             if (native.LastPresentedAlpha > 0) firstVisible.TrySetResult(now);
             if (!native.IsLanding) return;
+            if (firstLanding == 0) firstLanding = now;
+            else if (secondLanding == 0) secondLanding = now;
             if (lastSubmission is { } before) intervals.Add(Stopwatch.GetElapsedTime(before, now).TotalMilliseconds);
             lastSubmission = now;
         }
+        // Where the opening turn's time goes after the first visible frame: the landing ornament's window.
+        Action<System.Windows.Window>? priorHook = ResidentProbeWindowHook.SourceInitialized;
+        ResidentProbeWindowHook.SourceInitialized = window =>
+        {
+            priorHook?.Invoke(window);
+            if (window is not PinLandingDecoration decoration || ornamentCreated != 0) return;
+            ornamentCreated = Stopwatch.GetTimestamp();
+            decoration.ContentRendered += (_, _) => { if (ornamentRendered == 0) ornamentRendered = Stopwatch.GetTimestamp(); };
+        };
         _pins.BeforeShowForTest = shown =>
         {
             pin = shown;
@@ -130,6 +141,8 @@ public partial class App
             native.Presented += Submitted;
             shown.ResidentProbeInitialSize();
         };
+        var steps = new List<(string Step, long At)>();
+        _pins.OpeningStepForProbe = step => steps.Add((step, Stopwatch.GetTimestamp()));
         long started = Stopwatch.GetTimestamp();
         try
         {
@@ -138,14 +151,18 @@ public partial class App
             double sourceMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _pins.PinImageAtRegion(source, CaptureProvenance.None,
                 new RectD(monitor.WorkArea.Left + 24, monitor.WorkArea.Top + 24, width, height));
+            returned = Stopwatch.GetTimestamp();
             if (pin is null) throw new InvalidOperationException("No pin was created.");
             if (native is null) throw new InvalidOperationException("The pin did not use the lightweight host.");
             long firstAt = await ProbeNativePinWaitAsync(native, firstVisible.Task, 5000, "first nonzero lightweight pin alpha submission");
             double submitted = Stopwatch.GetElapsedTime(started, firstAt).TotalMilliseconds;
             native.FlushPresentation();
             double complete = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            recorder.PinFrame(scenario, index, "create-first-frame", new(submitted, complete, null));
             double constructedMilliseconds = Stopwatch.GetElapsedTime(started, created).TotalMilliseconds;
+            // The records wait for the landing: writing them on the dispatcher during it delayed its frames.
+            await ProbeWaitAsync(() => !native.IsLanding, 10_000, "lightweight pin landing finished");
+            ThrowNativePinError(native);
+            recorder.PinFrame(scenario, index, "create-first-frame", new(submitted, complete, null));
             recorder.ObservePin(scenario, index, "native-first-frame", new
             {
                 SourceMilliseconds = sourceMilliseconds,
@@ -153,16 +170,29 @@ public partial class App
                 ShowUntilVisibleSubmissionMilliseconds = submitted - constructedMilliseconds,
                 FlushMilliseconds = complete - submitted,
             });
+            double? After(long at) => at == 0 ? null : Stopwatch.GetElapsedTime(firstAt, at).TotalMilliseconds;
+            recorder.ObservePin(scenario, index, "native-opening-turn", new
+            {
+                // Milliseconds after the first visible submission.
+                OrnamentWindowCreated = After(ornamentCreated),
+                OpeningTurnReturned = After(returned),
+                FlushReturned = complete - submitted,
+                OrnamentFirstFrameRendered = After(ornamentRendered),
+                FirstLandingFrame = After(firstLanding),
+                SecondLandingFrame = After(secondLanding),
+                // Each step of the manager's opening turn, as its end after the first visible submission.
+                Steps = steps.Select(step => new { step.Step, End = After(step.At) }).ToArray(),
+            });
             recorder.Track(scenario, "pin " + index, pin);
             recorder.Track(scenario, "native pin " + index, native);
             recorder.Track(scenario, "source " + index, pin.PinnedContent.Image);
-            await ProbeWaitAsync(() => !native.IsLanding, 10_000, "lightweight pin landing finished");
-            ThrowNativePinError(native);
         }
         finally
         {
             if (native is not null) native.Presented -= Submitted;
             _pins.BeforeShowForTest = null;
+            _pins.OpeningStepForProbe = null;
+            ResidentProbeWindowHook.SourceInitialized = priorHook;
         }
         recorder.PinIntervals(scenario, index, intervals);
         if (options.Has("pin-150"))
@@ -259,8 +289,12 @@ public partial class App
         recorder.PinFrame(scenario, index, "opacity-post-wait-frame", MeasureNativePin(native, () => { }));
         sample("after-opacity", index, beforeOpacity, native.Source!.Width, native.Source.Height, native.Zoom);
         ObserveNativePin(recorder, scenario, index, "native-after-opacity", native);
-        recorder.ObservePin(scenario, index, "hover-first-show-available", false);
-        recorder.ObservePin(scenario, index, "lightweight-missing-hover-bar", "Increment 1 shows no hover bar on a lightweight pin; no hover timing was synthesized.");
+        // The bar native pins share: the first show creates it, as a WPF pin's first show creates its own.
+        bool hoverAlreadyShown = PinWindow.SharedNativeHoverBarForTest is not null;
+        var hover = await ResidentProbePresentation.MeasureAsync(Dispatcher, pin.ResidentProbeHover, () => pin.IsHoverBarShown);
+        recorder.PinFrame(scenario, index, hoverAlreadyShown ? "hover-bar-reshow-frame" : "hover-bar-first-frame", hover);
+        recorder.ObservePin(scenario, index, "hover-first-show-available", !hoverAlreadyShown);
+        pin.HideHoverBar();
         await Task.Delay(4000);
         var before = native.Bounds;
         rasters = native.RasterCount;

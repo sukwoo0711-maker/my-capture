@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Pinning;
@@ -290,7 +291,9 @@ public sealed class PinNativeWindowTests
                 else if (afterFirstVisibleFrame && pin.LastPresentedAlpha > 0) StartExit();
             };
             pin.Show();
-            Assert.Equal(0, pin.LastPresentedAlpha);
+            // Show presents the reveal's first visible step before any motion tick.
+            Assert.Equal(0, pin.MotionTickCount);
+            Assert.InRange(pin.LastPresentedAlpha, 1, 254);
             if (!afterFirstVisibleFrame) StartExit();
 
             var watch = Stopwatch.StartNew();
@@ -318,6 +321,111 @@ public sealed class PinNativeWindowTests
             Assert.Equal(0, NativePinWindow.LiveWindowCount);
             Assert.Equal(0, NativePinWindow.LiveDibCount);
             Assert.Equal(0, NativePinWindow.LiveDcCount);
+        }
+        finally { FluidMotion.AnimationsEnabledOverrideForTest = oldMotion; }
+    });
+
+    [Fact]
+    public void TheRevealShowsAVisibleFirstFrameBeforeTheFirstTickAndOpacityAndAccentNeverGoBack() => StaTestHost.Run(() =>
+    {
+        bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        try
+        {
+            using var pin = new NativePinWindow(PinNativeTestImages.Picture(80, 60), -20000, -20000);
+            var frames = new List<(byte Alpha, Color Outline, int Tick)>();
+            pin.Presented += () => frames.Add((pin.LastPresentedAlpha, pin.OutlineColor, pin.MotionTickCount));
+            pin.Show();
+            pin.StartLanding();
+            // The opening turn has drawn a visible frame, and no motion tick has run yet.
+            Assert.NotEmpty(frames);
+            Assert.Equal(0, pin.MotionTickCount);
+            byte first = frames[^1].Alpha;
+            Assert.Equal((byte)Math.Round(255 * NativePinWindow.RevealOpacity(NativePinWindow.RevealFirstFrameMs)), first);
+            Color restingOutline = frames[^1].Outline;
+
+            var watch = Stopwatch.StartNew();
+            while (pin.IsLanding && watch.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                var frame = new DispatcherFrame();
+                var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(5), DispatcherPriority.Background,
+                    (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
+                try { Dispatcher.PushFrame(frame); }
+                finally { timer.Stop(); }
+            }
+            Assert.False(pin.IsLanding);
+            Assert.Null(pin.LastPresentError);
+
+            // The first tick continues one frame on from the shown step: forward, and no jump.
+            (byte Alpha, Color Outline, int Tick) firstTick = frames.First(f => f.Tick > 0);
+            Assert.InRange(firstTick.Alpha, first, (byte)Math.Ceiling(255 * NativePinWindow.RevealOpacity(4 * NativePinWindow.RevealFirstFrameMs)));
+            // Through the reveal, opacity never decreases and the outline never moves back toward rest.
+            int previousAlpha = 0, previousAccent = 0;
+            foreach ((byte alpha, Color outline, _) in frames)
+            {
+                if (previousAlpha == 255) break;
+                Assert.True(alpha >= previousAlpha, $"Opacity went back: {previousAlpha} -> {alpha}");
+                int accent = Math.Abs(outline.R - restingOutline.R) + Math.Abs(outline.G - restingOutline.G) + Math.Abs(outline.B - restingOutline.B);
+                Assert.True(accent >= previousAccent, $"Accent went back: {previousAccent} -> {accent}");
+                previousAlpha = alpha;
+                previousAccent = accent;
+            }
+            Assert.Equal(255, previousAlpha);
+        }
+        finally { FluidMotion.AnimationsEnabledOverrideForTest = oldMotion; }
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheMotionHoldsTheFirstFrameUntilReadyOrTheLimitAndThenStartsFromIt(bool becomesReady) => StaTestHost.Run(() =>
+    {
+        bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        try
+        {
+            using var pin = new NativePinWindow(PinNativeTestImages.Picture(80, 60), -20000, -20000);
+            bool ready = false;
+            int asked = 0, started = 0, presentsWhileHeld = 0;
+            var watch = Stopwatch.StartNew();
+            pin.MotionReady = () => { asked++; return ready; };
+            pin.MotionStarted = () => started++;
+            pin.Show();
+            pin.StartLanding();
+            byte first = pin.LastPresentedAlpha;
+            pin.Presented += () => { if (started == 0) presentsWhileHeld++; };
+
+            static void Pump(Func<bool> until, double seconds)
+            {
+                var limit = Stopwatch.StartNew();
+                while (!until() && limit.Elapsed < TimeSpan.FromSeconds(seconds))
+                {
+                    var frame = new DispatcherFrame();
+                    var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(5), DispatcherPriority.Background,
+                        (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
+                    try { Dispatcher.PushFrame(frame); }
+                    finally { timer.Stop(); }
+                }
+            }
+
+            // Held: ticks run and ask, nothing is presented, the first frame stays.
+            Pump(() => pin.MotionTickCount >= 3, 2);
+            Assert.True(asked >= 3);
+            Assert.Equal(0, started);
+            Assert.Equal(0, presentsWhileHeld);
+            Assert.Equal(first, pin.LastPresentedAlpha);
+            Assert.True(pin.IsLanding);
+
+            if (becomesReady) ready = true;
+            Pump(() => started > 0, 2);
+            double heldMs = watch.Elapsed.TotalMilliseconds;
+            Assert.Equal(1, started);
+            if (!becomesReady) Assert.True(heldMs >= NativePinWindow.MotionHoldLimitMs, $"Held only {heldMs:0} ms.");
+            Pump(() => !pin.IsLanding, 3);
+            Assert.False(pin.IsLanding);
+            Assert.Equal(255, pin.LastPresentedAlpha);
+            Assert.Equal(1, started);
+            Assert.Null(pin.LastPresentError);
         }
         finally { FluidMotion.AnimationsEnabledOverrideForTest = oldMotion; }
     });

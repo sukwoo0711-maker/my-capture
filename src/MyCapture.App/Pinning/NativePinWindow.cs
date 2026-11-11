@@ -32,6 +32,16 @@ internal sealed class NativePinWindow : IDisposable
     // CS_DBLCLKS: a second press inside the double-click time arrives as WM_LBUTTONDBLCLK.
     private const string ClassName = "MyCapture.PinNative.2";
     private const uint DoubleClicks = 0x0008;
+    // A reveal or landing asked for and not drawn yet: its clock starts at the first motion tick, so the
+    // rest of the opening turn (and whatever the dispatcher runs before that tick) does not eat the motion.
+    private const long PendingStart = -1;
+    // A reveal presents its first visible step (one 60 Hz frame in) synchronously, in the opening turn.
+    // Its clock then starts at the first motion tick as if that step was shown a frame earlier, so the
+    // fade continues one frame on from the picture already on the screen: never back, never a stall.
+    internal const double RevealFirstFrameMs = 1000d / 60;
+    // The longest the first frame waits for MotionReady (the landing ornament's first frame) before the
+    // reveal and landing start anyway.
+    internal const double MotionHoldLimitMs = 250;
     private static readonly object ClassGate = new();
     private static readonly NativePinWindowInterop.WindowProcedure Procedure = DispatchMessage;
     private static bool _classRegistered;
@@ -56,7 +66,7 @@ internal sealed class NativePinWindow : IDisposable
     private bool _countedWindow, _ready, _closing, _hover, _active, _dragging, _failureReported;
     private bool _revealing, _colorAnimating, _opacityAnimating;
     private int _left, _top, _wheelRemainder;
-    private long _landingStarted, _revealStarted, _exitStarted, _colorStarted, _hideStarted, _findStarted, _opacityStarted;
+    private long _landingStarted, _revealStarted, _exitStarted, _colorStarted, _hideStarted, _findStarted, _opacityStarted, _holdStarted;
     private double _motionOpacity = 1, _exitStartOpacity = 1, _hideStartOpacity = 1, _opacityFrom = 1,
         _contentScale = 1, _gestureDpi, _gestureZoom;
     private Point _gesturePointer;
@@ -159,6 +169,23 @@ internal sealed class NativePinWindow : IDisposable
     /// <summary>A live zoom has settled into its full-quality picture.</summary>
     internal Action? Settled { get; set; }
     internal Action<double>? UserOpacityChanged { get; set; }
+    /// <summary>The window's rectangle or scale changed (move, zoom, resize, monitor scale).</summary>
+    internal Action? BoundsChanged { get; set; }
+    /// <summary>The window was shown (true) or finished hiding (false).</summary>
+    internal Action<bool>? ShownChanged { get; set; }
+    /// <summary>The pointer entered (true) or left (false) the window.</summary>
+    internal Action<bool>? HoverChanged { get; set; }
+    /// <summary>A user zoom asks for its readout with the zoom it shows; a step at a limit still asks.</summary>
+    internal Action<double>? ZoomShown { get; set; }
+    /// <summary>A Ctrl+wheel opacity change asks for its readout with the opacity it moves to.</summary>
+    internal Action<double>? OpacityShown { get; set; }
+    /// <summary>
+    /// Asked at each motion tick while a reveal or landing waits to start; false holds the first frame
+    /// (nothing is presented) until it returns true or <see cref="MotionHoldLimitMs"/> has passed.
+    /// </summary>
+    internal Func<bool>? MotionReady { get; set; }
+    /// <summary>The reveal and landing clocks have just started (the tick that ends the hold).</summary>
+    internal Action? MotionStarted { get; set; }
     /// <summary>The window is gone (an exit ended, or it was closed).</summary>
     internal Action? Closed { get; set; }
     /// <summary>The first failure after creation (present, settle, motion clock or a callback).</summary>
@@ -187,6 +214,7 @@ internal sealed class NativePinWindow : IDisposable
     internal bool IsVisible { get; private set; }
     internal bool IsClosed { get; private set; }
     internal bool IsLanding => _landingStarted != 0;
+    internal bool IsPointerOver => _hover;
     internal bool IsLiveZooming { get; private set; }
     internal bool IsExiting => _exitStarted != 0;
     internal bool IsCaptureExcluded { get; private set; }
@@ -262,8 +290,9 @@ internal sealed class NativePinWindow : IDisposable
         VerifyOpen();
         if (IsVisible) return;
         _revealing = FluidMotion.AnimationsEnabled;
-        _revealStarted = Stopwatch.GetTimestamp();
-        _motionOpacity = _revealing ? 0 : 1;
+        _revealStarted = PendingStart;
+        _holdStarted = 0;
+        _motionOpacity = _revealing ? RevealOpacity(RevealFirstFrameMs) : 1;
         IsVisible = true;
         try
         {
@@ -272,6 +301,7 @@ internal sealed class NativePinWindow : IDisposable
             if (_revealing) StartMotion();
         }
         catch { IsVisible = false; throw; }
+        ShownChanged?.Invoke(true);
     }
 
     internal void StartLanding()
@@ -279,9 +309,9 @@ internal sealed class NativePinWindow : IDisposable
         VerifyOpen();
         if (!IsVisible || IsHiding || IsExiting) return;
         _findStarted = 0;
-        _landingStarted = Stopwatch.GetTimestamp();
+        if (!(_revealing && _revealStarted == PendingStart)) _holdStarted = 0;
+        _landingStarted = PendingStart;
         StartMotion();
-        UpdateMotion();
     }
 
     /// <summary>Hides the window after the fast fade, keeping its place, zoom and pictures.</summary>
@@ -306,8 +336,9 @@ internal sealed class NativePinWindow : IDisposable
         if (!IsVisible) { Show(); return; }
         _hideStarted = 0;
         _revealing = FluidMotion.AnimationsEnabled;
-        _revealStarted = Stopwatch.GetTimestamp();
-        _motionOpacity = _revealing ? 0 : 1;
+        _revealStarted = PendingStart;
+        _holdStarted = 0;
+        _motionOpacity = _revealing ? RevealOpacity(RevealFirstFrameMs) : 1;
         Present();
         if (_revealing) StartMotion();
     }
@@ -318,6 +349,7 @@ internal sealed class NativePinWindow : IDisposable
         _motionOpacity = 1;
         IsVisible = false;
         _ = NativePinWindowInterop.ShowWindow(Handle, 0); // SW_HIDE.
+        ShownChanged?.Invoke(false);
     }
 
     /// <summary>Two pulses of the landing outline (one second of accent under reduced motion), on a quiet baseline.</summary>
@@ -349,6 +381,7 @@ internal sealed class NativePinWindow : IDisposable
         double old = Zoom;
         State.ApplyZoomStep(notches);
         ApplyZoomChange(old, anchorPhysical ?? Center, live: true, user: true);
+        ZoomShown?.Invoke(Zoom);
     }
 
     /// <summary>A user reset to 100% around the pin's centre.</summary>
@@ -359,6 +392,7 @@ internal sealed class NativePinWindow : IDisposable
         double old = Zoom;
         State.ResetZoom();
         ApplyZoomChange(old, Center, live: true, user: true);
+        ZoomShown?.Invoke(Zoom);
     }
 
     private Point Center => new(_left + (PixelWidth / 2d), _top + (PixelHeight / 2d));
@@ -378,6 +412,7 @@ internal sealed class NativePinWindow : IDisposable
         LastLiveSubmitMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         if (live) BeginLiveZoom(); else ForceSettle();
         LastLiveUiMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        BoundsChanged?.Invoke();
         if (user) UserZoomChanged?.Invoke();
     }
 
@@ -406,12 +441,13 @@ internal sealed class NativePinWindow : IDisposable
             else SetZoom(PinGeometry.StepZoom(Zoom, notches, .1), anchorPhysical, live: true);
             return;
         }
-        if (control) FadeOpacityBy(notches * PinWindow.OpacityStep);
+        if (control) OpacityShown?.Invoke(FadeOpacityBy(notches * PinWindow.OpacityStep));
         else
         {
             double old = Zoom;
             State.ApplyZoomStep(notches);
             ApplyZoomChange(old, anchorPhysical, live: true, user: true);
+            ZoomShown?.Invoke(Zoom);
         }
     }
 
@@ -485,6 +521,7 @@ internal sealed class NativePinWindow : IDisposable
         if (!NativePinWindowInterop.GetWindowRect(Handle, out var actual)) ThrowNative("GetWindowRect(move)");
         _left = actual.Left - _view.Left; _top = actual.Top - _view.Top;
         // Ordinary movement uses the retained image; only a DPI change rerasterizes.
+        BoundsChanged?.Invoke();
     }
 
     /// <summary>A move a pin makes (drag, probe): part of the pin stays on the desktop to grab.</summary>
@@ -537,6 +574,7 @@ internal sealed class NativePinWindow : IDisposable
         if (IsVisible) Present();
         else PlaceHidden("SetWindowPos(DPI)");
         ForceSettle();
+        BoundsChanged?.Invoke();
     }
 
     // A hidden window is not presented; keep its rectangle equal to what its DIB holds.
@@ -893,12 +931,28 @@ internal sealed class NativePinWindow : IDisposable
     private void UpdateMotion()
     {
         if (IsClosed) return;
+        long now = Stopwatch.GetTimestamp();
+        bool revealPending = _revealing && _revealStarted == PendingStart;
+        if (revealPending || _landingStarted == PendingStart)
+        {
+            // The first frame is on the screen; the motion starts once the pin's companions are ready
+            // (the landing ornament's first frame), so their one-off costs fall before it, not inside it.
+            if (_holdStarted == 0) _holdStarted = now;
+            if (!IsHiding && !IsExiting && Elapsed(_holdStarted) < MotionHoldLimitMs && MotionReady?.Invoke() == false) return;
+            _holdStarted = 0;
+            now = Stopwatch.GetTimestamp();
+            if (revealPending) _revealStarted = now - (long)(2 * RevealFirstFrameMs * Stopwatch.Frequency / 1000);
+            if (_landingStarted == PendingStart) _landingStarted = now;
+            MotionStarted?.Invoke();
+            if (IsClosed) return;
+        }
         bool raster = false, edge = false, present = IsLanding || IsExiting;
         if (_revealing)
         {
-            double progress = Math.Clamp(Elapsed(_revealStarted) / FluidMotion.FastDuration.TimeSpan.TotalMilliseconds, 0, 1);
-            _motionOpacity = progress; present = true;
-            if (progress >= 1) _revealing = false;
+            double elapsed = Elapsed(_revealStarted);
+            // Never below the step already shown (a tick inside the first frame's time).
+            _motionOpacity = Math.Max(_motionOpacity, RevealOpacity(elapsed)); present = true;
+            if (elapsed >= FluidMotion.FastDuration.TimeSpan.TotalMilliseconds) _revealing = false;
         }
         if (_colorAnimating)
         {
@@ -1038,6 +1092,13 @@ internal sealed class NativePinWindow : IDisposable
         if (!_dragging) _resizeEdge = PinResizeEdge.None;
     }
 
+    /// <summary>Starts a move from a press on a window over the pin (its readout), at a screen point.</summary>
+    internal void BeginMoveAtScreen(Point screen)
+    {
+        VerifyOpen();
+        BeginGesture(screen, default, control: true);
+    }
+
     // The edge under a point in surface pixels, as PinWindow.ResizeEdgeAt (in DIP).
     private PinResizeEdge EdgeAt(Point surface) => State.IsClickThrough || IsExiting ? PinResizeEdge.None
         : PinResize.HitTest(surface.X / DpiScale, surface.Y / DpiScale, State.WidthDip, State.HeightDip);
@@ -1064,7 +1125,8 @@ internal sealed class NativePinWindow : IDisposable
             State.SetZoom(placement.Zoom);
             _left = Coordinate(placement.Left); _top = Coordinate(placement.Top);
             BeginLiveZoom(); Render(highQuality: false); if (IsVisible) Present();
-            if (Math.Abs(Zoom - old) >= 1e-9) UserZoomChanged?.Invoke();
+            BoundsChanged?.Invoke();
+            if (Math.Abs(Zoom - old) >= 1e-9) { UserZoomChanged?.Invoke(); ZoomShown?.Invoke(Zoom); }
         }
     }
 
@@ -1143,10 +1205,11 @@ internal sealed class NativePinWindow : IDisposable
                     SetVisualState(true, _active);
                     var tracking = new NativePinWindowInterop.MouseTracking { Size = (uint)Marshal.SizeOf<NativePinWindowInterop.MouseTracking>(), Flags = 2, Window = Handle };
                     _ = NativePinWindowInterop.TrackMouseEvent(ref tracking);
+                    HoverChanged?.Invoke(true);
                 }
                 ContinueGesture(ToScreen(MessagePoint(lparam))); return IntPtr.Zero;
             }
-            case 0x02A3: SetVisualState(false, _active); return IntPtr.Zero;
+            case 0x02A3: SetVisualState(false, _active); HoverChanged?.Invoke(false); return IntPtr.Zero;
             case 0x020A: // WM_MOUSEWHEEL: the point is on the screen; MK_CONTROL rides in the low word.
                 Wheel(unchecked((short)(wparam.ToInt64() >> 16)), MessagePoint(lparam), (wparam.ToInt64() & 0x0008) != 0);
                 return IntPtr.Zero;
@@ -1205,6 +1268,8 @@ internal sealed class NativePinWindow : IDisposable
         KeyHandler = null; PressHandler = null; ContextMenuRequested = null; CloseRequested = null;
         ActiveChanged = null; GestureEnded = null; UserZoomChanged = null; Settled = null;
         UserOpacityChanged = null; Closed = null; Failed = null;
+        BoundsChanged = null; ShownChanged = null; HoverChanged = null; ZoomShown = null; OpacityShown = null;
+        MotionReady = null; MotionStarted = null;
         try { _dib?.Dispose(); _dib = null; }
         finally
         {
@@ -1297,6 +1362,10 @@ internal sealed class NativePinWindow : IDisposable
         catch { source?.Dispose(); throw; }
     }
     private static double Elapsed(long timestamp) => Stopwatch.GetElapsedTime(timestamp).TotalMilliseconds;
+
+    /// <summary>The reveal's opacity after <paramref name="ms"/>: linear over the fast duration, as before.</summary>
+    internal static double RevealOpacity(double ms) =>
+        Math.Clamp(ms / FluidMotion.FastDuration.TimeSpan.TotalMilliseconds, 0, 1);
     private static void EnsureClass()
     {
         lock (ClassGate)

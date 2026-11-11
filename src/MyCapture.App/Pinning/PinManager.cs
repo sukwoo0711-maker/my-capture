@@ -442,12 +442,13 @@ internal sealed partial class PinManager
             content.Kind,
             state.Zoom,
             _pins.Count);
+        OpeningStepForProbe?.Invoke("LogInformation");
 
         if (PinCreated is { } handlers)
         {
             foreach (Action handler in handlers.GetInvocationList())
             {
-                try { handler(); }
+                try { handler(); OpeningStepForProbe?.Invoke("PinCreated:" + handler.Method.DeclaringType?.Name + "." + handler.Method.Name); }
                 catch (Exception ex)
                 {
                     // Optional guidance must not turn an already-open pin into a failed action.
@@ -674,17 +675,26 @@ internal sealed partial class PinManager
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
         ShowPinWindow(pin, pin.Present);
+        OpeningStepForProbe?.Invoke("Present");
         AttachMermaid(pin);
+        OpeningStepForProbe?.Invoke("AttachMermaid");
         if (landing) pin.StartLandingEffect();
+        OpeningStepForProbe?.Invoke("StartLandingEffect");
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
             else pin.ActivatePin();
         }
+        OpeningStepForProbe?.Invoke("ActivatePin");
 
         NotifyOpenPinsChanged();
+        OpeningStepForProbe?.Invoke("NotifyOpenPinsChanged");
         NotifyPracticePinObservers(PinOpened, pin.PracticeId);
+        OpeningStepForProbe?.Invoke("NotifyPracticePinObservers");
     }
+
+    /// <summary>Resident probe only: marks each step of a pin's opening turn after its window is shown.</summary>
+    internal Action<string>? OpeningStepForProbe { get; set; }
 
     private void NotifyPracticePinObservers(Action<Guid>? observers, Guid pinId)
     {
@@ -1062,7 +1072,7 @@ internal sealed partial class PinManager
         try
         {
             result = e.Mode == PinSaveMode.SaveAs
-                ? await _saveService.SaveAsAsync(e.Image, pin, e.SourcePageUrl)
+                ? await _saveService.SaveAsAsync(e.Image, pin.DialogOwner, e.SourcePageUrl, pin.DialogOwnerHandle)
                 : await _saveService.QuickSaveAsync(e.Image, e.SourcePageUrl);
         }
         catch (Exception ex)
@@ -1091,7 +1101,7 @@ internal sealed partial class PinManager
         // folder so space can be freed or the other program found.
         string? folder = result.Error is { } error ? MyCapture.App.Themes.ThemedDialog.SaveLocationFor(error, result.Path) : null;
         _ = MyCapture.App.Themes.ThemedDialog.Show(
-            pin,
+            pin.DialogOwner,
             MyCapture.App.Themes.ThemedDialog.SaveFailureMessage(result.Error, result.Path),
             UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
@@ -1099,7 +1109,8 @@ internal sealed partial class PinManager
             details: detail,
             recovery: () => LastSaveOperationForTest = SavePinAsync(pin, new PinSaveRequestedEventArgs(PinSaveMode.SaveAs, e.Image, e.SourcePageUrl)),
             recoveryLabel: UiText.Get("Dialog.ChooseLocation"),
-            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)]);
+            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)],
+            ownerHandle: pin.DialogOwnerHandle);
         return result;
     }
 

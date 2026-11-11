@@ -74,6 +74,8 @@ public sealed class ResidentProbePinTests
     [InlineData("pin-light")]
     [InlineData("pin-light,pin-150")]
     [InlineData("pin-light,sw-pin-aux")]
+    [InlineData("pin-switch")]
+    [InlineData("pin-switch,sw-pin-aux")]
     public void VariantsAreExplicitAndComposable(string text)
     {
         var selected = ResidentProbeOptions.ReadVariants(["--resident-variant", text.ToUpperInvariant()]);
@@ -89,6 +91,9 @@ public sealed class ResidentProbePinTests
     [InlineData("pin-light,pin-scale-linear")]
     [InlineData("pin-light,sw-pin")]
     [InlineData("pin-light,sw-pin-idle")]
+    [InlineData("pin-switch,pin-light")]
+    [InlineData("pin-switch,pin-native")]
+    [InlineData("pin-switch,pin-150")]
     [InlineData("pin-plain")]
     public void LightweightVariantRejectsWpfRendererVariantsAndThePlainPrototypeIsGone(string text) =>
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", text]));

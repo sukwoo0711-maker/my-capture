@@ -109,19 +109,21 @@ internal sealed class ImageExportOptionsPanel : StackPanel
         parent.Children.Add(control);
     }
 
-    internal static ImageExportOptions? ShowCopyOptions(Window? owner, ImageExportOptions initial)
+    internal static ImageExportOptions? ShowCopyOptions(Window? owner, ImageExportOptions initial, IntPtr ownerHandle = default)
     {
         var panel = new ImageExportOptionsPanel(initial, full: false) { Margin = new Thickness(20) };
-        Window dialog = CreateCopyOptionsDialog(owner, panel);
+        Window dialog = CreateCopyOptionsDialog(owner, panel, ownerHandle);
         return dialog.ShowDialog() == true ? initial with { IncludeSourceUrl = panel.Read().IncludeSourceUrl, LongEdge = panel.Read().LongEdge } : null;
     }
 
-    internal static Window CreateCopyOptionsDialog(Window? owner, ImageExportOptionsPanel panel)
+    internal static Window CreateCopyOptionsDialog(Window? owner, ImageExportOptionsPanel panel, IntPtr ownerHandle = default)
     {
         var dialog = new Window { Title = UiText.Get("ExportOptions.Title"), Width = 360, SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
         StandardWindowTheme.Apply(dialog);
         if (owner?.IsVisible == true) dialog.Owner = owner;
+        // A native-hosted pin owns its dialogs through its HWND.
+        else if (ownerHandle != IntPtr.Zero) new System.Windows.Interop.WindowInteropHelper(dialog).Owner = ownerHandle;
         Button accept = ThemedDialog.CreateActionButton(UiText.Get("ExportOptions.Continue"), primary: true);
         Button cancel = ThemedDialog.CreateActionButton(UiText.Get("Dialog.Cancel"), primary: false);
         accept.IsDefault = true;
