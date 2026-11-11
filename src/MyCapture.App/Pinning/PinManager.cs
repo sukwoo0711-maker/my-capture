@@ -252,7 +252,7 @@ internal sealed partial class PinManager
         if (pin.State.IsHidden) ShowPinWindow(pin, pin.ShowPin);
         if (pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
         if (ActivatePinForTest is { } activatePin) activatePin(pin);
-        else pin.Activate();
+        else pin.ActivatePin();
         pin.PlayFindCue();
     }
 
@@ -423,6 +423,8 @@ internal sealed partial class PinManager
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        TryUseNativeHost(pin, content, settings, state,
+            screenOrigin?.Left ?? placement.Left * scale, screenOrigin?.Top ?? placement.Top * scale, scale);
         if (screenOrigin is { } origin)
             pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
@@ -440,12 +442,13 @@ internal sealed partial class PinManager
             content.Kind,
             state.Zoom,
             _pins.Count);
+        OpeningStepForProbe?.Invoke("LogInformation");
 
         if (PinCreated is { } handlers)
         {
             foreach (Action handler in handlers.GetInvocationList())
             {
-                try { handler(); }
+                try { handler(); OpeningStepForProbe?.Invoke("PinCreated:" + handler.Method.DeclaringType?.Name + "." + handler.Method.Name); }
                 catch (Exception ex)
                 {
                     // Optional guidance must not turn an already-open pin into a failed action.
@@ -536,7 +539,11 @@ internal sealed partial class PinManager
         state.SetCollapsed(closed.IsCollapsed);
         if (closed.IsCollapsed && closed.CollapsedOpacity is { } opacity) state.SetOpacity(opacity);
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        PinContent content = closed.Content.RenderedAt(scale);
+        var pin = new PinWindow(content, state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        // A reopened or restored pin goes through the policy again (design 4.4).
+        TryUseNativeHost(pin, content, _settings(), state,
+            physical?.Left ?? leftDip * scale, physical?.Top ?? topDip * scale, scale);
         if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {
@@ -637,7 +644,7 @@ internal sealed partial class PinManager
         pin.HideRequested += (_, _) => pin.HidePin();
         pin.ShowOnlyRequested += (_, _) => ShowOnlyPin(pin);
         pin.CanShowOnlyPin = () => _pins.Any(other => other != pin && !other.IsClosed && !other.State.IsHidden);
-        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsVisible)
+        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsShown)
             .Select(other =>
             {
                 var bounds = other.PhysicalBounds;
@@ -658,24 +665,36 @@ internal sealed partial class PinManager
         pin.UserZoomChanged += OnUserZoomChanged;
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
+        pin.HostSwitched += reason => _log.LogInformation("Pin host switched to WPF ({Reason})", reason);
+        pin.NativeHostFailed += error => LogNativeFailureOnce(error, pin.PinnedContent);
+        pin.NativeInteractionEnded += OnPinInteractionEnded;
         AttachTranslation(pin);
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
-        ShowPinWindow(pin, pin.Show);
+        ShowPinWindow(pin, pin.Present);
+        OpeningStepForProbe?.Invoke("Present");
         AttachMermaid(pin);
+        OpeningStepForProbe?.Invoke("AttachMermaid");
         if (landing) pin.StartLandingEffect();
+        OpeningStepForProbe?.Invoke("StartLandingEffect");
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
-            else pin.Activate();
+            else pin.ActivatePin();
         }
+        OpeningStepForProbe?.Invoke("ActivatePin");
 
         NotifyOpenPinsChanged();
+        OpeningStepForProbe?.Invoke("NotifyOpenPinsChanged");
         NotifyPracticePinObservers(PinOpened, pin.PracticeId);
+        OpeningStepForProbe?.Invoke("NotifyPracticePinObservers");
     }
+
+    /// <summary>Resident probe only: marks each step of a pin's opening turn after its window is shown.</summary>
+    internal Action<string>? OpeningStepForProbe { get; set; }
 
     private void NotifyPracticePinObservers(Action<Guid>? observers, Guid pinId)
     {
@@ -723,7 +742,10 @@ internal sealed partial class PinManager
 
         PinViewState state = pin.State;
         PinContent content = pin.PinnedContent;
-        byte[]? cached = content.EncodedPng ?? pin.ClipboardCache.TryGetEncoded(content.Image, content.SourcePageUrl);
+        // A copy's PNG is keyed by the bitmap it encoded; a picture kept only as a native source has no bitmap
+        // to look up unless one built for a copy is still alive, and building one here would only cost time.
+        byte[]? cached = content.EncodedPng ?? (content.ImageIfPresent is { } image
+            ? pin.ClipboardCache.TryGetEncoded(image, content.SourcePageUrl) : null);
         // The task owns the frozen source only until PNG encoding finishes. Its result has no
         // bitmap/window references; closing order is reserved before any background work completes.
         Func<PinContent, byte[]?, EncodedPinContent> encode = EncodeClosedForTest ?? EncodedPinContent.Encode;
@@ -1053,7 +1075,7 @@ internal sealed partial class PinManager
         try
         {
             result = e.Mode == PinSaveMode.SaveAs
-                ? await _saveService.SaveAsAsync(e.Image, pin, e.SourcePageUrl)
+                ? await _saveService.SaveAsAsync(e.Image, pin.DialogOwner, e.SourcePageUrl, pin.DialogOwnerHandle)
                 : await _saveService.QuickSaveAsync(e.Image, e.SourcePageUrl);
         }
         catch (Exception ex)
@@ -1082,7 +1104,7 @@ internal sealed partial class PinManager
         // folder so space can be freed or the other program found.
         string? folder = result.Error is { } error ? MyCapture.App.Themes.ThemedDialog.SaveLocationFor(error, result.Path) : null;
         _ = MyCapture.App.Themes.ThemedDialog.Show(
-            pin,
+            pin.DialogOwner,
             MyCapture.App.Themes.ThemedDialog.SaveFailureMessage(result.Error, result.Path),
             UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
@@ -1090,7 +1112,8 @@ internal sealed partial class PinManager
             details: detail,
             recovery: () => LastSaveOperationForTest = SavePinAsync(pin, new PinSaveRequestedEventArgs(PinSaveMode.SaveAs, e.Image, e.SourcePageUrl)),
             recoveryLabel: UiText.Get("Dialog.ChooseLocation"),
-            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)]);
+            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)],
+            ownerHandle: pin.DialogOwnerHandle);
         return result;
     }
 

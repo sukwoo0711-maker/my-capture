@@ -41,7 +41,7 @@ internal sealed class PinLandingDecoration : Window
     internal static Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
     internal static PinLandingThrottle Throttle { get; set; } = new();
 
-    private readonly PinWindow _pin;
+    private readonly IPinAnchor _pin;
     private readonly Stopwatch _clock;
     private readonly LandingSurface _surface;
     private readonly RectD _originalPinBounds;
@@ -74,18 +74,26 @@ internal sealed class PinLandingDecoration : Window
         State = Render(0);
         _surface.Frame = State;
         // Finish fallible artwork/layout setup before the owner can retain this window.
-        Owner = pin;
+        // The window that presents the pin owns it: the WPF window, or a native pin's HWND.
+        pin.AttachOwned(this);
         SourceInitialized += OnSourceInitialized;
-        _pin.LocationChanged += OnPinBoundsChanged;
-        _pin.SizeChanged += OnPinSizeChanged;
-        _pin.IsVisibleChanged += OnPinVisibilityChanged;
-        _pin.Closed += OnPinClosed;
+        _pin.AnchorBoundsChanged += OnPinBoundsChanged;
+        _pin.AnchorShownChanged += OnPinShownChanged;
+        _pin.AnchorClosed += OnPinClosed;
     }
 
     internal PinLandingLayout Layout { get; }
     internal PinLandingFrame State { get; private set; }
     internal bool IsCaptureExcluded { get; private set; }
     internal bool IsClosed { get; private set; }
+    /// <summary>WPF has drawn the ornament's first frame (ContentRendered).</summary>
+    internal bool HasRendered { get; private set; }
+
+    protected override void OnContentRendered(EventArgs e)
+    {
+        HasRendered = true;
+        base.OnContentRendered(e);
+    }
 
     internal static bool IsEligible(bool animations, bool remote, bool layered) => animations && !remote && layered;
 
@@ -97,7 +105,7 @@ internal sealed class PinLandingDecoration : Window
         {
             RectD bounds = ReadPhysicalBounds(pin);
             if (bounds.Width <= 0 || bounds.Height <= 0) return null;
-            IntPtr handle = new WindowInteropHelper(pin).Handle;
+            IntPtr handle = ((IPinAnchor)pin).AnchorHandle;
             double scale = MonitorEnumerator.GetFromWindow(handle).ScaleFactor;
             decoration = new PinLandingDecoration(pin, LayoutFor(bounds, scale), clock);
             shown = decoration.ShowDecoration();
@@ -117,7 +125,7 @@ internal sealed class PinLandingDecoration : Window
     /// <summary>Shows only after capture exclusion has succeeded, without changing foreground.</summary>
     internal bool ShowDecoration()
     {
-        if (IsClosed || !_pin.IsVisible) return false;
+        if (IsClosed || !_pin.IsAnchorShown) return false;
         IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
         if (!IsCaptureExcluded) return false;
         Show();
@@ -137,6 +145,7 @@ internal sealed class PinLandingDecoration : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         IntPtr handle = new WindowInteropHelper(this).Handle;
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
         WindowStyleFacade.SetClickThrough(handle, enabled: true);
         WindowStyleFacade.ExcludeFromAltTab(handle);
         CaptureWindowExclusion.DisableTransitions(this);
@@ -181,18 +190,20 @@ internal sealed class PinLandingDecoration : Window
         _surface.InvalidateVisual();
     }
 
-    private void OnPinBoundsChanged(object? sender, EventArgs e)
+    private void OnPinBoundsChanged()
     {
         // Initial WPF notifications may arrive after Show without an actual physical move.
-        if (ReadPhysicalBounds(_pin) != _originalPinBounds) Close();
+        if (!IsClosed && ReadPhysicalBounds(_pin) != _originalPinBounds) Close();
     }
 
-    private void OnPinSizeChanged(object sender, SizeChangedEventArgs e) => OnPinBoundsChanged(sender, e);
-    private void OnPinVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void OnPinShownChanged(bool shown)
     {
-        if (e.NewValue is false) Close();
+        if (!shown && !IsClosed) Close();
     }
-    private void OnPinClosed(object? sender, EventArgs e) => Close();
+    private void OnPinClosed()
+    {
+        if (!IsClosed) Close();
+    }
 
     protected override void OnClosed(EventArgs e)
     {
@@ -202,18 +213,13 @@ internal sealed class PinLandingDecoration : Window
         _source?.RemoveHook(NoActivateHook);
         _source = null;
         SourceInitialized -= OnSourceInitialized;
-        _pin.LocationChanged -= OnPinBoundsChanged;
-        _pin.SizeChanged -= OnPinSizeChanged;
-        _pin.IsVisibleChanged -= OnPinVisibilityChanged;
-        _pin.Closed -= OnPinClosed;
+        _pin.AnchorBoundsChanged -= OnPinBoundsChanged;
+        _pin.AnchorShownChanged -= OnPinShownChanged;
+        _pin.AnchorClosed -= OnPinClosed;
         base.OnClosed(e);
     }
 
-    private static RectD ReadPhysicalBounds(PinWindow pin)
-    {
-        (int left, int top, int right, int bottom) = pin.PhysicalBounds;
-        return new RectD(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
-    }
+    private static RectD ReadPhysicalBounds(IPinAnchor pin) => pin.AnchorBounds;
 
     internal static PinLandingLayout LayoutFor(RectD pin, double scale)
     {

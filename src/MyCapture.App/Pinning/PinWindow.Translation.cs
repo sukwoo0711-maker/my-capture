@@ -208,6 +208,13 @@ internal sealed partial class PinWindow
     internal void InvokeTranslationAction()
     {
         if (_isClosed) return;
+        // Translation is drawn by the WPF host only; the pin moves there when the action would do something.
+        if (_native is not null && TranslationState is PinTranslationState.Translated or PinTranslationState.Available
+            or PinTranslationState.ModelNeeded or PinTranslationState.Failed)
+        {
+            SwitchToWpf(PinSwitchReason.Command, InvokeTranslationAction);
+            return;
+        }
         if (TranslationState == PinTranslationState.Translated)
             SetTranslationDisplay(!_showingTranslation);
         else if (TranslationState is PinTranslationState.Available or PinTranslationState.ModelNeeded or PinTranslationState.Failed)

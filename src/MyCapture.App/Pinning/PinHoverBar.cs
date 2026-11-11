@@ -110,6 +110,7 @@ internal sealed class PinHoverBar : Window
         SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             WindowStyleFacade.SetNoActivate(hwnd, true);
             WindowStyleFacade.ExcludeFromAltTab(hwnd);
             CaptureWindowExclusion.DisableTransitions(this);
@@ -330,6 +331,13 @@ internal sealed class PinHoverBar : Window
             menu.Placement = PlacementMode.RelativePoint;
             menu.HorizontalOffset = origin.X;
             menu.VerticalOffset = origin.Y + 2;
+        }
+        else if (keyboard)
+        {
+            // A native-hosted pin is not a WPF owner; the menu opens under its button instead.
+            menu.PlacementTarget = OpacityButton;
+            menu.Placement = PlacementMode.Bottom;
+            menu.VerticalOffset = 2;
         }
         menu.Closed += (_, _) => { if (ReferenceEquals(_opacityMenu, menu)) _opacityMenu = null; OpacityMenuClosed?.Invoke(); };
         _opacityMenu = menu;

@@ -18,7 +18,9 @@ internal sealed class PinSessionService : IDisposable
         internal long EncodedLength { get; set; } = -1;
     }
 
-    private sealed record CapturedPin(PinSessionPin Pin, BitmapSource Image, ContentIdentity Identity);
+    // Image is null for a lightweight pin that keeps only its native source: the worker builds the bitmap
+    // from Content only when the PNG has to be written, instead of on the UI thread for every save.
+    private sealed record CapturedPin(PinSessionPin Pin, BitmapSource? Image, PinContent Content, ContentIdentity Identity);
     private sealed record SaveRequest(int Generation, long Sequence, IReadOnlyList<CapturedPin> Pins, bool Save);
     private const int CleanupRetryLimit = 6;
     private readonly PinManager _pins;
@@ -245,8 +247,8 @@ internal sealed class PinSessionService : IDisposable
         {
             foreach (PinManager.ClosedPin pin in _pins.SnapshotOpenPins())
             {
-                BitmapSource image = pin.Content.Image;
-                if (!image.IsFrozen) image = (BitmapSource)image.GetAsFrozen();
+                BitmapSource? image = pin.Content.HasOverlay || !pin.Content.Picture.IsBitmapDropped ? pin.Content.Image : null;
+                if (image is { IsFrozen: false }) image = (BitmapSource)image.GetAsFrozen();
                 ContentIdentity identity = _identities.GetValue(pin.Content, _ => new ContentIdentity(Guid.NewGuid()));
                 var record = new PinSessionPin(identity.Id, ToStoredKind(pin.Content.Kind), pin.Content.OriginalText,
                     pin.Content.SourcePageUrl, pin.Content.UsesDeviceIndependentPixels, pin.ImageWidthDip,
@@ -255,7 +257,7 @@ internal sealed class PinSessionService : IDisposable
                     pin.Content.Provenance.DocumentPath, pin.Content.Provenance.AppName,
                     pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle,
                     pin.IsCollapsed, pin.CollapsedOpacity);
-                captured.Add(new CapturedPin(record, image, identity));
+                captured.Add(new CapturedPin(record, image, pin.Content, identity));
             }
         }
         return new SaveRequest(_generation, sequence, captured, save);
@@ -341,7 +343,7 @@ internal sealed class PinSessionService : IDisposable
                         {
                             length = live.Identity.EncodedLength;
                             if (length > _store.MaxPngBytes - used) { images.Remove(candidate.Pin.Id); overLimit.Add(skipped); continue; }
-                            bytes = _encode(live.Image);
+                            bytes = _encode(live.Image ?? live.Content.Image);
                             length = live.Identity.EncodedLength = bytes.LongLength;
                         }
                         if (length > _store.MaxPngBytes - used) { images.Remove(candidate.Pin.Id); overLimit.Add(skipped); continue; }

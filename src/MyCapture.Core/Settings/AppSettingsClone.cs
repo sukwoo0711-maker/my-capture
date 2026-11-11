@@ -129,6 +129,7 @@ public static class AppSettingsClone
         InitialOpacity = s.InitialOpacity,
         ClosedWindowRestoreLimit = s.ClosedWindowRestoreLimit,
         ZoomStep = s.ZoomStep,
+        LightweightImagePins = s.LightweightImagePins,
     };
 
     private static AnnotationDefaults Clone(AnnotationDefaults s) => new()
