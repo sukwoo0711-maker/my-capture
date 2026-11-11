@@ -203,7 +203,7 @@ public sealed class PinLightweightHostWindowTests
         // Recognition that never finishes: the pin stays in its recognizing state until it closes.
         manager.RecognizeSelection = (_, token) =>
         {
-            recognitions++;
+            Interlocked.Increment(ref recognitions);
             var pending = new TaskCompletionSource<OcrResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             token.Register(() => pending.TrySetCanceled(token));
             return pending.Task;
@@ -254,9 +254,10 @@ public sealed class PinLightweightHostWindowTests
             Assert.True(pin.IsVisible);
             Assert.True(pin.IsShown);
             Assert.Null(pin.NativeWindowForTest);
-            // The replayed F2 started text selection on the WPF pin, in place.
-            Assert.Equal(1, recognitions);
+            // The replayed F2 started text selection on the WPF pin, in place. The pin is in its recognizing
+            // state at once; the recognizer itself is called from a pool thread a moment later.
             Assert.True(pin.IsRecognizingSelection);
+            PinNativeSpeedTestWait.Until(() => Volatile.Read(ref recognitions) == 1);
             (int left, int top, int right, int bottom) = pin.PhysicalBounds;
             Assert.Equal(nativeRect.Left, left);
             Assert.Equal(nativeRect.Top, top);
