@@ -52,10 +52,14 @@ public sealed class Arm64PackageTests
             try
             {
                 string? path = null; Exception? last = null;
-                // A process that has only just started may not have its module list yet: .NET Framework
-                // then throws Win32Exception, or returns no main module at all (seen on the x64 runner).
-                // Setup itself treats an unreadable executable as "not this application" (AppProcesses.Stop).
-                for (int attempt = 0; attempt < 50 && path == null; attempt++)
+                // The read is about a process that is running, as the application is when setup looks
+                // for it. One that has only just started has no settled module list yet: .NET Framework
+                // then throws Win32Exception, returns no main module, or returns the first module the
+                // loader has listed so far (ntdll.dll). All three were seen on the x64 runner, so wait
+                // until the image itself is listed. Setup treats an unreadable or other executable as
+                // "not this application" (AppProcesses.Stop).
+                bool IsCommandProcessor() => path != null && string.Equals(Path.GetFileName(path), "cmd.exe", StringComparison.OrdinalIgnoreCase);
+                for (int attempt = 0; attempt < 50 && !IsCommandProcessor(); attempt++)
                 {
                     try
                     {
@@ -65,7 +69,7 @@ public sealed class Arm64PackageTests
                     }
                     catch (System.ComponentModel.Win32Exception e) { last = e; }
                     catch (InvalidOperationException e) { last = e; }
-                    if (path == null) Thread.Sleep(100);
+                    if (!IsCommandProcessor()) Thread.Sleep(100);
                 }
                 Assert.True(path != null, "The main module of a system process could not be read: " + last);
                 Assert.Equal("cmd.exe", Path.GetFileName(path), ignoreCase: true);
