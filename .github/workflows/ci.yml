@@ -238,6 +238,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           . .\build\publish-architecture.ps1
           Assert-PublishArchitecture -PublishRoot (Join-Path $PWD 'artifacts/ci-arm64/publish') -Architecture arm64
+      # The hosted ARM64 image starts with a full-screen, topmost "Microsoft account" prompt (WWAHost,
+      # the whole 1024x768 screen) that owns the foreground and covers every window the capture,
+      # recording and input tests put on screen. It belongs to the throwaway runner; closing it
+      # changes nothing in the product or the tests. The next step reports the desktop afterwards.
+      - name: Close the runner's full-screen sign-in prompt
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          $prompts = @(Get-Process -Name WWAHost -ErrorAction SilentlyContinue)
+          foreach ($prompt in $prompts) {
+              Write-Host "Closing WWAHost $($prompt.Id): '$($prompt.MainWindowTitle)'"
+              Stop-Process -Id $prompt.Id -Force -ErrorAction SilentlyContinue
+          }
+          Start-Sleep -Seconds 3
+          Write-Host "WWAHost processes left: $(@(Get-Process -Name WWAHost -ErrorAction SilentlyContinue).Count)"
       # Diagnostics only; nothing here changes the runner. The first run failed on what this image
       # differs in: WPF effects through RenderTargetBitmap, a WWAHost window that owned the
       # foreground over the capture fixtures, the tray, and long-path Recycle Bin moves.

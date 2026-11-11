@@ -436,6 +436,12 @@ public sealed class ReleaseVersionContractTests
         int probe = job.IndexOf("dotnet run --file build/tools/runner-desktop-probe.cs", StringComparison.Ordinal);
         Assert.True(probe >= 0, "The ARM64 runner desktop probe is missing.");
         Assert.True(probe < job.IndexOf(@".\build\run-packaged-self-tests.ps1", StringComparison.Ordinal));
+        // The image's full-screen sign-in prompt covers every fixture window, so it is closed before
+        // the desktop is described and before anything is put on screen. Nothing else is stopped.
+        int prompt = job.IndexOf("Stop-Process -Id $prompt.Id", StringComparison.Ordinal);
+        Assert.True(prompt >= 0 && prompt < probe, "The runner's sign-in prompt must be closed before the desktop is described.");
+        Assert.Contains("Get-Process -Name WWAHost", job, StringComparison.Ordinal);
+        Assert.Equal(2, job.Split("Stop-Process", StringSplitOptions.None).Length);
         Assert.Contains("tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0", job[probe..], StringComparison.Ordinal);
         foreach (string evidence in new[] { "LongPathsEnabled", "BitBucket", "Get-WinUserLanguageList", "GraphicsCaptureSession", "WWAHost.exe" })
             Assert.Contains(evidence, job, StringComparison.Ordinal);
