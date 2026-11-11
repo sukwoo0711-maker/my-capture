@@ -110,6 +110,7 @@ internal sealed class PinHoverBar : Window
         SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             WindowStyleFacade.SetNoActivate(hwnd, true);
             WindowStyleFacade.ExcludeFromAltTab(hwnd);
             CaptureWindowExclusion.DisableTransitions(this);

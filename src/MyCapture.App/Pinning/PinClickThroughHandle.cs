@@ -77,6 +77,7 @@ internal sealed class PinClickThroughHandle : Window
         SourceInitialized += (_, _) =>
         {
             ConfigureHandle(this, clickThrough: false);
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             IsCaptureExcluded = ApplyCaptureExclusion(this);
             ApplyRoundRegion();
         };
@@ -272,6 +273,7 @@ internal sealed class PinClickThroughHint : Window
         SourceInitialized += (_, _) =>
         {
             PinClickThroughHandle.ConfigureHandle(this, clickThrough: true);
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             IsCaptureExcluded = PinClickThroughHandle.ApplyCaptureExclusion(this);
             if (!AllowsTransparency)
                 HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(PassiveHitTest);

@@ -312,6 +312,8 @@ public partial class App : Application
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
+        // A native pin's mouse-up never reaches WPF input; its manager reports the end of a gesture.
+        _pins.InteractionEnded += ScheduleIdleMemoryReclamation;
         _pins.OpenPinsChanged += () =>
         {
             if (_pins.IsInteractionActive) CancelIdleMemoryReclamation();

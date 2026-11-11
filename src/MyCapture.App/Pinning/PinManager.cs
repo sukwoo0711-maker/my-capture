@@ -252,7 +252,7 @@ internal sealed partial class PinManager
         if (pin.State.IsHidden) ShowPinWindow(pin, pin.ShowPin);
         if (pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
         if (ActivatePinForTest is { } activatePin) activatePin(pin);
-        else pin.Activate();
+        else pin.ActivatePin();
         pin.PlayFindCue();
     }
 
@@ -423,6 +423,8 @@ internal sealed partial class PinManager
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        TryUseNativeHost(pin, content, settings, state,
+            screenOrigin?.Left ?? placement.Left * scale, screenOrigin?.Top ?? placement.Top * scale, scale);
         if (screenOrigin is { } origin)
             pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
@@ -536,7 +538,11 @@ internal sealed partial class PinManager
         state.SetCollapsed(closed.IsCollapsed);
         if (closed.IsCollapsed && closed.CollapsedOpacity is { } opacity) state.SetOpacity(opacity);
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        PinContent content = closed.Content.RenderedAt(scale);
+        var pin = new PinWindow(content, state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        // A reopened or restored pin goes through the policy again (design 4.4).
+        TryUseNativeHost(pin, content, _settings(), state,
+            physical?.Left ?? leftDip * scale, physical?.Top ?? topDip * scale, scale);
         if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {
@@ -637,7 +643,7 @@ internal sealed partial class PinManager
         pin.HideRequested += (_, _) => pin.HidePin();
         pin.ShowOnlyRequested += (_, _) => ShowOnlyPin(pin);
         pin.CanShowOnlyPin = () => _pins.Any(other => other != pin && !other.IsClosed && !other.State.IsHidden);
-        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsVisible)
+        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsShown)
             .Select(other =>
             {
                 var bounds = other.PhysicalBounds;
@@ -658,19 +664,22 @@ internal sealed partial class PinManager
         pin.UserZoomChanged += OnUserZoomChanged;
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
+        pin.HostSwitched += reason => _log.LogInformation("Pin host switched to WPF ({Reason})", reason);
+        pin.NativeHostFailed += error => LogNativeFailureOnce(error, pin.PinnedContent.Image);
+        pin.NativeInteractionEnded += OnPinInteractionEnded;
         AttachTranslation(pin);
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
-        ShowPinWindow(pin, pin.Show);
+        ShowPinWindow(pin, pin.Present);
         AttachMermaid(pin);
         if (landing) pin.StartLandingEffect();
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
-            else pin.Activate();
+            else pin.ActivatePin();
         }
 
         NotifyOpenPinsChanged();

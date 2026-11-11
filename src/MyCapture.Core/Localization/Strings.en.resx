@@ -5620,6 +5620,8 @@ Install the model?</value></data>
   <data name="Pin_CollapsedTip" xml:space="preserve"><value>Double-click to expand the pin.</value></data>
   <data name="Tray_PinCollapsed" xml:space="preserve"><value>Collapsed</value></data>
   <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>Snap to edges and other pins while dragging</value></data>
+  <data name="Pin_LightweightLabel" xml:space="preserve"><value>Show picture pins with less memory</value></data>
+  <data name="Pin_LightweightDescription" xml:space="preserve"><value>Picture pins use less memory, and a pin that starts text selection or translation becomes a standard pin.</value></data>
   <data name="Pin_CollapseToggle" xml:space="preserve"><value>Collapse or expand pin</value></data>
   <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>Expand collapsed pin</value></data>
   <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>Double-click</value></data>

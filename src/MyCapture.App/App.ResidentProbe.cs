@@ -9,6 +9,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
+using MyCapture.App.Pinning;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
@@ -150,6 +151,7 @@ public partial class App
                     QuickAccessWindow => probe.Has("sw-card"),
                     CaptureFlightDecoration => probe.Has("sw-flight"),
                     AnnotationEditorWindow => probe.Has("sw-editor"),
+                    PinHoverBar or PinClickThroughHandle or PinClickThroughHint or PinLandingDecoration => probe.Has("sw-pin-aux"),
                     _ => false,
                 };
                 if (software && System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(window).Handle)
@@ -157,6 +159,7 @@ public partial class App
                     target.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
             };
         }
+        using var pinDiagnostics = new ResidentProbePinDiagnostics(probe, recorder);
         try
         {
             CaptureOverlayView.SuppressKeyPanelForProbe = probe.Has("no-key-panel");
@@ -238,6 +241,12 @@ public partial class App
                 await recorder.SettleAsync("pins-10 closed", probe.SettleSeconds,
                     () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
                 await recorder.AuditAsync("pins-10 closed");
+                break;
+            case "pin-1600":
+            case "pin-1080":
+            case "pin-4k":
+            case "pin-text":
+                await ProbePinMemoryAsync(probe, recorder, scenario, pinDiagnostics: ResidentProbePinDiagnostics.Current);
                 break;
             case ResidentProbeLibraryDelete.Scenario:
                 await ProbeLibraryDeleteAsync(probe, recorder);
@@ -697,7 +706,7 @@ public partial class App
             BitmapSource text = ResidentProbeImages.Text(900, 360, [$"Pinned text {index}", "SELECT * FROM captures;", "x = y + 1"]);
             _pins.PinRenderedText(text, $"Pinned text {index}\nSELECT * FROM captures;\nx = y + 1", isTable: false);
         }
-        await ProbeWaitAsync(() => _pins.SnapshotOpenPinWindows().Count(pin => pin.IsVisible) >= images + texts, 15_000, "pins shown");
+        await ProbeWaitAsync(() => _pins.SnapshotOpenPinWindows().Count(pin => pin.IsShown) >= images + texts, 15_000, "pins shown");
         recorder.Time(name + ": create → all shown", Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         foreach (var pin in _pins.SnapshotOpenPinWindows()) recorder.Track(name, "pin window", pin);
         await Task.Delay(dwellMs);

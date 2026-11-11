@@ -137,6 +137,7 @@ internal sealed class PinLandingDecoration : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         IntPtr handle = new WindowInteropHelper(this).Handle;
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
         WindowStyleFacade.SetClickThrough(handle, enabled: true);
         WindowStyleFacade.ExcludeFromAltTab(handle);
         CaptureWindowExclusion.DisableTransitions(this);

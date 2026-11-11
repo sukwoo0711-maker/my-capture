@@ -315,6 +315,13 @@ public sealed class PinSettings
 
     /// <summary>Scale step applied per mouse-wheel notch.</summary>
     public double ZoomStep { get; set; } = 0.1;
+
+    /// <summary>
+    /// Shows new and reopened picture pins in a native window that holds less memory. A pin that
+    /// starts a feature only the standard pin offers (text selection, translation) becomes one.
+    /// </summary>
+    /// <remarks>Off by default and on new installations.</remarks>
+    public bool LightweightImagePins { get; set; }
 }
 
 public sealed class AnnotationDefaults

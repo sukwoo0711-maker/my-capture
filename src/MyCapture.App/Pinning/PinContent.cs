@@ -77,6 +77,9 @@ internal sealed record PinContent
     /// <summary>A picture translation drawn over <c>_image</c>, its untouched source.</summary>
     private PinOverlayComposition? Overlay { get; init; }
 
+    /// <summary>Whether a picture translation is drawn over the source (<see cref="PinHostPolicy"/>).</summary>
+    internal bool HasOverlay => Overlay is not null;
+
     /// <summary>The exact PNG used to decode this image, when already available.</summary>
     internal byte[]? EncodedPng { get; init; }
 

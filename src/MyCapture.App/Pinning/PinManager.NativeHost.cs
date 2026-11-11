@@ -1,0 +1,65 @@
+using System.ComponentModel;
+using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
+using MyCapture.Core.Pin;
+using MyCapture.Core.Settings;
+
+namespace MyCapture.App.Pinning;
+
+// Lightweight picture pins: the host decision at open and reopen, and the fallback to WPF.
+internal sealed partial class PinManager
+{
+    private static int _nativeFailureLogged;
+
+    /// <summary>
+    /// Whether a screen reader runs. Increment 1 leaves the hook (default: none); the reader's own
+    /// state and its change notification come with increment 4 (design section 6).
+    /// </summary>
+    internal Func<bool> ScreenReaderActive { get; set; } = static () => false;
+
+    /// <summary>A native pin's move or resize ended; the app reclaims idle memory as after a WPF pin's mouse-up.</summary>
+    internal event Action? InteractionEnded;
+
+    /// <summary>Test hook: lets the next native failure write its one log line again.</summary>
+    internal static void ResetNativeFailureLogForTest() => Interlocked.Exchange(ref _nativeFailureLogged, 0);
+
+    private void TryUseNativeHost(PinWindow pin, PinContent content, PinSettings settings, PinViewState state,
+        double leftPhysical, double topPhysical, double scale)
+    {
+        if (PinHostPolicy.Choose(content, settings, ScreenReaderActive(), state.IsCollapsed) != PinHostKind.Native) return;
+        NativePinHost? host = null;
+        try
+        {
+            host = NativePinHost.Create(pin, content, leftPhysical, topPhysical, scale);
+            pin.UseNativeHost(host);
+        }
+        catch (Exception error) when (error is Win32Exception or OutOfMemoryException
+            or InvalidOperationException or ArgumentOutOfRangeException)
+        {
+            // The pin keeps its WPF window, exactly as with the setting off.
+            host?.Dispose();
+            LogNativeFailureOnce(error, content.Image);
+        }
+    }
+
+    // One warning per process, however many pins fail: the exception type and the picture size, never content.
+    private void LogNativeFailureOnce(Exception error, BitmapSource image)
+    {
+        if (Interlocked.Exchange(ref _nativeFailureLogged, 1) != 0) return;
+        _log.LogWarning("Lightweight pin unavailable, using the standard pin: {Error} for {Width}x{Height}",
+            error.GetType().Name, image.PixelWidth, image.PixelHeight);
+    }
+
+    private void OnPinInteractionEnded()
+    {
+        if (InteractionEnded is not { } handlers) return;
+        foreach (Action handler in handlers.GetInvocationList())
+        {
+            try { handler(); }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                _log.LogWarning(error, "Could not notify a pin interaction observer");
+            }
+        }
+    }
+}

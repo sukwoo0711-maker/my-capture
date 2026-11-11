@@ -19,6 +19,8 @@ internal sealed partial class PinWindow
     internal void ToggleCollapsed()
     {
         if (_isClosed || _state.IsClickThrough) return;
+        // A folded pin is a WPF thumbnail; a native pin moves to its WPF window first.
+        if (_native is not null) { SwitchToWpf(PinSwitchReason.Command, ToggleCollapsed); return; }
         var origin = PhysicalBounds;
         LeaveTextSelection(restoreFocus: false);
         EndDrag();

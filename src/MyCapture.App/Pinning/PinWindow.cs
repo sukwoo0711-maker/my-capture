@@ -43,8 +43,8 @@ namespace MyCapture.App.Pinning;
 /// </remarks>
 internal sealed partial class PinWindow : Window
 {
-    private const double GrabMarginDip = 24.0;
-    private const double OpacityStep = 0.1;
+    internal const double GrabMarginDip = 24.0;
+    internal const double OpacityStep = 0.1;
     private const double ArrowNudgeDip = 1.0;
     private const double ArrowNudgeShiftDip = 10.0;
 
@@ -351,6 +351,7 @@ internal sealed partial class PinWindow : Window
         RefreshCollapseMenu();
         if (_state.IsCollapsed) ShowThumbnail(VisualTreeHelper.GetDpi(this));
         Closed += (_, _) => { _thumbnail = null; _thumbnailContent = null; };
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.PinConstructed?.Invoke(this);
     }
 
     internal Task PendingProvenanceUpdateForTest { get; }
@@ -415,7 +416,8 @@ internal sealed partial class PinWindow : Window
     /// </summary>
     internal void ShowHoverBar()
     {
-        if (_isClosed || _state.IsCollapsed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
+        // Increment 1: a native pin shows no hover bar; increment 2 shares one through the pin anchor.
+        if (_native is not null || _isClosed || _state.IsCollapsed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
         _hoverHideTimer.Stop();
         PinHoverBar bar = _hoverBar ??= CreateHoverBar();
         if (!bar.IsVisible)
@@ -550,7 +552,8 @@ internal sealed partial class PinWindow : Window
 
     /// <summary>An effective zoom change caused by a user gesture or zoom command.</summary>
     internal event Action<Guid>? UserZoomChanged;
-    internal bool IsPracticeResizeInProgress => _dragging && _resizeEdge != PinResizeEdge.None;
+    internal bool IsPracticeResizeInProgress => _native is { } host ? host.Window.IsResizing
+        : _dragging && _resizeEdge != PinResizeEdge.None;
 
     /// <summary>Raised when a source lookup enriches the retained content and its saved session.</summary>
     internal event Action? ContentChanged;
@@ -611,14 +614,15 @@ internal sealed partial class PinWindow : Window
         if (!string.IsNullOrEmpty(status)) ShowFeedback(status, FeedbackKind.Result);
     }
 
-    /// <summary>The native handle, valid after the window is shown.</summary>
-    internal IntPtr Handle => _handle;
+    /// <summary>The native handle, valid after the window is shown: the native host's window while it presents the pin.</summary>
+    internal IntPtr Handle => _native is { } host ? host.Window.Handle : _handle;
 
     /// <summary>Whether this pin has been closed and should be pruned by the manager.</summary>
     internal bool IsClosed => _isClosed;
 
     internal bool IsInteractionActive => !_isClosed
-        && (_dragging || IsMouseCaptureWithin || IsTextSelectionMode || ContextMenu?.IsOpen == true);
+        && (_dragging || IsMouseCaptureWithin || IsTextSelectionMode || ContextMenu?.IsOpen == true
+            || _native?.Window.IsDragging == true);
 
     /// <summary>Test hook: whether the bottom feedback overlay is currently visible.</summary>
     internal bool IsFeedbackVisible => _feedback.Visibility == Visibility.Visible;
@@ -717,6 +721,10 @@ internal sealed partial class PinWindow : Window
     /// <summary>Applies click-through by toggling extended window styles via the facade.</summary>
     internal void ApplyClickThrough(bool enabled)
     {
+        if (_native is not null || _retiringNative is not null)
+        {
+            if (RouteNativeClickThrough(enabled)) return;
+        }
         bool changed = _state.IsClickThrough != enabled;
         _state.SetClickThrough(enabled);
         if (_handle != IntPtr.Zero)
@@ -782,18 +790,29 @@ internal sealed partial class PinWindow : Window
     internal bool ToggleClickThrough()
     {
         bool next = !_state.IsClickThrough;
+        bool native = _native is not null;
         ApplyClickThrough(next);
-        return _state.IsClickThrough;
+        // A native pin turns it on after its move to the WPF host, which follows in a frame.
+        return native ? next : _state.IsClickThrough;
     }
 
-    /// <summary>The pin's window bounds in physical pixels; empty if not yet shown.</summary>
+    /// <summary>The pin's window bounds in physical pixels (the whole surface of a native pin); empty if not yet shown.</summary>
     internal (int Left, int Top, int Right, int Bottom) PhysicalBounds =>
-        _handle != IntPtr.Zero ? WindowStyleFacade.GetWindowBounds(_handle) : (0, 0, 0, 0);
+        _native is { } host ? NativeBounds(host)
+        : _handle != IntPtr.Zero ? WindowStyleFacade.GetWindowBounds(_handle) : (0, 0, 0, 0);
 
     /// <summary>Hides the pin while retaining its position and zoom.</summary>
     internal void HidePin()
     {
         if (_isClosed || _state.IsHidden) return;
+        FinishHostSwitch();
+        if (_native is { } host)
+        {
+            _state.IsHidden = true;
+            host.Window.Hide();
+            HiddenStateChanged?.Invoke();
+            return;
+        }
         _state.IsHidden = true;
         UpdateClickThroughHandle();
         CancelPendingProgress();
@@ -827,8 +846,15 @@ internal sealed partial class PinWindow : Window
     internal void ShowPin()
     {
         if (_isClosed) return;
+        FinishHostSwitch();
         bool wasHidden = _state.IsHidden;
         _state.IsHidden = false;
+        if (_native is { } host)
+        {
+            host.Window.Reveal();
+            if (wasHidden) HiddenStateChanged?.Invoke();
+            return;
+        }
         _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
         // Show() need not change IsVisible when it interrupts the hide animation.
@@ -990,7 +1016,15 @@ internal sealed partial class PinWindow : Window
     internal void CloseWithExit()
     {
         if (_isClosed) return;
+        FinishHostSwitch();
         StartClosing();
+        if (_native is { } host)
+        {
+            if (!host.Window.IsClosed) host.Window.CloseWithExit(ExcludeLeavingPinFromCapture);
+            // Closed at once (no animation, not visible, or exclusion refused): the window follows now.
+            if (host.Window.IsClosed && !_windowClosed) Close();
+            return;
+        }
         if (!FluidMotion.AnimationsEnabled || !IsVisible || _handle == IntPtr.Zero
             || !ExcludeLeavingPinFromCapture(_handle))
         {
@@ -1015,12 +1049,18 @@ internal sealed partial class PinWindow : Window
     /// </summary>
     internal void CompleteExit(bool releaseBuffers = true)
     {
+        if (_native is not null)
+        {
+            // A native exit has no WPF frame to present; the window goes with the pin's own close.
+            if (!_windowClosed) Close();
+            return;
+        }
         FluidMotion.CompleteExit(this);
         if (_exitClosePending) CloseNow(releaseBuffers);
     }
 
     /// <summary>Whether the pin has closed but its exit is still on the screen.</summary>
-    internal bool IsLeaving => FluidMotion.IsExiting(this);
+    internal bool IsLeaving => _native is { } host ? host.Window.IsExiting : FluidMotion.IsExiting(this);
 
     // The exit's deferred close; the window may already have been closed directly meanwhile. The exit
     // ends inside WPF's render pass, where the resize that releases the buffers would render re-entrantly,
@@ -1085,6 +1125,9 @@ internal sealed partial class PinWindow : Window
         // Snapshot while the native window still exists and nothing has moved it.
         ClosedPlacement = CaptureClosedPlacement();
         _isClosed = true;
+        // A pin that closes while it moves to its WPF window drops the native one now; it never switches back.
+        DropRetiringNative();
+        _native?.Detach();
         _clickThroughHandle?.Close();
         _clickThroughHandle = null;
         StopLandingEffect();
@@ -1110,6 +1153,7 @@ internal sealed partial class PinWindow : Window
 
     private PinClosedPlacement? CaptureClosedPlacement()
     {
+        if (_native is { } host) return NativePlacement(host);
         if (_handle == IntPtr.Zero)
         {
             return null;
@@ -1132,7 +1176,9 @@ internal sealed partial class PinWindow : Window
     {
         _ = sender;
         _ = e;
-        AnimatePinReveal();
+        // A pin moving from its native window shows at once under it: no second reveal.
+        if (_skipRevealOnce) _skipRevealOnce = false;
+        else AnimatePinReveal();
         UpdateClickThroughHandle();
     }
 
@@ -1153,6 +1199,12 @@ internal sealed partial class PinWindow : Window
         // A restored pin moves to its physical position before it first becomes visible. A
         // failure is retried and reported by the manager once the window is shown.
         _ = ApplyRestorePlacement();
+        // A pin moving from its native window takes the native bounds once, then moves freely.
+        if (_switchPlacementPending)
+        {
+            _switchPlacementPending = false;
+            CompleteRestorePlacement();
+        }
     }
 
     /// <summary>The accent token brush the outline follows (<see cref="PinFrameColor.AccentKey"/>).</summary>
@@ -1164,8 +1216,16 @@ internal sealed partial class PinWindow : Window
         "FrameNeutral", typeof(Brush), typeof(PinWindow), new PropertyMetadata(null, OnFrameTokenChanged));
 
     // A theme, accent or contrast change swaps the token brushes; the outline changes at once.
-    private static void OnFrameTokenChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e) =>
-        ((PinWindow)sender).UpdateChromeColor(animate: false);
+    private static void OnFrameTokenChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e)
+    {
+        var pin = (PinWindow)sender;
+        pin.UpdateChromeColor(animate: false);
+        if (pin._native is { Window.IsClosed: false } host)
+            host.Window.SetFrameBrushes(pin.FrameAccentBrush, pin.FrameNeutralBrush, ThemeService.Current);
+    }
+
+    internal Brush? FrameAccentBrush => (Brush?)GetValue(FrameAccentProperty);
+    internal Brush? FrameNeutralBrush => (Brush?)GetValue(FrameNeutralProperty);
 
     /// <summary>Test hook: the outline colour the pin shows once any transition ends.</summary>
     internal Color FrameColorForTest => _chromeBrush.Color;
@@ -1687,7 +1747,11 @@ internal sealed partial class PinWindow : Window
         }
     }
 
-    internal void MovePhysicalForTest(double left, double top) => MovePhysical(left, top);
+    internal void MovePhysicalForTest(double left, double top)
+    {
+        if (_native is { } host) host.Window.MoveKeepingGrabbable(left, top);
+        else MovePhysical(left, top);
+    }
 
     private void ZoomAt(int notches, double pointerXDip, double pointerYDip)
     {
@@ -1766,7 +1830,7 @@ internal sealed partial class PinWindow : Window
     /// <summary>Test hook: commit the live-zoom cache the way the settle timer would.</summary>
     internal void ForceZoomSettleForTest() => CommitCrispZoom();
 
-    internal bool IsLiveZoomingForTest => _liveZooming;
+    internal bool IsLiveZoomingForTest => _native is { } host ? host.Window.IsLiveZooming : _liveZooming;
 
     internal static double ZoomRasterScale(double displayScale, double zoom) =>
         Math.Min(8, displayScale * Math.Max(1, zoom));
@@ -1939,7 +2003,14 @@ internal sealed partial class PinWindow : Window
     /// <summary>Locates a chosen pin with two outline pulses, without an opening ornament.</summary>
     internal void PlayFindCue()
     {
-        if (_isClosed || _state.IsHidden || !IsVisible) return;
+        if (_isClosed || _state.IsHidden) return;
+        FinishHostSwitch();
+        if (_native is { } host)
+        {
+            host.Window.PlayFindCue();
+            return;
+        }
+        if (!IsVisible) return;
         StopLandingEffect();
         _findCueRunning = true;
         _landingClock = Stopwatch.StartNew();
@@ -1969,6 +2040,14 @@ internal sealed partial class PinWindow : Window
     /// <summary>Called in the same dispatcher turn immediately after a new/reopened pin's Show.</summary>
     internal void StartLandingEffect()
     {
+        if (_native is { } host)
+        {
+            // Increment 1: the outline accent only; the landing ornament follows with the pin anchor.
+            if (_isClosed || _state.IsHidden || !host.Window.IsVisible) return;
+            LandingStarted = true;
+            host.Window.StartLanding();
+            return;
+        }
         if (_isClosed || !IsVisible || _state.IsHidden) return;
         StopLandingEffect();
         // A restored HWND may have changed DPI during Show. Settle that physical move
@@ -2454,6 +2533,7 @@ internal sealed partial class PinWindow : Window
     {
         _windowClosed = true;
         StartClosing();
+        DisposeNativeHost();
         // A direct close during an exit (close all, app exit) ends it; its deferred close is moot.
         FluidMotion.CompleteExit(this);
         ClipboardCache.Dispose();
