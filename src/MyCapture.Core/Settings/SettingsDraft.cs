@@ -908,6 +908,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
         _preservedStamp.Anchor.ToString(), Dbl(_preservedStamp.MarginX), Dbl(_preservedStamp.MarginY),
         Dbl(_preservedStamp.WidthFraction), Int(_preservedStamp.OpacityPercent),
+        _preservedStamp.Blend.ToString(), Int(_preservedStamp.PageOpacityPercent),
     ];
 
     private static string B(bool value) => value ? "1" : "0";
