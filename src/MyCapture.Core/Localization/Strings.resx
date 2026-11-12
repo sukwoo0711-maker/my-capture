@@ -5620,6 +5620,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_CollapsedTip" xml:space="preserve"><value>더블클릭하면 핀을 펼칩니다.</value></data>
   <data name="Tray_PinCollapsed" xml:space="preserve"><value>접힘</value></data>
   <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>끌 때 가장자리와 다른 핀에 붙이기</value></data>
+  <data name="Pin_LightweightLabel" xml:space="preserve"><value>그림 핀을 적은 메모리로 띄우기</value></data>
+  <data name="Pin_LightweightDescription" xml:space="preserve"><value>그림 핀이 쓰는 메모리를 줄이며, 글자 선택이나 번역을 시작한 핀은 일반 핀으로 바뀝니다.</value></data>
   <data name="Pin_CollapseToggle" xml:space="preserve"><value>핀 접기·펼치기</value></data>
   <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>접힌 핀 펼치기</value></data>
   <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>더블클릭</value></data>

@@ -522,6 +522,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool CloseOnDoubleClick { get => _closeOnDoubleClick; set => Set(ref _closeOnDoubleClick, value); }
     private bool _snapWhileDragging;
     public bool SnapWhileDragging { get => _snapWhileDragging; set => Set(ref _snapWhileDragging, value); }
+    private bool _lightweightImagePins;
+    public bool LightweightImagePins { get => _lightweightImagePins; set => Set(ref _lightweightImagePins, value); }
     public bool RestoreOpenPinsOnLaunch { get => _restoreOpenPinsOnLaunch; set => Set(ref _restoreOpenPinsOnLaunch, value); }
     public bool CacheResults { get => _cacheResults; set => Set(ref _cacheResults, value); }
 
@@ -794,6 +796,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
         _snapWhileDragging = s.Pin.SnapWhileDragging;
+        _lightweightImagePins = s.Pin.LightweightImagePins;
         _restoreOpenPinsOnLaunch = s.Pin.RestoreOpenPinsOnLaunch;
         _initialOpacity = Dbl(s.Pin.InitialOpacity);
         _zoomStep = Dbl(s.Pin.ZoomStep);
@@ -895,7 +898,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
         B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
         _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
-        B(_closeOnDoubleClick), B(_snapWhileDragging), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
+        B(_closeOnDoubleClick), B(_snapWhileDragging), B(_lightweightImagePins), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
@@ -1032,6 +1035,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             {
                 CloseOnDoubleClick = _closeOnDoubleClick,
                 SnapWhileDragging = _snapWhileDragging,
+                LightweightImagePins = _lightweightImagePins,
                 RestoreOpenPinsOnLaunch = _restoreOpenPinsOnLaunch,
                 InitialOpacity = ParseDouble(_initialOpacity),
                 ZoomStep = ParseDouble(_zoomStep),

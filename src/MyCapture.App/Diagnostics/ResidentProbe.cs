@@ -65,7 +65,9 @@ internal sealed class ResidentProbeOptions
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
          "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib",
-         "legacy-guide-write", "selector-show-owned"];
+         "legacy-guide-write", "selector-show-owned",
+         "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
+         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds
@@ -74,12 +76,14 @@ internal sealed class ResidentProbeOptions
     internal static readonly string[] AllScenarios =
         ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10", ResidentProbeLibraryDelete.Scenario];
 
-    private ResidentProbeOptions(string output, IReadOnlyList<string> scenarios, bool quick, bool audit)
+    internal ResidentProbeOptions(string output, IReadOnlyList<string> scenarios, bool quick, bool audit,
+        IReadOnlySet<string>? variants = null)
     {
         Output = output;
         Scenarios = scenarios;
         Quick = quick;
         Audit = audit;
+        if (variants is not null) Variants = variants;
     }
 
     /// <summary>
@@ -183,6 +187,23 @@ internal sealed class ResidentProbeOptions
             throw new ArgumentException("Native selector experiments cannot be combined with selector-wpf.");
         if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
             throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
+        if (variants.Contains("pin-native") && variants.Overlaps(
+            ["pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-light"]))
+            throw new ArgumentException("pin-native uses its own CPU renderer; choose it without a WPF pin renderer variant.");
+        if (variants.Contains("pin-light") && variants.Overlaps(["pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle"]))
+            throw new ArgumentException("pin-light opens picture pins through the product's native host; choose it without a WPF pin renderer variant.");
+        if (variants.Contains("pin-switch") && variants.Overlaps(
+            ["pin-native", "pin-light", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
+            throw new ArgumentException("pin-switch is its own check of the lightweight pin's switch; choose it alone.");
+        if (variants.Contains("pin-zoom") && variants.Overlaps(
+            ["pin-native", "pin-native-full", "pin-light", "pin-switch", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
+            throw new ArgumentException("pin-zoom is its own zoom and move measurement of one lightweight pin; choose it alone (with pin-hold-whole or pin-move-live).");
+        if ((variants.Contains("pin-hold-whole") || variants.Contains("pin-move-live")) && !variants.Contains("pin-zoom"))
+            throw new ArgumentException("pin-hold-whole and pin-move-live change what pin-zoom measures; choose them together with pin-zoom.");
+        if (variants.Contains("pin-reopen") && !variants.Contains("pin-light"))
+            throw new ArgumentException("pin-reopen closes and reopens pin-light's pins; choose it together with pin-light.");
+        if (variants.Contains("pin-native-full") && !variants.Contains("pin-native"))
+            throw new ArgumentException("pin-native-full selects pin-native's whole-surface live frames; choose it together with pin-native.");
         return variants;
     }
 }
@@ -288,7 +309,7 @@ internal static class ResidentProbeImages
 /// Process counters at fixed points of the probe script, the UI thread's input-priority round trip
 /// while idle, and the named timings of the responsiveness paths.
 /// </summary>
-internal sealed class ResidentProbeRecorder : IDisposable
+internal sealed partial class ResidentProbeRecorder : IDisposable
 {
     private readonly ResidentProbeOptions _options;
     private readonly Dispatcher _dispatcher;
@@ -400,9 +421,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
     /// Diagnostic only (<see cref="ResidentProbeOptions.Audit"/>): a forced, compacting full collection,
     /// then the counters and every tracked window or image still reachable.
     /// </summary>
-    internal async Task AuditAsync(string step)
+    internal async Task AuditAsync(string step, bool force = false)
     {
-        if (!_options.Audit) return;
+        if (!_options.Audit && !force) return;
         for (int pass = 0; pass < 2; pass++)
         {
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
@@ -587,6 +608,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Failures = _failures,
                 Breakdowns = _breakdowns,
                 ReceiptBreakdowns = _receiptBreakdowns,
+                PinMemorySamples = _pinMemorySamples,
+                PinMeasurements = _pinMeasurements,
+                PinObservations = _pinObservations,
                 MetricDefinitions = new
                 {
                     PrivateWorkingSetMb = "QueryWorkingSet nonshared resident pages; null and PrivateWorkingSetError when unavailable",

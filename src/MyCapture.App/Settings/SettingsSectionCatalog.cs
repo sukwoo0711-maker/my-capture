@@ -71,6 +71,7 @@ internal static class SettingsSectionCatalog
         new("InitialOpacity", SettingsSection.Pins, null, null, null),
         new("ZoomStep", SettingsSection.Pins, "PinHistoryExpander", null, null),
         new("ClosedWindowRestoreLimit", SettingsSection.Pins, "PinHistoryExpander", "G08", null),
+        new("LightweightImagePins", SettingsSection.Pins, null, null, null),
         new("OcrQuality", SettingsSection.Text, null, "G09", null),
         new("PreferredLanguages", SettingsSection.Text, null, null, null),
         new("CacheResults", SettingsSection.Text, null, null, null),

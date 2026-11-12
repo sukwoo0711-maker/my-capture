@@ -368,15 +368,24 @@ internal sealed class ThemedDialog : Window
     internal static MessageBoxResult Show(Window? owner, string text, string title, MessageBoxButton buttons = MessageBoxButton.OK,
         MessageBoxImage icon = MessageBoxImage.Information, MessageBoxResult defaultResult = MessageBoxResult.None,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null) =>
-        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon);
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, IntPtr ownerHandle = default) =>
+        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon, ownerHandle);
 
-    /// <summary>Shows a dialog built by one of the Create* factories modally over its owner.</summary>
-    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon)
+    /// <summary>
+    /// Shows a dialog built by one of the Create* factories modally over its owner; <paramref name="ownerHandle"/>
+    /// is a native window (a native-hosted pin) that owns it when no WPF owner is shown.
+    /// </summary>
+    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon, IntPtr ownerHandle = default)
     {
-        owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
+        owner = owner?.IsVisible == true ? owner : ownerHandle != IntPtr.Zero ? null : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
+        else if (ownerHandle != IntPtr.Zero)
+        {
+            new System.Windows.Interop.WindowInteropHelper(dialog).Owner = ownerHandle;
+            dialog.ShowInTaskbar = false;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
         else PlaceOwnerless(dialog, icon);
         dialog.ShowDialog();
         return dialog.Result;

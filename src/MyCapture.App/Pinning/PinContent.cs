@@ -36,8 +36,24 @@ internal sealed record PinContent
         double? layoutWidthDip = null,
         double? layoutHeightDip = null,
         CaptureProvenance? provenance = null)
+        : this(new PinPicture(image ?? throw new ArgumentNullException(nameof(image))), kind, originalText, sourcePageUrl,
+            usesDeviceIndependentPixels, textStyle, codeDocument, layoutWidthDip, layoutHeightDip, provenance)
     {
-        _image = image ?? throw new ArgumentNullException(nameof(image));
+    }
+
+    private PinContent(
+        PinPicture image,
+        PinContentKind kind,
+        string? originalText,
+        string sourcePageUrl,
+        bool usesDeviceIndependentPixels,
+        PinTextStyle? textStyle = null,
+        PinCodeDocument? codeDocument = null,
+        double? layoutWidthDip = null,
+        double? layoutHeightDip = null,
+        CaptureProvenance? provenance = null)
+    {
+        _image = image;
         RasterDpiX = image.DpiX;
         RasterDpiY = image.DpiY;
         Kind = kind;
@@ -51,16 +67,31 @@ internal sealed record PinContent
         LayoutHeightDip = layoutHeightDip ?? image.Height;
     }
 
-    private readonly BitmapSource _image;
+    // Shared by this content's with-copies (a source lookup that resolves keeps the pin's picture).
+    private readonly PinPicture _image;
 
     /// <summary>
     /// The picture as a bitmap. A picture translation flattens its layer onto the source only here, when
-    /// something needs the pixels (copy, the text selection's background).
+    /// something needs the pixels (copy, the text selection's background). A lightweight pin that keeps
+    /// only its native source builds the bitmap here; the caller's use is then the only reference to it.
     /// </summary>
-    internal BitmapSource Image => Overlay?.Image ?? _image;
+    internal BitmapSource Image => Overlay?.Image ?? _image.Bitmap;
+
+    /// <summary>
+    /// <see cref="Image"/> when a bitmap exists now, without building one: null only while a lightweight pin
+    /// keeps its native source alone and nothing else references a bitmap built from it.
+    /// </summary>
+    internal BitmapSource? ImageIfPresent => Overlay is not null ? Overlay.Image : _image.Peek;
+
+    /// <summary>The pixels behind <see cref="Image"/> (without a translation's layer), and whether a bitmap holds them.</summary>
+    internal PinPicture Picture => _image;
+
+    internal int PixelWidth => _image.PixelWidth;
+
+    internal int PixelHeight => _image.PixelHeight;
 
     /// <summary>What a pin window shows: the bitmap, or a picture translation's layers without a flattened copy.</summary>
-    internal ImageSource Display => Overlay?.Display ?? _image;
+    internal ImageSource Display => Overlay?.Display ?? _image.Bitmap;
 
     internal void ReleaseDisplayCache() => Overlay?.ReleaseFlattenedImage();
 
@@ -76,6 +107,9 @@ internal sealed record PinContent
 
     /// <summary>A picture translation drawn over <c>_image</c>, its untouched source.</summary>
     private PinOverlayComposition? Overlay { get; init; }
+
+    /// <summary>Whether a picture translation is drawn over the source (<see cref="PinHostPolicy"/>).</summary>
+    internal bool HasOverlay => Overlay is not null;
 
     /// <summary>The exact PNG used to decode this image, when already available.</summary>
     internal byte[]? EncodedPng { get; init; }
@@ -156,7 +190,7 @@ internal sealed record PinContent
     /// The closed-pin restore history budgets against this value.
     /// </summary>
     internal long EstimatedRetainedBytes =>
-        ClosedPinMemory.EstimatePixelBytes(_image.PixelWidth, _image.PixelHeight, _image.Format.BitsPerPixel)
+        SourcePixelBytes
         + ClosedPinMemory.EstimateTextBytes(OriginalText)
         + ClosedPinMemory.EstimateTextBytes(SourcePageUrl)
         + ClosedPinMemory.EstimateTextBytes(Provenance.Url)
@@ -174,6 +208,13 @@ internal sealed record PinContent
                 + ClosedPinMemory.EstimateTextBytes(CodeDocument.Background)
                 + ClosedPinMemory.EstimateTextBytes(CodeDocument.Foreground)
                 + CodeDocument.Runs.Sum(static run => 32L + ClosedPinMemory.EstimateTextBytes(run.Color)));
+
+    private long SourcePixelBytes => ClosedPinMemory.EstimatePixelBytes(_image.PixelWidth, _image.PixelHeight, _image.Format.BitsPerPixel);
+
+    /// <summary>The estimate for <see cref="Image"/>'s pixels, from the picture's size without building a bitmap.</summary>
+    internal long ImagePixelBytes => Overlay?.Image is { } flattened
+        ? ClosedPinMemory.EstimatePixelBytes(flattened.PixelWidth, flattened.PixelHeight, flattened.Format.BitsPerPixel)
+        : SourcePixelBytes;
 
     /// <summary>Bytes of the rendered diagram bitmaps; a closed pin drops them and renders the diagrams again.</summary>
     internal long MermaidPixelBytes =>
