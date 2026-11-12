@@ -15,6 +15,7 @@ using MyCapture.Ocr;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace MyCapture.App;
 
@@ -35,6 +36,7 @@ public partial class App
         {
             _overlay.UseNativeDibSelector = native;
             _overlay.NativeChromeStrategy = strategy;
+            _overlay.SkipNativeChromeShowRestackForProbe = variants.Contains("selector-show-owned");
         }
         if (_recorder is not null)
         {
@@ -531,6 +533,8 @@ public partial class App
             lock (marks) marks.Add(new ResidentProbeRecorder.Mark(stage,
                 Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2), Environment.CurrentManagedThreadId));
         };
+        using var dispatcherTrace = s_residentProbe?.Has("selector-breakdown") == true
+            ? new SelectorDispatcherTrace(Dispatcher, started) : null;
         try
         {
             HandleCaptureRequested();
