@@ -66,12 +66,23 @@ internal sealed partial class NativeSelectorChrome
         window.Width = bounds.Width / dpi;
         window.Height = bounds.Height / dpi;
         double x = bounds.X + owner.ScreenBounds.Left, y = bounds.Y + owner.ScreenBounds.Top;
-        window.Left = x / dpi;
-        window.Top = y / dpi;
-        // The HWND is already owned and topmost. Guide updates, including F1 and pointer movement,
-        // never restack it; that would feed synthetic mouse moves back into the selector.
-        PhysicalWindowPositioner.Move(new WindowInteropHelper(window).Handle,
-            new RectD(x, y, bounds.Width, bounds.Height));
+        IntPtr handle = new WindowInteropHelper(window).Handle;
+        BeginOwnPlacement(handle, new RectD(x, y, bounds.Width, bounds.Height));
+        try
+        {
+            window.Left = x / dpi;
+            window.Top = y / dpi;
+            // The HWND is already owned and topmost. Guide updates, including F1 and pointer movement,
+            // never restack it; that would feed synthetic mouse moves back into the selector.
+            PhysicalWindowPositioner.Move(handle, new RectD(x, y, bounds.Width, bounds.Height));
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // A guide that misses its position across a DPI seam is placed again by its next update;
+            // it never ends the selection.
+            owner.ReportChromePlacementMiss(error);
+        }
+        finally { EndOwnPlacement(); }
         if (_showingWindows && !window.IsVisible) window.Show();
     }
 

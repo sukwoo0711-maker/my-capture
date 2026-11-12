@@ -786,6 +786,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.InputReady += OnNativeInputReady;
         native.ActionRequested += OnOverlayActionRequested;
         native.Failed += OnNativeFailed;
+        native.ChromePlacementMissed = error =>
+            _log.LogWarning(error, "Capture selector chrome missed its bounds; the selection continues");
         native.Closed += OnNativeOverlayClosed;
         native.Prepare(ApplyNativeCaptureExclusion);
         if (presentation.Frame is { } frame) { native.AttachFrame(frame); ShowNativeSelector(native); }

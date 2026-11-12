@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -337,14 +338,21 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     {
         _dpiRefresh = null;
         if (_closed || _owner is null) return;
-        for (int index = 0; index < _windows.Count; index++)
+        _repairingPlacement = true;
+        try
         {
-            Window window = _windows[index];
-            // Key panel and start guide windows are placed from their own layout by PlaceGuideWindow.
-            if (_deferredWindows.Contains(window)) continue;
-            ApplyPhysicalBounds(window, _geometry[window], Follow(window));
+            for (int index = 0; index < _windows.Count; index++)
+            {
+                Window window = _windows[index];
+                // Key panel and start guide windows are placed from their own layout by PlaceGuideWindow.
+                if (_deferredWindows.Contains(window)) continue;
+                ApplyPhysicalBounds(window, _geometry[window], Follow(window));
+            }
         }
+        finally { _repairingPlacement = false; }
     }
+
+    private bool _repairingPlacement;
 
     private IntPtr OnMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -354,6 +362,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             handled = true;
             return IntPtr.Zero;
         }
+        if (message == 0x02E0) KeepOwnPlacementOnDpiChange(hwnd, lParam); // WM_DPICHANGED, before WPF applies it
         if (message == 0x007E) // Hidden top-level chrome receives display broadcasts too.
         {
             _invalid = true;
@@ -682,6 +691,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     {
         if (_placing) return;
         _placing = true;
+        BeginOwnPlacement(geometry.Handle, geometry.Bounds);
         try
         {
             ApplyContentScale(window, geometry);
@@ -705,7 +715,56 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             if (ApplyContentScale(window, geometry))
                 PhysicalWindowPositioner.MoveAndResize(geometry.Handle, geometry.Bounds);
         }
-        finally { _placing = false; }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Across a seam between monitors of different DPI, Windows sends WM_DPICHANGED inside
+            // SetWindowPos and WPF moves the HWND to the suggested rectangle, so the strict read-back
+            // misses (measured: the first attempt, on every crossing). Should it miss on all three, this
+            // is still chrome following the pointer, never a reason to end the selection: it is placed
+            // again, at the final DPI, once that change has settled.
+            RequestPlacementRepair();
+            _owner?.ReportChromePlacementMiss(error);
+        }
+        finally { EndOwnPlacement(); _placing = false; }
+    }
+
+    private IntPtr _ownPlacementHandle;
+    private RectD _ownPlacementBounds;
+
+    private void BeginOwnPlacement(IntPtr handle, RectD bounds)
+    {
+        _ownPlacementHandle = handle;
+        _ownPlacementBounds = bounds;
+    }
+
+    private void EndOwnPlacement() => _ownPlacementHandle = IntPtr.Zero;
+
+    /// <summary>
+    /// Moving onto a monitor with another DPI, Windows sends WM_DPICHANGED inside our SetWindowPos and WPF
+    /// then moves the HWND to the suggested rectangle: the size scaled by the DPI ratio from the same
+    /// top-left. That is not where the placement asked to be, so its read-back missed and it was placed a
+    /// second time; a guide placed through Left and Top was thrown onto the other monitor and back, and
+    /// came out with the ratio applied twice. The placement already has its bounds for the new DPI: they
+    /// replace the suggestion before WPF reads it, and the HWND stays where it was placed.
+    /// </summary>
+    private void KeepOwnPlacementOnDpiChange(IntPtr hwnd, IntPtr suggested)
+    {
+        if (_ownPlacementHandle == IntPtr.Zero || hwnd != _ownPlacementHandle || suggested == IntPtr.Zero) return;
+        RectD bounds = _ownPlacementBounds.ToPixelBounds();
+        Marshal.WriteInt32(suggested, 0, checked((int)bounds.Left));
+        Marshal.WriteInt32(suggested, 4, checked((int)bounds.Top));
+        Marshal.WriteInt32(suggested, 8, checked((int)bounds.Right));
+        Marshal.WriteInt32(suggested, 12, checked((int)bounds.Bottom));
+    }
+
+    internal int PlacementRepairsForTest { get; private set; }
+
+    private void RequestPlacementRepair()
+    {
+        PlacementRepairsForTest++;
+        if (_closed || _owner is null || _repairingPlacement || _dpiRefresh is { Status: DispatcherOperationStatus.Pending }) return;
+        // Below input priority, and once per failure: a seam that keeps failing waits for the next pointer sample.
+        _dpiRefresh = Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshDpiBounds));
     }
 
     private bool ApplyContentScale(Window window, ChromeGeometry geometry)
