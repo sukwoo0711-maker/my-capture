@@ -804,6 +804,7 @@ internal sealed partial class GalleryWindow : Window
     [
         "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
         "LibraryUndo_Restoring", "LibrarySelection_Moving", "LibrarySelection_MovingProgress",
+        "OpenWith.Preparing",
     ];
 
     private void InitializeActionStatus()
@@ -849,7 +850,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (text == UiText.Get("LibraryRecovery_Failed") || ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
             || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal)
-            || MatchesFormat(text, "LibraryUndo_PartlyRestored"))
+            || MatchesFormat(text, "LibraryUndo_PartlyRestored") || MatchesFormat(text, "OpenWith.Failed"))
         {
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }

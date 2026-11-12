@@ -56,6 +56,13 @@ internal sealed record TrayMenuState(
 /// </summary>
 internal static class TrayMenuLayout
 {
+    internal static string OpenPinStatus(PinWindow pin) =>
+        string.Join(" · ", new[]
+        {
+            pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : null,
+            pin.State.IsCollapsed ? UiText.Get("Tray_PinCollapsed") : null,
+        }.Where(value => value is not null));
+
     /// <summary>F1 opens the shortcut window from any MyCapture window; the tray shows the same key.</summary>
     internal const string ShortcutsGesture = "F1";
     internal const int MaxOpenPinEntries = 15;
@@ -108,9 +115,9 @@ internal static class TrayMenuLayout
         {
             var children = openPins.Take(MaxOpenPinEntries)
                 .Select(pin => new ThemedShellPresenter.MenuEntry(OpenPinLabel(pin.PinnedContent), () => activatePin(pin),
-                    Gesture: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty,
+                    Gesture: OpenPinStatus(pin),
                     LiteralLabel: true, Thumbnail: pin.PinnedContent.Image,
-                    IsMuted: pin.State.IsHidden, ItemStatus: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty))
+                    IsMuted: pin.State.IsHidden, ItemStatus: OpenPinStatus(pin)))
                 .ToList();
             if (openPins.Count > MaxOpenPinEntries)
                 children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries), null, IsEnabled: false));

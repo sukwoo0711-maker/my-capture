@@ -72,6 +72,18 @@ internal sealed class GalleryDragExportService
         return Stage(_clock(), false, null, path => GalleryExportFiles.Write(path, png));
     }
 
+    /// <summary>A program may save back to this file, so even a video must leave as a copy.</summary>
+    internal async Task<string> PrepareOpenWithAsync(CaptureRecord record)
+    {
+        if (Queue.Find(record.Id) != record) throw new InvalidOperationException("Capture is no longer available.");
+        if (record.FolderId is not null || !string.IsNullOrWhiteSpace(record.Title))
+            return await new GalleryFolderExportService(Queue, _stagingRoot, _clock).PreparePersistentSingleAsync(record);
+        using IDisposable lease = Queue.AcquireEvictionLease(record.Id);
+        string source = ResolveSource(record);
+        DateTimeOffset timestamp = _clock();
+        return await Task.Run(() => StageSource(source, record.IsVideo, timestamp, CancellationToken.None, stageVideo: true));
+    }
+
     private string ResolveSource(CaptureRecord record)
     {
         string sourcePath;

@@ -38,7 +38,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private bool _hoverTabPending;
     private RectD? _tabRequestedTarget, _tabRequestedShown;
     private double _tabRequestedScale;
-    private bool _tabRequestedMonitor, _tabRequestedText;
+    private bool _tabRequestedMonitor, _tabRequestedText, _tabRequestedElement, _tabRequestedElementHint;
     private int _guideRevision, _tabGuideRevision = -1;
     private readonly Rect[] _tabAvoid = new Rect[2];
     private readonly CaptureModeBar _bar;
@@ -51,6 +51,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private BitmapSource? _magnifierSource;
     private readonly string _defaultGuide = DefaultGuide;
     private readonly string _precisionGuide = UiText.Get("CapturePrecisionActive");
+    private string? _freeformGuide;
     private readonly Size _precisionGuideSize;
     private bool _precisionGuideShown;
     private bool _guideLayoutDirty = true;
@@ -174,6 +175,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-start");
         _owner = owner;
         if (owner.ChromeStrategy != NativeSelectorChromeStrategy.Parallel) owner.PrepareVisualFeedback();
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-feedback-ready");
         CachePointerAreas(owner);
         if (_magnifierAdornment is { } magnifier && owner.Frame is { } frame)
         {
@@ -181,6 +183,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 : new FormatConvertedBitmap(frame.Bitmap, PixelFormats.Bgr32, null, 0);
             magnifier.Bind(frame.PixelWidth, frame.PixelHeight, _pointerAreas, _scale);
         }
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-magnifier-ready");
         _rendered = false;
         _showingWindows = false;
         _guideVisible = true;
@@ -192,22 +195,29 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         Size barSize = MeasureBar();
         _barWindow.Width = barSize.Width;
         _barWindow.Height = barSize.Height;
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-bar-measured");
         _pendingFrames.Clear();
         AllCaptureExcluded = true;
         foreach (Window window in _windows)
         {
+            MarkWindow(window, "bind-start");
             new WindowInteropHelper(window).Owner = owner.Handle;
+            MarkWindow(window, "owner-set");
             if (window.Content is null) window.Content = _content[window];
+            MarkWindow(window, "content-attached");
             // Exclusion is re-applied on every lease, before any of these HWNDs can be shown.
             bool excluded = CaptureWindowExclusion.TryApply(window);
+            MarkWindow(window, "exclusion-applied");
             AllCaptureExcluded &= excluded;
             if (requireExclusion && !excluded) throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             CaptureWindowExclusion.DisableTransitions(window);
             if (!_deferredWindows.Contains(window)) _pendingFrames.Add(window);
+            MarkWindow(window, "bind-complete");
         }
         Place(_barWindow, _workArea.Left + (_workArea.Width - barSize.Width * _scale) / 2, _workArea.Top + 12 * _scale, Placement.Layout);
         if (_guideWindow is { } guide)
             Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, Placement.Layout);
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-layout-complete");
         Update(owner.ReadCursor(), Int32Rect.Empty);
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-complete");
     }
@@ -231,6 +241,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
 
     private Window Create(FrameworkElement content, double width, double height, bool interactive)
     {
+        // A plain Window, not a derived class: WPF applies the implicit Window style (UI font and
+        // text rendering, Themes/Controls.xaml) only to Window itself.
         var window = new Window
         {
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
@@ -380,7 +392,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 e.Handled = true;
                 return;
             }
-            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space) return;
+            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space or Key.PageUp or Key.PageDown) return;
         }
         e.Handled = owner.HandleKey(key, Keyboard.Modifiers);
     }
@@ -462,7 +474,9 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         if (SelectorTimeline.Mark is not { } mark) return;
         string name = ReferenceEquals(window, _barWindow) ? "bar"
             : ReferenceEquals(window, _sizeWindow) ? "size"
-            : ReferenceEquals(window, _guideWindow) ? "guide" : "magnifier";
+            : ReferenceEquals(window, _guideWindow) ? "guide"
+            : ReferenceEquals(window, _magnifierWindow) ? "magnifier"
+            : ReferenceEquals(window, _keyPanelWindow) ? "key-panel" : "start-guide";
         mark($"native-chrome-{name}-{phase}");
     }
 
@@ -477,7 +491,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.ActiveRatio);
         }
         bool precision = owner.PrecisionActive && owner.ToastMessage is null;
-        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide : _defaultGuide);
+        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide
+            : owner.Mode == CaptureSelectorMode.Freeform ? _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing") : _defaultGuide);
         if (_guideText.Text != guideText) _guideText.Text = guideText;
         if (_guideLayoutDirty || precision != _precisionGuideShown)
         {
@@ -595,9 +610,11 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         RectD? target = owner.HoverRegion, shown = owner.ShownHoverForTest ?? target;
         if (_tabRequestedTarget == target && _tabRequestedShown == shown && _tabRequestedScale == area.Scale
             && _tabRequestedMonitor == owner.HoverWholeMonitor && _tabRequestedText == owner.TextCaptureMode
+            && _tabRequestedElement == owner.HoverElement && _tabRequestedElementHint == owner.ElementWheelHint
             && _tabGuideRevision == _guideRevision) return;
         _tabRequestedTarget = target; _tabRequestedShown = shown; _tabRequestedScale = area.Scale;
         _tabRequestedMonitor = owner.HoverWholeMonitor; _tabRequestedText = owner.TextCaptureMode;
+        _tabRequestedElement = owner.HoverElement; _tabRequestedElementHint = owner.ElementWheelHint;
         _tabGuideRevision = _guideRevision;
         if (_hoverTabPending || _sizeWindow is not { } size) return;
         _hoverTabPending = NativeSelectorInterop.SetTimer(_geometry[size].Handle, HoverTabTimerId, 1, IntPtr.Zero) != 0;
@@ -629,7 +646,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         else _tabAvoid[1] = Rect.Empty;
         Rect tab = _hoverTab.Render(owner.ShownHoverForTest ?? target, target, owner.HoverWholeMonitor,
-            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid);
+            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid, owner.HoverElement, owner.ElementWheelHint);
         if (!_sizePanel.ShowsHoverTab)
         {
             _sizePanel.ShowsHoverTab = true;
@@ -680,7 +697,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         // moves (about 110 a second), WPF's input queue never emptied and Input-priority work such as
         // ContentRendered starved. Owned chrome already stays above the background, so after the one
         // topmost placement in Show, following the pointer only moves, and not at all when unchanged.
-            if (placement == Placement.Show) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
+            if (placement == Placement.Show && _owner?.SkipChromeShowRestackForProbe != true)
+                PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
             else PhysicalWindowPositioner.MoveAndResize(geometry.Handle, geometry.Bounds);
             // Crossing the seam can change the HWND's composition DPI inside SetWindowPos. Its content
             // compensation must use that final DPI, including when test monitor geometry is injected.

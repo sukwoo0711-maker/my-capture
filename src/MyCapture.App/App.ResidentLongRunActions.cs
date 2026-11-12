@@ -162,7 +162,7 @@ public partial class App
         BitmapSource image = ResidentProbeImages.Pattern(640, 360, ResidentLongRunContract.Seed);
         string expected = ResidentLongRunInputs.Pixels(image);
         PinWindow pin = _pins!.PinImage(image);
-        await ProbeWaitAsync(() => pin.IsVisible, 10_000, "pin visible");
+        await ProbeWaitAsync(() => pin.IsShown, 10_000, "pin visible");
         await NextLongRunRenderingAsync();
         if (ResidentLongRunInputs.Pixels(pin.PinnedContent.Image) != expected)
             throw new InvalidDataException("Real pin content differs.");

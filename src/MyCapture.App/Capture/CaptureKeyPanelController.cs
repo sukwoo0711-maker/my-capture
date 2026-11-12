@@ -123,7 +123,8 @@ internal sealed class CaptureKeyPanelController
         public CaptureKeyPanelContext Context => new(view.ShowKeyPanel, view.DeferredGuideCanDrag,
             view.DeferredGuideWindowDetection, view.DeferredGuideHasSelection, view.DeferredGuideRatioAvailable,
             view.CopyColorText is not null, view.TextCaptureAvailable, view.TextCaptureMode,
-            view.PinSelectionAvailable, view.PasteToScreenHotkey);
+            view.PinSelectionAvailable, view.PasteToScreenHotkey, view.FreeformAvailable,
+            view.Mode == CaptureSelectorMode.Freeform);
         public FontFamily UiFont => view.DeferredGuideUiFont;
         public FontFamily MonoFont => view.DeferredGuideMonoFont;
         public IReadOnlyDictionary<string, Brush> Palette => view.GuidePalette;

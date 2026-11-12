@@ -156,13 +156,19 @@ internal sealed class CaptureOverlayWindow : Window
         _pendingSelection = null;
         _pendingSelectionDetails = null;
         CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
-            details?.WholeMonitor == true, details?.PinRequested == true);
+            details?.WholeMonitor == true, details?.PinRequested == true, details?.FreeformMask);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
 
     internal void ConfirmSelectionAsPin() => _view.ConfirmSelectionAsPin();
+
+    internal string? FreeformUnavailableReason
+    {
+        get => _view.FreeformUnavailableReason;
+        set => _view.FreeformUnavailableReason = value;
+    }
 
     internal event EventHandler? SelectionCancelled;
 
@@ -443,13 +449,13 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor, e.PinRequested);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor, e.PinRequested, e.FreeformMask);
     }
 
     internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
 
     internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture,
-        bool wholeMonitor = false, bool pinRequested = false)
+        bool wholeMonitor = false, bool pinRequested = false, FreeformMask? freeformMask = null)
     {
         if (_completed)
         {
@@ -469,7 +475,8 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
         FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
-        System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
+        System.Windows.Media.Imaging.BitmapSource crop = freeformMask is null
+            ? ScreenCaptureEngine.Crop(frame, bitmapRegion) : FreeformCapture.Crop(frame, freeformMask);
         var selectedScreenRegion = new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
             bitmapRegion.Width, bitmapRegion.Height);
         // The window is chosen from the hotkey-time geometry, z-order and titles, which the confirmed
@@ -493,7 +500,7 @@ internal sealed class CaptureOverlayWindow : Window
             SelectionCompleted?.Invoke(
                 this,
                 new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, source.Title,
-                    sourcePageUrl: source.PageUrl)
+                    sourcePageUrl: source.PageUrl, recordForRepeat: freeformMask is null)
                 {
                     TextCapture = textCapture,
                     PinRequested = pinRequested,

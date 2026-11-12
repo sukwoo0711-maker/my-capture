@@ -215,7 +215,9 @@ public static class PinGeometry
     public static double StepZoom(double currentZoom, int notches, double step)
     {
         double factor = Math.Pow(1.0 + step, notches);
-        return ClampZoom(currentZoom * factor);
+        double next = currentZoom * factor;
+        if (currentZoom < 1 && next >= 1 || currentZoom > 1 && next <= 1) return 1;
+        return ClampZoom(next);
     }
 
     /// <summary>
