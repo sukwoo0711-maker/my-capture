@@ -36,7 +36,8 @@ internal sealed partial class GalleryWindow
             foreach (CaptureRecord record in images) leases.Add(_queue.AcquireEvictionLease(record.Id));
             var items = images.Select(record => new GalleryContactSheetItem(
                 _queue.GetFilePath(record, CaptureFileNames.Rendered), record.Title, record.CreatedAt,
-                record.SourceDetails.AppName, record.SourceWindowTitle)).ToArray();
+                record.SourceDetails.AppName, record.SourceWindowTitle,
+                _queue.GetFilePath(record, CaptureFileNames.Thumbnail))).ToArray();
             var dialog = new GalleryContactSheetDialog(items, selected.Length - images.Length,
                 () => images.Select((record, index) => _queue.Find(record.Id) == record
                     && record.ContentRevision == revisions[index]).All(current => current), _queue.Activities) { Owner = this };

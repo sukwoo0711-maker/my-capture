@@ -72,7 +72,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0642E2D15469" xml:space="preserve">
-    <value>Copy failed</value>
+    <value>Image copy failed</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_0669BC5BEA50" xml:space="preserve">
@@ -833,7 +833,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4C160257F02C" xml:space="preserve">
-    <value>Copying…</value>
+    <value>Copying image…</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_4C27BFC6C0E5" xml:space="preserve">
@@ -1710,7 +1710,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9693E1EB3EDB" xml:space="preserve">
-    <value>Copied</value>
+    <value>Image copied</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_976A6C92B870" xml:space="preserve">
@@ -5078,6 +5078,48 @@ Turn off: {0}</value></data>
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>Select images for the PDF. Videos are skipped.</value>
   </data>
+  <data name="ContactSheet.Order" xml:space="preserve">
+    <value>Image order</value>
+  </data>
+  <data name="ContactSheet.Sort" xml:space="preserve">
+    <value>Sort</value>
+  </data>
+  <data name="ContactSheet.SortLibrary" xml:space="preserve">
+    <value>Library order</value>
+  </data>
+  <data name="ContactSheet.SortOldest" xml:space="preserve">
+    <value>Oldest first</value>
+  </data>
+  <data name="ContactSheet.SortNewest" xml:space="preserve">
+    <value>Newest first</value>
+  </data>
+  <data name="ContactSheet.SortTitle" xml:space="preserve">
+    <value>By title</value>
+  </data>
+  <data name="ContactSheet.SortCustom" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="ContactSheet.MoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="ContactSheet.MoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="ContactSheet.IncludeItem" xml:space="preserve">
+    <value>Include image {0}</value>
+  </data>
+  <data name="ContactSheet.OrderItem" xml:space="preserve">
+    <value>Image {0}, {1}</value>
+  </data>
+  <data name="ContactSheet.OrderItemExcluded" xml:space="preserve">
+    <value>Image {0}, {1}, excluded</value>
+  </data>
+  <data name="ContactSheet.NoneIncluded" xml:space="preserve">
+    <value>Select at least one image to include in the PDF.</value>
+  </data>
+  <data name="ContactSheet.PageCountExcluded" xml:space="preserve">
+    <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages} · {2} excluded</value>
+  </data>
   <data name="Gallery.Compare" xml:space="preserve"><value>Compare</value></data>
   <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>Side by side</value></data>
   <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>Overlay</value></data>
@@ -5238,6 +5280,7 @@ Turn off: {0}</value></data>
   <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
+  <data name="Source.AppOnly" xml:space="preserve"><value>App only, no document or page</value></data>
   <data name="About_DiagnosticsBundle" xml:space="preserve"><value>Save diagnostics bundle</value></data>
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>Saves recent logs and diagnostics in one ZIP file. Captures, clipboard contents, window titles and file paths are not included, and nothing is sent automatically.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>Diagnostics bundle saved</value></data>
@@ -5457,6 +5500,9 @@ Install the model?</value></data>
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>The watermark image could not be saved.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>The watermark image cannot be read. Please register it again.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>The watermark is not available here.</value></data>
+  <data name="Stamp_Blend" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Stamp_BlendIntoPage" xml:space="preserve"><value>Blend into page</value></data>
+  <data name="Stamp_BlendOver" xml:space="preserve"><value>Lay on top</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>Quick access</value>
   </data>
@@ -5758,4 +5804,12 @@ Install the model?</value></data>
   <data name="OpenWith.Failed" xml:space="preserve"><value>Could not open the app. {0}</value></data>
   <data name="OpenWith.Unavailable" xml:space="preserve"><value>The selected app is unavailable.</value></data>
   <data name="OpenWith.AccessDenied" xml:space="preserve"><value>Access to the file was denied.</value></data>
+  <data name="Pin_CopyTextImageBusy" xml:space="preserve"><value>Copying text and image…</value></data>
+  <data name="Pin_CopyTextImageDone" xml:space="preserve"><value>Text and image copied</value></data>
+  <data name="Pin_CopyTextImageFailed" xml:space="preserve"><value>Text and image copy failed</value></data>
+  <data name="Pin_CopyImageName" xml:space="preserve"><value>Copy image</value></data>
+  <data name="Pin_CopyTextImageName" xml:space="preserve"><value>Copy text and image</value></data>
+  <data name="Pin_CopySelectedText" xml:space="preserve"><value>Copy selected text</value></data>
+  <data name="Pin_CopyImageOnly" xml:space="preserve"><value>Copy image only</value></data>
+  <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>Copy only the image shown now, without its text.</value></data>
 </root>

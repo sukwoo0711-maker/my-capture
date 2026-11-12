@@ -72,7 +72,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0642E2D15469" xml:space="preserve">
-    <value>복사 실패</value>
+    <value>이미지 복사 실패</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_0669BC5BEA50" xml:space="preserve">
@@ -833,7 +833,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4C160257F02C" xml:space="preserve">
-    <value>복사 중…</value>
+    <value>이미지 복사 중…</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_4C27BFC6C0E5" xml:space="preserve">
@@ -1710,7 +1710,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9693E1EB3EDB" xml:space="preserve">
-    <value>복사됨</value>
+    <value>이미지 복사됨</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_976A6C92B870" xml:space="preserve">
@@ -5078,6 +5078,48 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>PDF에 포함할 이미지를 선택하십시오. 동영상은 제외됩니다.</value>
   </data>
+  <data name="ContactSheet.Order" xml:space="preserve">
+    <value>이미지 순서</value>
+  </data>
+  <data name="ContactSheet.Sort" xml:space="preserve">
+    <value>정렬</value>
+  </data>
+  <data name="ContactSheet.SortLibrary" xml:space="preserve">
+    <value>라이브러리 순서</value>
+  </data>
+  <data name="ContactSheet.SortOldest" xml:space="preserve">
+    <value>촬영 시각 오래된 순</value>
+  </data>
+  <data name="ContactSheet.SortNewest" xml:space="preserve">
+    <value>촬영 시각 최신 순</value>
+  </data>
+  <data name="ContactSheet.SortTitle" xml:space="preserve">
+    <value>제목순</value>
+  </data>
+  <data name="ContactSheet.SortCustom" xml:space="preserve">
+    <value>직접 지정</value>
+  </data>
+  <data name="ContactSheet.MoveUp" xml:space="preserve">
+    <value>위로</value>
+  </data>
+  <data name="ContactSheet.MoveDown" xml:space="preserve">
+    <value>아래로</value>
+  </data>
+  <data name="ContactSheet.IncludeItem" xml:space="preserve">
+    <value>{0}번째 이미지 포함</value>
+  </data>
+  <data name="ContactSheet.OrderItem" xml:space="preserve">
+    <value>{0}번째 이미지, {1}</value>
+  </data>
+  <data name="ContactSheet.OrderItemExcluded" xml:space="preserve">
+    <value>{0}번째 이미지, {1}, 제외됨</value>
+  </data>
+  <data name="ContactSheet.NoneIncluded" xml:space="preserve">
+    <value>PDF에 포함할 이미지를 하나 이상 선택하십시오.</value>
+  </data>
+  <data name="ContactSheet.PageCountExcluded" xml:space="preserve">
+    <value>이미지 {0}개 · {1}페이지 · {2}개 제외</value>
+  </data>
   <data name="Gallery.Compare" xml:space="preserve"><value>비교</value></data>
   <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>나란히</value></data>
   <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>겹쳐 보기</value></data>
@@ -5238,6 +5280,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Source.OpenAutomation" xml:space="preserve"><value>출처: {0}, 열기</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>출처 앱을 찾을 수 없습니다.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>출처 앱을 열 수 없습니다.</value></data>
+  <data name="Source.AppOnly" xml:space="preserve"><value>앱만 기록됨, 문서·주소 없음</value></data>
   <data name="About_DiagnosticsBundle" xml:space="preserve"><value>진단 묶음 저장</value></data>
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>최근 로그와 진단 정보를 ZIP 파일 하나로 저장합니다. 캡처 내용, 클립보드, 창 제목, 파일 경로는 포함하지 않으며 자동으로 전송하지 않습니다.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료</value></data>
@@ -5457,6 +5500,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>워터마크 이미지를 저장하지 못했습니다.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>워터마크 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 워터마크를 사용할 수 없습니다.</value></data>
+  <data name="Stamp_Blend" xml:space="preserve"><value>표시 방식</value></data>
+  <data name="Stamp_BlendIntoPage" xml:space="preserve"><value>바탕에 스밈</value></data>
+  <data name="Stamp_BlendOver" xml:space="preserve"><value>위에 겹침</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>빠른 작업</value>
   </data>
@@ -5758,4 +5804,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="OpenWith.Failed" xml:space="preserve"><value>앱을 열지 못했습니다. {0}</value></data>
   <data name="OpenWith.Unavailable" xml:space="preserve"><value>선택한 앱을 사용할 수 없습니다.</value></data>
   <data name="OpenWith.AccessDenied" xml:space="preserve"><value>파일에 접근할 권한이 없습니다.</value></data>
+  <data name="Pin_CopyTextImageBusy" xml:space="preserve"><value>텍스트와 이미지 복사 중…</value></data>
+  <data name="Pin_CopyTextImageDone" xml:space="preserve"><value>텍스트와 이미지 복사됨</value></data>
+  <data name="Pin_CopyTextImageFailed" xml:space="preserve"><value>텍스트와 이미지 복사 실패</value></data>
+  <data name="Pin_CopyImageName" xml:space="preserve"><value>이미지 복사</value></data>
+  <data name="Pin_CopyTextImageName" xml:space="preserve"><value>텍스트와 이미지 복사</value></data>
+  <data name="Pin_CopySelectedText" xml:space="preserve"><value>선택한 텍스트 복사</value></data>
+  <data name="Pin_CopyImageOnly" xml:space="preserve"><value>이미지만 복사</value></data>
+  <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>지금 보이는 이미지만 복사하고 텍스트는 복사하지 않습니다.</value></data>
 </root>

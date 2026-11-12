@@ -219,20 +219,35 @@ public sealed class CaptureRecord
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourceDocumentPath { get; set; }
 
+    /// <summary>
+    /// Application user model ID of a packaged source application; null for desktop applications and
+    /// older records. Optional like the other source fields, so older builds skip it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceAppUserModelId { get; set; }
+
+    /// <summary>How <see cref="SourceDocumentPath"/> was found (CaptureDocumentOrigin); null when unknown.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceDocumentOrigin { get; set; }
+
     /// <summary>The validated source fields; unsafe stored values read as empty.</summary>
     [JsonIgnore]
     public CaptureSourceDetails SourceDetails =>
-        CaptureSourceDetails.Create(SourceAppName, SourceAppPath, SourceDocumentPath);
+        CaptureSourceDetails.Create(SourceAppName, SourceAppPath, SourceDocumentPath, SourceAppUserModelId,
+            SourceDocumentOrigin);
 
     /// <summary>Stores validated source fields, leaving absent ones null so they are not written.</summary>
     public void SetSourceDetails(CaptureSourceDetails? details)
     {
         CaptureSourceDetails source = details is null
             ? CaptureSourceDetails.Empty
-            : CaptureSourceDetails.Create(details.AppName, details.AppPath, details.DocumentPath);
+            : CaptureSourceDetails.Create(details.AppName, details.AppPath, details.DocumentPath,
+                details.AppUserModelId, details.DocumentOrigin);
         SourceAppName = NullIfEmpty(source.AppName);
         SourceAppPath = NullIfEmpty(source.AppPath);
         SourceDocumentPath = NullIfEmpty(source.DocumentPath);
+        SourceAppUserModelId = NullIfEmpty(source.AppUserModelId);
+        SourceDocumentOrigin = NullIfEmpty(source.DocumentOrigin);
     }
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
@@ -343,6 +358,8 @@ public sealed class CaptureRecord
         && SourceAppName == copy.SourceAppName
         && SourceAppPath == copy.SourceAppPath
         && SourceDocumentPath == copy.SourceDocumentPath
+        && SourceAppUserModelId == copy.SourceAppUserModelId
+        && SourceDocumentOrigin == copy.SourceDocumentOrigin
         && InitialRenderShowsSourceWindowTitle == copy.InitialRenderShowsSourceWindowTitle
         && RelativeDirectory == copy.RelativeDirectory;
 

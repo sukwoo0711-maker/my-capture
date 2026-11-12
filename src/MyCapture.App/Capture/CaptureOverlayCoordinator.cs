@@ -60,8 +60,23 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
         : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
             new BrowserPageUrlService(waitForBusyProbe: true).ReadAsync,
-            new WindowSourceService(waitForBusyProbe: true).ReadAsync)
+            new WindowSourceService(waitForBusyProbe: true))
     {
+    }
+
+    private CaptureOverlayCoordinator(
+        ScreenCaptureEngine captureEngine,
+        WindowCandidateService windowCandidates,
+        ILogger<CaptureOverlayCoordinator> log,
+        Func<bool, FrozenFrame>? acquireFrame,
+        Func<RectD>? desktopBounds,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> readPageUrls,
+        WindowSourceService sources)
+        : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
+            readPageUrls, sources.ReadAsync)
+    {
+        ReadEditorDocuments = sources.ReadEditorDocumentsAsync;
     }
 
     private CaptureOverlayCoordinator(
@@ -102,6 +117,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// replace it; null skips source metadata entirely.
     /// </summary>
     internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? ReadWindowSources { get; set; }
+
+    /// <summary>
+    /// Reads a code editor's document again after the capture, for editor windows whose confirmed source
+    /// has none (<see cref="WindowSourceService.ReadEditorDocumentsAsync"/>). Null skips it.
+    /// </summary>
+    internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, string>>>? ReadEditorDocuments { get; set; }
 
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
     internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
@@ -399,6 +420,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var nested = new CaptureOverlayCoordinator(_captureEngine, _windowCandidates, _log,
             _acquireFrame, _desktopBounds, _readWindowCandidates, ReadPageUrls, ReadWindowSources)
         {
+            ReadEditorDocuments = ReadEditorDocuments,
             SelectionPersistRequested = persist,
             OpenEditorAfterCapture = () => false,
             AutoDetectWindows = AutoDetectWindows,
@@ -480,7 +502,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             }, ReadPageUrls,
                 () => _readWindowCandidates(preparation.DesktopBounds),
                 ReadWindowSources,
-                settlePresentation ? Task.Delay(100) : null).ConfigureAwait(false);
+                settlePresentation ? Task.Delay(100) : null,
+                ReadEditorDocuments).ConfigureAwait(false);
             SelectorTimeline.Mark?.Invoke("frame-acquire-await-complete");
             frame = capturedFrame;
             confirmedWindows = sourceWindows;
@@ -786,6 +809,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.InputReady += OnNativeInputReady;
         native.ActionRequested += OnOverlayActionRequested;
         native.Failed += OnNativeFailed;
+        native.ChromePlacementMissed = error =>
+            _log.LogWarning(error, "Capture selector chrome missed its bounds; the selection continues");
         native.Closed += OnNativeOverlayClosed;
         native.Prepare(ApplyNativeCaptureExclusion);
         if (presentation.Frame is { } frame) { native.AttachFrame(frame); ShowNativeSelector(native); }

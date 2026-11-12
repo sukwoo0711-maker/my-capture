@@ -256,8 +256,9 @@ public sealed class TextCopyTutorialTests
                 keys => AutomationProperties.GetName(keys) == "T / Shift+T");
             Border originalText = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("Text_976A6C92B870"));
             Assert.Equal(UiText.Get("Text_33EFD44366A7"), KoreanWordWrap.Strip(Texts(originalText)[1].Text));
+            // Ctrl+double-click only: Ctrl+C on such a pin copies its image as well as the text.
             Assert.Contains(FirstRunWelcomeTests.Descendants(originalText).OfType<WrapPanel>(),
-                keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+                keys => AutomationProperties.GetName(keys) == UiText.Get("Text_C7011B8D345C"));
             Assert.Empty(FirstRunWelcomeTests.Descendants(originalText).OfType<Button>());
             Border quickAccess = Assert.Single(rows, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("QuickAccess.CopyText")
                 && KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.QuickAccess"));

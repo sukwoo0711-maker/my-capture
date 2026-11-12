@@ -53,6 +53,21 @@ public sealed class ImageAnnotation : AnnotationItem
         set => SetProperty(ref _rotationDegrees, double.IsFinite(value) ? value % 360.0 : 0);
     }
 
+    /// <summary>How the picture combines with the capture under it.</summary>
+    /// <remarks>
+    /// Written only when not <see cref="ImageBlend.Normal"/>, so layers without a blended
+    /// watermark keep their exact shape, and a layer saved before this field reads as normal.
+    /// An older version that does not know the field draws the picture normally.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImageBlend Blend
+    {
+        get => _blend;
+        set => SetProperty(ref _blend, Enum.IsDefined(value) ? value : ImageBlend.Normal);
+    }
+
+    private ImageBlend _blend;
+
     [JsonIgnore]
     public override string DisplayName => UiText.Get("Text_302BAE127938");
 
@@ -87,6 +102,7 @@ public sealed class ImageAnnotation : AnnotationItem
             SourceHeight = SourceHeight,
             Rect = Rect,
             RotationDegrees = RotationDegrees,
+            Blend = Blend,
         };
 
         CopyBaseTo(clone);

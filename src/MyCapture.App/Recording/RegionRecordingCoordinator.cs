@@ -357,6 +357,8 @@ internal sealed class RegionRecordingCoordinator
         native.ActionRequested += OnSelectionActionRequested;
         native.InputReady += OnNativeInputReady;
         native.Failed += OnNativeSelectionFailed;
+        native.ChromePlacementMissed = error =>
+            _log.LogWarning(error, "Recording selector chrome missed its bounds; the selection continues");
         // The same hidden-window exclusion boundary as the WPF recording selector.
         native.Prepare(ExcludeNativeSelectionWindow);
         if (!native.IsClosed) native.Closed += OnNativeSelectionClosed;

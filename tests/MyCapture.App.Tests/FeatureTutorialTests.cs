@@ -171,7 +171,7 @@ public sealed class FeatureTutorialTests
                 if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Text_976A6C92B870"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
-                    Assert.Equal("Ctrl+C / " + UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
+                    Assert.Equal(UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Pin_SelectText"))

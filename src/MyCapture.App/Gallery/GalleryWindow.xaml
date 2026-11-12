@@ -5,6 +5,7 @@
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:themes="clr-namespace:MyCapture.App.Themes"
         xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
+        xmlns:sources="clr-namespace:MyCapture.App.Sources"
         x:ClassModifier="internal"
         Style="{DynamicResource Window.Standard}"
         Title="{loc:Text Text_37AD4F28D422}"
@@ -197,7 +198,22 @@
             <Separator Tag="SeparatorSource" />
             <MenuItem Tag="OpenSource" Header="{loc:Text Source.Open}" CommandParameter="{Binding}" Click="OnOpenSourceMenuClick"
                       AutomationProperties.Name="{loc:Text Source.Open}"
-                      Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}" />
+                      Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem.Icon>
+                    <Border TextElement.FontSize="{x:Static themes:TypeScale.IconGlyph}" sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Tag="OpenSourceLocation" Header="{loc:Text Source.OpenLocation}" CommandParameter="{Binding}" Click="OnOpenSourceFolderClick"
+                      AutomationProperties.Name="{loc:Text Source.OpenLocation}"
+                      Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="CopySourceUrl" Header="{loc:Text Source.CopyUrl}" CommandParameter="{Binding}" Click="OnCopySourcePageClick"
+                      AutomationProperties.Name="{loc:Text Source.CopyUrl}"
+                      Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="CopySourcePath" Header="{loc:Text Source.CopyPath}" CommandParameter="{Binding}" Click="OnCopySourcePathClick"
+                      AutomationProperties.Name="{loc:Text Source.CopyPath}"
+                      Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}" />
+            <Separator Tag="SeparatorSourceViews"
+                       Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Tag="SameSource" Header="{loc:Text Source.ShowSame}" CommandParameter="{Binding}" Click="OnSameSourceMenuClick"
                       AutomationProperties.Name="{loc:Text Source.ShowSame}"
                       Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
@@ -1444,9 +1460,19 @@
                                 </Style>
                             </StackPanel.Resources>
                             <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
-                            <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
-                                       ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
-                                       Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+                            <DockPanel Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}">
+                                <!-- The kind's glyph until the application's icon is in memory, at a fixed 16 DIP slot. -->
+                                <Border DockPanel.Dock="Left" Width="16" Margin="0,0,6,0" VerticalAlignment="Top" TextElement.FontSize="{x:Static themes:TypeScale.Body}"
+                                        AutomationProperties.AutomationId="LibrarySourceAppIcon"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}"
+                                        sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
+                                <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
+                                           ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
+                                           Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+                            </DockPanel>
+                            <TextBlock AutomationProperties.AutomationId="LibrarySourceAppOnly" Margin="0,2,0,0"
+                                       Text="{loc:Text Source.AppOnly}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}"
+                                       Visibility="{Binding IsSourceAppOnly, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock AutomationProperties.AutomationId="LibrarySourceWindow" Margin="0,2,0,0"
                                        Foreground="{DynamicResource Text.Secondary}" ToolTip="{Binding SourceWindowTitle}"
                                        gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceWindowTitle}"
