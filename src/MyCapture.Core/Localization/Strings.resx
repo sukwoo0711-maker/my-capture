@@ -5314,6 +5314,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Translate_ErrorDiskFull" xml:space="preserve"><value>디스크 공간이 부족합니다. {0} MB 이상 확보한 뒤 다시 시도하십시오.</value></data>
   <data name="Translate_ErrorCorrupt" xml:space="preserve"><value>내려받은 파일이 손상되었습니다. 다시 시도하십시오.</value></data>
   <data name="Translate_ErrorDisk" xml:space="preserve"><value>번역 모델을 저장할 수 없습니다. 저장 공간과 권한을 확인하십시오.</value></data>
+  <data name="Translate_ErrorStalled" xml:space="preserve"><value>번역 모델 내려받기가 멈췄습니다. 네트워크 상태를 확인한 뒤 다시 시도하십시오.</value></data>
   <data name="Translate_SourceName" xml:space="preserve"><value>원문 {0}</value></data>
   <data name="Translate_TranslationName" xml:space="preserve"><value>번역 {0}</value></data>
   <data name="Translate_BlockName" xml:space="preserve"><value>블록 {0}</value></data>
@@ -5388,6 +5389,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>한국어와 영어만 번역합니다.</value></data>
   <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>번역 모델 준비 중</value></data>
   <data name="Pin_TranslationNoText" xml:space="preserve"><value>이미지에서 글자를 찾지 못했습니다.</value></data>
+  <data name="Pin_TranslationDownloadProgress" xml:space="preserve"><value>번역 모델 설치 중 · {0} / {1} MB</value></data>
+  <data name="Pin_TranslationReading" xml:space="preserve"><value>글자 읽는 중</value></data>
+  <data name="Pin_TranslationCancel" xml:space="preserve"><value>번역 취소</value></data>
+  <data name="Pin_TranslationCancelled" xml:space="preserve"><value>번역을 취소했습니다.</value></data>
+  <data name="Pin_TranslationNothing" xml:space="preserve"><value>번역할 내용이 없습니다.</value></data>
+  <data name="Pin_TranslationErrorNetwork" xml:space="preserve"><value>번역 모델을 내려받지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하십시오.</value></data>
   <data name="Pin_CopyTranslation" xml:space="preserve"><value>번역문 복사</value></data>
   <data name="App.CurrentVersion" xml:space="preserve"><value>버전 {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>영역 캡처를 누른 뒤 마우스로 드래그하여 캡처할 영역을 선택합니다.</value></data>
