@@ -18,7 +18,7 @@ public sealed class Arm64PackageTests
             f.Manifest.Architecture = "arm64"; f.Manifest.Runtime = "win-arm64";
             // The stand-in application is this run's setup executable, which is never built for ARM64.
             SetupContractsTests.Code(14, () => Payload.Application(stage, f.Manifest));
-            SetMachine(Path.Combine(stage, "MyCapture.exe"), 0xAA64);
+            SetMachine(WithinFixture(f.Root, Path.Combine(stage, "MyCapture.exe")), 0xAA64);
             Payload.Application(stage, f.Manifest);
             f.Manifest.Architecture = "x64"; f.Manifest.Runtime = "win-x64";
             SetupContractsTests.Code(14, () => Payload.Application(stage, f.Manifest));
@@ -86,6 +86,16 @@ public sealed class Arm64PackageTests
                 if (!child.WaitForExit(5000)) child.Kill();
             }
         }
+    }
+
+    /// <summary>The full path of a file this test patches in place, refused unless it lies under the fixture's root.</summary>
+    private static string WithinFixture(string root, string path)
+    {
+        string prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(path);
+        if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The staged test file is outside its fixture.");
+        return full;
     }
 
     private static void SetMachine(string path, ushort machine)
