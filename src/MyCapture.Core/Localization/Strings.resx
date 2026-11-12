@@ -5499,6 +5499,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>워터마크 이미지를 저장하지 못했습니다.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>워터마크 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 워터마크를 사용할 수 없습니다.</value></data>
+  <data name="Stamp_Blend" xml:space="preserve"><value>표시 방식</value></data>
+  <data name="Stamp_BlendIntoPage" xml:space="preserve"><value>바탕에 스밈</value></data>
+  <data name="Stamp_BlendOver" xml:space="preserve"><value>위에 겹침</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>빠른 작업</value>
   </data>

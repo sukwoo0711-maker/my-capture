@@ -387,7 +387,7 @@ public sealed class AnnotationDefaults
 public sealed class StampSettings
 {
     /// <summary>The opacities offered by the stamp menu, in percent.</summary>
-    public static readonly IReadOnlyList<int> OpacityChoices = [100, 70, 50, 30];
+    public static readonly IReadOnlyList<int> OpacityChoices = [100, 70, 50, 30, 20];
 
     public const int MinOpacityPercent = 10;
 
@@ -402,8 +402,36 @@ public sealed class StampSettings
     /// <summary>The stamp's width as a fraction of the canvas width.</summary>
     public double WidthFraction { get; set; } = MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction;
 
-    /// <summary>How opaque the placed stamp is, in percent.</summary>
+    /// <summary>How opaque the placed stamp is, in percent, when it lies over the capture.</summary>
     public int OpacityPercent { get; set; } = 100;
+
+    /// <summary>
+    /// How the placed stamp combines with the capture. A settings file written before this
+    /// field reads as <see cref="MyCapture.Core.Annotations.ImageBlend.IntoPage"/>, so a stamp
+    /// registered earlier also blends into the page from now on.
+    /// </summary>
+    public MyCapture.Core.Annotations.ImageBlend Blend { get; set; } = MyCapture.Core.Annotations.ImageBlend.IntoPage;
+
+    /// <summary>
+    /// How strong the placed stamp is, in percent, when it blends into the page. Kept apart from
+    /// <see cref="OpacityPercent"/> because the strength that reads as faint print is far below
+    /// the opacity that suits a logo lying on top.
+    /// </summary>
+    public int PageOpacityPercent { get; set; } = DefaultPageOpacityPercent;
+
+    public const int DefaultPageOpacityPercent = 20;
+
+    /// <summary>The percentage the opacity menu shows and changes for the current <see cref="Blend"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int CurrentOpacityPercent
+    {
+        get => Blend == MyCapture.Core.Annotations.ImageBlend.IntoPage ? PageOpacityPercent : OpacityPercent;
+        set
+        {
+            if (Blend == MyCapture.Core.Annotations.ImageBlend.IntoPage) PageOpacityPercent = value;
+            else OpacityPercent = value;
+        }
+    }
 
     /// <summary>
     /// Repairs values a hand-edited or imported file could hold, silently: this is bookkeeping the
@@ -420,6 +448,8 @@ public sealed class StampSettings
             MyCapture.Core.Annotations.StampLayout.MaxWidthFraction,
             MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction);
         OpacityPercent = Math.Clamp(OpacityPercent, MinOpacityPercent, 100);
+        if (!Enum.IsDefined(Blend)) Blend = MyCapture.Core.Annotations.ImageBlend.IntoPage;
+        PageOpacityPercent = Math.Clamp(PageOpacityPercent, MinOpacityPercent, 100);
     }
 
     public StampSettings Clone() => new()
@@ -429,6 +459,8 @@ public sealed class StampSettings
         MarginY = MarginY,
         WidthFraction = WidthFraction,
         OpacityPercent = OpacityPercent,
+        Blend = Blend,
+        PageOpacityPercent = PageOpacityPercent,
     };
 
     private static double Repair(double value, double min, double max, double fallback) =>

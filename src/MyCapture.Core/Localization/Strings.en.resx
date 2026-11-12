@@ -5499,6 +5499,9 @@ Install the model?</value></data>
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>The watermark image could not be saved.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>The watermark image cannot be read. Please register it again.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>The watermark is not available here.</value></data>
+  <data name="Stamp_Blend" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Stamp_BlendIntoPage" xml:space="preserve"><value>Blend into page</value></data>
+  <data name="Stamp_BlendOver" xml:space="preserve"><value>Lay on top</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>Quick access</value>
   </data>
