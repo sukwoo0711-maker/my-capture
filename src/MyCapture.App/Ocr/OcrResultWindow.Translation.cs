@@ -269,6 +269,7 @@ internal sealed partial class OcrResultWindow
             UiText.Get("Translate_ErrorCorrupt"),
         TranslationModelException { Error: TranslationModelError.Disk } or IOException or UnauthorizedAccessException =>
             UiText.Get("Translate_ErrorDisk"),
+        TranslationModelException { Error: TranslationModelError.Stalled } => UiText.Get("Translate_ErrorStalled"),
         _ => UiText.Get("Translate_ErrorNetwork"),
     };
 }
