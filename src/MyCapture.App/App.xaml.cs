@@ -2702,10 +2702,10 @@ public partial class App : Application
             }
             return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
         });
-        services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
+        services.AddSingleton<IOcrService>(serviceProvider => new CodeOcrService(new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>()));
+            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>())));
 
         // Launch-at-login through the per-user Run key, or through the manifest startup task
         // in the Microsoft Store build, whose Run key writes are virtualized and never run.

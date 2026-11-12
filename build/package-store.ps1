@@ -90,7 +90,7 @@ $provenance = Assert-StorePublishProvenance $repo $PublishDir $Version
 Assert-ReleaseSizeBudget -PublishRoot $PublishDir -Architecture x64
 $provenanceHash = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $PublishDir) 'release-manifest.json') -Algorithm SHA256).Hash
 # Legal notices remain mandatory in addition to the exact source and inventory gate.
-foreach ($required in @('MyCapture.exe', 'MyCapture.dll', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.md',
+foreach ($required in @('MyCapture.exe', 'MyCapture.dll', 'zxing.dll', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.md',
         'DOTNET-LICENSE.txt', 'DOTNET-THIRD-PARTY-NOTICES.txt', 'Assets\tray-idle.ico')) {
     if (-not (Test-Path -LiteralPath (Join-Path $PublishDir $required) -PathType Leaf)) {
         throw "The publish folder is missing $required; use the folder build\package.ps1 produced."
