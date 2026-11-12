@@ -265,6 +265,94 @@ public sealed class PinTranslationServiceTests
         Assert.True(result.NeedsReview);
     }
 
+    [Theory]
+    // opus-mt-en-ko-1 outputs that 5.3.1 threw away as changed values.
+    [InlineData("The store opens at nine and closes at six.", "가게는 9시에 문을 열고 6시에 문을 닫습니다.")]
+    [InlineData("The meeting is on March 3, 2025 at 2:30 PM.", "회의는 2025년 3월 3일 오후 2시 30분에 있습니다.")]
+    [InlineData("Version 5.3.1 was released on November 12.", "버전 5.3.1은 11월 12일에 출시되었다.")]
+    [InlineData("Dr. Smith will see you at 10 a.m. on Monday.", "스미스 박사는 월요일 오전 10시에 만나요.")]
+    [InlineData("The U.S. team won the game, e.g. by two points.", "미국 팀이 2점 차이로 승리했다.")]
+    public async Task SameValueWrittenAnotherWay_IsAccepted(string source, string translated)
+    {
+        var translator = new FakeTranslator(_ => translated);
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+
+        Assert.Equal(translated, result.Content.OriginalText);
+        Assert.False(result.NeedsReview);
+    }
+
+    [Theory]
+    [InlineData("The store opens at nine and closes at six.", "가게는 8시에 문을 열고 6시에 문을 닫습니다.")]
+    [InlineData("The meeting is on March 3, 2025 at 2:30 PM.", "회의는 2025년 3월 3일 오전 2시 30분에 있습니다.")]
+    [InlineData("The meeting is on March 3, 2025 at 2:30 PM.", "회의는 2025년 4월 3일 오후 2시 30분에 있습니다.")]
+    [InlineData("The U.S. team won the game.", "영국 팀이 승리했다.")]
+    [InlineData("You can borrow two books and two magazines.", "책 2권과 잡지 2권, 그리고 음반 2장을 빌릴 수 있습니다.")]
+    public async Task ChangedValueWrittenAnotherWay_KeepsTheSource(string source, string translated)
+    {
+        var translator = new FakeTranslator(_ => translated);
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+
+        Assert.Equal(source, result.Content.OriginalText);
+        Assert.True(result.NeedsReview);
+    }
+
+    [Fact]
+    public async Task ShortParagraph_IsTranslatedWholeInOneCall()
+    {
+        const string source = "Thank you for your order. We will send you an email when it ships.";
+        var translator = new FakeTranslator(_ => "주문해 주셔서 감사합니다. 배송시 이메일을 보내 드리겠습니다.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+
+        Assert.Equal([source], Assert.Single(translator.Calls));
+        Assert.Equal("주문해 주셔서 감사합니다. 배송시 이메일을 보내 드리겠습니다.", result.Content.OriginalText);
+        Assert.False(result.NeedsReview);
+    }
+
+    [Theory]
+    // A changed value in the whole translation.
+    [InlineData("주문 7건 감사합니다. 배송시 이메일을 보내 드리겠습니다.")]
+    // A dropped sentence.
+    [InlineData("주문해 주셔서 감사합니다")]
+    public async Task ShortParagraph_FailingTheWholeChecks_IsTranslatedSentenceBySentence(string whole)
+    {
+        const string source = "Thank you for your order. We will send you an email when it ships.";
+        var translator = new FakeTranslator(text => text == source ? whole
+            : text.StartsWith("Thank", StringComparison.Ordinal) ? "주문 감사합니다." : "배송시 이메일을 보내 드리겠습니다.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+
+        Assert.Equal(2, translator.Calls.Count);
+        Assert.Equal([source], translator.Calls[0]);
+        Assert.Equal(["Thank you for your order.", "We will send you an email when it ships."], translator.Calls[1]);
+        Assert.Equal("주문 감사합니다. 배송시 이메일을 보내 드리겠습니다.", result.Content.OriginalText);
+        Assert.False(result.NeedsReview);
+    }
+
+    [Fact]
+    public async Task LongParagraphAndKoreanParagraph_StayPerSentence()
+    {
+        const string longSource = "The configuration of the system requires careful attention to every setting. "
+            + "The network and the configuration files used by the service must be reviewed before each release.";
+        var translator = new FakeTranslator(_ => "번역된 문장입니다.");
+        await new PinTranslationService(translator).TranslateAsync(await CreateContent(longSource), CancellationToken.None);
+        Assert.Equal(2, Assert.Single(translator.Calls).Length);
+
+        const string koreanSource = "주문해 주셔서 감사합니다. 배송되면 이메일을 보내 드립니다.";
+        var korean = new FakeTranslator(_ => "Thank you.");
+        await new PinTranslationService(korean, PinTranslationDirection.KoreanToEnglish)
+            .TranslateAsync(await CreateContent(koreanSource), CancellationToken.None);
+        Assert.Equal(2, Assert.Single(korean.Calls).Length);
+    }
+
+    [Theory]
+    [InlineData("Thank you for your order. We will send you an email when it ships.", true)]
+    [InlineData("The configuration of the system requires careful attention to every setting. The network and the configuration files used by the service must be reviewed before each release.", false)]
+    public void TokenEstimate_KeepsOnlyShortParagraphsUnderTheSegmentBudget(string text, bool fits) =>
+        Assert.Equal(fits, PinTranslationService.EstimateTokens(text) <= TextTranslationService.MaxSegmentTokens);
+
     [Fact]
     public async Task DelayedResult_IsNotPublishedAfterCancellationEvenIfEngineIgnoresIt()
     {
