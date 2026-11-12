@@ -88,6 +88,8 @@ internal static class NativeSelectorInterop
     [DllImport("gdi32.dll")] internal static extern IntPtr CreatePen(int style, int width, uint color);
     [DllImport("gdi32.dll")] internal static extern IntPtr GetStockObject(int item);
     [DllImport("gdi32.dll")] internal static extern bool Rectangle(IntPtr dc, int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] internal static extern bool MoveToEx(IntPtr dc, int x, int y, IntPtr previous);
+    [DllImport("gdi32.dll")] internal static extern bool LineTo(IntPtr dc, int x, int y);
     [DllImport("msimg32.dll", SetLastError = true)] internal static extern bool AlphaBlend(IntPtr dc, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint blend);
     [DllImport("dwmapi.dll")] internal static extern int DwmFlush();
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);

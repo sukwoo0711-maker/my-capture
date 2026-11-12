@@ -103,6 +103,8 @@ internal sealed class RegionRecordingCoordinator
 
     /// <summary>Raised whenever the whole recording session (selection→record→edit) ends.</summary>
     internal event EventHandler? SessionEnded;
+    /// <summary>No selector or frame preparation remains, even if recording controls are open.</summary>
+    internal event Action? SelectorClosed;
 
     /// <summary>
     /// Committed edit that yielded a still image the caller should push into the
@@ -975,6 +977,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void EndSessionIfIdle()
     {
+        if (!IsSelecting) SelectorClosed?.Invoke();
         if (!IsActive)
         {
             SessionEnded?.Invoke(this, EventArgs.Empty);

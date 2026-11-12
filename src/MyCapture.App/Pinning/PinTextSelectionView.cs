@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Themes;
+using MyCapture.Ocr;
 
 namespace MyCapture.App.Pinning;
 
@@ -48,6 +49,21 @@ internal sealed class PinTextSelectionView : Grid
     private Point _dragPoint;
     private double _zoom = 1;
     private long _wheelDelta;
+
+    internal PinTextSelectionView(OcrResult recognized, int pixelWidth, int pixelHeight)
+    {
+        _original = recognized.Text;
+        Background = Brushes.Transparent;
+        ClipToBounds = true;
+        AutomationProperties.SetName(this, UiText.Get("Pin_SelectText"));
+        CommandManager.AddPreviewCanExecuteHandler(this, OnPreviewCanExecute);
+        CommandManager.AddPreviewExecutedHandler(this, OnPreviewExecuted);
+        ImageSelection = new PinImageTextSelectionView(recognized, pixelWidth, pixelHeight);
+        BindPinContextMenu(ImageSelection);
+        Children.Add(ImageSelection);
+    }
+
+    internal PinImageTextSelectionView? ImageSelection { get; }
 
     internal PinTextSelectionView(PinContent content)
     {
@@ -232,6 +248,7 @@ internal sealed class PinTextSelectionView : Grid
     {
         get
         {
+            if (ImageSelection is not null) return ImageSelection.Selection.SelectedText;
             if (_table is not null) return _table.SelectedText;
             if (MarkdownBox is { } markdown)
             {
@@ -254,7 +271,8 @@ internal sealed class PinTextSelectionView : Grid
 
     internal void FocusSelection()
     {
-        if (TextBox is not null) TextBox.Focus();
+        if (ImageSelection is not null) ImageSelection.Focus();
+        else if (TextBox is not null) TextBox.Focus();
         else if (MarkdownBox is not null) MarkdownBox.Focus();
         else TableGrid?.Focus();
     }
@@ -386,7 +404,8 @@ internal sealed class PinTextSelectionView : Grid
 
     internal void SelectAll()
     {
-        if (_table is not null && TableGrid is not null)
+        if (ImageSelection is not null) ImageSelection.SelectAll();
+        else if (_table is not null && TableGrid is not null)
         {
             SelectCells(0, 0, _table.Rows.Count - 1, _table.ColumnCount - 1);
             _table.SelectAll();

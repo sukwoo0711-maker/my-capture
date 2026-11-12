@@ -1720,6 +1720,9 @@
   <data name="Pin_SelectText" xml:space="preserve">
     <value>글자 선택</value>
   </data>
+  <data name="Pin_SelectTextRecognizing" xml:space="preserve">
+    <value>글자 인식 중…</value>
+  </data>
   <data name="Pin_SelectTextStarted" xml:space="preserve">
     <value>글자 선택: 드래그해 고른 뒤 Ctrl+C를 누르십시오. Esc를 누르면 끝납니다.</value>
   </data>
@@ -5692,4 +5695,67 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingAudio_Failed" xml:space="preserve">
     <value>{0} 녹음을 사용할 수 없습니다. 녹화는 계속합니다.</value>
   </data>
+  <data name="Pin_Collapse" xml:space="preserve"><value>접기</value></data>
+  <data name="Pin_Expand" xml:space="preserve"><value>펼치기</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+더블클릭</value></data>
+  <data name="Pin_CollapsedTip" xml:space="preserve"><value>더블클릭하면 핀을 펼칩니다.</value></data>
+  <data name="Tray_PinCollapsed" xml:space="preserve"><value>접힘</value></data>
+  <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>끌 때 가장자리와 다른 핀에 붙이기</value></data>
+  <data name="Pin_LightweightLabel" xml:space="preserve"><value>그림 핀을 적은 메모리로 띄우기</value></data>
+  <data name="Pin_LightweightDescription" xml:space="preserve"><value>그림 핀이 쓰는 메모리를 줄이며, 글자 선택이나 번역을 시작한 핀은 일반 핀으로 바뀝니다.</value></data>
+  <data name="Pin_CollapseToggle" xml:space="preserve"><value>핀 접기·펼치기</value></data>
+  <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>접힌 핀 펼치기</value></data>
+  <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>더블클릭</value></data>
+  <data name="Pin_SnapBypass" xml:space="preserve"><value>붙이기 없이 이동</value></data>
+  <data name="Pin_ShiftDragGesture" xml:space="preserve"><value>Shift+드래그</value></data>
+  <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>확대·축소 · 100%에서 정지</value></data>
+  <data name="Pin_ZoomGesture" xml:space="preserve"><value>휠 / + / -</value></data>
+  <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+더블클릭으로 핀을 접거나 펼칩니다. 끌 때 Shift를 누르면 붙이기를 잠시 끕니다. 휠과 +·- 키의 확대·축소는 100%에서 한 번 멈춥니다.</value></data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>휠</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>창 안 요소 선택 (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>클릭: 요소 캡처 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>클릭: 요소 텍스트 복사 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · 휠: 요소 선택</value></data>
+  <data name="CaptureFreeform_Name" xml:space="preserve">
+    <value>자유형</value>
+  </data>
+  <data name="CaptureFreeform_Help" xml:space="preserve">
+    <value>포인터로 영역을 그려 캡처합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Drawing" xml:space="preserve">
+    <value>포인터로 자유형 그리기 · 놓으면 캡처</value>
+  </data>
+  <data name="CaptureFreeform_KeyHelp" xml:space="preserve">
+    <value>자유형 전환 · 포인터로 그리기</value>
+  </data>
+  <data name="CaptureFreeform_Unavailable" xml:space="preserve">
+    <value>이 선택 화면에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Text" xml:space="preserve">
+    <value>텍스트 복사에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Color" xml:space="preserve">
+    <value>색상 복사에서는 자유형을 사용할 수 없습니다.</value>
+  </data>
+  <data name="CaptureFreeform_Recording" xml:space="preserve">
+    <value>녹화 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Scrolling" xml:space="preserve">
+    <value>스크롤 캡처 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Delay" xml:space="preserve">
+    <value>예약 캡처 영역은 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Editor" xml:space="preserve">
+    <value>편집 중 추가 캡처는 사각형으로 선택합니다.</value>
+  </data>
+  <data name="CaptureFreeform_Discard" xml:space="preserve"><value>그린 윤곽 취소</value></data>
+  <data name="OpenWith.Menu" xml:space="preserve"><value>연결 프로그램</value></data>
+  <data name="OpenWith.Choose" xml:space="preserve"><value>다른 앱 선택…</value></data>
+  <data name="OpenWith.Loading" xml:space="preserve"><value>불러오는 중</value></data>
+  <data name="OpenWith.Preparing" xml:space="preserve"><value>파일 준비 중</value></data>
+  <data name="OpenWith.Opened" xml:space="preserve"><value>앱으로 전달됨</value></data>
+  <data name="OpenWith.Failed" xml:space="preserve"><value>앱을 열지 못했습니다. {0}</value></data>
+  <data name="OpenWith.Unavailable" xml:space="preserve"><value>선택한 앱을 사용할 수 없습니다.</value></data>
+  <data name="OpenWith.AccessDenied" xml:space="preserve"><value>파일에 접근할 권한이 없습니다.</value></data>
 </root>

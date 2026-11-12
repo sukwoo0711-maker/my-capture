@@ -73,6 +73,18 @@ internal sealed partial class OcrResultWindow
     private void EnsureTranslation()
     {
         if (_translator is null || _currentExtraction is null) return;
+        // The library stores plain text, without line geometry or payload markers. Its
+        // existing geometry refresh must finish before any cached text reaches a translator.
+        if (!_currentExtraction.HasGeometry && GeometryRequested is not null)
+        {
+            _translationPanel.ShowChecking();
+            if (!_geometryRequested)
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (ExtractionMode == OcrExtractionMode.Translation) RequestGeometryIfNeeded(force: true);
+                }));
+            return;
+        }
         if (ReferenceEquals(_translatedExtraction, _currentExtraction)
             && _translationPanel.State is not (OcrTranslationPanel.ViewState.Idle or OcrTranslationPanel.ViewState.Cancelled))
             return;
@@ -82,6 +94,12 @@ internal sealed partial class OcrResultWindow
         if (_translationBlocks.Count == 0)
         {
             _translationPanel.ShowNothingToTranslate();
+            return;
+        }
+        if (_translationBlocks.All(block => block.IsCodePayload))
+        {
+            _translationPanel.ShowResults(_translationBlocks.Select(block => new TranslatedBlock(block,
+                new TranslatedText(block.Text, block.Text, [], []))).ToArray());
             return;
         }
         _translationPanel.ShowChecking();
@@ -169,7 +187,7 @@ internal sealed partial class OcrResultWindow
         IReadOnlyList<TranslatedText> translations;
         try
         {
-            translations = await translator.TranslateAsync([.. blocks.Select(block => block.Text)], progress, token)
+            translations = await TranslationBlocks.TranslateAsync(blocks, translator, progress, token)
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)

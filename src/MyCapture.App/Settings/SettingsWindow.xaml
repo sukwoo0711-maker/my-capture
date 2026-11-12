@@ -1055,6 +1055,11 @@
                         AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                         IsChecked="{Binding CloseOnDoubleClick}" />
 
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                        Content="{loc:Text Pin_SnapWhileDragging}"
+                        AutomationProperties.Name="{loc:Text Pin_SnapWhileDragging}"
+                        IsChecked="{Binding SnapWhileDragging}" />
+
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
@@ -1089,6 +1094,15 @@
                                 </Grid>
                             </StackPanel>
                         </Expander>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}" Margin="0,12,0,6"
+                        Content="{loc:Text Pin_LightweightLabel}"
+                        AutomationProperties.Name="{loc:Text Pin_LightweightLabel}"
+                        AutomationProperties.HelpText="{loc:Text Pin_LightweightDescription}"
+                        IsChecked="{Binding LightweightImagePins}" />
+
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                        Text="{loc:Text Pin_LightweightDescription}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -1521,7 +1535,7 @@
                                     <DockPanel LastChildFill="True" HorizontalAlignment="Left">
                                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                     </DockPanel>
-                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="Ctrl+Shift+F3" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                                 </StackPanel>
 
                                 <StackPanel Style="{StaticResource Settings.Field}">
