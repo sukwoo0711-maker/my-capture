@@ -22,6 +22,7 @@ internal sealed class PinTextSelectionView : Grid
 {
     private readonly string _original;
     private readonly bool _isCode;
+    private readonly PinCodeDocument? _code;
     private readonly int[] _characterStarts = [];
     private readonly int[] _characterEnds = [];
     private readonly PinTableSelection? _table;
@@ -69,6 +70,7 @@ internal sealed class PinTextSelectionView : Grid
     {
         _original = content.OriginalText ?? throw new ArgumentException("The pin has no original text.", nameof(content));
         _isCode = content.TextStyle == PinTextStyle.Code;
+        _code = _isCode ? content.CodeDocument : null;
         Color background = SampleBackground(content.Image);
         _background = background;
         var backgroundBrush = new SolidColorBrush(background);
@@ -221,8 +223,8 @@ internal sealed class PinTextSelectionView : Grid
                 Background = backgroundBrush,
                 Foreground = foreground,
                 BorderThickness = new Thickness(0),
-                FontFamily = new FontFamily(_isCode ? ClipboardCodeRenderer.FontFamilyName
-                    : _original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
+                FontFamily = _isCode ? ClipboardCodeRenderer.FontFamilyFor(_code)
+                    : new FontFamily(_original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 SelectionOpacity = 1,
@@ -285,12 +287,12 @@ internal sealed class PinTextSelectionView : Grid
         {
             double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
             double paddingY = _isCode ? ClipboardCodeRenderer.VerticalPaddingDip : 20;
-            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : TypeScale.Content.PlainText) * _zoom;
+            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeFor(_code) : TypeScale.Content.PlainText) * _zoom;
             // The text padding gives back the TextBox's own inset, so the selectable text lands on
             // the picture's glyphs and a line that fits the picture does not scroll.
             double horizontal = Math.Max(0, (paddingX * _zoom) - TextBoxLayout.ContentInsetDip);
             TextBox.Padding = new Thickness(horizontal, paddingY * _zoom, horizontal, paddingY * _zoom);
-            TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightDip : 24) * _zoom);
+            TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightFor(_code) : 24) * _zoom);
         }
         if (TableGrid is not null)
         {

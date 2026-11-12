@@ -107,7 +107,7 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy")),
-                    ("Text_976A6C92B870", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy") + " / " + UiText.Get("Text_C7011B8D345C")),
+                    ("Text_976A6C92B870", UiText.Get("Text_C7011B8D345C")),
                     ("Pin_SelectText", ShortcutCatalog.Hints(ShortcutScope.Pin, "SelectText")),
                     ("Pin_CollapseToggle", UiText.Get("Pin_CollapseGesture")),
                     ("Pin_ExpandCollapsed", UiText.Get("Pin_DoubleClickGesture")),

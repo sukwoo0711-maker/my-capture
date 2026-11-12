@@ -1037,7 +1037,9 @@ internal sealed class AnnotationEditorController
     /// annotation's own <see cref="AnnotationItem.Opacity"/> is used: it is already saved with the
     /// layer and drawn by the renderer, so no format change is involved.
     /// </param>
-    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0)
+    /// <param name="blend">How the image combines with the capture, also part of the same step.</param>
+    internal ImageAnnotation AddImageAnnotation(
+        string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0, ImageBlend blend = ImageBlend.Normal)
     {
         var image = new ImageAnnotation
         {
@@ -1046,6 +1048,7 @@ internal sealed class AnnotationEditorController
             SourceHeight = sourceHeight,
             Rect = rect.Normalized(),
             Opacity = opacity,
+            Blend = blend,
         };
 
         _undo.Execute(new AddAnnotationCommand(_document, image));

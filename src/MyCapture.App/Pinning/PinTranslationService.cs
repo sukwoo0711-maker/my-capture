@@ -274,7 +274,13 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
             runs.Add(run with { Start = start, Length = stop - start });
             end = stop;
         }
-        var document = new PinCodeDocument(output, runs, source.Background, source.Foreground);
+        // The translation is drawn in the same editor font as its source.
+        var document = new PinCodeDocument(output, runs, source.Background, source.Foreground)
+        {
+            FontSizeDip = source.FontSizeDip,
+            LineHeightDip = source.LineHeightDip,
+            FontFamily = source.FontFamily,
+        };
         return document.IsValid() ? document : null;
     }
 

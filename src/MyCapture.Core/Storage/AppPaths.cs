@@ -63,6 +63,13 @@ public sealed class AppPaths
     /// </summary>
     public string TranslationModelsRoot { get; }
 
+    /// <summary>
+    /// Disposable icons of source applications, one per application, beside the downloaded models:
+    /// local app data for the desktop build and the package's LocalCache for the Store build, never
+    /// the roaming data root. Deleting it costs only a later re-read of the icons.
+    /// </summary>
+    public string SourceIconsRoot => Path.Combine(Path.GetDirectoryName(OcrModelsRoot) ?? DataRoot, "source-icons");
+
     public string SettingsFile => Path.Combine(DataRoot, "settings.json");
 
     public string IndexFile => Path.Combine(DataRoot, "index.json");

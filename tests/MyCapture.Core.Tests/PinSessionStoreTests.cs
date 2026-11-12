@@ -672,6 +672,38 @@ public sealed class PinSessionStoreTests
     }
 
     [Fact]
+    public void CodeDocument_SourceFontMetricsRoundTripAndAreBounded()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot code = CodeSnapshot();
+        PinCodeDocument metrics = code.Pin.CodeDocument! with
+        {
+            FontSizeDip = 14,
+            LineHeightDip = 19,
+            FontFamily = "Cascadia Code, D2Coding",
+        };
+        Assert.True(metrics.IsValid());
+        PinSessionStore store = CreateStore(workspace);
+        Assert.True(store.Save([code with { Pin = code.Pin with { CodeDocument = metrics } }]));
+
+        PinCodeDocument restored = Assert.IsType<PinCodeDocument>(Assert.Single(CreateStore(workspace).Load()).Pin.CodeDocument);
+        Assert.Equal((14.0, 19.0, "Cascadia Code, D2Coding"), (restored.FontSizeDip, restored.LineHeightDip, restored.FontFamily));
+        Assert.Equal(metrics.DisplayText, restored.DisplayText);
+        Assert.True(restored.IsValid());
+
+        // A manifest written before these fields restores the defaults.
+        Assert.Null(code.Pin.CodeDocument!.FontSizeDip);
+        Assert.False((metrics with { FontSizeDip = 7.9 }).IsValid());
+        Assert.False((metrics with { FontSizeDip = 40.1 }).IsValid());
+        Assert.False((metrics with { FontSizeDip = double.NaN }).IsValid());
+        Assert.False((metrics with { LineHeightDip = 81 }).IsValid());
+        Assert.False((metrics with { FontFamily = "C:\\Windows\\Fonts\\#Evil" }).IsValid());
+        Assert.False((metrics with { FontFamily = "file:///x#Name" }).IsValid());
+        Assert.False((metrics with { FontFamily = "A, , B" }).IsValid());
+        Assert.False((metrics with { FontFamily = new string('a', PinCodeDocument.MaxFontFamilyLength + 1) }).IsValid());
+    }
+
+    [Fact]
     public void Save_CountBudgetKeepsNewestPinsAndLogsSkippedCount()
     {
         using var workspace = new TempWorkspace();

@@ -10,8 +10,9 @@ using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Gallery;
 
+/// <param name="ThumbnailPath">The library's small picture, shown in the order list; the image itself when absent.</param>
 internal sealed record GalleryContactSheetItem(string ImagePath, string Title, DateTimeOffset CreatedAt,
-    string? SourceApp, string SourceWindow);
+    string? SourceApp, string SourceWindow, string? ThumbnailPath = null);
 
 internal static class GalleryContactSheetRenderer
 {

@@ -163,17 +163,19 @@ public sealed partial class SettingsThemePreviewTests
                         T("LibraryUx_Keep"), "-", T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
                     Assert.Equal(["Enter", "Space", "P", "T", "", "Ctrl+C", "", "", "M", "", "K", "Del", "F2", "Alt+Enter"], gestures);
-                    // Existing pin, copy, recognize and delete icons are preserved in their new positions.
-                    Assert.Equal([T("Gallery.Float"), T("Text_854582314EBD"), T("Text_42A667BC71B0"), T("Text_6139B6C3ED73")],
+                    // Existing pin, copy, recognize and delete icons are preserved in their new positions;
+                    // Open source carries the source application's icon (shown only with a source).
+                    Assert.Equal([T("Gallery.Float"), T("Text_854582314EBD"), T("Text_42A667BC71B0"), T("Source.Open"), T("Text_6139B6C3ED73")],
                         menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));
                     Assert.DoesNotContain(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, T("LibraryUx_DragHelp")));
                     Assert.Equal(FontWeights.Bold, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).FontWeight);
 
-                    // All three source actions share one group; Properties is alone in the last group.
+                    // The source's own commands in Explorer's order (open, copy address), then the library's
+                    // views of it; Properties is alone in the last group.
                     Open(image);
                     Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), T("OpenWith.Menu"), "-",
                         T("Text_42A667BC71B0"), T("Library.ExportImage"), T("ContactSheet.Action"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"),
-                        T("LibraryUx_Keep"), "-", T("Source.Open"), T("Source.ShowSame"), T("LibraryUx_SourceDetails"), "-",
+                        T("LibraryUx_Keep"), "-", T("Source.Open"), T("Source.CopyUrl"), "-", T("Source.ShowSame"), T("LibraryUx_SourceDetails"), "-",
                         T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     int lastSeparator = menu.Items.IndexOf(menu.Items.OfType<Separator>().Last());
                     Assert.Equal("MediaInfo", Assert.IsType<MenuItem>(Assert.Single(menu.Items.Cast<object>().Skip(lastSeparator + 1))).Tag);

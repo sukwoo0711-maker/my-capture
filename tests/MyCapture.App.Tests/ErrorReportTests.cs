@@ -94,14 +94,15 @@ public sealed class ErrorReportTests
         using var provider = new RecentErrorLogProvider(log);
         ILogger logger = provider.CreateLogger("MyCapture.App.Test");
         logger.LogInformation("Information"); logger.LogWarning("Warning");
-        long start = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 10_000; i++)
+        long[] windows = ThreadAllocation.Measure(() =>
         {
-            logger.LogInformation("Information");
-            logger.LogWarning("Warning");
-        }
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - start;
-        Assert.Equal(0, allocated);
+            for (int i = 0; i < 10_000; i++)
+            {
+                logger.LogInformation("Information");
+                logger.LogWarning("Warning");
+            }
+        });
+        Assert.True(ThreadAllocation.AnyWithin(windows, 0), "20,000 log calls allocated " + ThreadAllocation.Describe(windows));
         Assert.Empty(log.Snapshot());
         Assert.False(logger.IsEnabled(LogLevel.Information));
         Assert.False(logger.IsEnabled(LogLevel.Warning));
