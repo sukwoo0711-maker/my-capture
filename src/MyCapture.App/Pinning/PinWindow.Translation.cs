@@ -132,7 +132,7 @@ internal sealed partial class PinWindow
         TranslationState = PinTranslationState.Translated;
         EndTranslationProgress();
         // Don't replace text under an active selection. The command remains available.
-        if (!IsTextSelectionMode && !_showingMarkdownSource) SetTranslationDisplay(true);
+        if (!IsTextSelectionMode && !IsRecognizingSelection && !_showingMarkdownSource) SetTranslationDisplay(true);
         else RefreshTranslationActions();
         ShowFeedback(UiText.Get(needsReview ? "Pin_TranslationReview"
                 : toKorean ? "Pin_TranslatedKorean" : "Pin_TranslatedEnglish"),
@@ -142,7 +142,7 @@ internal sealed partial class PinWindow
     internal void SetTranslationDisplay(bool translated)
     {
         if (_isClosed || _translationOriginal is null || _translationResult is null) return;
-        if (IsTextSelectionMode) LeaveTextSelection(restoreFocus: false);
+        if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
         _showingMarkdownSource = false;
         EndDrag();
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
@@ -208,6 +208,13 @@ internal sealed partial class PinWindow
     internal void InvokeTranslationAction()
     {
         if (_isClosed) return;
+        // Translation is drawn by the WPF host only; the pin moves there when the action would do something.
+        if (_native is not null && TranslationState is PinTranslationState.Translated or PinTranslationState.Available
+            or PinTranslationState.ModelNeeded or PinTranslationState.Failed)
+        {
+            SwitchToWpf(PinSwitchReason.Command, InvokeTranslationAction);
+            return;
+        }
         if (TranslationState == PinTranslationState.Translated)
             SetTranslationDisplay(!_showingTranslation);
         else if (TranslationState is PinTranslationState.Available or PinTranslationState.ModelNeeded or PinTranslationState.Failed)
@@ -287,7 +294,7 @@ internal sealed partial class PinWindow
     {
         if (_isClosed || !TranslationSourceContent.IsMarkdown) return;
         if (source && _showingTranslation) SetTranslationDisplay(false);
-        if (IsTextSelectionMode) LeaveTextSelection(restoreFocus: false);
+        if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
         EndDrag();
         if (source)
         {
@@ -299,6 +306,7 @@ internal sealed partial class PinWindow
         _imageElement.Source = DisplayContent.Display;
         _chrome.Background = _showingTranslation || source ? Brushes.White : null;
         UpdateImageRasterLayout();
+        if (_state.IsCollapsed) ShowThumbnail(VisualTreeHelper.GetDpi(this));
         BuildContextMenu();
     }
 

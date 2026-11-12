@@ -56,5 +56,6 @@
 
   <Import Project="..\..\build\tools\TestHostDpiStartupHook\TestHostDpiStartupHook.targets"
           Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  <Import Project="..\MyCapture.ElementFixture\MyCapture.ElementFixture.targets" />
 
 </Project>

@@ -134,7 +134,7 @@ public partial class App
     private bool UnexpectedIdleWindowVisible() => _quickAccess is { IsVisible: true }
         || ProbeOverlay is { IsVisible: true } || ProbeEditor is { IsVisible: true }
         || ProbeOcrWindow() is { IsVisible: true }
-        || (_pins?.SnapshotOpenPinWindows().Any(window => window.IsVisible) ?? false);
+        || (_pins?.SnapshotOpenPinWindows().Any(window => window.IsShown) ?? false);
 
     /// <summary>Observes every library-activity event, including work wholly between two samples.</summary>
     private sealed class IdleActivityObservation : IDisposable

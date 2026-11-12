@@ -158,11 +158,11 @@ public sealed partial class SettingsThemePreviewTests
                     // An image without a source follows the Windows command order; Properties is last.
                     f.ViewModel.ClearSelection();
                     Open(plain);
-                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), "-",
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), T("OpenWith.Menu"), "-",
                         T("Text_42A667BC71B0"), T("Library.ExportImage"), T("ContactSheet.Action"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"),
                         T("LibraryUx_Keep"), "-", T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
-                    Assert.Equal(["Enter", "Space", "P", "T", "Ctrl+C", "", "", "M", "", "K", "Del", "F2", "Alt+Enter"], gestures);
+                    Assert.Equal(["Enter", "Space", "P", "T", "", "Ctrl+C", "", "", "M", "", "K", "Del", "F2", "Alt+Enter"], gestures);
                     // Existing pin, copy, recognize and delete icons are preserved in their new positions.
                     Assert.Equal([T("Gallery.Float"), T("Text_854582314EBD"), T("Text_42A667BC71B0"), T("Text_6139B6C3ED73")],
                         menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));
@@ -171,7 +171,7 @@ public sealed partial class SettingsThemePreviewTests
 
                     // All three source actions share one group; Properties is alone in the last group.
                     Open(image);
-                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), "-",
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), T("OpenWith.Menu"), "-",
                         T("Text_42A667BC71B0"), T("Library.ExportImage"), T("ContactSheet.Action"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"),
                         T("LibraryUx_Keep"), "-", T("Source.Open"), T("Source.ShowSame"), T("LibraryUx_SourceDetails"), "-",
                         T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
@@ -183,7 +183,7 @@ public sealed partial class SettingsThemePreviewTests
 
                     // Video's double-click action is Play, with image-only actions hidden as before.
                     Open(video);
-                    Assert.Equal([T("Text_D43A776C5E28"), T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                    Assert.Equal([T("Text_D43A776C5E28"), T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("OpenWith.Menu"), "-",
                         T("ContactSheet.Action"), T("Library.ExportGif"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), T("LibraryUx_Keep"), "-",
                         T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     Assert.Equal(string.Empty, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).InputGestureText);

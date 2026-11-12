@@ -232,6 +232,24 @@ public sealed class EncodedPinHistoryTests(ITestOutputHelper output)
     });
 
     [Fact]
+    public void ReopenedPinPicture_EncodesOnThreadsThatDidNotDecodeIt() => StaTestHost.Run(() =>
+    {
+        // Copy, quick save, the session and the next close encode a reopened pin's picture on other threads
+        // than the one that decoded its PNG.
+        var manager = new PinManager(() => new PinSettings(), NullLogger.Instance);
+        try
+        {
+            manager.PinImage(Image(20, 10)).Close();
+            PinHistoryTestSupport.Await(manager.LastClosedEncodingForTest);
+            BitmapSource reopened = PinHistoryTestSupport.Restore(manager)!.PinnedContent.Image;
+
+            byte[] here = ImageCodec.EncodePng(reopened);
+            Assert.Equal(here, DecodedPngEncodesOnAnyThreadTests.OnNewThread(() => ImageCodec.EncodePng(reopened)));
+        }
+        finally { manager.CloseAllForExit(); }
+    });
+
+    [Fact]
     public void ClosedTranslationViewReopensWithoutItsOwnBorder() => StaTestHost.Run(() =>
     {
         const string text = "번역문은 핀 테두리 안을 채웁니다.";

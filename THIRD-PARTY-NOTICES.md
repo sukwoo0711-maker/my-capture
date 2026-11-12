@@ -15,6 +15,7 @@ under their own licenses.
 | Microsoft.Web.WebView2 1.0.4022.49 | On-demand, isolated local Mermaid rendering | Microsoft WebView2 SDK license | <https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4022.49> |
 | Mermaid 11.12.0 | Local diagram rendering in Markdown pins | MIT; bundled dependency notices below | <https://github.com/mermaid-js/mermaid/releases/tag/mermaid%4011.12.0> |
 | RapidOcrNet 4.2.0 | PP-OCR ONNX pipeline used for Accurate OCR | Apache-2.0 | <https://github.com/BobLd/RapidOcrNet> |
+| ZXing.Net 0.16.11 | Local QR code and barcode recognition / 로컬 QR 코드·바코드 인식 | Apache-2.0 | <https://github.com/micjahn/ZXing.Net> |
 | Microsoft.ML.OnnxRuntime / Microsoft.ML.OnnxRuntime.Managed 1.30.0 | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
 | SkiaSharp / SkiaSharp.NativeAssets.Win32 3.119.1 | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
 | Clipper2 2.0.0 | Polygon geometry used by RapidOcrNet | Boost Software License 1.0 | <https://www.nuget.org/packages/Clipper2/2.0.0> |
@@ -34,6 +35,7 @@ build and published output under `Assets/ThirdParty/`:
 | Component | Included files |
 | --- | --- |
 | RapidOcrNet 4.2.0 | `RapidOcrNet-4.2.0/LICENSE.txt`, `RapidOcrNet-4.2.0/NOTICE.txt` |
+| ZXing.Net 0.16.11 | `ZXing.Net-0.16.11/LICENSE.txt` (Apache License 2.0) |
 | Microsoft.ML.OnnxRuntime and Microsoft.ML.OnnxRuntime.Managed 1.30.0 | `OnnxRuntime-1.30.0/LICENSE.txt`, `OnnxRuntime-1.30.0/ThirdPartyNotices.txt` |
 | SkiaSharp and SkiaSharp.NativeAssets.Win32 3.119.1 | `SkiaSharp-3.119.1/LICENSE.txt`, `SkiaSharp-3.119.1/THIRD-PARTY-NOTICES.txt` |
 | Clipper2 2.0.0, Angus Johnson | `Clipper2-2.0.0/License.txt` |

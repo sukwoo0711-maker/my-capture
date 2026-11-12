@@ -66,6 +66,48 @@ public sealed class PinSessionSettingsTests
         Assert.False(draft.HasUnappliedChanges);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LightweightImagePins_RoundTripsThroughStoreCloneAndDraft(bool enabled)
+    {
+        using var workspace = new TempWorkspace();
+        var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
+        Assert.False(new PinSettings().LightweightImagePins);
+        Assert.False(NewInstallDefaults.Create().Pin.LightweightImagePins);
+        store.Save(new AppSettings { Pin = { LightweightImagePins = enabled } });
+
+        AppSettings loaded = store.Load();
+        Assert.Equal(enabled, loaded.Pin.LightweightImagePins);
+        AppSettings clone = loaded.DeepClone();
+        loaded.Pin.LightweightImagePins = !enabled;
+        Assert.Equal(enabled, clone.Pin.LightweightImagePins);
+
+        var draft = new SettingsDraft(clone);
+        Assert.Equal(enabled, draft.LightweightImagePins);
+        Assert.False(draft.HasUnappliedChanges);
+        draft.LightweightImagePins = !enabled;
+        Assert.True(draft.HasUnappliedChanges);
+        Assert.Equal(!enabled, draft.ToAppSettings().Pin.LightweightImagePins);
+        draft.LightweightImagePins = enabled;
+        Assert.False(draft.HasUnappliedChanges);
+        draft.LoadFrom(clone);
+        Assert.Equal(enabled, draft.LightweightImagePins);
+    }
+
+    [Fact]
+    public void LightweightImagePins_IsOffInAnOlderSettingsFile()
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        File.WriteAllText(workspace.Paths.SettingsFile, """
+            {"schemaVersion":4,"pin":{"closeOnDoubleClick":true}}
+            """);
+        var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
+
+        Assert.False(store.Load().Pin.LightweightImagePins);
+    }
+
     [Fact]
     public void DeepClone_CopiesEveryWritablePinSetting()
     {
@@ -74,12 +116,14 @@ public sealed class PinSessionSettingsTests
             Pin =
             {
                 CloseOnDoubleClick = false,
+                SnapWhileDragging = false,
                 RestoreOpenPinsOnLaunch = true,
                 CtrlClickDebounceMs = 350,
                 InitialOpacity = 0.75,
                 ClosedWindowRestoreLimit = 5,
                 ZoomStep = 0.2,
                 ClickThroughHintShownCount = 2,
+                LightweightImagePins = true,
             },
         };
         var defaults = new PinSettings();

@@ -77,6 +77,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MyCapture.App.Accessibility.ScreenReaderState? _screenReader;
     private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
@@ -289,6 +290,9 @@ public partial class App : Application
             () => _settings!.Pin,
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
+        // The message window is the hotkey service's own; the reader state only listens to it.
+        _screenReader = new MyCapture.App.Accessibility.ScreenReaderState(_services.GetRequiredService<NativeMessageWindow>());
+        _pins.AttachScreenReader(_screenReader);
         _pins.PinCreated += ShowFirstPinTip;
         _pins.PinCreated += OnPinCreatedForStoreRating;
         // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
@@ -312,6 +316,8 @@ public partial class App : Application
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
+        // A native pin's mouse-up never reaches WPF input; its manager reports the end of a gesture.
+        _pins.InteractionEnded += ScheduleIdleMemoryReclamation;
         _pins.OpenPinsChanged += () =>
         {
             if (_pins.IsInteractionActive) CancelIdleMemoryReclamation();
@@ -378,9 +384,12 @@ public partial class App : Application
             () => _settings!.Ocr);
         _overlay.PrivacyRedactionService = _privacyRedactionService;
 
-        // A pin's OCR is transient: recognise the pinned image bytes and show the shared result
-        // window, but never cache the text — a pin has no backing capture record.
+        // Pin recognition is shared in memory only; no capture record or persisted OCR is made.
         _pins.OcrRequested += OnPinOcrRequested;
+        _pins.RecognizeSelection = (image, token) => _ocrService is null
+            ? Task.FromResult(MyCapture.Ocr.OcrResult.Unavailable())
+            : PinTextCopyService.RecognizeAsync(image, _ocrService,
+                _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token);
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
@@ -485,6 +494,7 @@ public partial class App : Application
             _services.GetRequiredService<ILoggerFactory>(),
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.SelectorClosed += () => _captureGuideWrites?.NotifySelectorClosed();
         _recorder.RecordingSaved = saved => _storeRating?.RecordCapture(saved);
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.FrameCaptureService = _videoFrameCapture;
@@ -547,6 +557,7 @@ public partial class App : Application
                 _recorder?.RefreshWatermarkSettings(updated.Recording.Watermark);
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
+                _pins?.ApplySettings();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },
@@ -2691,10 +2702,10 @@ public partial class App : Application
             }
             return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
         });
-        services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
+        services.AddSingleton<IOcrService>(serviceProvider => new CodeOcrService(new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>()));
+            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>())));
 
         // Launch-at-login through the per-user Run key, or through the manifest startup task
         // in the Microsoft Store build, whose Run key writes are virtualized and never run.

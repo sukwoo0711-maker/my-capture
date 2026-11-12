@@ -25,6 +25,8 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="RapidOcrNet" Version="4.2.0" />
+    <!-- QR and barcode decoding beside text recognition: managed only, no native binary, no dependencies. -->
+    <PackageVersion Include="ZXing.Net" Version="0.16.11" />
     <!-- makeappx/makepri for the Microsoft Store package only (build\tools\StoreTools); never shipped. -->
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
   </ItemGroup>

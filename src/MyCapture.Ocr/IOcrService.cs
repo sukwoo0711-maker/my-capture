@@ -87,6 +87,19 @@ public sealed class OcrRequest
     /// </summary>
     public Action<OcrResult>? BeforeLatinRecovery { get; init; }
 
+    internal OcrRequest WithBitmap(BitmapSource bitmap, Action<OcrResult>? beforeRecovery) => new(null, null, bitmap)
+    {
+        UpscaleFactor = UpscaleFactor,
+        PreferredLanguages = PreferredLanguages,
+        SearchRotatedOrientations = SearchRotatedOrientations,
+        EnhanceContrast = EnhanceContrast,
+        UseNeuralModel = UseNeuralModel,
+        LocalCorrection = LocalCorrection,
+        UseSuperResolution = UseSuperResolution,
+        RecoverLatinIntrusions = RecoverLatinIntrusions,
+        BeforeLatinRecovery = beforeRecovery,
+    };
+
     /// <summary>Returns a copy of this request with <see cref="RecoverLatinIntrusions"/> set.</summary>
     public OcrRequest WithLatinRecovery(Action<OcrResult>? beforeRecovery = null) => new(EncodedImage, FilePath, Bitmap)
     {
