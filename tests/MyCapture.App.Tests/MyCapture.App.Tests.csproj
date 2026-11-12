@@ -19,6 +19,7 @@
                       ReferenceOutputAssembly="false" Private="false" OutputItemType="_MyCaptureTestHostDpiHook" />
     <Compile Include="..\Shared\TestRecycleBin.cs" Link="TestRecycleBin.cs" />
     <Compile Include="..\Shared\RecordingClipboard.cs" Link="RecordingClipboard.cs" />
+    <Compile Include="..\Shared\ThreadAllocation.cs" Link="ThreadAllocation.cs" />
     <Using Include="MyCapture.Tests" />
   </ItemGroup>
 
