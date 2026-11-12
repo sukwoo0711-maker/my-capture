@@ -19,7 +19,7 @@ namespace MyCapture.Core.Settings;
 /// values. The four core shortcuts take priority over other programs, and the first launch
 /// explains the assignments; a reset keeps the user's own answer about that priority instead.
 /// Ctrl+Shift+Z opens the library, F3 pins content, Shift+F3 hides or
-/// shows the pins, and the upload shortcut stays unassigned.
+/// shows the pins, Ctrl+Shift+F3 reopens a closed pin, and the upload shortcut stays unassigned.
 /// Shortcut keys stay visible in every button tooltip, double-click does not close a new pin,
 /// and pins left open at exit reopen at the next launch.
 /// </para>
@@ -40,6 +40,7 @@ public static class NewInstallDefaults
         ArgumentNullException.ThrowIfNull(settings);
         settings.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
         settings.Hotkeys.HideAllPins = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
+        settings.Hotkeys.RestoreClosedPin = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkF3);
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
         settings.Pin.CloseOnDoubleClick = true;
         settings.Pin.RestoreOpenPinsOnLaunch = true;

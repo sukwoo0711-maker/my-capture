@@ -299,6 +299,7 @@ internal sealed partial class PinWindow
         _imageElement.Source = DisplayContent.Display;
         _chrome.Background = _showingTranslation || source ? Brushes.White : null;
         UpdateImageRasterLayout();
+        if (_state.IsCollapsed) ShowThumbnail(VisualTreeHelper.GetDpi(this));
         BuildContextMenu();
     }
 

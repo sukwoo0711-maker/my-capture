@@ -157,7 +157,8 @@ internal sealed class PinSessionService : IDisposable
                     {
                         _identities.Add(content, new ContentIdentity(pin.Id) { EncodedLength = length });
                         _pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
-                            pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder));
+                            pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
+                            IsCollapsed: pin.IsCollapsed, CollapsedOpacity: pin.CollapsedOpacity));
                         consumed.Add(pin.Id);
                     }
                     catch (Exception ex) { _log.LogWarning("Could not reopen saved pin {PinId} ({FailureType})", pin.Id, ex.GetType().Name); }
@@ -252,7 +253,8 @@ internal sealed class PinSessionService : IDisposable
                     pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
                     pin.Content.TextStyle, pin.Content.CodeDocument, pin.Content.Provenance.Url,
                     pin.Content.Provenance.DocumentPath, pin.Content.Provenance.AppName,
-                    pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle);
+                    pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle,
+                    pin.IsCollapsed, pin.CollapsedOpacity);
                 captured.Add(new CapturedPin(record, image, identity));
             }
         }

@@ -123,6 +123,7 @@ public static class AppSettingsClone
     {
         ClickThroughHintShownCount = s.ClickThroughHintShownCount,
         CloseOnDoubleClick = s.CloseOnDoubleClick,
+        SnapWhileDragging = s.SnapWhileDragging,
         RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,
         InitialOpacity = s.InitialOpacity,

@@ -109,6 +109,10 @@ internal sealed class ShortcutHelpWindow : Window
                     ("QuickAccess.Copy", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy")),
                     ("Text_976A6C92B870", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy") + " / " + UiText.Get("Text_C7011B8D345C")),
                     ("Pin_SelectText", ShortcutCatalog.Hints(ShortcutScope.Pin, "SelectText")),
+                    ("Pin_CollapseToggle", UiText.Get("Pin_CollapseGesture")),
+                    ("Pin_ExpandCollapsed", UiText.Get("Pin_DoubleClickGesture")),
+                    ("Pin_SnapBypass", UiText.Get("Pin_ShiftDragGesture")),
+                    ("Pin_ZoomStopHelp", UiText.Get("Pin_ZoomGesture")),
                     ("QuickAccess.Save", ShortcutCatalog.Hints(ShortcutScope.Pin, "Save")), ("Dialog.Close", ShortcutCatalog.Hints(ShortcutScope.Pin, "Close"))]),
                 ("Help.QuickAccess", CatalogRows(ShortcutScope.QuickAccess)),
             ];
