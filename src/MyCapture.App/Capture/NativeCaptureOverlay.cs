@@ -97,6 +97,19 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
     internal Action<RectD>? GeometrySelectionCompleted { get; set; }
     internal event Action<Exception>? Failed;
+    /// <summary>
+    /// Told once per selector that chrome following the pointer missed its bounds. The selection goes on;
+    /// the owner writes it to the log, the only trace such a miss leaves.
+    /// </summary>
+    internal Action<Exception>? ChromePlacementMissed { get; set; }
+    private bool _chromePlacementMissReported;
+
+    internal void ReportChromePlacementMiss(Exception error)
+    {
+        if (_chromePlacementMissReported) return;
+        _chromePlacementMissReported = true;
+        ChromePlacementMissed?.Invoke(error);
+    }
 
     internal void Prepare(Func<IntPtr, bool>? applyExclusion = null)
     {
