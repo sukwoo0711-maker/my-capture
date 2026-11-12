@@ -165,7 +165,9 @@ public sealed class WindowSourceServiceTests
 
         Assert.Equal(new[] { Explorer.Handle }, folderRequest!.ToArray());
         Assert.Equal(new WindowSourceSnapshot(42, "Microsoft Edge", EdgePath, ""), sources[Browser.Handle]);
-        Assert.Equal(new WindowSourceSnapshot(7, "Windows 탐색기", ExplorerPath, Folder), sources[Explorer.Handle]);
+        // The folder now records where it came from.
+        Assert.Equal(new WindowSourceSnapshot(7, "Windows 탐색기", ExplorerPath, Folder, DocumentOrigin: CaptureDocumentOrigin.Explorer),
+            sources[Explorer.Handle]);
     }
 
     [Fact]

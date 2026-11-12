@@ -148,6 +148,10 @@ internal sealed partial class GalleryWindow : Window
                 _viewModel.Refresh();
                 RefreshOcrCoverageBanner();
             }
+            // Once the cards are up, the icon thread reads each distinct source application once,
+            // behind every card's own request and at below-normal priority.
+            if (IsVisible)
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, PrewarmSourceIcons);
         };
 
         // F2 edits a capture title in place, or renames the focused folder.

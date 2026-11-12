@@ -9,6 +9,7 @@ using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Pinning;
@@ -38,9 +39,11 @@ internal enum PasteResult
 /// </para>
 /// <para>
 /// Placement uses the monitor under the cursor: the frozen image's pixel size is converted
-/// to DIP with that monitor's scale factor, fitted to ~80% of its working area by
-/// <see cref="PinGeometry"/>, and centred near the cursor but clamped fully inside the work
-/// area. This keeps a pin from opening off-screen or larger than the display.
+/// to DIP with that monitor's scale factor, shown at that size (or, for a spreadsheet's picture
+/// of its cells, at the size the cells had in the sheet window) unless it would not fit the
+/// working area, then reduced by <see cref="PinGeometry"/> just enough to fit, and centred near
+/// the cursor but clamped fully inside the work area. This keeps a pin from opening off-screen
+/// or larger than the display.
 /// </para>
 /// <para>
 /// Every pin that closes (Esc, Delete, double-click, its menu, or close all) is remembered
@@ -234,6 +237,27 @@ internal sealed partial class PinManager
     internal Func<MonitorInfo>? ReadPlacementMonitorForTest { get; set; }
     internal Func<IReadOnlyList<MonitorInfo>>? ReadRestoreMonitorsForTest { get; set; }
 
+    /// <summary>
+    /// Starts the optional read of how large a copied spreadsheet range looked on screen, or
+    /// returns null when the copy did not come from the foreground spreadsheet window. Runs on
+    /// the UI thread before the clipboard is read, so it must only start work, never wait.
+    /// Null (no read) until the app shell sets <see cref="ReadSpreadsheetView"/>; tests set a stand-in.
+    /// </summary>
+    internal Func<Task<SpreadsheetSelectionView?>?>? BeginSpreadsheetViewRead { get; set; }
+
+    /// <summary>Reads the foreground spreadsheet window's object model, when the copy came from it.</summary>
+    internal static Task<SpreadsheetSelectionView?>? ReadSpreadsheetView()
+    {
+        IntPtr source = ExcelSelectionReader.FindCopySource();
+        return source == IntPtr.Zero ? null : ExcelSelectionReader.ReadAsync(source);
+    }
+
+    /// <summary>
+    /// Longest a paste waits for <see cref="BeginSpreadsheetViewRead"/>, counted from when the read
+    /// started; it runs while the clipboard is read, so a pin usually waits for none of it.
+    /// </summary>
+    internal TimeSpan SpreadsheetViewWait { get; set; } = ExcelSelectionReader.Budget;
+
     /// <summary>Open pins in opening order, newest first, including hidden pins.</summary>
     internal IReadOnlyList<PinWindow> SnapshotOpenPinWindows()
     {
@@ -336,15 +360,22 @@ internal sealed partial class PinManager
     /// </summary>
     internal async Task<PasteResult> PasteFromClipboardAsync(Func<Task<ClipboardImageReader.PinReadAttempt>>? readClipboard = null)
     {
+        long sheetViewStarted = Stopwatch.GetTimestamp();
+        Task<SpreadsheetSelectionView?>? sheetView = StartSpreadsheetViewRead();
         ClipboardImageReader.PinReadAttempt read = await (readClipboard ?? ClipboardImageReader.ReadPinAsync)();
 
         switch (read.Outcome.Status)
         {
             case ClipboardImageStatus.Success when read.Content is not null:
-                PinWindow clipboardPin = OpenPin(read.Content, activate: false);
-                PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, LogicalPinId: clipboardPin.LogicalPracticeId,
-                    WindowPinId: clipboardPin.PracticeId, ClipboardSequence: read.ClipboardSequence));
-                return PasteResult.Pinned;
+                // Only a spreadsheet's own picture of its cells has an on-screen size to follow.
+                SpreadsheetSelectionView? view = read.Content.Kind == PinContentKind.Table
+                    && !read.Content.UsesDeviceIndependentPixels
+                        ? await AwaitSpreadsheetViewAsync(sheetView, sheetViewStarted)
+                        : null;
+                // Waiting for the view may resume on a pool thread; windows open on the manager's thread.
+                if (!_dispatcher.CheckAccess())
+                    return await _dispatcher.InvokeAsync(() => OpenPastedPin(read, view));
+                return OpenPastedPin(read, view);
 
             case ClipboardImageStatus.Busy:
                 _log.LogInformation("Paste-to-screen: clipboard was busy");
@@ -354,6 +385,47 @@ internal sealed partial class PinManager
                 _log.LogInformation("Paste-to-screen: no supported clipboard content");
                 return PasteResult.NoSupportedContent;
         }
+    }
+
+    private PasteResult OpenPastedPin(ClipboardImageReader.PinReadAttempt read, SpreadsheetSelectionView? view)
+    {
+        PinWindow clipboardPin = OpenPin(read.Content!, activate: false, spreadsheetView: view);
+        PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, LogicalPinId: clipboardPin.LogicalPracticeId,
+            WindowPinId: clipboardPin.PracticeId, ClipboardSequence: read.ClipboardSequence));
+        return PasteResult.Pinned;
+    }
+
+    private Task<SpreadsheetSelectionView?>? StartSpreadsheetViewRead()
+    {
+        try
+        {
+            return BeginSpreadsheetViewRead?.Invoke();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.LogDebug("Spreadsheet view read did not start ({FailureType})", ex.GetType().Name);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The spreadsheet view if its read has finished within <see cref="SpreadsheetViewWait"/> of
+    /// starting; otherwise null, and the pin opens at its usual size. A late result is dropped,
+    /// never applied to the open pin.
+    /// </summary>
+    private async Task<SpreadsheetSelectionView?> AwaitSpreadsheetViewAsync(Task<SpreadsheetSelectionView?>? read, long started)
+    {
+        if (read is null) return null;
+        TimeSpan remaining = SpreadsheetViewWait - Stopwatch.GetElapsedTime(started);
+        if (!read.IsCompleted && remaining > TimeSpan.Zero)
+            await Task.WhenAny(read, Task.Delay(remaining));
+        if (!read.IsCompletedSuccessfully)
+        {
+            if (read.IsFaulted) _ = read.Exception; // Observed: the view is optional.
+            _log.LogDebug("Spreadsheet view was not available in time; the pin keeps the picture's size");
+            return null;
+        }
+        return read.Result;
     }
 
     /// <summary>Opens a new pin for an already-decoded, frozen image.</summary>
@@ -379,7 +451,8 @@ internal sealed partial class PinManager
     internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
         OpenPin(PinContent.FromText(image, originalText, isTable), activate: true);
 
-    private PinWindow OpenPin(PinContent content, bool activate, RectD? screenOrigin = null, MonitorInfo? captureMonitor = null)
+    private PinWindow OpenPin(PinContent content, bool activate, RectD? screenOrigin = null, MonitorInfo? captureMonitor = null,
+        SpreadsheetSelectionView? spreadsheetView = null)
     {
         PinSettings settings = _settings();
         MonitorInfo monitor = captureMonitor ?? ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
@@ -390,6 +463,14 @@ internal sealed partial class PinManager
         // previews keep their original DIP layout while their raster follows the display.
         double imageWidthDip = content.UsesDeviceIndependentPixels ? content.LayoutWidthDip : content.Image.PixelWidth / scale;
         double imageHeightDip = content.UsesDeviceIndependentPixels ? content.LayoutHeightDip : content.Image.PixelHeight / scale;
+        // A spreadsheet picture opens as large as its cells looked in the sheet window, when the
+        // window's selection still has the picture's shape (PinGeometry.SpreadsheetViewZoom).
+        double preferredZoom = 1;
+        if (spreadsheetView is { } view && screenOrigin is null && !content.UsesDeviceIndependentPixels
+            && PinGeometry.SpreadsheetViewZoom(content.PixelWidth, content.PixelHeight, scale, view) is { } sheetZoom)
+        {
+            preferredZoom = sheetZoom;
+        }
         content = content.RenderedAt(scale);
         BitmapSource image = content.Image;
 
@@ -413,7 +494,8 @@ internal sealed partial class PinManager
             workHeightDip,
             cursorXDip,
             cursorYDip,
-            _pins.Count);
+            _pins.Count,
+            preferredZoom);
 
         var state = new PinViewState(
             imageWidthDip,
@@ -1012,7 +1094,7 @@ internal sealed partial class PinManager
 
         if (sender is PinWindow pin && !pin.IsClosed)
         {
-            pin.ReportCopyResult(copied);
+            pin.ReportCopyResult(copied, request.OriginalText is not null);
         }
     }
 

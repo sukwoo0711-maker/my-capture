@@ -289,7 +289,11 @@ public partial class App : Application
         _pins = new PinManager(
             () => _settings!.Pin,
             pinSaveService,
-            _services.GetRequiredService<ILogger<PinManager>>());
+            _services.GetRequiredService<ILogger<PinManager>>())
+        {
+            // A spreadsheet picture opens as large as its cells looked in the sheet window.
+            BeginSpreadsheetViewRead = PinManager.ReadSpreadsheetView,
+        };
         // The message window is the hotkey service's own; the reader state only listens to it.
         _screenReader = new MyCapture.App.Accessibility.ScreenReaderState(_services.GetRequiredService<NativeMessageWindow>());
         _pins.AttachScreenReader(_screenReader);
@@ -2627,6 +2631,9 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
         AppPaths paths = ResolveAppPaths();
+        // Source application icons persist beside the downloaded models; nothing reads them before a
+        // library card, chip or pin asks, and every read runs on the cache's own background thread.
+        MyCapture.App.Sources.SourceIconCache.Configure(paths.SourceIconsRoot);
 
         // Information and above also go to logs\mycapture.log under the same rule as the recent-error
         // list: numbers and code identifiers only, never message text, paths, titles or clipboard.
@@ -2662,6 +2669,7 @@ public partial class App : Application
             {
                 coordinator.ReadPageUrls = privacy.ReadPages;
                 coordinator.ReadWindowSources = privacy.ReadSources;
+                coordinator.ReadEditorDocuments = null;
             }
             return coordinator;
         });

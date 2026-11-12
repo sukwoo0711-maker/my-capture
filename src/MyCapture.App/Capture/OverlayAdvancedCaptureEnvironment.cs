@@ -81,6 +81,15 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
         return sources.GetValueOrDefault(window.Handle);
     }
 
+    public async Task<string> ReadEditorDocumentAsync(WindowUnderCursor window, CaptureSourceDetails source)
+    {
+        if (window.Handle == IntPtr.Zero || window.ProcessId == 0) return string.Empty;
+        IReadOnlyDictionary<IntPtr, string> documents = await _windowSources.ReadEditorDocumentsAsync([
+            new WindowCandidate(window.Handle, window.ScreenBounds, window.Title, ProcessId: window.ProcessId) { Source = source },
+        ]).ConfigureAwait(false);
+        return documents.GetValueOrDefault(window.Handle) ?? string.Empty;
+    }
+
     public RectD? ResolveRepeatRegion(RegionHistoryEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);

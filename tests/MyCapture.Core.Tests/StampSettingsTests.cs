@@ -35,7 +35,7 @@ public sealed class StampSettingsTests
         Assert.Equal(16, stamp.MarginY);
         Assert.Equal(0.15, stamp.WidthFraction);
         Assert.Equal(100, stamp.OpacityPercent);
-        Assert.Equal([100, 70, 50, 30], StampSettings.OpacityChoices);
+        Assert.Equal([100, 70, 50, 30, 20], StampSettings.OpacityChoices);
     }
 
     [Fact]

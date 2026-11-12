@@ -105,6 +105,13 @@ internal sealed partial class GalleryWindow
                     item.Visibility = tile.HasSourceBadge && tile.SourceProvenance.CanOpen
                         ? Visibility.Visible : Visibility.Collapsed;
                     break;
+                // Explorer's order after Open source: the file's location, then copying its path or address.
+                case "OpenSourceLocation" or "CopySourcePath":
+                    item.Visibility = tile.HasSourceDocumentPath ? Visibility.Visible : Visibility.Collapsed;
+                    break;
+                case "CopySourceUrl":
+                    item.Visibility = tile.HasSourcePageUrl ? Visibility.Visible : Visibility.Collapsed;
+                    break;
                 case "Keep":
                     item.Header = UiText.Get(targets.Count > 0 && targets.All(target => target.IsPinned) ? "LibraryUx_Unkeep" : "LibraryUx_Keep");
                     break;
@@ -124,6 +131,9 @@ internal sealed partial class GalleryWindow
         // A source-less card has no source group. Hide its separator rather than leave two in a row.
         foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorSource"))
             separator.Visibility = tile.HasSourceBadge ? Visibility.Visible : Visibility.Collapsed;
+        // Between the source's own commands and the library's views of it, only when both groups show.
+        foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorSourceViews"))
+            separator.Visibility = tile.HasSourceBadge && tile.SourceProvenance.CanOpen ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task OpenWithAsync(Func<string, Task> invoke)

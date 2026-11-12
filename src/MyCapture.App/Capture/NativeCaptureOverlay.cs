@@ -97,6 +97,19 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     /// <summary>Recording needs geometry only; it must not allocate a cropped screenshot.</summary>
     internal Action<RectD>? GeometrySelectionCompleted { get; set; }
     internal event Action<Exception>? Failed;
+    /// <summary>
+    /// Told once per selector that chrome following the pointer missed its bounds. The selection goes on;
+    /// the owner writes it to the log, the only trace such a miss leaves.
+    /// </summary>
+    internal Action<Exception>? ChromePlacementMissed { get; set; }
+    private bool _chromePlacementMissReported;
+
+    internal void ReportChromePlacementMiss(Exception error)
+    {
+        if (_chromePlacementMissReported) return;
+        _chromePlacementMissReported = true;
+        ChromePlacementMissed?.Invoke(error);
+    }
 
     internal void Prepare(Func<IntPtr, bool>? applyExclusion = null)
     {
@@ -165,6 +178,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 mark(result >= 0 ? "native-dwm-flush-complete" : "native-dwm-flush-failed");
             }
             Activate();
+            ClaimEscapeWithoutForeground();
         }
         catch { Close(); throw; }
         finally { _showing = false; }
@@ -457,6 +471,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         _dispatcher.VerifyAccess();
         if (_closed) return;
+        ReleaseEscapeClaim();
         _closed = true;
         _elements?.Dispose(); _elements = null; CreateElementSource = null;
         _elementScaleWindow = null;
@@ -599,8 +614,12 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             case 0x0101:
                 if (wParam.ToInt32() is 0x10 or 0xA0 or 0xA1) { _ = Pointer(); _chrome?.Update(EffectivePointer, _selection); }
                 break;
+            case 0x0312 when wParam.ToInt64() == EscapeHotkeyId: // WM_HOTKEY: Esc before the selector was activated.
+                OnEscapeHotkey();
+                return IntPtr.Zero;
             case 0x0006:
                 if ((wParam.ToInt64() & 0xffff) == 0) CheckFocusLater();
+                else ReleaseEscapeClaim();
                 break;
             case 0x0010: // WM_CLOSE
                 Close();

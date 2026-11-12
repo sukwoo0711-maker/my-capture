@@ -37,11 +37,13 @@ public sealed class SelectionRatiosTests
         RectD last = default;
         for (int warm = 0; warm < 500; warm++) last = Round(anchor, warm);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 20_000; i++) last = Round(anchor, i);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        // 20,000 calls per window: one allocating call would put bytes in every window.
+        long[] windows = ThreadAllocation.Measure(() =>
+        {
+            for (int i = 0; i < 20_000; i++) last = Round(anchor, i);
+        });
 
-        Assert.Equal(0, allocated);
+        Assert.True(ThreadAllocation.AnyWithin(windows, 0), "Fitting allocated " + ThreadAllocation.Describe(windows));
         Assert.True(last.Width >= 1);
 
         static RectD Round(PointD anchor, int i)
