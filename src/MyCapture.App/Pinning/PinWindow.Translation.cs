@@ -109,6 +109,7 @@ internal sealed partial class PinWindow
         }
         // Checking and translating look the same; the button and the menu are rebuilt only when what they show changes.
         if (TranslationActionView != shown) RefreshTranslationActions();
+        OnTranslationStateForReveal(state);
     }
 
     /// <summary>Tells the user why nothing changed (for example an image pin that is already in the target language).</summary>
@@ -134,6 +135,7 @@ internal sealed partial class PinWindow
         // Don't replace text under an active selection. The command remains available.
         if (!IsTextSelectionMode && !IsRecognizingSelection && !_showingMarkdownSource) SetTranslationDisplay(true);
         else RefreshTranslationActions();
+        OnTranslationAppliedForReveal();
         ShowFeedback(UiText.Get(needsReview ? "Pin_TranslationReview"
                 : toKorean ? "Pin_TranslatedKorean" : "Pin_TranslatedEnglish"),
             needsReview ? FeedbackKind.Warning : FeedbackKind.Confirmation);
@@ -143,6 +145,7 @@ internal sealed partial class PinWindow
     {
         if (_isClosed || _translationOriginal is null || _translationResult is null) return;
         if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
+        var revealBefore = RevealSnapshot();
         _showingMarkdownSource = false;
         EndDrag();
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
@@ -177,6 +180,7 @@ internal sealed partial class PinWindow
         _chrome.Background = translated && _content.Kind != PinContentKind.Image ? Brushes.White : null;
         UpdateImageRasterLayout();
         RefreshTranslationActions();
+        OnTranslationDisplayChangedForReveal(revealBefore, translated);
         ViewStateChanged?.Invoke();
     }
 

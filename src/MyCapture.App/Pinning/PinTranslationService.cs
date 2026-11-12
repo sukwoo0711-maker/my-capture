@@ -12,6 +12,9 @@ namespace MyCapture.App.Pinning;
 internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview, Lazy<PinContent>? DocumentView = null)
 {
     internal PinContent? Document => DocumentView?.Value;
+
+    /// <summary>A picture translation's placed blocks as separate layers, for the pin's change into it; null for other pins.</summary>
+    internal IReadOnlyList<PinOverlayBlockLayer>? BlockLayers { get; init; }
 }
 
 /// <summary>Whether a pin can be translated into the target language, and in which direction.</summary>
