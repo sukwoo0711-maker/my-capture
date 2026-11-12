@@ -93,6 +93,7 @@ public sealed class Arm64PackageTests
     {
         string prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         string full = Path.GetFullPath(path);
+        if (string.IsNullOrWhiteSpace(full)) throw new IOException("The staged test file has no path.");
         if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new IOException("The staged test file is outside its fixture.");
         return full;
