@@ -33,10 +33,12 @@ public static class PinGeometry
     public const double MaxOpacity = 1.0;
 
     /// <summary>
-    /// Fraction of the working area an unscaled pin is allowed to occupy before its
-    /// initial zoom is reduced to fit.
+    /// Fraction of the working area a new pin may occupy before its initial zoom is reduced
+    /// to fit. A pin shows its content at the size it had on screen whenever it fits: the
+    /// window is exactly the image (the one-DIP outline is drawn over the image's edge and
+    /// the hover bar sits inside the pin), so no margin is reserved.
     /// </summary>
-    public const double InitialFitFraction = 0.8;
+    public const double InitialFitFraction = 1.0;
 
     /// <summary>Horizontal cascade step so stacked floats stay distinguishable.</summary>
     public const double CascadeOffsetXDip = 36.0;
@@ -61,19 +63,22 @@ public static class PinGeometry
         double Zoom);
 
     /// <summary>
-    /// Computes the initial zoom so a 1:1 image never exceeds
-    /// <see cref="InitialFitFraction"/> of the working area on either axis. Images that
-    /// already fit stay at 1.0 (never enlarged).
+    /// Computes the initial zoom: <paramref name="preferredZoom"/> (1.0, the image's natural
+    /// size, unless the source told how large it looked on screen), reduced only as far as
+    /// needed for the pin to fit <see cref="InitialFitFraction"/> of the working area on
+    /// either axis.
     /// </summary>
     public static double InitialZoom(
         double imageWidthDip,
         double imageHeightDip,
         double workWidthDip,
-        double workHeightDip)
+        double workHeightDip,
+        double preferredZoom = 1.0)
     {
+        double preferred = double.IsFinite(preferredZoom) && preferredZoom > 0 ? ClampZoom(preferredZoom) : 1.0;
         if (imageWidthDip <= 0 || imageHeightDip <= 0)
         {
-            return 1.0;
+            return preferred;
         }
 
         double maxWidth = Math.Max(1.0, workWidthDip * InitialFitFraction);
@@ -82,9 +87,74 @@ public static class PinGeometry
         double widthRatio = maxWidth / imageWidthDip;
         double heightRatio = maxHeight / imageHeightDip;
 
-        // Only shrink; a small clip is shown at its natural pixel size, not blown up.
-        double fit = Math.Min(1.0, Math.Min(widthRatio, heightRatio));
+        // Only shrink below the preferred size; a small clip is never blown up past it.
+        double fit = Math.Min(preferred, Math.Min(widthRatio, heightRatio));
         return ClampZoom(fit);
+    }
+
+    /// <summary>Smallest initial zoom a spreadsheet's on-screen size may ask for.</summary>
+    public const double MinSpreadsheetViewZoom = 0.25;
+
+    /// <summary>Largest initial zoom a spreadsheet's on-screen size may ask for.</summary>
+    public const double MaxSpreadsheetViewZoom = 4.0;
+
+    /// <summary>Relative shape difference allowed between a spreadsheet picture and its selection.</summary>
+    public const double SpreadsheetShapeTolerance = 0.05;
+
+    /// <summary>Absolute shape difference (DIP) always allowed, for one-cell selections.</summary>
+    public const double SpreadsheetShapeToleranceDip = 4.0;
+
+    /// <summary>
+    /// The zoom at which a spreadsheet's picture of its copied cells appears as large as the
+    /// cells looked on screen, or <see langword="null"/> when the selection does not describe
+    /// the picture.
+    /// </summary>
+    /// <remarks>
+    /// The selection's size is in points at 100% sheet zoom (1 pt = 96/72 DIP); the sheet
+    /// window's zoom scales it on screen. The picture's pixels are taken as display pixels of
+    /// the pin's monitor, the same assumption a pin makes without this information, so the
+    /// returned ratio also corrects a picture rendered at another pixel density. The ratio must
+    /// agree on both axes: a selection changed after the copy rarely keeps the picture's shape.
+    /// A picture within a border pixel or 3% of the cells' size returns exactly 1 so it is not resampled.
+    /// </remarks>
+    public static double? SpreadsheetViewZoom(
+        int pictureWidthPx,
+        int pictureHeightPx,
+        double monitorScale,
+        SpreadsheetSelectionView view)
+    {
+        if (pictureWidthPx <= 0 || pictureHeightPx <= 0 || !double.IsFinite(monitorScale) || monitorScale <= 0
+            || !view.IsPlausible)
+        {
+            return null;
+        }
+
+        double visibleWidth = view.WidthPoints * (96.0 / 72.0) * (view.ZoomPercent / 100.0);
+        double visibleHeight = view.HeightPoints * (96.0 / 72.0) * (view.ZoomPercent / 100.0);
+        double pictureWidth = pictureWidthPx / monitorScale;
+        double pictureHeight = pictureHeightPx / monitorScale;
+        double widthRatio = visibleWidth / pictureWidth;
+        double heightRatio = visibleHeight / pictureHeight;
+
+        // The picture can differ from the cells by a border pixel or the sheet's per-zoom
+        // rounding of column widths; allow that, but not a different shape.
+        if (Math.Abs((pictureHeight * widthRatio) - visibleHeight)
+                > Math.Max(SpreadsheetShapeToleranceDip, visibleHeight * SpreadsheetShapeTolerance)
+            || Math.Abs((pictureWidth * heightRatio) - visibleWidth)
+                > Math.Max(SpreadsheetShapeToleranceDip, visibleWidth * SpreadsheetShapeTolerance))
+        {
+            return null;
+        }
+
+        // A picture already as large as the cells (give or take a border pixel or 3%) is not resampled.
+        if (Math.Abs(pictureWidth - visibleWidth) <= Math.Max(SpreadsheetShapeToleranceDip, visibleWidth * 0.03)
+            && Math.Abs(pictureHeight - visibleHeight) <= Math.Max(SpreadsheetShapeToleranceDip, visibleHeight * 0.03))
+        {
+            return 1.0;
+        }
+
+        double zoom = Math.Sqrt(widthRatio * heightRatio);
+        return double.IsFinite(zoom) && zoom >= MinSpreadsheetViewZoom && zoom <= MaxSpreadsheetViewZoom ? zoom : null;
     }
 
     /// <summary>
@@ -100,9 +170,10 @@ public static class PinGeometry
         double workWidthDip,
         double workHeightDip,
         double cursorXDip,
-        double cursorYDip)
+        double cursorYDip,
+        double preferredZoom = 1.0)
     {
-        double zoom = InitialZoom(imageWidthDip, imageHeightDip, workWidthDip, workHeightDip);
+        double zoom = InitialZoom(imageWidthDip, imageHeightDip, workWidthDip, workHeightDip, preferredZoom);
         double width = Math.Max(1.0, imageWidthDip * zoom);
         double height = Math.Max(1.0, imageHeightDip * zoom);
 
@@ -130,7 +201,8 @@ public static class PinGeometry
         double workHeightDip,
         double cursorXDip,
         double cursorYDip,
-        int openPinCount)
+        int openPinCount,
+        double preferredZoom = 1.0)
     {
         Placement basePlacement = InitialPlacement(
             imageWidthDip,
@@ -140,7 +212,8 @@ public static class PinGeometry
             workWidthDip,
             workHeightDip,
             cursorXDip,
-            cursorYDip);
+            cursorYDip,
+            preferredZoom);
 
         int index = Math.Max(0, openPinCount);
         int column = index % 4;
