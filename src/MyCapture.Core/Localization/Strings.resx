@@ -72,7 +72,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0642E2D15469" xml:space="preserve">
-    <value>복사 실패</value>
+    <value>이미지 복사 실패</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_0669BC5BEA50" xml:space="preserve">
@@ -833,7 +833,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4C160257F02C" xml:space="preserve">
-    <value>복사 중…</value>
+    <value>이미지 복사 중…</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_4C27BFC6C0E5" xml:space="preserve">
@@ -1710,7 +1710,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9693E1EB3EDB" xml:space="preserve">
-    <value>복사됨</value>
+    <value>이미지 복사됨</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_976A6C92B870" xml:space="preserve">
@@ -5677,4 +5677,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="OpenWith.Failed" xml:space="preserve"><value>앱을 열지 못했습니다. {0}</value></data>
   <data name="OpenWith.Unavailable" xml:space="preserve"><value>선택한 앱을 사용할 수 없습니다.</value></data>
   <data name="OpenWith.AccessDenied" xml:space="preserve"><value>파일에 접근할 권한이 없습니다.</value></data>
+  <data name="Pin_CopyTextImageBusy" xml:space="preserve"><value>텍스트와 이미지 복사 중…</value></data>
+  <data name="Pin_CopyTextImageDone" xml:space="preserve"><value>텍스트와 이미지 복사됨</value></data>
+  <data name="Pin_CopyTextImageFailed" xml:space="preserve"><value>텍스트와 이미지 복사 실패</value></data>
+  <data name="Pin_CopyImageName" xml:space="preserve"><value>이미지 복사</value></data>
+  <data name="Pin_CopyTextImageName" xml:space="preserve"><value>텍스트와 이미지 복사</value></data>
+  <data name="Pin_CopySelectedText" xml:space="preserve"><value>선택한 텍스트 복사</value></data>
+  <data name="Pin_CopyImageOnly" xml:space="preserve"><value>이미지만 복사</value></data>
+  <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>지금 보이는 이미지만 복사하고 텍스트는 복사하지 않습니다.</value></data>
 </root>

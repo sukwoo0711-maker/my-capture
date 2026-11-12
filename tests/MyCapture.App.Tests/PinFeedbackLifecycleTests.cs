@@ -149,7 +149,7 @@ public sealed class PinFeedbackLifecycleTests
             Press(pin, Key.OemPlus);
             Assert.Equal(FeedbackKind.Echo, pin.FeedbackForTest.Kind);
             pin.AdvanceFeedbackForTest(FeedbackTiming.Echo);
-            Assert.Equal((MyCapture.Core.Localization.UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress, false), pin.FeedbackForTest);
+            Assert.Equal((MyCapture.Core.Localization.UiText.Get("Pin_CopyTextImageBusy"), FeedbackKind.Progress, false), pin.FeedbackForTest);
             pin.ReportCopyResult(true);
             Assert.Equal(FeedbackKind.Confirmation, pin.FeedbackForTest.Kind);
         }

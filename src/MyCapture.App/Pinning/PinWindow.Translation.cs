@@ -253,7 +253,13 @@ internal sealed partial class PinWindow
         (TranslationState != PinTranslationState.Unavailable, TranslationActionEnabled, TranslationActionLabel,
             TranslationButtonHelp, TranslationState == PinTranslationState.Disabled ? TranslationActionHelp : null);
 
-    private bool RefreshTranslationButton(PinHoverBar bar) =>
+    private bool RefreshTranslationButton(PinHoverBar bar)
+    {
+        bar.SetCopyAction(CopyActionName);
+        return RefreshTranslationButtonCore(bar);
+    }
+
+    private bool RefreshTranslationButtonCore(PinHoverBar bar) =>
         bar.SetTranslationAction(TranslationState != PinTranslationState.Unavailable,
             TranslationActionEnabled, TranslationActionLabel, TranslationButtonHelp);
 
@@ -268,6 +274,8 @@ internal sealed partial class PinWindow
         BuildContextMenu();
     }
 
+    private bool TranslationCopyItemShown => _showingTranslation && _translationResult?.OriginalText is not null;
+
     private void AddTranslationMenuItem(ContextMenu menu)
     {
         if (TranslationState == PinTranslationState.Unavailable) return;
@@ -275,8 +283,11 @@ internal sealed partial class PinWindow
         action.IsEnabled = TranslationActionEnabled;
         if (TranslationState == PinTranslationState.Disabled) action.ToolTip = TranslationActionHelp;
         menu.Items.Add(action);
-        if (_showingTranslation && _translationResult?.OriginalText is not null)
+        if (TranslationCopyItemShown)
+        {
             menu.Items.Add(MenuItemFor(UiText.Get("Pin_CopyTranslation"), (_, _) => RequestTranslatedTextCopy()));
+            menu.Items.Add(CopyImageOnlyMenuItem());
+        }
         if (_showingTranslation && _translationDocument is not null && _translationResult?.Kind == PinContentKind.Image)
             menu.Items.Add(MenuItemFor(UiText.Get(_showingTranslationDocument ? "Pin_TranslationPictureView" : "Pin_TranslationDocumentView"),
                 (_, _) => SetTranslationDocumentDisplay(!_showingTranslationDocument)));

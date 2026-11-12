@@ -425,6 +425,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         _hoverHideTimer.Stop();
         // A native pin borrows the one bar its thread's native pins share (PinWindow.NativeSurfaces).
         PinHoverBar bar = _native is not null ? AdoptNativeHoverBar() : _hoverBar ??= CreateHoverBar();
+        bar.SetCopyAction(CopyActionName);
         if (!bar.IsVisible)
         {
             // Start next to the pin so the first frame never lands on another monitor.
@@ -471,6 +472,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     {
         bar.ReadOpacity = () => target()?._state.Opacity ?? 1;
         bar.CopyRequested += () => target()?.CopyImageToClipboard();
+        bar.CopyNameProvider = () => target()?.CopyActionName;
         bar.TranslationRequested += () => target()?.InvokeTranslationAction();
         bar.SaveRequested += () => target()?.RequestSave(PinSaveMode.QuickSave);
         bar.SourceRequested += () => { if (target() is { } pin) pin.LastSourceOperationForTest = pin.OpenSourceAsync(); };
@@ -714,9 +716,16 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     }
 
     /// <summary>Completes pin-local clipboard feedback after the asynchronous copy.</summary>
-    internal void ReportCopyResult(bool copied) => ShowFeedback(
-        copied ? UiText.Get("Text_9693E1EB3EDB") : UiText.Get("Text_0642E2D15469"),
-        copied ? FeedbackKind.Confirmation : FeedbackKind.ActionRequired);
+    /// <param name="copied">Whether the clipboard took it.</param>
+    /// <param name="withText">Whether the copy carried text beside the picture; null reads the text the pin shows now.</param>
+    internal void ReportCopyResult(bool copied, bool? withText = null)
+    {
+        bool textToo = withText ?? VisibleText is not null;
+        ShowFeedback(
+            copied ? UiText.Get(textToo ? "Pin_CopyTextImageDone" : "Text_9693E1EB3EDB")
+                : UiText.Get(textToo ? "Pin_CopyTextImageFailed" : "Text_0642E2D15469"),
+            copied ? FeedbackKind.Confirmation : FeedbackKind.ActionRequired);
+    }
 
     /// <summary>Completes feedback for copying a rendered pin's retained source text.</summary>
     /// <remarks>
@@ -1929,10 +1938,27 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             OriginalTextCopyRequested?.Invoke(this, imageSelection.Selection.AllText);
             return;
         }
-        ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
+        string? text = VisibleText;
+        ShowFeedback(UiText.Get(text is null ? "Text_4C160257F02C" : "Pin_CopyTextImageBusy"), FeedbackKind.Progress);
         // Ctrl+C copies what the pin shows: the translation while it is shown, with its picture.
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl, VisibleText));
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl, text));
     }
+
+    /// <summary>Copies only the picture the pin shows, never its text.</summary>
+    private void CopyImageOnlyToClipboard()
+    {
+        ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl, null));
+    }
+
+    /// <summary>
+    /// What Ctrl+C, the copy button and the menu's first copy item place on the clipboard now,
+    /// named for the tooltip, the automation name and the menu item.
+    /// </summary>
+    internal string CopyActionName =>
+        _textSelection?.SelectedOriginalText is not null || _textSelection?.ImageSelection is not null
+            ? UiText.Get("Pin_CopySelectedText")
+            : UiText.Get(VisibleText is null ? "Pin_CopyImageName" : "Pin_CopyTextImageName");
 
     private void RequestOcr()
     {
@@ -2412,11 +2438,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             UiText.Get("Text_8300472A5BE3"),
             "Icon.Save",
             "Ctrl+S"));
-        menu.Items.Add(MenuItemFor(
-            UiText.Get("Text_37B3D3B11B26"),
+        MenuItem copyItem = MenuItemFor(
+            CopyActionName,
             (_, _) => CopyImageToClipboard(),
             iconResourceKey: "Icon.Copy",
-            inputGestureText: "Ctrl+C"));
+            inputGestureText: "Ctrl+C");
+        menu.Items.Add(copyItem);
         if (_originalText is not null)
         {
             menu.Items.Add(MenuItemFor(
@@ -2425,6 +2452,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
                 UiText.Get("Text_BB7798D87E07"),
                 "Icon.Copy",
                 UiText.Get("Text_C7011B8D345C")));
+            // While the translation is shown, its own copy item (at the top) is the one this follows.
+            if (!TranslationCopyItemShown) menu.Items.Add(CopyImageOnlyMenuItem());
         }
         else
         {
@@ -2479,6 +2508,9 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
         _refreshContextMenu = () =>
         {
+            // A selection made since the menu was built changes what the first copy item copies.
+            copyItem.Header = CopyActionName;
+            AutomationProperties.SetName(copyItem, CopyActionName);
             RefreshTextSelectionMenuItem(menu, selectTextIndex);
             RefreshCollapseMenu();
             RefreshRestoreClosedMenuItem();
@@ -2490,6 +2522,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         RefreshCollapseMenu();
         if (_textSelection is not null) _textSelection.ContextMenu = menu;
     }
+
+    private MenuItem CopyImageOnlyMenuItem() => MenuItemFor(
+        UiText.Get("Pin_CopyImageOnly"),
+        (_, _) => CopyImageOnlyToClipboard(),
+        UiText.Get("Pin_CopyImageOnlyHelp"),
+        "Icon.Copy");
 
     private void RefreshTextSelectionMenuItem(ContextMenu menu, int index)
     {
