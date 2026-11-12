@@ -8,6 +8,8 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 
 2026-10-21 Gemini·Grok 외부 평가 합의안 2절에 따라 설명과 기능 목록을 다시 정리했습니다. 설명 첫 단락은 짧은 설명 하나로 줄이고, 단축키와 메뉴는 한 절에 모았습니다. 기능 줄은 단축키가 아니라 하는 일로 시작합니다. 녹화에 소리가 없다는 점은 설명·기능 줄·9번 캡션에 다른 항목과 같은 크기로 적고, 스크롤 캡처 한도(40프레임·32,760픽셀·256MB)를 밝혔습니다. 검색어는 핀·표·코드 단어로 바꿨습니다. 이 변경은 다음 제출 때 Partner Center에 입력합니다.
 
+2026-11-10 검색 노출을 다시 재고 검색어와 첫 문단을 바꿨습니다. 한국 Store 공개 검색에서 MyCapture는 '캡처' 24위, '캡쳐' 51위, '화면 캡처' 65위였고, 검색어에 넣어 둔 '핀'과 '화면 고정'으로도 상위 120개 안에 나오지 않았습니다. '스크린샷', 'OCR', '번역'도 같았습니다. 미국 Store에서는 'screenshot', 'screen capture', 'pin to screen', 'OCR' 모두 상위 100개 안에 없었습니다. 그래서 '띄우기' 계열 검색어를 사람들이 실제로 치는 낱말(캡쳐, 스크린샷, 텍스트 추출 OCR, 이미지 번역)로 바꾸고, 짧은 소개와 설명 첫 문단에 같은 낱말을 넣었습니다. 설명과 기능 목록에는 빠져 있던 번역을 더했습니다. 짧은 소개와 첫 문단의 한국어 문안은 2026-10-30 초안(PR #201)을 따랐습니다. 측정은 `storeedgefd.dsx.mp.microsoft.com/v9.0/pages/searchResults`를 검색어별로 읽은 값이고, 제출이 게시된 뒤 1주일쯤 지나 같은 방법으로 다시 잽니다.
+
 ## 공통 항목
 
 - **제품 이름**: 두 언어 모두 `MyCapture`. 패키지 DisplayName과 같습니다.
@@ -31,11 +33,11 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 
 ### 짧은 소개
 
-엑셀 사양 표와 자주 쓰는 코드를 에디터 위에 띄워 두고 원문을 그대로 다시 복사하는 Windows 핀 도구입니다. 광고·계정 없이 무료이고, 캡처와 글자 인식은 이 PC 안에서 처리합니다.
+윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지 번역 프로그램입니다. 캡처한 화면이나 엑셀 표·코드를 다른 창 위에 핀으로 고정하고 원문을 다시 복사합니다. 이미지 속 글자 복사(OCR)와 한국어·영어 번역, 영역 녹화·GIF 내보내기를 지원합니다. 광고와 계정 없이 쓰며, 캡처·글자 인식·번역은 이 PC 안에서 처리합니다.
 
 ### 설명
 
-MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 다른 창 위에 띄워 두는 Windows 핀 도구입니다.
+MyCapture는 윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지 번역 프로그램입니다. 엑셀 표와 코드, 캡처한 화면을 다른 창 위에 핀(F3)으로 띄워 두고 원문을 다시 복사하며, 이미지 속 한국어·영어 글자 복사(OCR)와 양방향 번역을 이 PC 안에서 처리합니다. 소리 없는 영역 녹화(MP4)와 GIF 내보내기도 한 프로그램에서 지원합니다.
 
 핀:
 
@@ -62,13 +64,15 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 
 텍스트 복사는 캡처한 이미지나 이미지 핀의 한국어·영어를 PC에서 인식해 클립보드에 복사합니다. 표는 CSV·Markdown·탭 구분 형식으로 복사합니다.
 
+번역은 이미지 핀과 글자 인식 결과의 한국어와 영어를 이 PC 안에서 서로 옮깁니다. 번역 모델은 처음 쓸 때 한 번 내려받습니다.
+
 라이브러리는 창 제목과 이미지 속 글자로 지난 캡처를 찾으며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 새로 설치하면 보관 기간 제한이 없고, 폴더 밖 항목이 5GB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
 
 영역·창·전체 화면·지연·스크롤 캡처를 지원합니다. 스크롤 캡처는 한 번에 최대 40프레임, 세로 32,760픽셀, 256MB까지 이어 붙이고, 한도에 닿으면 거기까지 이어 붙인 이미지를 엽니다. 녹화는 화면만 기록하며 소리는 녹음하지 않습니다. 영역 녹화는 MP4로 저장하고, 영상 편집기에서 구간을 자르고 텍스트를 넣은 뒤 MP4나 GIF로 내보냅니다.
 
 공유하기 전에는 이미지 편집기에서 화살표, 텍스트, 단계 번호를 넣고 블러나 모자이크로 일부를 가립니다. 자동 가리기는 인식한 글자에서 이메일, 국내 전화번호, 카드번호, 주민등록번호, IPv4 주소와 지원 형식의 API 키·토큰을 찾아 가립니다. 주석과 가림막은 비파괴 레이어로 남아 나중에 수정합니다.
 
-광고와 계정이 없고 회사 업무에도 무료로 씁니다. 캡처, 편집, 글자 인식, 녹화는 모두 이 PC 안에서 처리합니다. 소스 코드는 GitHub에 MIT 라이선스로 공개되어 있습니다.
+광고와 계정이 없고 회사 업무에도 무료로 씁니다. 캡처, 편집, 글자 인식, 번역, 녹화는 모두 이 PC 안에서 처리합니다. 소스 코드는 GitHub에 MIT 라이선스로 공개되어 있습니다.
 
 한국어·영어 인터페이스, 키보드 조작과 스크린 리더 접근성을 지원합니다. 테마는 Windows 설정 따르기·밝게·어둡게·고대비의 네 가지입니다.
 
@@ -82,6 +86,7 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 - 핀 투명도 20–100%, 뒤 창 클릭 허용, 확대·축소 10–800%
 - 다음 실행 때 열린 핀 다시 띄우기, 최근 닫은 핀 20개까지 다시 열기
 - 캡처와 이미지 핀의 한국어·영어 글자 복사, 표는 CSV·Markdown·탭 구분으로 복사
+- 이미지 핀과 글자 인식 결과의 한국어·영어 번역(이 PC에서 처리)
 - 라이브러리: 창 제목·이미지 속 글자 검색, 폴더 정리, 보관, 폴더·ZIP 내보내기
 - 영역·창·전체 화면·지연 캡처, 스크롤 캡처(최대 40프레임, 세로 32,760픽셀)
 - 영역 녹화(MP4, 소리 없음), 구간 자르기·텍스트 넣기, MP4·GIF 내보내기
@@ -142,19 +147,19 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 
 ### 검색어
 
-화면 고정 핀, 항상 위에 고정, 이미지 띄우기, 표 띄우기, 코드 띄우기, 클립보드 핀, 화면 캡처
+화면 캡처, 캡쳐, 스크린샷, 화면 고정 핀, 클립보드 핀, 텍스트 추출 OCR, 이미지 번역
 
-Partner Center 한도: 7개 검색어, 검색어당 40자 이하, 전체 고유 단어 21개 이하. 위 목록은 검색어 7개, 고유 단어 11개(화면, 고정, 핀, 항상, 위에, 이미지, 띄우기, 표, 코드, 클립보드, 캡처)입니다. 쉼표로 검색어를 나눈 뒤 공백으로 단어를 나누어 중복을 제외했습니다. 2026-10-21 외부 평가 합의(Grok #14)에 따라 캡처 일반명이던 '화면 고정 캡처', '스크린샷 고정', '캡처 프로그램', '캡쳐'를 핀·표·코드 단어로 바꿨습니다. 사람들은 이 기능을 '화면 고정', '항상 위에 고정', '이미지 띄우기'로 찾으므로 이 셋은 남기고, '화면 고정'은 휴대폰 화면 고정과 겹치지 않게 '핀'과 묶었습니다. Store 정책 10.1.3은 검색어에 가격 단어와 다른 제품 이름을 금지하므로 '무료', '엑셀', '캡처 도구'(Windows 캡처 도구의 한국어 제품명)는 넣지 않습니다.
+Partner Center 한도: 7개 검색어, 검색어당 40자 이하, 전체 고유 단어 21개 이하. 위 목록은 검색어 7개, 고유 단어 12개(화면, 캡처, 캡쳐, 스크린샷, 고정, 핀, 클립보드, 텍스트, 추출, OCR, 이미지, 번역)입니다. 쉼표로 검색어를 나눈 뒤 공백으로 단어를 나누어 중복을 제외했습니다. 2026-10-21에는 캡처 일반명을 빼고 핀·표·코드 단어('항상 위에 고정', '이미지 띄우기', '표 띄우기', '코드 띄우기')로 바꿨지만, 2026-11-10 측정에서 그 단어들로는 상위 120개 안에 나오지 않았습니다. 그래서 '화면 고정 핀'과 '클립보드 핀'은 남기고 나머지 자리를 사람들이 실제로 치는 낱말로 바꿨습니다. '캡쳐'는 '캡처'의 흔한 표기라 따로 넣었습니다. Store 정책 10.1.3은 검색어에 가격 단어와 다른 제품 이름을 금지하므로 '무료', '엑셀', '캡처 도구'(Windows 캡처 도구의 한국어 제품명)는 넣지 않습니다.
 
 ## English (en-US)
 
 ### Short description
 
-Keep your Excel spec table and go-to code snippets above the editor, and copy their original text back. Free, with no ads or account; capture and OCR stay on this PC.
+A free Windows screenshot and pin-to-screen tool. Pin captures, Excel tables and code above other windows and copy their original text back. Copy and translate text in images (OCR) on this PC. No ads or account.
 
 ### Description
 
-MyCapture is a Windows pinning tool that keeps Excel spec tables and code snippets above your other windows while you code.
+MyCapture is a free Windows screenshot, pin-to-screen and image translation tool. Pin captures, Excel tables and code above your other windows with F3 and copy their original text back. Text in images is recognized (OCR) and translated between Korean and English on this PC. Region recording to MP4 without sound and GIF export are included.
 
 Pins:
 
@@ -181,6 +186,8 @@ Note: the four global shortcuts are the defaults for new installations; change t
 
 Copy text recognizes Korean and English in captures and image pins on this PC. Tables can be copied as CSV, Markdown or tab-separated text.
 
+Translate turns Korean and English text in image pins and OCR results into the other language on this PC. The translation model is downloaded once, the first time you use it.
+
 Search the library by window title or by text inside images. Organize items into folders and export to a folder or ZIP. New installations keep items with no time limit; automatic cleanup removes the oldest items outside folders only after they pass 5 GB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
 
 Capture a region, window or full screen, or use delayed and scrolling capture. Scrolling capture joins up to 40 frames, 32,760 pixels in height or 256 MB, and opens what it has joined when it reaches a limit. Recording captures the screen only; no sound is recorded. Record a region to MP4, trim it, add text and export MP4 or GIF.
@@ -201,6 +208,7 @@ Requirements: Windows 11 or Windows 10 version 22H2 (x64). ARM64 PCs need Window
 - Pin opacity from 20 to 100%, click-through, zoom from 10 to 800%
 - Open pins return at the next launch; reopen up to 20 recently closed pins
 - Copy Korean and English text from captures and image pins; copy tables as CSV, Markdown or tab-separated text
+- Translate Korean and English text in image pins and OCR results on this PC
 - Library search by window title or image text, folders, Keep, and folder or ZIP export
 - Region, window, full screen and delayed capture; scrolling capture up to 40 frames or 32,760 pixels high
 - Region recording to MP4, no sound; trim, add text, export MP4 or GIF
@@ -261,9 +269,9 @@ Limit: 1,500 characters. The Store has 5.0.0, so the 5.0.1 change follows the 5.
 
 ### Search terms
 
-pin to screen, always on top, pin clipboard, pin table on screen, pin code snippet, floating screenshot, screen capture
+screenshot, screen capture, pin to screen, pin clipboard, OCR copy text, translate image, scrolling screenshot
 
-Partner Center limits: 7 terms, 40 characters per term, and 21 unique words in total. This list has 7 terms and 13 unique words (pin, to, screen, always, on, top, clipboard, table, code, snippet, floating, screenshot, capture), counted by splitting terms at commas and words at spaces, then removing duplicates without regard to case. Following the 2026-10-21 review consensus (Grok #14), the generic capture terms "pin image on screen", "image always on top", "screenshot tool" and "OCR" were replaced with pin, table and code terms. Store policy 10.1.3 does not allow pricing terms or other products' titles in search terms, so "free", "Excel" and "snipping tool alternative" are not used.
+Partner Center limits: 7 terms, 40 characters per term, and 21 unique words in total. This list has 7 terms and 12 unique words (screenshot, screen, capture, pin, to, clipboard, OCR, copy, text, translate, image, scrolling), counted by splitting terms at commas and words at spaces, then removing duplicates without regard to case. On 2026-10-21 the generic capture terms were replaced with pin, table and code terms, but in the 2026-11-10 measurement MyCapture was outside the top 100 US results for "pin to screen", "screen capture", "screenshot" and "OCR" alike. The list now keeps the two pin terms and uses the remaining slots for words people type. Store policy 10.1.3 does not allow pricing terms or other products' titles in search terms, so "free", "Excel" and "snipping tool alternative" are not used.
 
 ## 제출 옵션: 제한 기능 사용 사유
 
