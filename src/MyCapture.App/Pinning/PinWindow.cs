@@ -1310,9 +1310,11 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             // An activated pin already has a full accent. Give an explicit find cue its
             // quiet baseline so both pulses remain visible, then restore focus emphasis.
             emphasized: !(_findCueRunning && _landingRenderingAttached) && (_chromeHover || _chromeActive));
-        if (_landingAccentAmount > 0)
+        // A translation that has just come in brightens the outline once, in the landing flash's accent.
+        double accentAmount = Math.Max(_landingAccentAmount, _translationGlowAmount);
+        if (accentAmount > 0)
         {
-            target = BlendFrameColor(target, LandingAccentColor, _landingAccentAmount);
+            target = BlendFrameColor(target, LandingAccentColor, accentAmount);
             animate = false;
         }
         // Read the presentation value before replacing an in-flight animation; otherwise a

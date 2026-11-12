@@ -834,7 +834,7 @@ internal static partial class PinTranslationOverlay
     /// <summary>Places the translations, which must follow the prepared blocks in order.</summary>
     internal static PinOverlayComposition Compose(PinOverlayPreparation preparation, IReadOnlyList<PinOverlayTranslation> translations,
         bool drawText = true, Action<PinOverlayBlock, PinOverlayFit, bool>? observeFit = null,
-        Action<PinOverlayBlock, string>? observeDecision = null)
+        Action<PinOverlayBlock, string>? observeDecision = null, Action<PinOverlayBlockLayer>? observeBlockLayer = null)
     {
         ArgumentNullException.ThrowIfNull(preparation);
         ArgumentNullException.ThrowIfNull(translations);
@@ -843,8 +843,7 @@ internal static partial class PinTranslationOverlay
             throw new ArgumentException("The translations must follow the prepared blocks.", nameof(translations));
         BitmapSource source = preparation.Source;
         int width = preparation.Width, height = preparation.Height;
-        var draws = new List<(PinOverlayFit Fit, PinOverlayBackground[] Backgrounds, Color Color, PinOverlayBlock Block,
-            double InkTop, double PitchScale, TextAlignment Alignment, Geometry? Clip, BackgroundSurface Surface)>();
+        var draws = new List<ComposedDraw>();
         var metrics = new CompositionMetrics();
         var inkBounds = new Dictionary<(string Text, double Size, double Pitch), Rect>();
         var paragraphMetrics = new Dictionary<(string Text, double Size, double Pitch), Size>();
@@ -892,6 +891,7 @@ internal static partial class PinTranslationOverlay
             // A surface sampled before the translation stays exact unless an earlier placement touches it.
             BlockLayout layout = preparation.Layouts[index] is not { } prepared ? PrepareLayout(preparation, index, obstacles, inkDistances)
                 : prepared.Surface.Admits(prepared.Obstacles, obstacles) ? prepared : WithSurface(prepared, preparation, index, obstacles);
+            bool preparedSurface = ReferenceEquals(layout, preparation.Layouts[index]);
             PinOverlayBackground[] backgrounds = layout.Backgrounds;
             Color background = layout.Background;
             BackgroundSurface surface = layout.Surface;
@@ -929,8 +929,13 @@ internal static partial class PinTranslationOverlay
             { needsReview = true; observeDecision?.Invoke(item.Block, "fit"); continue; }
             Color foreground = layout.Foreground;
             OcrRect clipBounds = surface.ExtraInk.Aggregate(EraseBounds(fit.Bounds, width, height), OcrRect.Union);
-            draws.Add((fit, backgrounds, foreground, item.Block, ink.Y, pitchScale, alignment,
-                surface.DrawingClip(clipBounds), surface));
+            draws.Add(new(fit, backgrounds, foreground, item.Block, ink.Y, pitchScale, alignment,
+                surface.DrawingClip(clipBounds), surface)
+            {
+                Index = index,
+                Signature = observeBlockLayer is null ? null
+                    : DrawSignature(fit, foreground, ink.Y, pitchScale, alignment, clipBounds, preparedSurface ? null : obstacles),
+            });
             observeDecision?.Invoke(item.Block, "rendered");
         }
         if (draws.Count == 0) return new(source, null, needsReview, 0);
@@ -938,86 +943,12 @@ internal static partial class PinTranslationOverlay
         using (DrawingContext drawing = layer.Open())
         {
             // Native pixels even when the source has non-square or non-96 DPI; Layered and Flatten scale the layer.
-            foreach (var draw in draws)
-            {
-                if (draw.Clip is not null) drawing.PushClip(draw.Clip);
-                Color background = MedianColor(draw.Backgrounds.Select(value => value.Color).ToArray());
-                Color foreground = draw.Color;
-                // Erase the complete source ink before putting any translucent surface over it.
-                // Snap outwards to physical pixels so fractional OCR edges cannot leave antialiased remnants.
-                for (int i = 0; i < draw.Block.Lines.Count; i++)
-                {
-                    OcrRect erase = EraseBounds(draw.Block.Lines[i].Bounds, width, height);
-                    drawing.DrawRectangle(draw.Surface.Brush(erase, draw.Backgrounds[i].Color), null, Rect(erase));
-                }
-                foreach (OcrRect extra in draw.Surface.ExtraInk)
-                    drawing.DrawRectangle(draw.Surface.Brush(extra, background), null, Rect(extra));
-                bool needsPlate = draw.Backgrounds.Any(value => value.NeedsPlate || Contrast(value.Color, background) > 1.5
-                    || Contrast(foreground, value.Color) < 4.5);
-                observeFit?.Invoke(draw.Block, draw.Fit, needsPlate);
-                if (needsPlate)
-                {
-                    (foreground, double opacity) = PlateStyle(background, foreground);
-                    OcrRect outer = Inflate(draw.Fit.Bounds, Padding, width, height);
-                    drawing.DrawRoundedRectangle(draw.Surface.Brush(outer, background, opacity * .2), null, Rect(outer), 3, 3);
-                    OcrRect inner = Inflate(draw.Fit.Bounds, Padding - 1, width, height);
-                    drawing.DrawRoundedRectangle(draw.Surface.Brush(inner, background, opacity), null, Rect(inner), 2, 2);
-                }
-                if (drawText)
-                {
-                    var key = (draw.Fit.RenderText, draw.Fit.FontSize, foreground, draw.PitchScale, draw.Alignment,
-                        draw.Alignment == TextAlignment.Left ? 0 : draw.Fit.Bounds.Width, draw.Surface.Underline);
-                    if (!renderedText.TryGetValue(key, out FormattedText? text))
-                    {
-                        text = Format(draw.Fit.RenderText, draw.Fit.FontSize, new SolidColorBrush(foreground),
-                            draw.PitchScale * draw.Fit.FontSize);
-                        if (draw.Surface.Underline) text.SetTextDecorations(TextDecorations.Underline);
-                        if (draw.Alignment != TextAlignment.Left)
-                        {
-                            text.TextAlignment = draw.Alignment;
-                            // Wrapping was already selected at the legal break points by Fit.
-                            text.MaxTextWidth = draw.Fit.Bounds.Width + .02;
-                        }
-                        renderedText.Add(key, text);
-                    }
-                    Point origin = new(draw.Fit.Bounds.X, draw.Fit.Bounds.Y - draw.InkTop);
-                    if (draw.Fit.LineOffsets.Count > 0)
-                    {
-                        string[] lines = draw.Fit.RenderText.Split('\n');
-                        double pitch = draw.PitchScale * draw.Fit.FontSize;
-                        if (pitch <= 0) pitch = Format("Ag", draw.Fit.FontSize, Brushes.Black).Height;
-                        for (int i = 0; i < lines.Length; i++)
-                        {
-                            // PlacementBounds includes the source line pitch in the first
-                            // baseline. Keep it when rendering separate exclusion-aware lines,
-                            // especially when the source ink cap makes the em much smaller.
-                            var line = Format(lines[i], draw.Fit.FontSize, new SolidColorBrush(foreground), pitch);
-                            if (draw.Surface.Underline) line.SetTextDecorations(TextDecorations.Underline);
-                            drawing.DrawText(line, new Point(origin.X + draw.Fit.LineOffsets[i], origin.Y + i * pitch));
-                        }
-                    }
-                    else if (draw.Surface.LeadingInset > 0 && draw.Alignment == TextAlignment.Left)
-                    {
-                        int newline = draw.Fit.RenderText.IndexOf('\n');
-                        string first = newline < 0 ? draw.Fit.RenderText : draw.Fit.RenderText[..newline];
-                        double pitch = draw.PitchScale * draw.Fit.FontSize;
-                        var firstLine = Format(first, draw.Fit.FontSize, new SolidColorBrush(foreground), pitch);
-                        if (draw.Surface.Underline) firstLine.SetTextDecorations(TextDecorations.Underline);
-                        drawing.DrawText(firstLine, new Point(origin.X + draw.Surface.LeadingInset, origin.Y));
-                        if (newline >= 0)
-                        {
-                            var rest = Format(draw.Fit.RenderText[(newline + 1)..], draw.Fit.FontSize, new SolidColorBrush(foreground), pitch);
-                            if (draw.Surface.Underline) rest.SetTextDecorations(TextDecorations.Underline);
-                            drawing.DrawText(rest, new Point(origin.X, origin.Y + (pitch > 0 ? pitch : firstLine.Height)));
-                        }
-                    }
-                    else drawing.DrawText(text, origin);
-                }
-                if (draw.Clip is not null) drawing.Pop();
-            }
+            foreach (ComposedDraw draw in draws)
+                DrawComposed(drawing, draw, width, height, drawText, observeFit, renderedText, surfacePart: true, textPart: true);
         }
         // Frozen, the layer leaves the thread that measured it for the pin's UI thread.
         layer.Freeze();
+        if (observeBlockLayer is not null) ObserveBlockLayers(draws, width, height, drawText, renderedText, observeBlockLayer);
         return new(source, layer, needsReview, draws.Count);
     }
 
