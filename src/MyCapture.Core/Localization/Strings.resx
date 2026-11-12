@@ -1720,6 +1720,9 @@
   <data name="Pin_SelectText" xml:space="preserve">
     <value>글자 선택</value>
   </data>
+  <data name="Pin_SelectTextRecognizing" xml:space="preserve">
+    <value>글자 인식 중…</value>
+  </data>
   <data name="Pin_SelectTextStarted" xml:space="preserve">
     <value>글자 선택: 드래그해 고른 뒤 Ctrl+C를 누르십시오. Esc를 누르면 끝납니다.</value>
   </data>

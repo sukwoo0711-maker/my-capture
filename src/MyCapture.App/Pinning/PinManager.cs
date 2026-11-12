@@ -209,6 +209,8 @@ internal sealed partial class PinManager
     /// <summary>Raised when a pin requests OCR of its image (Ctrl+double-click or menu).</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
 
+    internal Func<BitmapSource, CancellationToken, Task<MyCapture.Ocr.OcrResult>>? RecognizeSelection { get; set; }
+
     /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
     internal event Action? PinCreated;
 
@@ -418,7 +420,7 @@ internal sealed partial class PinManager
             settings.InitialOpacity,
             settings.ZoomStep);
 
-        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
+        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, recognizeSelection: RecognizeSelection);
         if (screenOrigin is { } origin)
             pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
@@ -530,7 +532,7 @@ internal sealed partial class PinManager
             _settings().ZoomStep);
 
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings);
+        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings, recognizeSelection: RecognizeSelection);
         if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {

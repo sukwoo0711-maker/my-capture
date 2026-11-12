@@ -378,9 +378,12 @@ public partial class App : Application
             () => _settings!.Ocr);
         _overlay.PrivacyRedactionService = _privacyRedactionService;
 
-        // A pin's OCR is transient: recognise the pinned image bytes and show the shared result
-        // window, but never cache the text — a pin has no backing capture record.
+        // Pin recognition is shared in memory only; no capture record or persisted OCR is made.
         _pins.OcrRequested += OnPinOcrRequested;
+        _pins.RecognizeSelection = (image, token) => _ocrService is null
+            ? Task.FromResult(MyCapture.Ocr.OcrResult.Unavailable())
+            : PinTextCopyService.RecognizeAsync(image, _ocrService,
+                _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token);
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
