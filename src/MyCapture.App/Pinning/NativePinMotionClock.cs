@@ -2,6 +2,13 @@ using System.Windows.Threading;
 
 namespace MyCapture.App.Pinning;
 
+/// <summary>What a <see cref="NativePinMotionClock"/> ticks: a native pin, or a WPF pin's zoom motion.</summary>
+internal interface INativeMotionTarget
+{
+    /// <summary>One DWM-paced tick on the owner's dispatcher; <paramref name="result"/> is DwmFlush's HRESULT.</summary>
+    void OnNativeMotionTick(NativePinMotionClock clock, int result);
+}
+
 /// <summary>
 /// DWM-paced motion without a WPF rendering target. One dedicated background thread posts
 /// one weak STA callback and waits for its acknowledgement before the next DWM flush.
@@ -13,15 +20,15 @@ internal sealed class NativePinMotionClock
     private readonly object _gate = new();
     private readonly CancellationTokenSource _cancel = new();
     private readonly Dispatcher _dispatcher;
-    private readonly WeakReference<NativePinWindow> _owner;
+    private readonly WeakReference<INativeMotionTarget> _owner;
     private bool _disposed;
     internal static int LiveCount => Volatile.Read(ref _liveCount);
     internal Task Completion { get; }
 
-    internal NativePinMotionClock(Dispatcher dispatcher, NativePinWindow owner)
+    internal NativePinMotionClock(Dispatcher dispatcher, INativeMotionTarget owner)
     {
         _dispatcher = dispatcher;
-        _owner = new WeakReference<NativePinWindow>(owner);
+        _owner = new WeakReference<INativeMotionTarget>(owner);
         Interlocked.Increment(ref _liveCount);
         try
         {

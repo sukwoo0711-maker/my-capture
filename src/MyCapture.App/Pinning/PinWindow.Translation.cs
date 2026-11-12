@@ -145,6 +145,7 @@ internal sealed partial class PinWindow
         if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
         _showingMarkdownSource = false;
         EndDrag();
+        FinishZoomMotion();
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
         if (!translated) _showingTranslationDocument = false;
         PinContent next = translated
