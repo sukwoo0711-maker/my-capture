@@ -5078,6 +5078,48 @@ Turn off: {0}</value></data>
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>Select images for the PDF. Videos are skipped.</value>
   </data>
+  <data name="ContactSheet.Order" xml:space="preserve">
+    <value>Image order</value>
+  </data>
+  <data name="ContactSheet.Sort" xml:space="preserve">
+    <value>Sort</value>
+  </data>
+  <data name="ContactSheet.SortLibrary" xml:space="preserve">
+    <value>Library order</value>
+  </data>
+  <data name="ContactSheet.SortOldest" xml:space="preserve">
+    <value>Oldest first</value>
+  </data>
+  <data name="ContactSheet.SortNewest" xml:space="preserve">
+    <value>Newest first</value>
+  </data>
+  <data name="ContactSheet.SortTitle" xml:space="preserve">
+    <value>By title</value>
+  </data>
+  <data name="ContactSheet.SortCustom" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="ContactSheet.MoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="ContactSheet.MoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="ContactSheet.IncludeItem" xml:space="preserve">
+    <value>Include image {0}</value>
+  </data>
+  <data name="ContactSheet.OrderItem" xml:space="preserve">
+    <value>Image {0}, {1}</value>
+  </data>
+  <data name="ContactSheet.OrderItemExcluded" xml:space="preserve">
+    <value>Image {0}, {1}, excluded</value>
+  </data>
+  <data name="ContactSheet.NoneIncluded" xml:space="preserve">
+    <value>Select at least one image to include in the PDF.</value>
+  </data>
+  <data name="ContactSheet.PageCountExcluded" xml:space="preserve">
+    <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages} · {2} excluded</value>
+  </data>
   <data name="Gallery.Compare" xml:space="preserve"><value>Compare</value></data>
   <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>Side by side</value></data>
   <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>Overlay</value></data>
