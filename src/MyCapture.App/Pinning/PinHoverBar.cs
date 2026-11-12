@@ -73,7 +73,7 @@ internal sealed class PinHoverBar : Window
         StandardWindowTheme.ApplyFloatingText(this);
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
-        CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
+        CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), CopyKey);
         TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_Translate"), key: null);
         TranslationButton.Visibility = Visibility.Collapsed;
         TranslationButton.Click += (_, _) => TranslationRequested?.Invoke();
@@ -98,6 +98,10 @@ internal sealed class PinHoverBar : Window
         OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: "O");
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
+        CopyButton.ToolTipOpening += (_, _) =>
+        {
+            if (CopyNameProvider?.Invoke() is { } copyName) SetCopyAction(copyName);
+        };
         SaveButton.Click += (_, _) => SaveRequested?.Invoke();
         SourceButton.Click += (_, _) => SourceRequested?.Invoke();
         OpacityButton.Click += (_, _) => OpenOpacityMenu();
@@ -137,7 +141,24 @@ internal sealed class PinHoverBar : Window
         };
     }
 
+    private const string CopyKey = "Ctrl+C";
+
     internal event Action? CopyRequested;
+
+    /// <summary>What the copy button places on the clipboard now; read each time its tooltip opens.</summary>
+    internal Func<string?>? CopyNameProvider { get; set; }
+
+    /// <summary>
+    /// Names what copy places on the clipboard in the tooltip, the automation name and its help.
+    /// The visible name stays "Copy", so the bar never changes width.
+    /// </summary>
+    internal void SetCopyAction(string name)
+    {
+        string help = $"{name} ({CopyKey})";
+        CopyButton.ToolTip = help;
+        AutomationProperties.SetName(CopyButton, name);
+        AutomationProperties.SetHelpText(CopyButton, help);
+    }
 
     internal event Action? TranslationRequested;
 
