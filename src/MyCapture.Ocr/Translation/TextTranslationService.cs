@@ -12,6 +12,16 @@ internal sealed record TranslatedText(string Source, string Text, IReadOnlyList<
 /// <summary>Blocks finished so far, wherever they are in the reading order, out of all blocks of the request.</summary>
 internal readonly record struct TranslationProgress(int Completed, int Total);
 
+/// <summary>
+/// A progress receiver that also takes each block's finished translation as soon as the model call that completes it ends.
+/// The result handed over is the one <see cref="ITextTranslator.TranslateAsync"/> returns for that block; it arrives on
+/// the translating thread, so a receiver only stores it.
+/// </summary>
+internal interface ITranslatedBlockSink
+{
+    void Translated(IReadOnlyList<(int Index, TranslatedText Result)> blocks);
+}
+
 /// <summary>What the OCR result window uses: the model on disk, then translation.</summary>
 internal interface ITextTranslator
 {
@@ -204,6 +214,8 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         var pending = segments.SelectMany(block => block).Where(segment => !_cache.ContainsKey(segment))
             .Distinct(StringComparer.Ordinal).ToList();
         BlockProgress? blocks = progress is null ? null : new BlockProgress(segments, _cache, progress, ProgressInterval);
+        var sink = progress as ITranslatedBlockSink;
+        HandOver(sink, blocks, sources, segments, cancellationToken);
         foreach (List<string> batch in PlanBatches(pending, engine.CountTokens))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -212,27 +224,44 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
                 blocks is null ? null : row => blocks.Finish(batch[row]), cancellationToken);
             for (int index = 0; index < batch.Count; index++) _cache[batch[index]] = translated[index];
             blocks?.FinishCall(batch);
+            HandOver(sink, blocks, sources, segments, cancellationToken);
         }
 
         var results = new List<TranslatedText>(sources.Count);
         for (int index = 0; index < sources.Count; index++)
-        {
-            var texts = new List<string>();
-            var missing = new List<string>();
-            var invented = new List<string>();
-            foreach (string segment in segments[index])
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                (string repaired, _) = ProtectedTokens.Repair(segment, _cache[segment]);
-                ProtectedTokenCheck check = ProtectedTokens.Check(segment, repaired);
-                texts.Add(repaired);
-                missing.AddRange(check.Altered.Select(issue => issue.Token));
-                invented.AddRange(check.Invented.Select(issue => issue.Token));
-            }
-            results.Add(new TranslatedText(sources[index] ?? "", string.Join(" ", texts.Where(text => text.Length > 0)),
-                [.. missing.Distinct(StringComparer.Ordinal)], [.. invented.Distinct(StringComparer.Ordinal)]));
-        }
+            results.Add(Assemble(sources[index], segments[index], cancellationToken));
         return results;
+    }
+
+    /// <summary>One block's result from the cached translations of its segments.</summary>
+    private TranslatedText Assemble(string? source, List<string> segments, CancellationToken cancellationToken)
+    {
+        var texts = new List<string>();
+        var missing = new List<string>();
+        var invented = new List<string>();
+        foreach (string segment in segments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            (string repaired, _) = ProtectedTokens.Repair(segment, _cache[segment]);
+            ProtectedTokenCheck check = ProtectedTokens.Check(segment, repaired);
+            texts.Add(repaired);
+            missing.AddRange(check.Altered.Select(issue => issue.Token));
+            invented.AddRange(check.Invented.Select(issue => issue.Token));
+        }
+        return new TranslatedText(source ?? "", string.Join(" ", texts.Where(text => text.Length > 0)),
+            [.. missing.Distinct(StringComparer.Ordinal)], [.. invented.Distinct(StringComparer.Ordinal)]);
+    }
+
+    /// <summary>Hands the blocks completed since the last call to a receiver that takes them; the model's calls stay as they are.</summary>
+    private void HandOver(ITranslatedBlockSink? sink, BlockProgress? blocks, IReadOnlyList<string> sources, List<string>[] segments,
+        CancellationToken cancellationToken)
+    {
+        if (sink is null || blocks is null) return;
+        List<int> completed = blocks.TakeCompleted();
+        if (completed.Count == 0) return;
+        var results = new List<(int Index, TranslatedText Result)>(completed.Count);
+        foreach (int index in completed) results.Add((index, Assemble(sources[index], segments[index], cancellationToken)));
+        sink.Translated(results);
     }
 
     /// <summary>
@@ -286,6 +315,8 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         private readonly Dictionary<string, List<int>> _waiting = new(StringComparer.Ordinal);
         private int _completed;
         private int _reported;
+        // Blocks completed since the last TakeCompleted, in the order they completed.
+        private readonly List<int> _newlyCompleted = [];
         private long _reportedAt;
 
         internal BlockProgress(List<string>[] segments, Dictionary<string, string> cache, IProgress<TranslationProgress> progress,
@@ -304,9 +335,21 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
                     if (!_waiting.TryGetValue(segment, out List<int>? blocks)) _waiting[segment] = blocks = [];
                     blocks.Add(block);
                 }
-                if (_unfinished[block] == 0) _completed++;
+                if (_unfinished[block] == 0)
+                {
+                    _completed++;
+                    _newlyCompleted.Add(block);
+                }
             }
             Report(call: true);
+        }
+
+        /// <summary>The blocks whose every segment is translated since the last call, in reading order.</summary>
+        internal List<int> TakeCompleted()
+        {
+            List<int> completed = [.. _newlyCompleted.Order()];
+            _newlyCompleted.Clear();
+            return completed;
         }
 
         /// <summary>A sentence the model has ended while its call still decodes others.</summary>
@@ -327,7 +370,11 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         {
             if (!_waiting.Remove(segment, out List<int>? blocks)) return;
             foreach (int block in blocks)
-                if (--_unfinished[block] == 0) _completed++;
+                if (--_unfinished[block] == 0)
+                {
+                    _completed++;
+                    _newlyCompleted.Add(block);
+                }
         }
 
         private void Report(bool call)

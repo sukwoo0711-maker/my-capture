@@ -151,6 +151,7 @@ internal sealed partial class PinWindow
     /// <summary>A closing pin keeps no timer, handler or animation of its translation progress.</summary>
     private void ReleaseTranslationProgress()
     {
+        EndTranslationReveal();
         ResetTranslationCount();
         _translationProgressLine = null;
         _feedbackShowsTranslation = false;
