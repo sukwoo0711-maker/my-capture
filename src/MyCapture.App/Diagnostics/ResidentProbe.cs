@@ -64,7 +64,7 @@ internal sealed class ResidentProbeOptions
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
-         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib",
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements",
          "legacy-guide-write", "selector-show-owned",
          "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
          "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];

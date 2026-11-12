@@ -37,6 +37,16 @@ public sealed class ResidentProbeMetricsTests
     });
 
     [Fact]
+    public void ElementStepIsOptInForEitherRenderer()
+    {
+        Assert.DoesNotContain("selector-elements", ResidentProbeOptions.ReadVariants([]));
+        Assert.Contains("selector-elements", ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-elements"]));
+        var wpf = ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf,selector-elements"]);
+        Assert.Contains("selector-elements", wpf);
+        Assert.False(ResidentProbeOptions.UsesNativeSelector(wpf));
+    }
+
+    [Fact]
     public void ReleaseMeasurementsDoNotEnableDiagnosticWorkByDefault()
     {
         Assert.Empty(ResidentProbeOptions.ReadVariants(["--selftest-resident", "unused"]));

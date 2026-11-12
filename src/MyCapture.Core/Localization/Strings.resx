@@ -5630,4 +5630,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>확대·축소 · 100%에서 정지</value></data>
   <data name="Pin_ZoomGesture" xml:space="preserve"><value>휠 / + / -</value></data>
   <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+더블클릭으로 핀을 접거나 펼칩니다. 끌 때 Shift를 누르면 붙이기를 잠시 끕니다. 휠과 +·- 키의 확대·축소는 100%에서 한 번 멈춥니다.</value></data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>휠</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>창 안 요소 선택 (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>클릭: 요소 캡처 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>클릭: 요소 텍스트 복사 · 휠: 범위 조절</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · 휠: 요소 선택</value></data>
 </root>

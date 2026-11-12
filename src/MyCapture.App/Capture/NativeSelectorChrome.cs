@@ -38,7 +38,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private bool _hoverTabPending;
     private RectD? _tabRequestedTarget, _tabRequestedShown;
     private double _tabRequestedScale;
-    private bool _tabRequestedMonitor, _tabRequestedText;
+    private bool _tabRequestedMonitor, _tabRequestedText, _tabRequestedElement, _tabRequestedElementHint;
     private int _guideRevision, _tabGuideRevision = -1;
     private readonly Rect[] _tabAvoid = new Rect[2];
     private readonly CaptureModeBar _bar;
@@ -391,7 +391,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 e.Handled = true;
                 return;
             }
-            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space) return;
+            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space or Key.PageUp or Key.PageDown) return;
         }
         e.Handled = owner.HandleKey(key, Keyboard.Modifiers);
     }
@@ -608,9 +608,11 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         RectD? target = owner.HoverRegion, shown = owner.ShownHoverForTest ?? target;
         if (_tabRequestedTarget == target && _tabRequestedShown == shown && _tabRequestedScale == area.Scale
             && _tabRequestedMonitor == owner.HoverWholeMonitor && _tabRequestedText == owner.TextCaptureMode
+            && _tabRequestedElement == owner.HoverElement && _tabRequestedElementHint == owner.ElementWheelHint
             && _tabGuideRevision == _guideRevision) return;
         _tabRequestedTarget = target; _tabRequestedShown = shown; _tabRequestedScale = area.Scale;
         _tabRequestedMonitor = owner.HoverWholeMonitor; _tabRequestedText = owner.TextCaptureMode;
+        _tabRequestedElement = owner.HoverElement; _tabRequestedElementHint = owner.ElementWheelHint;
         _tabGuideRevision = _guideRevision;
         if (_hoverTabPending || _sizeWindow is not { } size) return;
         _hoverTabPending = NativeSelectorInterop.SetTimer(_geometry[size].Handle, HoverTabTimerId, 1, IntPtr.Zero) != 0;
@@ -642,7 +644,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         else _tabAvoid[1] = Rect.Empty;
         Rect tab = _hoverTab.Render(owner.ShownHoverForTest ?? target, target, owner.HoverWholeMonitor,
-            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid);
+            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid, owner.HoverElement, owner.ElementWheelHint);
         if (!_sizePanel.ShowsHoverTab)
         {
             _sizePanel.ShowsHoverTab = true;

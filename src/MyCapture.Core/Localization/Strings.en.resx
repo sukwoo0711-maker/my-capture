@@ -5630,4 +5630,9 @@ Install the model?</value></data>
   <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>Zoom · stop at 100%</value></data>
   <data name="Pin_ZoomGesture" xml:space="preserve"><value>Wheel / + / -</value></data>
   <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+double-click collapses or expands the pin. Hold Shift while dragging to bypass snapping. Wheel and + or - zoom steps stop once at 100%.</value></data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>Wheel</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>Select an element in the window (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>Click: Capture element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>Click: Copy text from element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · Wheel: Select element</value></data>
 </root>
