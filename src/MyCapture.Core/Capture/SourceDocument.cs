@@ -126,20 +126,19 @@ public static class SourceDocument
     {
         string normalized = CaptureSourceText.NormalizeLocalPath(path);
         if (normalized.Length == 0 || normalized.Contains('"')) return null;
-        ProcessStartInfo start = ExplorerStartInfo(explorerPath);
-        // Explorer parses commas itself, so quote the validated path even when it has no spaces.
-        if (selectFile) start.Arguments = "/select,\"" + normalized + "\"";
-        else start.ArgumentList.Add(normalized);
-        return start;
+        return ExplorerStartInfo(explorerPath, normalized, selectFile);
     }
 
     /// <summary>
-    /// Explorer itself, with no arguments yet: the one place that starts it. Callers add the folder,
-    /// the file to select, or a packaged application's shell item.
+    /// Explorer with one argument the caller has validated: the one place that starts it. The argument is
+    /// a folder, a file to select, or a packaged application's shell item, and has no quotation mark.
     /// </summary>
-    internal static ProcessStartInfo ExplorerStartInfo(string explorerPath)
+    internal static ProcessStartInfo ExplorerStartInfo(string explorerPath, string normalized, bool selectFile)
     {
         var start = new ProcessStartInfo(explorerPath) { UseShellExecute = false };
+        // Explorer parses commas itself, so quote the validated path even when it has no spaces.
+        if (selectFile) start.Arguments = "/select,\"" + normalized + "\"";
+        else start.ArgumentList.Add(normalized);
         return start;
     }
 

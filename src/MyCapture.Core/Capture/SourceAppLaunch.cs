@@ -115,8 +115,6 @@ public static class SourceAppLaunch
         string explorer = CaptureSourceText.NormalizeLocalPath(explorerPath);
         if (id.Length == 0 || explorer.Length == 0) return null;
         // The ID has only letters, digits and . - _ ! (NormalizeAppUserModelId), so it needs no quoting.
-        ProcessStartInfo start = SourceDocument.ExplorerStartInfo(explorer);
-        start.ArgumentList.Add(@"shell:AppsFolder\" + id);
-        return start;
+        return SourceDocument.ExplorerStartInfo(explorer, @"shell:AppsFolder\" + id, selectFile: false);
     }
 }
