@@ -131,25 +131,29 @@ public sealed class PinOriginalSizeTests
     [Fact]
     public void PasteLargePicture_ThatFitsTheWorkArea_OpensAtFullSize() => StaTestHost.Run(() =>
     {
-        // 1700 x 900 on a 1920 x 1040 work area: 88.5% x 86.5%, which shrank to 80% before.
-        PinManager manager = Manager(1);
+        // 900 x 620 on a 1000 x 700 work area: 90% x 88.6%, which shrank to 80% before. The work area is
+        // this small because a WPF window cannot be larger than the real desktop allows (1044 x 788 on a
+        // CI runner's 1024 x 768 screen), whatever work area the test supplies.
+        const double workWidth = 1000, workHeight = 700;
+        PinManager manager = Manager(1, workWidth, 740, workHeight);
         try
         {
-            BitmapSource picture = Picture(1700, 900);
+            BitmapSource picture = Picture(900, 620);
             PinWindow pin = Paste(manager, PinContent.FromImage(picture));
             Assert.Equal(1.0, pin.State.Zoom, 6);
-            Assert.Equal((1700.0, 900.0), (pin.Width, pin.Height));
-            Assert.InRange(pin.Left, 0, 1920 - 1700);
-            Assert.InRange(pin.Top, 0, 1040 - 900);
+            Assert.Equal((900.0, 620.0), (pin.Width, pin.Height));
+            Assert.InRange(pin.Left, 0, workWidth - 900);
+            Assert.InRange(pin.Top, 0, workHeight - 620);
 
             // Larger than the work area: just small enough to fit it, not 80% of it.
             PinWindow huge = Paste(manager, PinContent.FromImage(Picture(3000, 1000)));
-            Assert.Equal(1920.0 / 3000, huge.State.Zoom, 6);
-            Assert.Equal(1920, huge.Width, 6);
+            Assert.Equal(workWidth / 3000, huge.State.Zoom, 6);
+            Assert.Equal(workWidth, huge.Width, 6);
 
-            double oldZoom = Math.Min(1, Math.Min(1920 * 0.8 / 1700, 1040 * 0.8 / 900));
-            SaveEvidence(WorkAreaDiagram(picture, oldZoom, "before-80pct"), "large-picture-initial-size-before.png");
-            SaveEvidence(WorkAreaDiagram(picture, pin.State.Zoom, "after-100pct"), "large-picture-initial-size-after.png");
+            double oldZoom = Math.Min(1, Math.Min(workWidth * 0.8 / 900, workHeight * 0.8 / 620));
+            Assert.True(oldZoom < 1);
+            SaveEvidence(WorkAreaDiagram(picture, oldZoom, "before-80pct", workWidth, workHeight), "large-picture-initial-size-before.png");
+            SaveEvidence(WorkAreaDiagram(picture, pin.State.Zoom, "after-100pct", workWidth, workHeight), "large-picture-initial-size-after.png");
         }
         finally { manager.CloseAllForExit(); }
     });
@@ -186,10 +190,11 @@ public sealed class PinOriginalSizeTests
         finally { timer.Stop(); }
     }
 
-    private static PinManager Manager(double scale) => new(() => new PinSettings(), NullLogger.Instance)
+    private static PinManager Manager(double scale, double width = 1920, double height = 1080, double workHeight = 1040) =>
+        new(() => new PinSettings(), NullLogger.Instance)
     {
         ReadPlacementMonitorForTest = () => new MonitorInfo("fake",
-            new RectD(0, 0, 1920 * scale, 1080 * scale), new RectD(0, 0, 1920 * scale, 1040 * scale), (uint)(96 * scale), true),
+            new RectD(0, 0, width * scale, height * scale), new RectD(0, 0, width * scale, workHeight * scale), (uint)(96 * scale), true),
         BeforeShowForTest = pin => pin.ShowActivated = false,
         ActivatePinForTest = _ => { },
     };
@@ -211,24 +216,24 @@ public sealed class PinOriginalSizeTests
         return bitmap;
     }
 
-    /// <summary>The work area (1920 x 1040, drawn at half size) with the pin's opening rectangle.</summary>
-    private static BitmapSource WorkAreaDiagram(BitmapSource picture, double zoom, string label)
+    /// <summary>The work area, drawn at half size, with the pin's opening rectangle.</summary>
+    private static BitmapSource WorkAreaDiagram(BitmapSource picture, double zoom, string label, double workWidth, double workHeight)
     {
         const double half = 0.5;
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
         {
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x1E, 0x23, 0x2B)), null, new Rect(0, 0, 1920 * half, 1040 * half));
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x1E, 0x23, 0x2B)), null, new Rect(0, 0, workWidth * half, workHeight * half));
             double width = picture.PixelWidth * zoom * half, height = picture.PixelHeight * zoom * half;
-            Rect pin = new((1920 * half - width) / 2, (1040 * half - height) / 2, width, height);
+            Rect pin = new((workWidth * half - width) / 2, (workHeight * half - height) / 2, width, height);
             dc.DrawImage(picture, pin);
             dc.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(0xDC, 0x14, 0x3C)), 2), pin);
-            var text = new FormattedText($"{label}: {picture.PixelWidth}x{picture.PixelHeight} at {zoom:P0} on a 1920x1040 work area",
+            var text = new FormattedText($"{label}: {picture.PixelWidth}x{picture.PixelHeight} at {zoom:P0} on a {workWidth:0}x{workHeight:0} work area",
                 System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 14,
                 Brushes.White, 1);
             dc.DrawText(text, new Point(8, 6));
         }
-        var bitmap = new RenderTargetBitmap((int)(1920 * half), (int)(1040 * half), 96, 96, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap((int)(workWidth * half), (int)(workHeight * half), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;
