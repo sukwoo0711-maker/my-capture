@@ -86,6 +86,8 @@ if (-not (Test-Path -LiteralPath $PublishDir -PathType Container)) {
 }
 . (Join-Path $PSScriptRoot 'packaged-validation.ps1')
 $provenance = Assert-StorePublishProvenance $repo $PublishDir $Version
+. (Join-Path $PSScriptRoot 'release-size-budget.ps1')
+Assert-ReleaseSizeBudget -PublishRoot $PublishDir -Architecture x64
 $provenanceHash = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $PublishDir) 'release-manifest.json') -Algorithm SHA256).Hash
 # Legal notices remain mandatory in addition to the exact source and inventory gate.
 foreach ($required in @('MyCapture.exe', 'MyCapture.dll', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.md',

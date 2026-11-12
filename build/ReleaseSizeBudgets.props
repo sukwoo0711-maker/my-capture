@@ -1,0 +1,17 @@
+<Project>
+  <!-- Byte budgets include the packaged legal notices. Update these numbers deliberately,
+       with a size-report comparison and a measured portable ZIP in the review. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <!-- Measured 2026-11-11: installed 242225761, ZIP 116649629, projection 2125824.
+         Two percent headroom, rounded up to 100000 bytes (projection: 10000). -->
+    <MyCaptureInstalledSizeBudgetBytes Condition="'$(MyCaptureInstalledSizeBudgetBytes)' == ''">247100000</MyCaptureInstalledSizeBudgetBytes>
+    <MyCapturePortableSizeBudgetBytes Condition="'$(MyCapturePortableSizeBudgetBytes)' == ''">119000000</MyCapturePortableSizeBudgetBytes>
+    <MyCaptureProjectionSizeBudgetBytes Condition="'$(MyCaptureProjectionSizeBudgetBytes)' == ''">2170000</MyCaptureProjectionSizeBudgetBytes>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x86'">
+    <!-- Measured 2026-11-11: installed 213710542, ZIP 105348221, projection 1925120. -->
+    <MyCaptureInstalledSizeBudgetBytes Condition="'$(MyCaptureInstalledSizeBudgetBytes)' == ''">218000000</MyCaptureInstalledSizeBudgetBytes>
+    <MyCapturePortableSizeBudgetBytes Condition="'$(MyCapturePortableSizeBudgetBytes)' == ''">107500000</MyCapturePortableSizeBudgetBytes>
+    <MyCaptureProjectionSizeBudgetBytes Condition="'$(MyCaptureProjectionSizeBudgetBytes)' == ''">1970000</MyCaptureProjectionSizeBudgetBytes>
+  </PropertyGroup>
+</Project>
