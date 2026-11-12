@@ -19,8 +19,14 @@ internal readonly record struct TranslationDownloadProgress(long ReceivedBytes, 
 /// </summary>
 internal enum TranslationModelError
 {
-    /// <summary>The server or the connection failed, or the transfer stalled.</summary>
+    /// <summary>The server or the connection failed.</summary>
     Network,
+
+    /// <summary>
+    /// The transfer stopped: no byte within the stall timeout, or too few bytes to ever finish (less than the
+    /// slow-transfer floor within the slow-transfer window).
+    /// </summary>
+    Stalled,
 
     /// <summary>A file arrived with the wrong size or SHA-256.</summary>
     Corrupt,
@@ -70,12 +76,16 @@ internal sealed class TranslationModelStore
     private const int HandleDiskFullHResult = unchecked((int)0x80070027); // ERROR_HANDLE_DISK_FULL
 
     private static readonly TimeSpan DefaultStallTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan DefaultSlowWindow = TimeSpan.FromSeconds(60);
+    private const long DefaultSlowFloorBytes = 64 * 1024;
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(100);
     private static readonly char[] InvalidNameChars = Path.GetInvalidFileNameChars();
 
     private readonly HttpClient _http;
     private readonly ILogger _log;
     private readonly TimeSpan _stallTimeout;
+    private readonly TimeSpan _slowWindow;
+    private readonly long _slowFloorBytes;
     private readonly Func<string, long> _availableFreeSpace;
     private readonly string _modelsRoot;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -94,12 +104,15 @@ internal sealed class TranslationModelStore
     }
 
     /// <summary>
-    /// Supplies the transport, the file list, the stall timeout and the free-space probe so tests
-    /// can run the store against small synthetic files.
+    /// Supplies the transport, the file list, the stall timeout, the slow-transfer limit and the free-space
+    /// probe so tests can run the store against small synthetic files.
     /// </summary>
+    /// <param name="slowWindow">With <paramref name="slowFloorBytes"/>: after a file's first byte, every
+    /// <paramref name="slowFloorBytes"/> more must arrive within this time, or the transfer counts as stalled.</param>
     internal TranslationModelStore(AppPaths paths, HttpClient http, ILogger log,
         IReadOnlyList<TranslationModelFile>? files = null, TimeSpan? stallTimeout = null,
-        Func<string, long>? availableFreeSpace = null, string? folderName = null)
+        Func<string, long>? availableFreeSpace = null, string? folderName = null,
+        TimeSpan? slowWindow = null, long? slowFloorBytes = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -107,6 +120,12 @@ internal sealed class TranslationModelStore
         _stallTimeout = stallTimeout ?? DefaultStallTimeout;
         if (_stallTimeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(stallTimeout), "The stall timeout must be positive.");
+        _slowWindow = slowWindow ?? DefaultSlowWindow;
+        if (_slowWindow <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(slowWindow), "The slow-transfer window must be positive.");
+        _slowFloorBytes = slowFloorBytes ?? DefaultSlowFloorBytes;
+        if (_slowFloorBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(slowFloorBytes), "The slow-transfer floor must be positive.");
         _availableFreeSpace = availableFreeSpace ?? QueryFreeSpace;
         Files = ValidateFiles(files ?? TranslationModelCatalog.Files);
         TotalBytes = Files.Sum(file => file.Bytes);
@@ -281,7 +300,7 @@ internal sealed class TranslationModelStore
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TranslationModelException(TranslationModelError.Network,
+            throw new TranslationModelException(TranslationModelError.Stalled,
                 $"The download of {file.FileName} stalled.", ex);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -346,6 +365,10 @@ internal sealed class TranslationModelStore
             PreallocationSize = file.Bytes,
         };
         long received = 0;
+        // A trickle never waits the stall timeout for its next byte, yet would not finish in hours: from the
+        // first byte on, every slow-transfer floor of bytes must arrive within the slow-transfer window.
+        long windowStart = 0;
+        long windowBytes = 0;
         string actual;
         using (var output = new FileStream(temp, options))
         using (var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
@@ -355,7 +378,14 @@ internal sealed class TranslationModelStore
             {
                 // Keep local hashing, disk writes and progress callbacks outside the
                 // network wait deadline; their cancellation still uses the caller token.
-                stall.CancelAfter(_stallTimeout);
+                TimeSpan wait = _stallTimeout;
+                if (windowStart != 0)
+                {
+                    TimeSpan left = _slowWindow - Stopwatch.GetElapsedTime(windowStart);
+                    if (left <= TimeSpan.Zero) throw TooSlow(file, received - windowBytes);
+                    if (left < wait) wait = left;
+                }
+                stall.CancelAfter(wait);
                 int read = await ReadAsync(file, body, buffer, stall.Token, cancellationToken)
                     .ConfigureAwait(false);
                 stall.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -365,6 +395,8 @@ internal sealed class TranslationModelStore
                 sha256.AppendData(buffer, 0, read);
                 await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
                 received += read;
+                if (windowStart == 0 || received - windowBytes >= _slowFloorBytes)
+                    (windowStart, windowBytes) = (Stopwatch.GetTimestamp(), received);
                 reporter.Tick(completedBefore + received);
             }
             await output.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -560,6 +592,10 @@ internal sealed class TranslationModelStore
 
     private VerificationState VerificationFor(string path) =>
         _verification.GetOrAdd(Path.GetFullPath(path), static _ => new VerificationState());
+
+    private TranslationModelException TooSlow(TranslationModelFile file, long bytes) =>
+        new(TranslationModelError.Stalled,
+            $"The download of {file.FileName} received {bytes} bytes in {_slowWindow.TotalSeconds:0.#} s, below {_slowFloorBytes}.");
 
     private static TranslationModelException Corrupt(TranslationModelFile file, string reason) =>
         new(TranslationModelError.Corrupt, $"Translation model file {file.FileName} {reason}.");

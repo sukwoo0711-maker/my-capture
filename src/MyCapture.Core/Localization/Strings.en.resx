@@ -5314,6 +5314,7 @@ Turn off: {0}</value></data>
   <data name="Translate_ErrorDiskFull" xml:space="preserve"><value>Not enough disk space. Free up at least {0} MB and try again.</value></data>
   <data name="Translate_ErrorCorrupt" xml:space="preserve"><value>A downloaded file is damaged. Try again.</value></data>
   <data name="Translate_ErrorDisk" xml:space="preserve"><value>Can't save the translation model. Check the free space and permissions.</value></data>
+  <data name="Translate_ErrorStalled" xml:space="preserve"><value>The translation model download stopped. Check your network and try again.</value></data>
   <data name="Translate_SourceName" xml:space="preserve"><value>Original {0}</value></data>
   <data name="Translate_TranslationName" xml:space="preserve"><value>Translation {0}</value></data>
   <data name="Translate_BlockName" xml:space="preserve"><value>Block {0}</value></data>
@@ -5388,6 +5389,12 @@ Install the model?</value></data>
   <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>Only Korean and English can be translated.</value></data>
   <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>Translation model is being prepared</value></data>
   <data name="Pin_TranslationNoText" xml:space="preserve"><value>No text was found in the image.</value></data>
+  <data name="Pin_TranslationDownloadProgress" xml:space="preserve"><value>Installing translation model · {0} / {1} MB</value></data>
+  <data name="Pin_TranslationReading" xml:space="preserve"><value>Reading text</value></data>
+  <data name="Pin_TranslationCancel" xml:space="preserve"><value>Cancel translation</value></data>
+  <data name="Pin_TranslationCancelled" xml:space="preserve"><value>Translation cancelled.</value></data>
+  <data name="Pin_TranslationNothing" xml:space="preserve"><value>There is nothing to translate.</value></data>
+  <data name="Pin_TranslationErrorNetwork" xml:space="preserve"><value>Can't download the translation model. Check your internet connection and try again.</value></data>
   <data name="Pin_CopyTranslation" xml:space="preserve"><value>Copy translation</value></data>
   <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
