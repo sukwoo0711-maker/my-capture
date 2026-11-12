@@ -61,6 +61,10 @@ public sealed class PinCoreFlowTests
             Assert.Equal(PasteResult.Pinned, manager.PasteFromClipboardAsync(
                 () => Task.FromResult(ClipboardImageReader.PinReadAttempt.Success(content))).GetAwaiter().GetResult());
             PinWindow pin = Assert.IsType<PinWindow>(shown);
+            // Text previews are rasterized for the pin's monitor before copying.
+            // Images and table pictures retain the bitmap supplied by the clipboard.
+            BitmapSource renderedImage = pin.PinnedContent.Image;
+            if (kind != "text") Assert.Same(image, renderedImage);
             switch (gesture)
             {
                 case "keyboard":
@@ -81,11 +85,11 @@ public sealed class PinCoreFlowTests
             }
             Assert.Equal(1, copies);
             Assert.True(forwarded.HasValue);
-            Assert.Same(image, forwarded.Value.Image);
+            Assert.Same(renderedImage, forwarded.Value.Image);
             Assert.Equal(content.SourcePageUrl, forwarded.Value.Url);
             Assert.Equal(text, forwarded.Value.Text);
             Assert.True(request.HasValue);
-            Assert.Same(image, request.Value.Image);
+            Assert.Same(renderedImage, request.Value.Image);
             Assert.Equal(text, request.Value.OriginalText);
             Assert.Equal(content.SourcePageUrl, request.Value.SourcePageUrl);
         }
@@ -109,7 +113,12 @@ public sealed class PinCoreFlowTests
             Assert.Equal(source, data.GetData(DataFormats.UnicodeText, autoConvert: false));
             Assert.False(data.GetDataPresent(DataFormats.Text, autoConvert: false));
             Assert.True(data.GetDataPresent(DataFormats.Bitmap, autoConvert: false));
-            Assert.Same(image, data.GetData(DataFormats.Bitmap, autoConvert: false));
+            BitmapSource legacy = Assert.IsAssignableFrom<BitmapSource>(data.GetData(DataFormats.Bitmap, autoConvert: false));
+            Assert.Equal(image.PixelWidth, legacy.PixelWidth);
+            Assert.Equal(image.PixelHeight, legacy.PixelHeight);
+            byte[] legacyPixels = new byte[image.PixelWidth * image.PixelHeight * 4];
+            legacy.CopyPixels(legacyPixels, image.PixelWidth * 4, 0);
+            Assert.All(legacyPixels, channel => Assert.Equal((byte)255, channel));
             Assert.True(data.GetDataPresent("PNG", autoConvert: false));
             using var bytes = new MemoryStream();
             Assert.IsAssignableFrom<Stream>(data.GetData("PNG", autoConvert: false)).CopyTo(bytes);
@@ -118,6 +127,9 @@ public sealed class PinCoreFlowTests
             BitmapSource decoded = BitmapDecoder.Create(bytes, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
             Assert.Equal(image.PixelWidth, decoded.PixelWidth);
             Assert.Equal(image.PixelHeight, decoded.PixelHeight);
+            byte[] pngPixels = new byte[image.PixelWidth * image.PixelHeight * 4];
+            decoded.CopyPixels(pngPixels, image.PixelWidth * 4, 0);
+            Assert.All(pngPixels, channel => Assert.Equal((byte)0, channel));
         }).GetAwaiter().GetResult();
         Assert.True(copied);
         Assert.Equal(1, writes);

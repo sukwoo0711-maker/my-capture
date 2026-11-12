@@ -29,12 +29,28 @@ public sealed class ClipboardTextRendererTests
     {
         BitmapSource twoColumns = RenderOnSta("A\tC", isTabularContent: true);
         BitmapSource emptyMiddleColumn = RenderOnSta("A\t\tC", isTabularContent: true);
-        BitmapSource trailingEmptyRow = RenderOnSta("A\tC\r\n", isTabularContent: true);
+        BitmapSource emptyLastRow = RenderOnSta("A\tC\r\n\r\n", isTabularContent: true);
 
         Assert.True(emptyMiddleColumn.PixelWidth > twoColumns.PixelWidth);
-        Assert.True(trailingEmptyRow.PixelHeight > twoColumns.PixelHeight);
+        Assert.True(emptyLastRow.PixelHeight > twoColumns.PixelHeight);
         Assert.True(emptyMiddleColumn.IsFrozen);
-        Assert.True(trailingEmptyRow.IsFrozen);
+        Assert.True(emptyLastRow.IsFrozen);
+    }
+
+    [Theory]
+    [InlineData("A\tC\r\n")]
+    [InlineData("A\tC\n")]
+    [InlineData("A\tC\r")]
+    public void Table_LineBreakThatEndsTheTextAddsNoRow(string terminated)
+    {
+        // A spreadsheet range copy ends with CRLF; that line break closes the last row.
+        BitmapSource unterminated = RenderOnSta("A\tC", isTabularContent: true);
+        BitmapSource table = RenderOnSta(terminated, isTabularContent: true);
+
+        Assert.Equal(unterminated.PixelWidth, table.PixelWidth);
+        Assert.Equal(unterminated.PixelHeight, table.PixelHeight);
+        Assert.True(CopyPixels(unterminated).SequenceEqual(CopyPixels(table)));
+        Assert.True(table.IsFrozen);
     }
 
     [Fact]

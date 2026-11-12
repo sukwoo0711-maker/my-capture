@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using Xunit;
 
@@ -7,6 +8,44 @@ namespace MyCapture.App.Tests;
 
 public sealed class ResidentProbeMetricsTests
 {
+    [Fact]
+    public void NativeDispatcherTraceRecordsPriorityAndDetachesAtEnd() => StaTestHost.Run(() =>
+    {
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        var marks = new List<string>();
+        Action<string>? previous = SelectorTimeline.Mark;
+        SelectorTimeline.Mark = marks.Add;
+        try
+        {
+            using (var trace = new SelectorDispatcherTrace(dispatcher, Stopwatch.GetTimestamp())) RunTurn();
+            Assert.Contains(marks, mark => mark.StartsWith("op ") && mark.Contains("[Normal]"));
+            int count = marks.Count;
+            RunTurn();
+            Assert.Equal(count, marks.Count);
+        }
+        finally { SelectorTimeline.Mark = previous; }
+
+        void RunTurn()
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal,
+                new Action(() => Thread.Sleep(10)));
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                new Action(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+    });
+
+    [Fact]
+    public void ElementStepIsOptInForEitherRenderer()
+    {
+        Assert.DoesNotContain("selector-elements", ResidentProbeOptions.ReadVariants([]));
+        Assert.Contains("selector-elements", ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-elements"]));
+        var wpf = ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf,selector-elements"]);
+        Assert.Contains("selector-elements", wpf);
+        Assert.False(ResidentProbeOptions.UsesNativeSelector(wpf));
+    }
+
     [Fact]
     public void ReleaseMeasurementsDoNotEnableDiagnosticWorkByDefault()
     {
@@ -22,11 +61,65 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("selector-breakdown")]
     [InlineData("receipt-breakdown")]
     [InlineData("no-key-panel")]
+    [InlineData("selector-wpf")]
+    [InlineData("legacy-guide-write")]
+    [InlineData("selector-show-owned")]
     public void AttributionVariantsAreExplicitAndIndependentlySelectable(string variant)
     {
         IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variant.ToUpperInvariant()]);
         Assert.Single(selected);
         Assert.Contains(variant, selected, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("no-flight,selector-native-dib")]
+    [InlineData("no-flight,selector-wpf")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-fresh")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-parallel")]
+    [InlineData("no-flight,selector-native-dib,selector-chrome-dib")]
+    [InlineData("no-flight,selector-breakdown")]
+    [InlineData("no-flight,legacy-guide-write,selector-show-owned")]
+    public void StageOneSelectorMeasurementVariantsAreAccepted(string variants)
+    {
+        IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
+        Assert.Equal(variants.Split(',').Length, selected.Count);
+        foreach (string variant in variants.Split(',')) Assert.Contains(variant, selected);
+    }
+
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("selector-native-dib", true)]
+    [InlineData("selector-wpf", false)]
+    [InlineData("SELECTOR-WPF", false)]
+    public void RendererVariantsSelectNativeByDefaultAndKeepWpfAvailable(string variants, bool native)
+    {
+        IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
+        Assert.Equal(native, ResidentProbeOptions.UsesNativeSelector(selected));
+        Assert.Equal(NativeSelectorChromeStrategy.Retained, ResidentProbeOptions.GetSelectorChromeStrategy(selected));
+    }
+
+    [Theory]
+    [InlineData("selector-native-dib")]
+    [InlineData("selector-chrome-fresh")]
+    [InlineData("selector-chrome-parallel")]
+    [InlineData("selector-chrome-dib")]
+    [InlineData("selector-native-dib,selector-chrome-fresh")]
+    [InlineData("selector-show-owned")]
+    [InlineData("SELECTOR-SHOW-OWNED")]
+    public void WpfVariantRejectsContradictoryNativeRequests(string native)
+    {
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf," + native]));
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", native + ",SELECTOR-WPF"]));
+    }
+
+    [Theory]
+    [InlineData("selector-prejit")]
+    [InlineData("selector-warm-bind")]
+    [InlineData("sw-chrome")]
+    [InlineData("SW-CHROME")]
+    public void RejectedSelectorExperimentsAreNoLongerAccepted(string variant)
+    {
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", variant]));
     }
 
     [Fact]
@@ -58,6 +151,26 @@ public sealed class ResidentProbeMetricsTests
         Assert.Null(error);
         Assert.NotNull(bytes);
         Assert.True(bytes > 0);
+    }
+
+    [Fact]
+    public void LibraryDeleteRunsLastInTheReleaseTableAndItsBudgetRejectsOneShellOperationPerCapture()
+    {
+        Assert.Equal(ResidentProbeLibraryDelete.Scenario, ResidentProbeOptions.AllScenarios[^1]);
+        Assert.Equal(124, ResidentProbeLibraryDelete.Count(quick: false));
+        Assert.Equal(12, ResidentProbeLibraryDelete.Count(quick: true));
+        // 124 directories with the real Recycle Bin on the developer PC, 2026-11-06. One Shell
+        // operation per capture kept the cards until the move ended (42.6 s) and restored for 396 s;
+        // one operation for the selection moved them in 14.9 s and restored them in 8.1 s, with the
+        // cards gone as in the slowest first delete measured (1.2 s).
+        IReadOnlyList<string> before = ResidentProbeLibraryDelete.OverBudget(new(124, 42_560, 42_560, 396_370));
+        Assert.Equal(3, before.Count);
+        Assert.Contains("library-delete: 124 selected → cards gone: 42560 ms, budget 5000 ms", before);
+        Assert.Empty(ResidentProbeLibraryDelete.OverBudget(new(124, 1_200, 14_920, 8_100)));
+        // The quick probe of 12 on the same PC: the build before the batches (d28e9172) and the batched one.
+        Assert.Equal(new[] { "library-delete: undo 12 → result on the status line: 28204 ms, budget 6800 ms" },
+            ResidentProbeLibraryDelete.OverBudget(new(12, 1_652, 1_652, 28_204)));
+        Assert.Empty(ResidentProbeLibraryDelete.OverBudget(new(12, 975, 1_097, 4_053)));
     }
 
     [Fact]

@@ -18,6 +18,8 @@ namespace MyCapture.Ocr;
 /// </summary>
 internal sealed class NeuralOcrEngine : IDisposable
 {
+    // Opt-in diagnostic boundaries only; the null production path does not read the clock.
+    internal enum WholeObservationStage { BeforeTaskRun, WorkerEntered, BeforeDetect, AfterDetect }
     /// <summary>
     /// The row recognizer leaves after this quiet spell. Pictures translated one after another
     /// share it, and it is gone well before a closed translation pin's memory settles.
@@ -35,6 +37,11 @@ internal sealed class NeuralOcrEngine : IDisposable
     private readonly ILogger _log;
     private readonly OnnxRuntimeInitialization _runtime;
     private readonly TimeSpan _engineIdleRelease;
+    private readonly IReadOnlyList<KeyValuePair<string, string>> _wholeSessionConfigEntries;
+    private readonly Action<SessionOptions, string, string, string, string>? _wholeSessionInitializing;
+    private readonly Action<RapidOcrNet.OcrResult>? _wholeResultObserved;
+    private readonly IProgress<(int Completed, int Total)>? _wholeProgressObserved;
+    private readonly Action<WholeObservationStage, long>? _wholeStageObserved;
     private readonly object _sync = new();
     private readonly object _rowSync = new();
     private readonly Timer _engineIdle;
@@ -48,12 +55,39 @@ internal sealed class NeuralOcrEngine : IDisposable
         OcrModelStore store,
         ILogger<NeuralOcrEngine> log,
         OnnxRuntimeInitialization? runtime = null,
-        TimeSpan? engineIdleRelease = null)
+        TimeSpan? engineIdleRelease = null,
+        bool disableWholeSessionSpinning = false,
+        Action<SessionOptions, string, string, string, string>? wholeSessionInitializing = null,
+        Action<RapidOcrNet.OcrResult>? wholeResultObserved = null,
+        IProgress<(int Completed, int Total)>? wholeProgressObserved = null)
+        : this(store, log, runtime, engineIdleRelease, disableWholeSessionSpinning,
+            wholeSessionInitializing, wholeResultObserved, wholeProgressObserved, wholeStageObserved: null)
+    {
+    }
+
+    // Preserve the original constructor signature; only a diagnostic caller selects this overload.
+    // runtimeWholeSessionSpinning restores ONNX Runtime's own spin for a comparison run.
+    internal NeuralOcrEngine(
+        OcrModelStore store,
+        ILogger<NeuralOcrEngine> log,
+        OnnxRuntimeInitialization? runtime,
+        TimeSpan? engineIdleRelease,
+        bool disableWholeSessionSpinning,
+        Action<SessionOptions, string, string, string, string>? wholeSessionInitializing,
+        Action<RapidOcrNet.OcrResult>? wholeResultObserved,
+        IProgress<(int Completed, int Total)>? wholeProgressObserved,
+        Action<WholeObservationStage, long>? wholeStageObserved,
+        bool runtimeWholeSessionSpinning = false)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
         _engineIdleRelease = engineIdleRelease ?? EngineIdleRelease;
+        _wholeSessionConfigEntries = WholeSessionConfigEntries(disableWholeSessionSpinning, runtimeWholeSessionSpinning);
+        _wholeSessionInitializing = wholeSessionInitializing;
+        _wholeResultObserved = wholeResultObserved;
+        _wholeProgressObserved = wholeProgressObserved;
+        _wholeStageObserved = wholeStageObserved;
         _engineIdle = new Timer(_ => ReleaseEngineIfIdle(), null, Timeout.Infinite, Timeout.Infinite);
         _rowIdle = new Timer(_ => ReleaseRowReaderIfIdle(), null, Timeout.Infinite, Timeout.Infinite);
         ModelVerificationTask = _store.PreVerifyInstalledModelsAsync();
@@ -87,12 +121,14 @@ internal sealed class NeuralOcrEngine : IDisposable
 
         // ONNX init + detect must not run on the WPF dispatcher. A large receipt otherwise
         // freezes the shell long enough to look like a hang or failed launch.
+        _wholeStageObserved?.Invoke(WholeObservationStage.BeforeTaskRun, Stopwatch.GetTimestamp());
         return await Task.Run(() => RecognizeOnWorker(request, cancellationToken), cancellationToken)
             .ConfigureAwait(false);
     }
 
     private OcrResult RecognizeOnWorker(OcrRequest request, CancellationToken cancellationToken)
     {
+        _wholeStageObserved?.Invoke(WholeObservationStage.WorkerEntered, Stopwatch.GetTimestamp());
         if (!TryInitialize())
         {
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
@@ -121,7 +157,13 @@ internal sealed class NeuralOcrEngine : IDisposable
                 SetEngineIdle(Timeout.InfiniteTimeSpan);
                 try
                 {
-                    return ToResult(engine.Detect(bitmap, CreateOptions(), cancellationToken));
+                    _wholeStageObserved?.Invoke(WholeObservationStage.BeforeDetect, Stopwatch.GetTimestamp());
+                    RapidOcrNet.OcrResult raw = _wholeProgressObserved is { } progress
+                        ? engine.Detect(bitmap, CreateOptions(), progress, cancellationToken)
+                        : engine.Detect(bitmap, CreateOptions(), cancellationToken);
+                    _wholeStageObserved?.Invoke(WholeObservationStage.AfterDetect, Stopwatch.GetTimestamp());
+                    _wholeResultObserved?.Invoke(raw);
+                    return ToResult(raw);
                 }
                 finally
                 {
@@ -151,6 +193,39 @@ internal sealed class NeuralOcrEngine : IDisposable
         ClsThresh = 0.99f,
         RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
     };
+
+    private static readonly KeyValuePair<string, string>[] ShortWholeSessionSpin =
+    [
+        KeyValuePair.Create("session.intra_op.spin_duration_us", "1000"),
+        KeyValuePair.Create("session.inter_op.spin_duration_us", "1000"),
+        KeyValuePair.Create("session.intra_op.spin_backoff_max", "4"),
+        KeyValuePair.Create("session.inter_op.spin_backoff_max", "4"),
+    ];
+
+    private static readonly KeyValuePair<string, string>[] NoWholeSessionSpin =
+    [
+        KeyValuePair.Create("session.intra_op.allow_spinning", "0"),
+        KeyValuePair.Create("session.inter_op.allow_spinning", "0"),
+    ];
+
+    /// <summary>
+    /// With the duration unset, the ONNX Runtime package lets an idle pool thread spin through 2^20
+    /// turns, each checking for work and pausing once, before it blocks. The whole-image sessions bound
+    /// that spin to about 1 ms, with up to four pauses per turn. On the Windows 10 reference PC that
+    /// returned the same results over 1,000 readings and used 21.5 % less processor time (#223).
+    /// No spin and the runtime's own spin stay for comparison runs.
+    /// </summary>
+    internal static IReadOnlyList<KeyValuePair<string, string>> WholeSessionConfigEntries(bool disableSpinning, bool runtimeSpinning)
+    {
+        if (disableSpinning && runtimeSpinning)
+        {
+            throw new ArgumentException("Choose no spin or the runtime's own spin, not both.", nameof(runtimeSpinning));
+        }
+
+        if (disableSpinning) return NoWholeSessionSpin;
+        if (runtimeSpinning) return Array.Empty<KeyValuePair<string, string>>();
+        return ShortWholeSessionSpin;
+    }
 
     internal bool TryInitialize()
     {
@@ -203,6 +278,11 @@ internal sealed class NeuralOcrEngine : IDisposable
             // and packs a reading's tensors into one block; with the pixels no longer passed through
             // a PNG (ForSkia), a size read before takes about 2 % longer than in 5.0.0, a new one 12 %.
             options.EnableCpuMemArena = false;
+            foreach ((string key, string value) in _wholeSessionConfigEntries)
+            {
+                options.AddSessionConfigEntry(key, value);
+            }
+            _wholeSessionInitializing?.Invoke(options, det, cls, rec, keys);
             engine.InitModels(det, cls, rec, keys, options);
             Volatile.Write(ref _engine, engine);
             // An engine loaded and then not used, e.g. by an image that fails to decode, still leaves.

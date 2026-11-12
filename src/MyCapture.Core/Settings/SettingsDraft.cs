@@ -520,6 +520,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     // ================= Pin =================
 
     public bool CloseOnDoubleClick { get => _closeOnDoubleClick; set => Set(ref _closeOnDoubleClick, value); }
+    private bool _snapWhileDragging;
+    public bool SnapWhileDragging { get => _snapWhileDragging; set => Set(ref _snapWhileDragging, value); }
+    private bool _lightweightImagePins;
+    public bool LightweightImagePins { get => _lightweightImagePins; set => Set(ref _lightweightImagePins, value); }
     public bool RestoreOpenPinsOnLaunch { get => _restoreOpenPinsOnLaunch; set => Set(ref _restoreOpenPinsOnLaunch, value); }
     public bool CacheResults { get => _cacheResults; set => Set(ref _cacheResults, value); }
 
@@ -791,6 +795,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
+        _snapWhileDragging = s.Pin.SnapWhileDragging;
+        _lightweightImagePins = s.Pin.LightweightImagePins;
         _restoreOpenPinsOnLaunch = s.Pin.RestoreOpenPinsOnLaunch;
         _initialOpacity = Dbl(s.Pin.InitialOpacity);
         _zoomStep = Dbl(s.Pin.ZoomStep);
@@ -846,14 +852,20 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     /// <summary>
     /// Resets every editable field to the defaults a new installation starts with
-    /// (<see cref="NewInstallDefaults"/>). Deliberate and fully reversible: nothing is written
+    /// (<see cref="NewInstallDefaults"/>), except the user's answer about the core shortcuts:
+    /// whether it was given and whether those shortcuts take priority over other programs stay
+    /// as they are. Deliberate and fully reversible: nothing is written
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
     public void ResetToDefaults()
     {
         AppSettings defaults = NewInstallDefaults.Create();
+        // Priority is the user's answer, not a default: a reset must not take the core keys from
+        // another program for someone who kept their keys, nor before an upgrade's open question
+        // has been answered.
         defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        defaults.Hotkeys.ForceCoreShortcuts = _forceCoreShortcuts;
         defaults.General.PracticeRevisionOffered = _preservedPracticeRevisionOffered;
         ReplaceValues(defaults);
     }
@@ -886,7 +898,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
         B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
         _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
-        B(_closeOnDoubleClick), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
+        B(_closeOnDoubleClick), B(_snapWhileDragging), B(_lightweightImagePins), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
@@ -1022,6 +1034,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Pin =
             {
                 CloseOnDoubleClick = _closeOnDoubleClick,
+                SnapWhileDragging = _snapWhileDragging,
+                LightweightImagePins = _lightweightImagePins,
                 RestoreOpenPinsOnLaunch = _restoreOpenPinsOnLaunch,
                 InitialOpacity = ParseDouble(_initialOpacity),
                 ZoomStep = ParseDouble(_zoomStep),

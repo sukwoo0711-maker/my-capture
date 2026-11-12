@@ -173,6 +173,42 @@ public sealed class QuickAccessReceiptLayoutTests
         finally { card.Close(); }
     });
 
+    // Off, the keep icon stays Text.Primary like the card's other command icons. On, it takes the
+    // toggle's selection ink, so the on state's fill (Text.SelectionBackground, the colour of
+    // Text.Primary) cannot hide it.
+    [Fact]
+    public void KeepIconTakesTheToggleInkOnTheSelectionFill() => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = Card(Image(320, 200));
+        try
+        {
+            Border host = QuickAccessDetachedFixture.Layout(card);
+            var keep = card.KeepToggleForTest;
+            SymbolIcon icon = Assert.IsType<SymbolIcon>(keep.Content);
+            Assert.Equal(Ink(host, "Text.Primary"), Assert.IsType<SolidColorBrush>(icon.Stroke).Color);
+
+            keep.IsChecked = true;
+            host.UpdateLayout();
+            var fill = Assert.IsType<Border>(keep.Template.FindName("CheckedLayer", keep));
+            Color stroke = Assert.IsType<SolidColorBrush>(icon.Stroke).Color;
+            Color background = ((SolidColorBrush)fill.Background).Color;
+            Assert.Equal(Ink(host, "Text.SelectionForeground"), stroke);
+            Assert.Equal(Ink(host, "Text.SelectionBackground"), background);
+            Assert.True(MyCapture.Core.Themes.ThemeContrast.Ratio(Theme(stroke), Theme(background)) >= 4.5,
+                "the keep icon must read on the on-state fill");
+
+            keep.IsChecked = false;
+            host.UpdateLayout();
+            Assert.Equal(Ink(host, "Text.Primary"), Assert.IsType<SolidColorBrush>(icon.Stroke).Color);
+        }
+        finally { card.Close(); }
+    });
+
+    private static Color Ink(FrameworkElement host, string key) => ((SolidColorBrush)host.FindResource(key)).Color;
+
+    private static MyCapture.Core.Themes.ThemeColor Theme(Color color) =>
+        MyCapture.Core.Themes.ThemeColor.Argb(color.A, color.R, color.G, color.B);
+
     private static Rect Bounds(FrameworkElement element, Visual ancestor) =>
         element.TransformToAncestor(ancestor).TransformBounds(new Rect(element.RenderSize));
 

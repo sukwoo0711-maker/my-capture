@@ -41,8 +41,10 @@ public sealed class ShellRetakeWindowTests
         window.Close();
     });
 
-    [Fact]
-    public void Retake_PreservesOwnedAndOtherEditors_StartsFreshSession_AndKeepsBothOriginals() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Retake_PreservesOwnedAndOtherEditors_StartsFreshSession_AndKeepsBothOriginals(bool native) => StaTestHost.Run(() =>
     {
         string originals = OwnedTestDirectory.Create("retake-original");
         var paths = AppPaths.CreateForRoot(originals);
@@ -51,14 +53,13 @@ public sealed class ShellRetakeWindowTests
         var persistence = new CapturePersistenceService(queue, paths, () => settings, NullLogger<CapturePersistenceService>.Instance);
         CaptureRecord? initial = null, separate = null;
         int acquired = 0, outsideClosed = 0;
-        CaptureOverlayWindow? selector = null;
         using var outsideCoordinator = Create(Frame);
         Assert.True(outsideCoordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
         PumpUntil(() => outsideCoordinator.LastTransitionForTest.IsCompleted);
         var outside = EditorWindow(outsideCoordinator);
         outside.Closing += (_, _) => outsideClosed++;
         using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.ApplyCaptureExclusion = window => { selector = Assert.IsType<CaptureOverlayWindow>(window); return true; };
+        coordinator.UseNativeDibSelector = native;
         coordinator.SelectionPersistRequested = selection =>
         {
             initial = persistence.PersistOriginal(selection.SelectedBitmap, 1, "original", "test");
@@ -91,7 +92,7 @@ public sealed class ShellRetakeWindowTests
             Assert.True(editor.IsVisible);
             Assert.True(outside.IsVisible);
             Assert.True(coordinator.IsActive);
-            Assert.True(Assert.IsType<CaptureOverlayView>(selector!.Content).CaptureFullScreen());
+            Assert.True(new CoordinatorSelector(coordinator, native).CaptureFullScreen());
             PumpUntil(() => coordinator.CanRetake);
             Assert.NotNull(separate);
             Assert.NotEqual(initial.Id, separate.Id);
@@ -111,14 +112,15 @@ public sealed class ShellRetakeWindowTests
         finally { coordinator.Cancel(); outsideCoordinator.Cancel(); OwnedTestDirectory.Delete(originals); }
     });
 
-    [Fact]
-    public void Retake_DoesNotCloseTheEditor_AndRejectsConcurrentSelectionAndPersistence() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Retake_DoesNotCloseTheEditor_AndRejectsConcurrentSelectionAndPersistence(bool native) => StaTestHost.Run(() =>
     {
         int acquired = 0, closes = 0, writes = 0;
-        CaptureOverlayWindow? selector = null;
         var persisted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.ApplyCaptureExclusion = window => { selector = Assert.IsType<CaptureOverlayWindow>(window); return true; };
+        coordinator.UseNativeDibSelector = native;
         coordinator.EditorScreenCaptureRequested = _ => { writes++; return persisted.Task; };
         coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
         PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
@@ -129,13 +131,14 @@ public sealed class ShellRetakeWindowTests
         {
             coordinator.Start(false, false, false, preserveEditor: true);
             PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
-            CaptureOverlayWindow firstSelector = Assert.IsType<CaptureOverlayWindow>(selector);
+            var firstSelector = new CoordinatorSelector(coordinator, native);
+            nint firstHandle = firstSelector.Handle;
             Assert.Equal(1, acquired);
             coordinator.Start(false, false, false, preserveEditor: true);
-            Assert.Same(firstSelector, selector);
+            Assert.Equal(firstHandle, new CoordinatorSelector(coordinator, native).Handle);
             Assert.Equal(1, acquired);
             Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty, recordForRepeat: false, preserveEditor: true));
-            Assert.True(Assert.IsType<CaptureOverlayView>(firstSelector.Content).CaptureFullScreen());
+            Assert.True(firstSelector.CaptureFullScreen());
             PumpUntil(() => writes == 1);
             coordinator.Start(false, false, false, preserveEditor: true);
             Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty, recordForRepeat: false, preserveEditor: true));

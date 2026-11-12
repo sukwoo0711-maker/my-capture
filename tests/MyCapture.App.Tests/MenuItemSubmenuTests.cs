@@ -235,19 +235,29 @@ public sealed class MenuItemSubmenuTests
         Directory.CreateDirectory(directory);
         BitmapSource Render(FrameworkElement element)
         {
-            var image = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth), (int)Math.Ceiling(element.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            Size extent = PopupSnapshot.ExtentOf(element);
+            var image = new RenderTargetBitmap((int)Math.Ceiling(extent.Width), (int)Math.Ceiling(extent.Height), 96, 96, PixelFormats.Pbgra32);
             image.Render(element);
             return image;
         }
         BitmapSource parentImage = Render(menu), childImage = Render(popupBody);
         var drawing = new DrawingVisual();
-        int width = parentImage.PixelWidth + childImage.PixelWidth + 24;
-        int height = Math.Max(parentImage.PixelHeight, childImage.PixelHeight) + 16;
+        double parentWidth = Math.Ceiling(menu.ActualWidth), childWidth = Math.Ceiling(popupBody.ActualWidth);
+        Rect parentBounds = PopupSnapshot.DrawBounds(menu, new Point(8, 8), parentImage.PixelWidth, parentImage.PixelHeight);
+        Rect childBounds = PopupSnapshot.DrawBounds(popupBody, new Point(parentWidth + 16, 8), childImage.PixelWidth, childImage.PixelHeight);
+        var canvas = new Rect(0, 0, parentWidth + childWidth + 24,
+            Math.Max(Math.Ceiling(menu.ActualHeight), Math.Ceiling(popupBody.ActualHeight)) + 16);
+        canvas.Union(parentBounds);
+        canvas.Union(childBounds);
+        // Extend the sheet outside its logical origin when a shadow exceeds the old padding.
+        parentBounds.Offset(-canvas.X, -canvas.Y);
+        childBounds.Offset(-canvas.X, -canvas.Y);
+        int width = (int)Math.Ceiling(canvas.Width), height = (int)Math.Ceiling(canvas.Height);
         using (DrawingContext dc = drawing.RenderOpen())
         {
             dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-            dc.DrawImage(parentImage, new Rect(8, 8, parentImage.PixelWidth, parentImage.PixelHeight));
-            dc.DrawImage(childImage, new Rect(parentImage.PixelWidth + 16, 8, childImage.PixelWidth, childImage.PixelHeight));
+            dc.DrawImage(parentImage, parentBounds);
+            dc.DrawImage(childImage, childBounds);
         }
         var sheet = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         sheet.Render(drawing);

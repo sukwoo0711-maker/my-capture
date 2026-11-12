@@ -215,7 +215,9 @@ public sealed class EditorRotationAndTextTests
             foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText" })
                 Assert.Equal("Button.Ghost", Tier(Command(tool)));
             Assert.Equal("Button.Primary", Tier(Command("EditorFlowDone")));
-            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowSaveToFile")));
+            // The outputs beside it, save to file and pin, share one bordered surface.
+            Assert.Equal("Button.Secondary", Tier(Command("EditorFlowSaveToFile")));
+            Assert.Equal("Button.Secondary", Tier(Command("EditorFlowPin")));
         });
     }
 

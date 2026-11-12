@@ -46,6 +46,28 @@ public sealed class OcrSelectionCopyTests
     });
 
     [Fact]
+    public void EachDeliveredCopyIsReportedOnceForTheStoreRating() => Ocr410Fixture.RunSta(() =>
+    {
+        var window = CreateWindow();
+        try
+        {
+            var reported = new List<bool>();
+            window.TextCopied += reported.Add;
+            window.ShowResult(OcrResult.Success("first line\nsecond line", "en-US", [], TimeSpan.Zero), "fixture");
+            window.SelectExtractionMode(OcrExtractionMode.Text);
+            Button copy = ButtonNamed(window, UiText.Get("Text_20CF6A996B4D"));
+            long writes = RecordingClipboard.WriteCount;
+
+            Click(copy);
+            Click(copy);
+
+            Assert.Equal(writes + 2, RecordingClipboard.WriteCount);
+            Assert.Equal([true, true], reported);
+        }
+        finally { window.CloseForExit(); }
+    });
+
+    [Fact]
     public void TranslationCopyButtonUsesCurrentSelectionThenAllTranslations() => Ocr410Fixture.RunSta(() =>
     {
         OcrResultWindow window = CreateTranslatedWindow();

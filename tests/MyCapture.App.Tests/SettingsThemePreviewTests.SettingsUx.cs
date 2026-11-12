@@ -512,12 +512,18 @@ public sealed partial class SettingsThemePreviewTests
                     HotkeyRecorder hide = Recorder(nameof(SettingsDraft.HideAllPinsHotkey));
                     if (name == "new")
                     {
+                        // A new installation also assigns hide/show and reopen for pins.
+                        Assert.Equal("Ctrl+Shift+Z", library.Text);
                         Assert.Equal("F3", paste.Text);
                         Assert.Equal("Shift+F3", hide.Text);
-                        Assert.All(recorders.Skip(2).Where(recorder => recorder != paste && recorder != hide),
+                        HotkeyRecorder restore = Recorder(nameof(SettingsDraft.RestoreClosedPinHotkey));
+                        Assert.Equal("Ctrl+Shift+F3", restore.Text);
+                        Assert.All(recorders.Skip(2).Where(recorder => recorder != library && recorder != paste && recorder != hide && recorder != restore),
                             recorder => Assert.Equal(string.Empty, recorder.Text));
+                        // Every row's "Default" restores the chord a new installation starts with.
+                        Assert.All(recorders, recorder => Assert.Equal(recorder.Text, recorder.DefaultText));
                         // An unassigned row says so on the button that records a new chord.
-                        Button record = Descendants(library).OfType<Button>().First();
+                        Button record = Descendants(Recorder(nameof(SettingsDraft.ToggleClickThroughHotkey))).OfType<Button>().First();
                         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Hotkey.Unassigned"));
                         Assert.Equal(UiText.Get("SettingsUx_RecordHotkeyTip"), record.ToolTip);
                     }

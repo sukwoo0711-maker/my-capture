@@ -3,7 +3,7 @@ using MyCapture.Core.Queue;
 namespace MyCapture.Core.Settings;
 
 /// <summary>
-/// The settings a new installation starts with: region capture, screen recording and clipboard
+/// The settings a new installation starts with. Region capture, screen recording, the library and
 /// pin commands own global shortcuts, the theme follows Windows, key captions appear while Alt is held, and
 /// library images have no time limit within a 1,000-item / 5 GiB capacity budget.
 /// </summary>
@@ -16,8 +16,10 @@ namespace MyCapture.Core.Settings;
 /// </para>
 /// <para>
 /// Only a launch with no settings file at all, and the "reset to defaults" command, use these
-/// values. F3 pins clipboard content, matching Snipaste and PixPin and the app's core reference
-/// workflow; Shift+F3 hides or shows the pins. Library and upload shortcuts stay unassigned.
+/// values. The four core shortcuts take priority over other programs, and the first launch
+/// explains the assignments; a reset keeps the user's own answer about that priority instead.
+/// Ctrl+Shift+Z opens the library, F3 pins content, Shift+F3 hides or
+/// shows the pins, Ctrl+Shift+F3 reopens a closed pin, and the upload shortcut stays unassigned.
 /// Shortcut keys stay visible in every button tooltip, double-click does not close a new pin,
 /// and pins left open at exit reopen at the next launch.
 /// </para>
@@ -36,9 +38,9 @@ public static class NewInstallDefaults
     public static void Apply(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        settings.Hotkeys.OpenLibrary = Hotkey.None;
         settings.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
         settings.Hotkeys.HideAllPins = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
+        settings.Hotkeys.RestoreClosedPin = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkF3);
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
         settings.Pin.CloseOnDoubleClick = true;
         settings.Pin.RestoreOpenPinsOnLaunch = true;
@@ -50,5 +52,6 @@ public static class NewInstallDefaults
         settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
         settings.Queue.MaxBytes = 5L * 1024 * 1024 * 1024;
         settings.Queue.MaxItems = 1000;
+        CoreShortcuts.Accept(settings.Hotkeys);
     }
 }

@@ -18,16 +18,17 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureRatioAutomationTests
 {
     [Theory]
-    [InlineData(SelectionRatio.Free)]
-    [InlineData(SelectionRatio.Ratio16x9)]
-    public void RealInvokePatternOpensTheMenuWithoutChangingTheLock(SelectionRatio ratio) => StaTestHost.Run(() =>
+    [InlineData(false, SelectionRatio.Free)]
+    [InlineData(false, SelectionRatio.Ratio16x9)]
+    [InlineData(true, SelectionRatio.Free)]
+    [InlineData(true, SelectionRatio.Ratio16x9)]
+    public void RealInvokePatternOpensTheMenuWithoutChangingTheLock(bool native, SelectionRatio ratio) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("en-US");
-        CaptureOverlayView view = View();
-        Window host = Host(view);
+        RatioSelector view = View(native);
         try
         {
-            Show(host, view);
+            Show(view);
             view.SelectRatio(ratio);
             CaptureModeBar bar = view.ModeBarForTest!;
             AutomationPeer peer = UIElementAutomationPeer.CreatePeerForElement(bar.RatioButton);
@@ -47,24 +48,26 @@ public sealed class CaptureRatioAutomationTests
             MenuItem selected = Assert.Single(bar.RatioMenuForTest!.Items.OfType<MenuItem>(), item => item.IsChecked);
             Assert.Equal(CaptureModeBar.RatioName(ratio), selected.Header);
         }
-        finally { Close(view, host); }
+        finally { view.ReleaseResources(); }
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ClickAndEnterOpenTheSameMenuWithoutTogglingTheLock(bool keyboard) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ClickAndEnterOpenTheSameMenuWithoutTogglingTheLock(bool native, bool keyboard) => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = View();
-        Window host = Host(view);
+        RatioSelector view = View(native);
         try
         {
-            Show(host, view);
+            Show(view);
             view.SelectRatio(SelectionRatio.Ratio4x3);
             CaptureModeBar bar = view.ModeBarForTest!;
             if (keyboard)
             {
                 KeyEventArgs enter = Overlay.KeyArgs(Key.Enter);
+                if (native) enter.RoutedEvent = Keyboard.PreviewKeyDownEvent;
                 bar.RatioButton.RaiseEvent(enter);
                 Assert.True(enter.Handled);
             }
@@ -77,17 +80,18 @@ public sealed class CaptureRatioAutomationTests
             Assert.Equal(SelectionRatio.Ratio4x3, view.Ratio);
             Assert.True(bar.RatioButton.IsChecked);
         }
-        finally { Close(view, host); }
+        finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void DisabledRatioButtonRejectsAutomationActivation() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DisabledRatioButtonRejectsAutomationActivation(bool native) => StaTestHost.Run(() =>
     {
-        CaptureOverlayView view = View();
-        Window host = Host(view);
+        RatioSelector view = View(native);
         try
         {
-            Show(host, view);
+            Show(view);
             view.CopyColorText = _ => Task.FromResult(true);
             view.SelectMode(CaptureSelectorMode.Color);
             CaptureModeBar bar = view.ModeBarForTest!;
@@ -98,38 +102,18 @@ public sealed class CaptureRatioAutomationTests
             Assert.Null(bar.RatioMenuForTest);
             Assert.Equal(SelectionRatio.Free, view.Ratio);
         }
-        finally { Close(view, host); }
+        finally { view.ReleaseResources(); }
     });
 
-    private static CaptureOverlayView View()
-    {
-        var view = new CaptureOverlayView(Desktop(), showMagnifier: false)
-        {
-            ReadCursor = () => new PointD(300, 300),
-            PlaceCursor = _ => false,
-            ReadMonitors = () => Monitors,
-            ShowModeBar = true,
-        };
-        view.InitializePointer();
-        return view;
-    }
+    // The native variant shows a real selector window, which must fit on the CI desktop.
+    private static RatioSelector View(bool native) => new(native, native ? ShownDesktop() : Desktop(),
+        () => new PointD(300, 300), false, native ? ShownMonitors : Monitors);
 
-    private static Window Host(CaptureOverlayView view) => new()
-    {
-        Content = view,
-        Width = 800,
-        Height = 500,
-        WindowStyle = WindowStyle.None,
-        ResizeMode = ResizeMode.NoResize,
-        ShowInTaskbar = false,
-    };
-
-    private static void Show(Window host, CaptureOverlayView view)
+    private static void Show(RatioSelector view)
     {
         // RenderTargetBitmap alone leaves the button detached. A popup needs the live owner
         // and input source that the real selector provides throughout its dispatcher turns.
-        host.Show();
-        host.UpdateLayout();
+        view.Show();
         Overlay.PumpUntil(() => view.ModeBarForTest?.RatioButton is { IsLoaded: true, IsVisible: true });
         Assert.NotNull(PresentationSource.FromVisual(view.ModeBarForTest!.RatioButton));
     }
@@ -140,10 +124,4 @@ public sealed class CaptureRatioAutomationTests
         Assert.NotNull(PresentationSource.FromVisual(bar.RatioMenuForTest!));
     }
 
-    private static void Close(CaptureOverlayView view, Window host)
-    {
-        if (view.ModeBarForTest?.RatioMenuForTest is { } menu) menu.IsOpen = false;
-        view.ReleaseResources();
-        host.Close();
-    }
 }

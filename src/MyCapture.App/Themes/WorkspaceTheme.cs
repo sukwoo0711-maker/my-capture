@@ -18,9 +18,21 @@ internal static class WorkspaceTheme
             window.Resources.MergedDictionaries.Add(Create(role));
         }
         Windows.Add((new WeakReference<Window>(window), role));
+        window.Closed += OnWindowClosed;
         ModernWindowChrome.SetWorkspaceRole(window, role);
         Apply(window.Resources, role, ThemeService.EffectiveTheme);
         ModernWindowChrome.Refresh(window);
+    }
+
+    private static void OnWindowClosed(object? sender, EventArgs args)
+    {
+        if (sender is not Window closed) return;
+        closed.Closed -= OnWindowClosed;
+        // A closed window may remain referenced by its owner. It no longer needs
+        // palette updates; hidden windows stay registered so they can reopen.
+        for (int i = Windows.Count - 1; i >= 0; i--)
+            if (!Windows[i].Window.TryGetTarget(out Window? window) || ReferenceEquals(window, closed))
+                Windows.RemoveAt(i);
     }
 
     internal static ResourceDictionary Create(WorkspaceRole role)

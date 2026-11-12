@@ -56,7 +56,7 @@ internal static partial class ProtectedTokens
     [GeneratedRegex(@"'[A-Za-z_][A-Za-z0-9_.\-]*'", RegexOptions.CultureInvariant)]
     private static partial Regex QuotedPattern();
 
-    [GeneratedRegex(L + @"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\(\)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(L + @"(?<!(?:^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*\.)[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\(\)", RegexOptions.CultureInvariant)]
     private static partial Regex CallPattern();
 
     [GeneratedRegex(L + @"[A-Za-z][A-Za-z0-9_]*\[\d+(?::\d+)?\]", RegexOptions.CultureInvariant)]
@@ -83,7 +83,7 @@ internal static partial class ProtectedTokens
     [GeneratedRegex(L + @"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+" + R, RegexOptions.CultureInvariant)]
     private static partial Regex SnakePattern();
 
-    [GeneratedRegex(L + @"(?=[A-Za-z0-9]*[a-z])(?:[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z]{2,}[A-Za-z0-9]*)" + R, RegexOptions.CultureInvariant)]
+    [GeneratedRegex(L + @"(?=[A-Za-z0-9]*[a-z])(?:[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][a-z0-9]*[A-Z]{2}[A-Za-z0-9]*)" + R, RegexOptions.CultureInvariant)]
     private static partial Regex CamelPattern();
 
     [GeneratedRegex(L + @"[A-Z][A-Z0-9]+" + R, RegexOptions.CultureInvariant)]
@@ -149,16 +149,25 @@ internal static partial class ProtectedTokens
         var candidates = new List<(ProtectedSpan Span, int Priority)>();
         for (int priority = 0; priority < Patterns.Length; priority++)
         {
-            foreach (Match match in Patterns[priority].Pattern.Matches(text))
-                candidates.Add((new ProtectedSpan(match.Index, match.Length, match.Value, Patterns[priority].Kind), priority));
+            // Only the spans are allocated. Matches() kept a Match object per hit until its collection
+            // ended and a LINQ sort copied the list with its keys: 6.5 MB instead of 2.3 MB for 64K
+            // characters of short %VAR% paths, enough to bring a garbage collection into a long input.
+            foreach (ValueMatch match in Patterns[priority].Pattern.EnumerateMatches(text))
+                candidates.Add((new ProtectedSpan(match.Index, match.Length, text.Substring(match.Index, match.Length),
+                    Patterns[priority].Kind), priority));
         }
 
+        // Earliest start, then the longest span, then the earlier pattern. One pattern's matches never share
+        // a start, so no two candidates compare equal and an unstable sort gives the one possible order.
+        candidates.Sort(static (left, right) =>
+        {
+            int order = left.Span.Start.CompareTo(right.Span.Start);
+            if (order == 0) order = right.Span.Length.CompareTo(left.Span.Length);
+            return order != 0 ? order : left.Priority.CompareTo(right.Priority);
+        });
         var chosen = new List<ProtectedSpan>();
         int end = 0;
-        foreach ((ProtectedSpan span, _) in candidates
-            .OrderBy(candidate => candidate.Span.Start)
-            .ThenByDescending(candidate => candidate.Span.Length)
-            .ThenBy(candidate => candidate.Priority))
+        foreach ((ProtectedSpan span, _) in candidates)
         {
             if (span.Start < end) continue;
             chosen.Add(span);
@@ -403,9 +412,14 @@ internal static partial class ProtectedTokens
     internal static bool HasTranslatableWords(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var rest = new StringBuilder(text);
-        foreach (ProtectedSpan span in Find(text).OrderByDescending(span => span.Start))
-            rest.Remove(span.Start, span.Length);
+        var rest = new StringBuilder(text.Length);
+        int end = 0;
+        foreach (ProtectedSpan span in Find(text))
+        {
+            rest.Append(text, end, span.Start - end);
+            end = span.Start + span.Length;
+        }
+        rest.Append(text, end, text.Length - end);
         return EnglishWord().IsMatch(rest.ToString());
     }
 

@@ -51,7 +51,7 @@ public sealed class RecordingSavedStateTests
         Assert.Equal(Visibility.Visible, indicator.Visibility);
         Assert.Same(typeof(RecordingControlWindow).GetField("CheckGlyph", BindingFlags.Static | BindingFlags.NonPublic)!
             .GetValue(null), indicator.Data);
-        Assert.Equal(Success(), Assert.IsType<SolidColorBrush>(status.Foreground).Color);
+        Assert.Equal(SuccessText(), Assert.IsType<SolidColorBrush>(status.Foreground).Color);
         Assert.Equal(Success(), Assert.IsType<SolidColorBrush>(indicator.Stroke).Color);
         Assert.Null(indicator.Fill);
 
@@ -188,9 +188,14 @@ public sealed class RecordingSavedStateTests
         }
     });
 
-    // The bar follows the theme token, or its own emerald when the test thread has no theme.
-    private static Color Success() =>
-        ThemeBrushes.Follow("State.Success", Color.FromRgb(0x45, 0xD6, 0xA2)) is SolidColorBrush brush
+    // The bar follows the theme tokens (the check State.Success, the word Text.Success), or its own
+    // emerald when the test thread has no theme.
+    private static Color Success() => Token("State.Success");
+
+    private static Color SuccessText() => Token("Text.Success");
+
+    private static Color Token(string key) =>
+        ThemeBrushes.Follow(key, Color.FromRgb(0x45, 0xD6, 0xA2)) is SolidColorBrush brush
             ? brush.Color
             : Color.FromRgb(0x45, 0xD6, 0xA2);
 

@@ -29,6 +29,9 @@ public sealed class CoreShortcutSettingsApplyTests
             if (failSave) Directory.CreateDirectory(paths.SettingsFile);
             var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
             AppSettings live = NewInstallDefaults.Create();
+            live.Hotkeys.ForceCoreShortcuts = false;
+            live.Hotkeys.CoreShortcutsAsked = false;
+            live.Hotkeys.OpenLibrary = Hotkey.None;
             AppSettings before = live;
             using var native = new NativeMessageWindow();
             using var hotkeys = new GlobalHotkeyService(native, new Registrar(false),
@@ -96,6 +99,8 @@ public sealed class CoreShortcutSettingsApplyTests
         {
             var store = new SettingsStore(AppPaths.CreateForRoot(ExportTestDirectory.Create()), NullLogger<SettingsStore>.Instance);
             AppSettings published = NewInstallDefaults.Create();
+            published.Hotkeys.ForceCoreShortcuts = false;
+            published.Hotkeys.OpenLibrary = Hotkey.None;
             published.Hotkeys.CoreShortcutsAsked = previouslyAsked;
             using var window = new NativeMessageWindow();
             using var hotkeys = new GlobalHotkeyService(window, new Registrar(blocked),
@@ -132,6 +137,38 @@ public sealed class CoreShortcutSettingsApplyTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ResetBesideTheOpenQuestionLeavesPriorityToTheAnswer(bool accepted) => StaTestHost.Run(() =>
+    {
+        // An upgrade that has not answered opens Settings from the tray beside the question and resets.
+        var store = new SettingsStore(AppPaths.CreateForRoot(ExportTestDirectory.Create()), NullLogger<SettingsStore>.Instance);
+        var live = new AppSettings();
+        using var window = new NativeMessageWindow();
+        using var hotkeys = new GlobalHotkeyService(window, new Registrar(false),
+            NullLogger<GlobalHotkeyService>.Instance, new UnavailableOverride());
+        hotkeys.Initialize(live.Hotkeys);
+        var startup = new StartupRegistrationService(new MemoryRunKeyStore(), @"C:\Apps\MyCapture.exe");
+        var apply = new SettingsApplyService(store, () => live, next => live = next,
+            null, hotkeys, startup, NullLogger.Instance);
+        var draft = new SettingsDraft(live);
+        draft.ResetToDefaults();
+
+        Assert.True(apply.Apply(draft.ToAppSettings()).Saved);
+        Assert.False(live.Hotkeys.CoreShortcutsAsked);
+        Assert.False(live.Hotkeys.ForceCoreShortcuts);
+
+        SettingsApplyResult answer = App.ApplyPracticeShortcutAnswer(live, apply, accepted, firstRun: false);
+
+        Assert.True(answer.Saved);
+        foreach (HotkeySettings keys in new[] { live.Hotkeys, store.Load().Hotkeys })
+        {
+            Assert.True(keys.CoreShortcutsAsked);
+            Assert.Equal(accepted, keys.ForceCoreShortcuts);
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Apply_BeforeWelcomeNeverAccessesStartupAndPreservesItsPreference(bool failSave) =>
         StaTestHost.Run(() =>
         {
@@ -140,6 +177,9 @@ public sealed class CoreShortcutSettingsApplyTests
             if (failSave) Directory.CreateDirectory(paths.SettingsFile);
             var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
             AppSettings published = NewInstallDefaults.Create();
+            published.Hotkeys.ForceCoreShortcuts = false;
+            published.Hotkeys.CoreShortcutsAsked = false;
+            published.Hotkeys.OpenLibrary = Hotkey.None;
             AppSettings original = published;
             Assert.True(original.General.LaunchAtLogin);
             using var window = new NativeMessageWindow();

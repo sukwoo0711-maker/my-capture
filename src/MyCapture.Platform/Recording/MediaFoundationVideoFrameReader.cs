@@ -90,8 +90,6 @@ internal sealed class DecodedVideoFrameSelector
 /// </summary>
 public sealed partial class MediaFoundationVideoFrameReader : IDisposable
 {
-    private const uint MfVersion = 0x0002_0070;
-    private const uint MfStartupFull = 0;
     private const uint FirstVideoStream = 0xFFFF_FFFC;
     private const uint AllStreams = 0xFFFF_FFFE;
     private const uint MediaSource = 0xFFFF_FFFF;
@@ -116,7 +114,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     private static readonly Guid PresentationDuration = new("6c990d33-bb8e-477a-8598-0d5d96fcd88a");
 
     private IMFSourceReader? _reader;
-    private readonly bool _startedMediaFoundation;
+    private MediaFoundationLifetime.Lease? _platform;
     private int _codedWidth;
     private int _codedHeight;
     private int _cropX;
@@ -156,8 +154,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             throw new FileNotFoundException("The source video is unavailable.", fullPath);
         }
 
-        Check(MFStartup(MfVersion, MfStartupFull), nameof(MFStartup));
-        _startedMediaFoundation = true;
+        // Started once for the process (#243); the lease holds it until Dispose.
+        _platform = MediaFoundationPlatform.Acquire();
         try
         {
             Initialize(fullPath, options ?? MediaFoundationVideoFrameReaderOptions.Default);
@@ -208,7 +206,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             throw new FileNotFoundException("The source video is unavailable.", fullPath);
         }
 
-        Check(MFStartup(MfVersion, MfStartupFull), nameof(MFStartup));
+        // Disposed after the finally below has released the reader.
+        using MediaFoundationLifetime.Lease platform = MediaFoundationPlatform.Acquire();
         IMFSourceReader? reader = null;
         try
         {
@@ -221,8 +220,6 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             {
                 Marshal.ReleaseComObject(reader);
             }
-
-            _ = MFShutdown();
         }
     }
 
@@ -243,7 +240,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             throw new FileNotFoundException("The source video is unavailable.", fullPath);
         }
 
-        Check(MFStartup(MfVersion, MfStartupFull), nameof(MFStartup));
+        // Disposed after the finally below has released the reader.
+        using MediaFoundationLifetime.Lease platform = MediaFoundationPlatform.Acquire();
         IMFSourceReader? reader = null;
         try
         {
@@ -265,8 +263,6 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             {
                 Marshal.ReleaseComObject(reader);
             }
-
-            _ = MFShutdown();
         }
     }
 
@@ -851,10 +847,9 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         _d3d?.Dispose();
         _d3d = null;
 
-        if (_startedMediaFoundation)
-        {
-            _ = MFShutdown();
-        }
+        // Last: the platform outlives every Media Foundation object this reader created.
+        _platform?.Dispose();
+        _platform = null;
     }
 
     private static void Check(int result, string operation)
@@ -921,11 +916,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         public NativeVideoSize Area;
     }
 
-    [DllImport("mfplat.dll")]
-    private static extern int MFStartup(uint version, uint flags);
-
-    [DllImport("mfplat.dll")]
-    private static extern int MFShutdown();
+    // MFStartup and MFShutdown belong to MediaFoundationPlatform alone.
 
     [DllImport("mfplat.dll")]
     private static extern int MFCreateAttributes(out IMFAttributes attributes, uint initialSize);

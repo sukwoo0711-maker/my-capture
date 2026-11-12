@@ -54,6 +54,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
     private const double ToolRailWidth = 94;
+    // Strength sliders sit beside an exact value box, so a short track is enough to drag; at this
+    // width every single-type English configuration keeps its delete button on the one row.
+    private const double InspectorSliderWidth = 40;
 
     private readonly AnnotationSourceMetadata _frame;
     private readonly BitmapSource _selectedBitmap;
@@ -146,6 +149,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private FrameworkElement _stepSection = null!;
     private Border _stepPreview = null!;
     private Path _stepPreviewNumber = null!;
+    private Path _stepPreviewOutline = null!;
     private readonly HangulShortcutRelay _hangulRelay;
     private DispatcherTimer? _hangulNoticeTimer;
     private long? _hangulNoticeShownAt;
@@ -306,7 +310,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         _viewport.MouseLeftButtonUp += OnSurfaceMouseUp;
         _viewport.MouseRightButtonDown += OnSurfaceRightDown;
         _viewport.MouseLeave += (_, _) => HidePointerPreview();
-        _controller.VisualInvalidated += (_, _) => RefreshPointerFeedback();
+        _controller.VisualInvalidated += (_, _) =>
+        {
+            SyncLiveTextInk();
+            RefreshPointerFeedback();
+        };
         PreviewKeyDown += (_, _) => RefreshPointerModifiers();
         PreviewKeyUp += (_, _) => RefreshPointerModifiers();
         _viewport.LostMouseCapture += (_, e) =>
@@ -602,7 +610,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
         if (_commitInProgress) return true;
-        if (_customColorPopup is { IsOpen: true } && key == Key.Escape && modifiers == ModifierKeys.None)
+        if (IsCustomColorFlyoutOpen && key == Key.Escape && modifiers == ModifierKeys.None)
         {
             _customColorInput.Text = ColorCode(CurrentPropertyColor());
             CloseCustomColorFlyout(returnFocus: true);
@@ -853,7 +861,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _lastPointerControl;
     private bool _pointerInside;
     private Window? _pointerWindow;
-    private Popup? _pointerColorPopup;
     private EditorCursorKind _canvasCursorKind;
 
     /// <summary>A left press on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
@@ -1300,11 +1307,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void RefreshPointerFeedback()
     {
         if (_viewport is null || _surface is null) return;
-        if (_customColorPopup is not null && !ReferenceEquals(_pointerColorPopup, _customColorPopup))
-        {
-            _pointerColorPopup = _customColorPopup;
-            _pointerColorPopup.Opened += (_, _) => HidePointerPreview();
-        }
         ConfigurePointerScale();
         if (_lastPointerDip is not Point dip)
         {
@@ -1325,7 +1327,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void UpdatePointerPreview(PointD image) => _surface.UpdatePointerPreview(image,
         _pointerInside && _activeTextBox is null && _crop is null && !_mosaicDragging
-        && _customColorPopup is not { IsOpen: true }
+        && !IsCustomColorFlyoutOpen
         && (_simulatingPointer || _pointerWindow?.IsActive != false));
 
     private void HidePointerPreview()
@@ -1375,11 +1377,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // Settle that layout before copying the image scale into the live font size.
         UpdateLayout();
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        ColorRgba foreground = annotation.Foreground;
-        double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
-        Color background = annotation.Background.A > 0
-            ? Color.FromArgb(255, annotation.Background.R, annotation.Background.G, annotation.Background.B)
-            : luma > 140 ? Colors.Black : Colors.White;
+        SolidColorBrush ink = annotation.Foreground.ToBrush();
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1392,12 +1390,16 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
-            Foreground = annotation.Foreground.ToBrush(),
-            // TextBox does not draw the caption's outline; keep unplated text readable while editing.
-            Background = new SolidColorBrush(background),
+            Foreground = ink,
+            // The box draws only the glyphs, caret, selection and IME composition. The surface
+            // draws the caption's plate and outline under it with the committed caption's code
+            // (AnnotationEditorController.LiveTextForPaint), so the picture shows through between
+            // the glyphs and typing already looks like the result.
+            Background = Brushes.Transparent,
             Template = CaptionTextBoxTemplate.Value,
-            CaretBrush = 0.299 * background.R + 0.587 * background.G + 0.114 * background.B > 140
-                ? Brushes.Black : Brushes.White,
+            // White or black inside a ring of the caption's outline colour (CaretBrushes), so the
+            // caret shows over any picture under the clear box.
+            CaretBrush = CaretBrushes(annotation).Core,
             BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1426,9 +1428,15 @@ internal sealed partial class AnnotationEditorControl : Grid
         SizeChangedEventHandler resize = (_, _) => LayoutLiveTextBox(textBox);
         ScrollChangedEventHandler scroll = (_, e) =>
         {
+            MarkCaretOutlineStale();
             if (e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
                 UpdateLiveTextViewport(textBox);
+            SyncLiveTextScroll(textBox);
         };
+        // The layout pass places the outline, as it places the box's own caret; a caret move only
+        // marks it (see MarkCaretOutlineStale).
+        RoutedEventHandler caretMoved = (_, _) => MarkCaretOutlineStale();
+        EventHandler laidOut = (_, _) => UpdateCaretOutline(textBox);
         ScrollViewer? contentHost = null;
         bool connected = false;
         void ConnectViewport()
@@ -1436,6 +1444,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (connected) return;
             connected = true;
             _overlayCanvas.SizeChanged += resize;
+            textBox.SelectionChanged += caretMoved;
+            textBox.LayoutUpdated += laidOut;
             textBox.ApplyTemplate();
             contentHost = textBox.Template.FindName("PART_ContentHost", textBox) as ScrollViewer;
             if (contentHost is not null)
@@ -1445,6 +1455,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 contentHost.Template = CaptionScrollHostTemplate.Value;
                 contentHost.ApplyTemplate();
                 contentHost.ScrollChanged += scroll;
+                if (ReferenceEquals(_activeTextBox, textBox)) AttachCaretOutline(contentHost);
             }
             UpdateLiveTextViewport(textBox);
         }
@@ -1454,8 +1465,11 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (!connected) return;
             connected = false;
             _overlayCanvas.SizeChanged -= resize;
+            textBox.SelectionChanged -= caretMoved;
+            textBox.LayoutUpdated -= laidOut;
             if (contentHost is not null) contentHost.ScrollChanged -= scroll;
             contentHost = null;
+            if (ReferenceEquals(_activeTextBox, textBox)) DetachCaretOutline();
         };
         LayoutLiveTextBox(textBox);
         ConnectViewport();
@@ -1523,13 +1537,17 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         box.FontSize = Math.Max(1, editing.FontSize * dipPerPixel);
-        TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
+        // New text, a new font size or a new width can move the caret without moving its index.
+        _caretOutlineStale = true;
+        string content = box.Text ?? string.Empty;
+        TextLayout fit = LiveTextLayout(editing, content);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
-        double minimumWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
-        double availableWidth = Math.Max(minimumWidth, _overlayCanvas.ActualWidth - target.Left + _liveTextInset.X);
-        box.MinWidth = fit.AutoSize ? Math.Max(minimumWidth, Math.Min(160, availableWidth)) : minimumWidth;
-        box.MinHeight = 32;
+        // The box hugs the text at every image scale: at least one em of the live font inside
+        // its chrome, so an empty caption still shows its frame and caret.
+        double em = box.FontSize;
+        box.MinWidth = chrome + em;
+        box.MinHeight = em + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -1548,6 +1566,24 @@ internal sealed partial class AnnotationEditorControl : Grid
         box.RenderTransform = new RotateTransform(editing.RotationDegrees,
             target.Width / 2 + _liveTextInset.X, target.Height / 2 + _liveTextInset.Y);
         UpdateLiveTextViewport(box);
+        // The plate and outline under the box follow the same text and layout, including text
+        // an IME is still composing (it is part of box.Text).
+        if (_controller.UpdateLiveText(content, fit)) _surface.InvalidateVisual();
+        SyncLiveTextScroll(box);
+    }
+
+    /// <summary>
+    /// Keeps the live box's glyphs in the caption's colour, and its caret in the colours that go
+    /// with it, when the caption changes while the box stays open; the surface takes the outline
+    /// and plate from the caption on its next paint.
+    /// </summary>
+    private void SyncLiveTextInk()
+    {
+        if (_activeTextBox is not { } box || _editingText is not { } editing) return;
+        SyncCaretInk();
+        Color ink = editing.Foreground.ToColor();
+        if (box.Foreground is SolidColorBrush { Color: var current } && current == ink) return;
+        box.Foreground = editing.Foreground.ToBrush();
     }
 
     private TextLayout LiveTextLayout(TextAnnotation text, string content) =>
@@ -1595,7 +1631,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// The live caption's scroll host: the text viewport between two bar slots, so the vertical bar
     /// can sit right of the caption, left of it, or over its right edge (see
     /// <see cref="ChooseCaptionScrollBarSide"/>) without changing the text view or its width. The
-    /// bar keeps the application's ScrollBar style. Sealed once, so any editor thread may use it.
+    /// bar keeps the application's ScrollBar style. Under the text view, a layer of the same bounds
+    /// holds the caret's outline. Sealed once, so any editor thread may use it.
     /// </summary>
     private static readonly Lazy<ControlTemplate> CaptionScrollHostTemplate = new(() =>
     {
@@ -1610,6 +1647,8 @@ internal sealed partial class AnnotationEditorControl : Grid
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <Canvas x:Name="CaretOutlineLayer" Grid.Column="1" Margin="{TemplateBinding Padding}"
+                            IsHitTestVisible="False" />
                     <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Column="1"
                                             Margin="{TemplateBinding Padding}"
                                             CanContentScroll="{TemplateBinding CanContentScroll}"
@@ -1667,6 +1706,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         Canvas.SetLeft(box, _liveTextLeft - (side == CaptionScrollBarSide.Left ? scrollWidth : 0));
     }
 
+    /// <summary>
+    /// Tells the surface how far the live box has scrolled a caption taller than the canvas, so the
+    /// plate and outline under the box stay on the glyphs it shows and stay inside its text view.
+    /// </summary>
+    private void SyncLiveTextScroll(TextBox box)
+    {
+        if (!ReferenceEquals(_activeTextBox, box)) return;
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var presenter = host?.Template?.FindName("PART_ScrollContentPresenter", host) as ScrollContentPresenter;
+        LiveCaptionScroll? scroll = null;
+        if (host is { ScrollableHeight: > 0 } && presenter is not null)
+        {
+            double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+            // The first glyph's line starts at the caption's top when the box is not scrolled.
+            double top = presenter.TranslatePoint(default, box).Y - _liveTextInset.Y;
+            scroll = new LiveCaptionScroll(host.VerticalOffset / dipPerPixel, top / dipPerPixel, presenter.ActualHeight / dipPerPixel);
+        }
+
+        if (_controller.UpdateLiveTextScroll(scroll)) _surface.InvalidateVisual();
+    }
+
     internal AnnotationDocument CreateCurrentImageSnapshot()
     {
         Dispatcher.VerifyAccess();
@@ -1708,6 +1768,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
 
         box.TextChanged -= OnLiveTextBoxTextChanged;
+        DetachCaretOutline();
         _overlayCanvas.Children.Remove(box);
 
         bool hadText = !string.IsNullOrEmpty(box.Text);
@@ -2009,6 +2070,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         UIElement statusBar = BuildStatusBar();
         Grid.SetRow(statusBar, 2);
         Children.Add(statusBar);
+        AttachColorFlyoutLayer();
     }
 
     private Border BuildCommandBar()
@@ -2111,6 +2173,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             "Icon.Pin", () => Geometry.Parse("M10,17.5 L10,12.25 M6.25,12.25 L13.75,12.25 L12.5,8.5 L13,3.75 L7,3.75 L7.5,8.5 Z"),
             PinAndClose);
         AutomationProperties.SetAutomationId(_pinButton, "EditorFlowPin");
+        // An output like save to file beside it, so it takes the same bordered surface.
+        _pinButton.SetResourceReference(StyleProperty, "Button.Secondary");
         CommandButton(_pinButton, borderless: false);
         CommandButtonPresentation.CollapseOrder(_pinButton, 7);
         RefreshPinShortcut();
@@ -2244,8 +2308,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// The disabled look comes from the shared button styles: each button level keeps its shape
     /// and only dims. <paramref name="borderless"/> marks an editing command (undo, crop, rotate,
     /// redact, copy text, cancel), drawn as a borderless tool button with its icon and name. Only
-    /// the output commands (save, copy) keep the bordered surface and Done the fill, so the bar
-    /// reads as tools, outputs and one finishing action.
+    /// the output commands (save to file, pin) keep the bordered secondary surface and Done (copy)
+    /// the fill, so the bar reads as tools, outputs and one finishing action.
     /// </remarks>
     private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
@@ -2305,8 +2369,10 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
-        var reduceExport = new MenuItem { Header = UiText.Get("ExportReduction_Title") };
-        AutomationName(reduceExport, UiText.Get("ExportReduction_Title"));
+        // The command opens a dialog, so its name ends with an ellipsis as in the library; the
+        // dialog's own title (ExportReduction_Title) has none.
+        var reduceExport = new MenuItem { Header = UiText.Get("Library.ExportImage") };
+        AutomationName(reduceExport, UiText.Get("Library.ExportImage"));
         reduceExport.Click += (_, _) => Commit(EditorCommitAction.SaveAs, reduceExport: true);
         menu.Items.Add(reduceExport);
 
@@ -2467,7 +2533,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _overlayCanvas.Background = null;
         _viewport.Children.Add(_overlayCanvas);
 
-        return ThemedBorder(new Border
+        Border frame = ThemedBorder(new Border
         {
             Background = Brush("Surface.Sunken", Colors.Black),
             BorderBrush = Brush("Border.Subtle", Colors.DimGray),
@@ -2477,6 +2543,15 @@ internal sealed partial class AnnotationEditorControl : Grid
             ClipToBounds = true,
             Child = _viewport,
         }, "Surface.Sunken");
+        // A Border does not clip its child to its rounded corners, and the canvas paints its
+        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in). The corners
+        // are drawn over the canvas, above everything in it, instead of clipping the canvas to
+        // the outline's inside edge: WPF draws a rounded clip through an intermediate surface as
+        // large as the canvas (about 30 MB for a 4K editor). The frame sits on the body's surface.
+        var corners = new CanvasFrameCorners(frame, "Surface.Base");
+        Panel.SetZIndex(corners, int.MaxValue);
+        _viewport.Children.Add(corners);
+        return frame;
     }
 
     private Border BuildInspector()
@@ -2554,12 +2629,20 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var panel = PropertyGroup("AnnotationStepProperties");
         panel.Children.Add(PropertyLabel(UiText.Get("EditorUx_StepNumberNext")));
+        // The canvas strokes a badge's outline and fills the number over it, so only the outer
+        // half of the outline shows; the preview layers two paths the same way. The number's
+        // clear stroke gives both paths the same measured size, so centring keeps them aligned.
+        _stepPreviewOutline = new Path
+        {
+            Stroke = StepPreviewOutlineBrush,
+            StrokeLineJoin = PenLineJoin.Round,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         _stepPreviewNumber = new Path
         {
             Fill = Brushes.White,
-            Stroke = StepPreviewOutlineBrush,
-            StrokeThickness = 1,
-            StrokeLineJoin = PenLineJoin.Round,
+            Stroke = Brushes.Transparent,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -2567,9 +2650,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             Width = 32,
             Height = 32,
-            CornerRadius = new CornerRadius(4),
+            // Square, as the canvas paints a step badge's plate.
             BorderThickness = new Thickness(1),
-            Child = _stepPreviewNumber,
+            Child = new Grid { Children = { _stepPreviewOutline, _stepPreviewNumber } },
             SnapsToDevicePixels = true,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
@@ -2589,25 +2672,37 @@ internal sealed partial class AnnotationEditorControl : Grid
         ColorRgba color = _controller.StrokeColor;
         double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         string name = UiText.Format("EditorUx_StepNumberNextName", number);
+        string family = _controller.DefaultFontFamily;
         // The inspector refreshes on every selection and history event while the step tool is
         // active; the badge is rebuilt only when something it draws or announces changes.
-        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name);
+        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name, family);
         if (_stepPreviewShown == shown) return;
         _stepPreviewShown = shown;
         _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
-        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-            text.Length > 2 ? TypeScale.Content.StepPreviewDense : TypeScale.Content.StepPreviewNormal, Brushes.White, pixelsPerDip);
-        Geometry digits = formatted.BuildGeometry(new Point(0, 0));
+        // The badge the next click adds, laid out as the canvas lays it out: its font, weight
+        // and outline, fitted to the preview's size by the measure the step tool uses.
+        var badge = new TextAnnotation
+        {
+            IsStepNumber = true, Text = text, Rect = new RectD(0, 0, _stepPreview.Width, _stepPreview.Height),
+            FontFamily = family, Background = color, Foreground = ColorRgba.White, Bold = true, HasOutline = true,
+        };
+        badge.FontSize = MeasureStepNumberFont(badge);
+        Geometry digits = TextAnnotationLayout.Format(badge, pixelsPerDip).BuildGeometry(new Point(0, 0));
         // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
         Rect ink = digits.Bounds;
         if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
         _stepPreviewNumber.Data = digits;
+        _stepPreviewOutline.Data = digits;
+        // The canvas's outline width for this badge (AnnotationRenderer.DrawText).
+        double outline = badge.OutlineStyle == TextOutlineStyle.Consistent
+            ? badge.FontSize / 18 : Math.Max(1, badge.FontSize / 12);
+        _stepPreviewOutline.StrokeThickness = outline;
+        _stepPreviewNumber.StrokeThickness = outline;
         AutomationName(_stepPreview, name);
     }
 
     /// <summary>What the step preview last drew and announced.</summary>
-    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name)? _stepPreviewShown;
+    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name, string Family)? _stepPreviewShown;
 
     /// <summary>The number the step preview shows, for tests.</summary>
     internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);
@@ -2787,7 +2882,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
             ToolTip = UiText.Get("Text_27FD5EFB7773"),
-            Width = 64,
+            Width = InspectorSliderWidth,
             MinHeight = 32,
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
@@ -2917,7 +3012,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             IsSnapToTickEnabled = true,
             Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
-            Width = 64,
+            Width = InspectorSliderWidth,
             MinHeight = 32,
             VerticalAlignment = VerticalAlignment.Center,
         };

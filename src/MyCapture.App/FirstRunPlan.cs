@@ -5,8 +5,10 @@ namespace MyCapture.App;
 /// <summary>What the shell opens itself at launch.</summary>
 /// <param name="ShowWelcome">The first-run welcome window.</param>
 /// <param name="OpenLibrary">The library, opened right away.</param>
-/// <param name="ShowCoreShortcuts">The unanswered shortcut question, before any other launch window.</param>
-internal readonly record struct LaunchPresentation(bool ShowWelcome, bool OpenLibrary, bool ShowCoreShortcuts = false);
+/// <param name="ShowCoreShortcuts">The shortcut question or first-install notice, before any other launch window.</param>
+/// <param name="CoreShortcutsNotice">The first-install notice for shortcuts that are already assigned.</param>
+internal readonly record struct LaunchPresentation(bool ShowWelcome, bool OpenLibrary, bool ShowCoreShortcuts = false,
+    bool CoreShortcutsNotice = false);
 
 /// <summary>What follows the welcome window.</summary>
 internal enum AfterWelcome
@@ -25,8 +27,9 @@ internal enum PracticeCloseRoute { Normal, Ignore, CompleteFirstRunAtExit, Conti
 internal sealed record StartAtSignInOutcome(bool Enabled, string? Notice);
 
 /// <summary>
-/// First-run presentation: one window at a time. The unanswered core-shortcut question comes
-/// first, including on a quiet launch. After the answer, a first run shows the welcome window (no
+/// First-run presentation uses one window at a time. The unanswered core-shortcut question or
+/// the new installation's assigned-shortcut notice comes first, including on a quiet launch.
+/// After the answer or acknowledgement, a first run continues with the welcome guide (no
 /// library behind it and no notification on top); the library follows once it closes, with the
 /// "ready" notification naming the capture key. Later launches keep their behaviour: the library
 /// opens unless the launch is a quiet sign-in launch. They show no "ready" notification: it would
@@ -39,8 +42,11 @@ internal static class FirstRunPlan
             ? PracticeCloseRoute.CompleteFirstRunAtExit : PracticeCloseRoute.Ignore
         : firstRun && step == WelcomeStep.Consent ? PracticeCloseRoute.ContinueWelcome : PracticeCloseRoute.Normal;
 
-    internal static LaunchPresentation ForLaunch(bool isFirstRun, bool quietLaunch, bool openSettings, bool coreShortcutsAsked = true) => !coreShortcutsAsked
+    internal static LaunchPresentation ForLaunch(bool isFirstRun, bool quietLaunch, bool openSettings,
+        bool coreShortcutsAsked = true, bool coreShortcutsForced = false) => !coreShortcutsAsked
         ? new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: true)
+        : isFirstRun && coreShortcutsForced
+        ? new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: true, CoreShortcutsNotice: true)
         : isFirstRun
         ? new LaunchPresentation(ShowWelcome: true, OpenLibrary: false)
         : new LaunchPresentation(ShowWelcome: false, OpenLibrary: !quietLaunch && !openSettings);

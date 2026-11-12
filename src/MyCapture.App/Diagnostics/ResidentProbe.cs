@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -23,8 +24,13 @@ namespace MyCapture.App.Diagnostics;
 /// <remarks>
 /// The probe never registers global shortcuts, never writes the Run key, never checks for updates,
 /// never imports the legacy library and never writes the clipboard (the clipboard writer is replaced
-/// before any product code runs). Desktop frames are synthetic, at the virtual desktop's size, so no
-/// screen content is read or stored.
+/// before any product code runs). Selection frames are synthetic, at the virtual desktop's size.
+/// The one step that reaches outside the data root is the large library delete
+/// (<see cref="ResidentProbeLibraryDelete"/>): its synthetic captures pass through the user's Recycle
+/// Bin and its Undo brings them all back, leaving there only the deletion's retired journal folder,
+/// as every Undo in the app does. The probe never empties the Recycle Bin.
+/// Ordinary modes retain native one-pixel/metadata prewarm. The explicit long-run preflight also
+/// substitutes those input boundaries before shell startup; it does not measure native acquisition.
 /// </remarks>
 internal sealed class ResidentProbeOptions
 {
@@ -47,24 +53,38 @@ internal sealed class ResidentProbeOptions
     /// The old <c>prewarm-readers</c> flag is accepted as a no-op since warming is now the default;
     /// <c>no-reader-prewarm</c> wins when both are supplied. <c>legacy-capture-settle</c>,
     /// <c>no-idle-gc</c>, <c>legacy-flight-bounds</c> and <c>no-private-working-set</c> isolate the
-    /// corresponding performance changes. <c>selector-breakdown</c> adds dispatcher tracing and a
-    /// blocking render-thread flush before selection; <c>receipt-breakdown</c> records receipt marks.
+    /// corresponding performance changes. <c>selector-breakdown</c> adds dispatcher tracing; the WPF
+    /// path also blocks on a render-thread flush before selection. <c>receipt-breakdown</c> records receipt marks.
+    /// <c>legacy-guide-write</c> restores immediate idle guide writes; <c>selector-show-owned</c> omits
+    /// the native chrome show restack.
     /// These diagnostic variants change workload or timing and are never used for the release table.
     /// </summary>
     internal static readonly string[] KnownVariants =
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "no-flight-spare", "no-copy-wait",
          "frame-cached", "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers",
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
-         "selector-breakdown", "receipt-breakdown", "no-key-panel"];
+         "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
+         "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements",
+         "selector-freeform", "selector-freeform-once",
+         "legacy-guide-write", "selector-show-owned",
+         "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
+         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];
 
-    internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
+    /// <summary>
+    /// The release table's steps, in order. The large library delete runs last: the captures it adds
+    /// stay in the probe's library, and no earlier step is measured with them.
+    /// </summary>
+    internal static readonly string[] AllScenarios =
+        ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10", ResidentProbeLibraryDelete.Scenario];
 
-    private ResidentProbeOptions(string output, IReadOnlyList<string> scenarios, bool quick, bool audit)
+    internal ResidentProbeOptions(string output, IReadOnlyList<string> scenarios, bool quick, bool audit,
+        IReadOnlySet<string>? variants = null)
     {
         Output = output;
         Scenarios = scenarios;
         Quick = quick;
         Audit = audit;
+        if (variants is not null) Variants = variants;
     }
 
     /// <summary>
@@ -85,6 +105,14 @@ internal sealed class ResidentProbeOptions
 
     internal bool Has(string variant) => Variants.Contains(variant);
 
+    /// <summary>The native selector is the product default; WPF remains an explicit diagnostic route.</summary>
+    internal static bool UsesNativeSelector(IReadOnlySet<string> variants) => !variants.Contains("selector-wpf");
+
+    internal static NativeSelectorChromeStrategy GetSelectorChromeStrategy(IReadOnlySet<string> variants) =>
+        variants.Contains("selector-chrome-fresh") ? NativeSelectorChromeStrategy.Fresh
+        : variants.Contains("selector-chrome-parallel") ? NativeSelectorChromeStrategy.Parallel
+        : variants.Contains("selector-chrome-dib") ? NativeSelectorChromeStrategy.Dib : NativeSelectorChromeStrategy.Retained;
+
     internal string Output { get; }
 
     internal string DataRoot => DiagnosticOutputPaths.Child(Output, "profile");
@@ -96,6 +124,15 @@ internal sealed class ResidentProbeOptions
 
     /// <summary>Short settle windows for development; the release table always uses the full ones.</summary>
     internal bool Quick { get; }
+
+    internal int? LibraryFirstPageCount { get; private init; }
+
+    internal bool LibraryFirstPage => LibraryFirstPageCount is not null;
+
+    internal bool LongRun => ResidentLongRunContract.IsRequested(Scenarios);
+
+    internal bool LongRunPreflight => Scenarios.Count == 1 &&
+        string.Equals(Scenarios[0], ResidentLongRunContract.PreflightScenario, StringComparison.OrdinalIgnoreCase);
 
     internal int[] SettleSeconds => Quick ? [0, 2, 4] : [0, 10, 30];
 
@@ -115,8 +152,15 @@ internal sealed class ResidentProbeOptions
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
         IReadOnlySet<string> variants = ReadVariants(args);
+        ResidentLongRunContract.ValidateOptions(scenarios, quick, audit, variants,
+            Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)));
+        int? libraryCount = GalleryFirstPageProbe.ValidateOptions(scenarios, quick, audit, variants,
+            Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)), args);
         return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
         {
+            LibraryFirstPageCount = libraryCount,
             Variants = variants,
             SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
             SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
@@ -137,6 +181,32 @@ internal sealed class ResidentProbeOptions
                 variants.Add(variant);
             }
         }
+        int chromeVariants = variants.Count(variant => variant.StartsWith("selector-chrome-", StringComparison.OrdinalIgnoreCase));
+        if (variants.Contains("selector-wpf") && (variants.Contains("selector-native-dib") || chromeVariants != 0))
+            throw new ArgumentException("Choose selector-wpf or a native selector variant, not both.");
+        if (variants.Contains("selector-wpf") && variants.Contains("selector-show-owned"))
+            throw new ArgumentException("Native selector experiments cannot be combined with selector-wpf.");
+        if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
+            throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
+        if (variants.Contains("selector-freeform") && variants.Contains("selector-freeform-once"))
+            throw new ArgumentException("Choose every-capture or first-capture freeform measurement, not both.");
+        if (variants.Contains("pin-native") && variants.Overlaps(
+            ["pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-light"]))
+            throw new ArgumentException("pin-native uses its own CPU renderer; choose it without a WPF pin renderer variant.");
+        if (variants.Contains("pin-light") && variants.Overlaps(["pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle"]))
+            throw new ArgumentException("pin-light opens picture pins through the product's native host; choose it without a WPF pin renderer variant.");
+        if (variants.Contains("pin-switch") && variants.Overlaps(
+            ["pin-native", "pin-light", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
+            throw new ArgumentException("pin-switch is its own check of the lightweight pin's switch; choose it alone.");
+        if (variants.Contains("pin-zoom") && variants.Overlaps(
+            ["pin-native", "pin-native-full", "pin-light", "pin-switch", "pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-idle", "pin-150"]))
+            throw new ArgumentException("pin-zoom is its own zoom and move measurement of one lightweight pin; choose it alone (with pin-hold-whole or pin-move-live).");
+        if ((variants.Contains("pin-hold-whole") || variants.Contains("pin-move-live")) && !variants.Contains("pin-zoom"))
+            throw new ArgumentException("pin-hold-whole and pin-move-live change what pin-zoom measures; choose them together with pin-zoom.");
+        if (variants.Contains("pin-reopen") && !variants.Contains("pin-light"))
+            throw new ArgumentException("pin-reopen closes and reopens pin-light's pins; choose it together with pin-light.");
+        if (variants.Contains("pin-native-full") && !variants.Contains("pin-native"))
+            throw new ArgumentException("pin-native-full selects pin-native's whole-surface live frames; choose it together with pin-native.");
         return variants;
     }
 }
@@ -242,7 +312,7 @@ internal static class ResidentProbeImages
 /// Process counters at fixed points of the probe script, the UI thread's input-priority round trip
 /// while idle, and the named timings of the responsiveness paths.
 /// </summary>
-internal sealed class ResidentProbeRecorder : IDisposable
+internal sealed partial class ResidentProbeRecorder : IDisposable
 {
     private readonly ResidentProbeOptions _options;
     private readonly Dispatcher _dispatcher;
@@ -256,6 +326,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
     private readonly List<Timing> _timings = [];
     private readonly List<string> _failures = [];
     private readonly List<string> _notes = [];
+    private readonly SortedDictionary<string, object?> _machineState = new(StringComparer.Ordinal);
     private readonly List<(string Step, string Kind, WeakReference Reference)> _tracked = [];
     private readonly List<ResidentProbeMemoryMap.Snapshot> _audits = [];
     private readonly List<Breakdown> _breakdowns = [];
@@ -302,6 +373,15 @@ internal sealed class ResidentProbeRecorder : IDisposable
     {
         public double? RenderThreadCompleteMs { get; init; }
         public string? RenderThreadCompleteError { get; init; }
+        public string Backend { get; init; } = "wpf";
+        public double? ShortcutHandledMs { get; init; }
+        public double? SourceFrameReadyMs { get; init; }
+        public double? DisplayDibReadyMs { get; init; }
+        public double? FirstFullFrameSubmittedMs { get; init; }
+        public double? CompositorSyncMs { get; init; }
+        public double? ChromeReadyMs { get; init; }
+        public double? InputReadyMs { get; init; }
+        public string? PresentationError { get; init; }
     }
 
     internal void AddBreakdown(Breakdown breakdown)
@@ -344,9 +424,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
     /// Diagnostic only (<see cref="ResidentProbeOptions.Audit"/>): a forced, compacting full collection,
     /// then the counters and every tracked window or image still reachable.
     /// </summary>
-    internal async Task AuditAsync(string step)
+    internal async Task AuditAsync(string step, bool force = false)
     {
-        if (!_options.Audit) return;
+        if (!_options.Audit && !force) return;
         for (int pass = 0; pass < 2; pass++)
         {
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
@@ -431,6 +511,16 @@ internal sealed class ResidentProbeRecorder : IDisposable
         lock (_gate) _notes.Add(note);
     }
 
+    /// <summary>
+    /// A state of this PC that a step's times depend on and that the probe does not set, such as how
+    /// much the Recycle Bin already holds before the library delete. The report writes it with the
+    /// run's environment, so that runs are compared where it matches.
+    /// </summary>
+    internal void MachineState(string name, object? value)
+    {
+        lock (_gate) _machineState[name] = value;
+    }
+
     internal void Fail(Exception error)
     {
         lock (_gate) _failures.Add(error.ToString());
@@ -509,6 +599,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 VirtualDesktop = $"{desktop.Width}x{desktop.Height}",
                 Monitors = MonitorEnumerator.GetAll().Select(monitor =>
                     $"{monitor.Bounds.Width}x{monitor.Bounds.Height}@{monitor.Dpi}{(monitor.IsPrimary ? " primary" : "")}").ToArray(),
+                MachineState = _machineState,
                 _options.Quick,
                 _options.Audit,
                 Variants = _options.Variants.Order().ToArray(),
@@ -520,11 +611,21 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Failures = _failures,
                 Breakdowns = _breakdowns,
                 ReceiptBreakdowns = _receiptBreakdowns,
+                PinMemorySamples = _pinMemorySamples,
+                PinMeasurements = _pinMeasurements,
+                PinObservations = _pinObservations,
                 MetricDefinitions = new
                 {
                     PrivateWorkingSetMb = "QueryWorkingSet nonshared resident pages; null and PrivateWorkingSetError when unavailable",
-                    SelectorMs = "Shortcut handler to first CompositionTarget.Rendering tick with selector frame attached",
+                    SelectorMs = "Backend=wpf: first CompositionTarget.Rendering tick with selector frame attached; Backend=native-dib: full background BitBlt followed by GdiFlush; compare like endpoints separately",
                     RenderThreadCompleteMs = "Shortcut handler to diagnostic MediaContext.CompleteRender return after first Rendering; render-thread upper bound, not physical display latency",
+                    ShortcutHandledMs = "Handler-entry timeline mark, relative to probe invocation",
+                    SourceFrameReadyMs = "Frozen source ready on the acquisition worker, relative to probe invocation",
+                    DisplayDibReadyMs = "Native display DIB copied and dimmed, relative to probe invocation; null for WPF",
+                    FirstFullFrameSubmittedMs = "Native full-background WM_PAINT/BitBlt and GdiFlush completed; not physical display latency",
+                    CompositorSyncMs = "Diagnostic DwmFlush after native background submission, before chrome construction/show; null on failure or WPF",
+                    ChromeReadyMs = "Native: all small windows reported ContentRendered; WPF: selector ContentRendered",
+                    InputReadyMs = "Native: first input dispatcher turn after background submission and activation attempt, before deferred chrome construction; WPF: ContentRendered handler completed",
                     ReceiptBreakdowns = "Opt-in receipt marks from selection to first card Rendering; Gen0/1/2 are collection-count deltas over that interval",
                 },
                 Audits = _audits,

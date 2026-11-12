@@ -258,12 +258,16 @@ internal sealed partial class GalleryWindow
         }));
     }
 
-    private void FocusFolderCard(GalleryFolderCardViewModel card)
+    private void FocusFolderCard(GalleryFolderCardViewModel card, Func<bool>? stillWanted = null)
     {
+        if (stillWanted is not null && !stillWanted()) return;
         GalleryFolderRow? row = _viewModel.Rows.OfType<GalleryFolderRow>().FirstOrDefault(r => r.Folders.Contains(card));
         if (row is null) return;
         RowsList.ScrollIntoView(row);
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusFolderCard(RowsList, card)));
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (stillWanted is null || stillWanted()) _ = FocusFolderCard(RowsList, card);
+        }));
     }
 
     private static bool FocusFolderCard(DependencyObject parent, GalleryFolderCardViewModel card)
@@ -422,13 +426,21 @@ internal sealed partial class GalleryWindow
         var dialog = new GalleryFolderDeletionDialog(name, preview, scope.FolderId is null) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         _deleteInProgress = _foldersBusy = true;
+        RecycleProgressLine? progress = null;
         try
         {
             CloseInlinePlayer();
             foreach (Guid captureId in captureIds) _viewModel.FindTile(captureId)?.SetThumbnailLoadingEnabled(false);
+            // The folder's captures leave the view at once instead of waiting on screen as blank cards.
+            _viewModel.SetLeaving(captureIds);
+            _viewModel.Refresh();
+            if (captureIds.Length > 0) progress = new RecycleProgressLine(this, captureIds.Length, DeleteProgressDelay);
             Func<Guid, bool> canRemove = captureId => !_commitService.IsRecordBusy(captureId) && !_videoLibrary.IsBusy(captureId);
-            CaptureFolderDeletionResult result = await _queue.DeleteFolderScopeAsync(scope, canRemove,
-                expectedCaptureIds: captureIds, expectedFolderIds: folderIds);
+            Task<CaptureFolderDeletionResult> deletion;
+            using (progress is null ? null : _controller.Recovery?.ReportRecycleProgress(progress.Report))
+                deletion = _queue.DeleteFolderScopeAsync(scope, canRemove, expectedCaptureIds: captureIds, expectedFolderIds: folderIds);
+            CaptureFolderDeletionResult result = await deletion;
+            progress?.End();
             IReadOnlyList<Guid> unavailable = result.RecycleUnavailableIds;
             CaptureFolderDeletionResult? permanent = await LibraryPermanentDeletion.ResolveAsync(unavailable,
                 count => LibraryPermanentDeletion.Confirm(this, count),
@@ -453,6 +465,8 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
+            progress?.End();
+            _viewModel.ClearLeaving(captureIds);
             _deleteInProgress = _foldersBusy = false;
             _viewModel.Refresh();
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);

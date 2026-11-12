@@ -26,6 +26,8 @@ internal sealed partial class PinTranslationService
             : ([], null);
         if (blocks.Count == 0)
         {
+            if (recognized.Lines.Any(line => line.IsCodePayload))
+                return await TranslatePayloadDocumentAsync(recognized, picture, cancellationToken).ConfigureAwait(false);
             string text = OcrExtractionAnalyzer.Analyze(recognized).Text(joinLines: false);
             PinContent snapshot = PinContent.FromImage(image, picture.SourcePageUrl, picture.Provenance)
                 with { PendingProvenance = picture.PendingProvenance };
@@ -127,6 +129,26 @@ internal sealed partial class PinTranslationService
                 ReleaseWhenPrepared(preparation);
             }
         }
+    }
+
+    private Task<PinTranslationResult?> TranslatePayloadDocumentAsync(OcrResult recognized, PinContent picture,
+        CancellationToken token)
+    {
+        var pieces = new List<PlanPiece>();
+        foreach (OcrLine line in recognized.Lines)
+        {
+            if (pieces.Count > 0) pieces.Add(new("\n"));
+            if (line.IsCodePayload) pieces.Add(new(line.Text));
+            else
+            {
+                string repaired = OcrLatinTextRepair.Repair(line.Text);
+                pieces.Add(new(line.Text, PlanKind.Prose, PinScript.IsTranslatable(repaired, Direction), repaired));
+            }
+        }
+        var plan = new PinTranslationPlan(PinTextFormat.Prose, pieces);
+        PinContent template = PinContent.FromText(picture.Image, plan.Original, false, picture.Provenance)
+            with { PendingProvenance = picture.PendingProvenance };
+        return plan.HasTranslatable ? TranslatePlanAsync(plan, template, token) : Task.FromResult<PinTranslationResult?>(null);
     }
 
     /// <summary>A preparation abandoned by a failed or cancelled translation releases its pixels when it ends.</summary>

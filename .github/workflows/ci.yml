@@ -20,7 +20,7 @@ jobs:
   build-and-test:
     name: Release build and tests
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
 
     steps:
       - name: Check out source
@@ -35,16 +35,103 @@ jobs:
         shell: powershell
         run: .\build\build.ps1 -Configuration Release -Test
 
-      - name: Require hosted file-symlink regression pass
+      - name: Require hosted file-symlink regressions to pass
         shell: powershell
         run: |
-          $testName = 'MyCapture.App.Tests.GalleryBatchDragTests.FinalSourceSymlinkIsRejected_AndExternalTargetIsPreserved'
-          $resultPattern = '^\s*(Passed|Skipped|Failed)\s+' + [regex]::Escape($testName) + '\s+\[[^\]]+\]\s*$'
-          $results = @(Select-String -LiteralPath 'build/logs/test.log' -Pattern $resultPattern -CaseSensitive -ErrorAction Stop)
-          if ($results.Count -ne 1 -or $results[0].Line -cnotmatch '^\s*Passed\s+') {
-              throw "Required hosted regression did not record exactly one Passed result: $testName"
+          $ErrorActionPreference = 'Stop'
+          $requiredTests = @(
+              'MyCapture.App.Tests.GalleryBatchDragTests.FinalSourceSymlinkIsRejected_AndExternalTargetIsPreserved'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Ocr_DownloadFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Translation_DownloadFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Ocr_FinalFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.ModelDownloadPathBoundaryTests.Translation_FinalFileLink_PreservesOutsideFiles'
+              'MyCapture.App.Tests.TranslationNativeLoadPathBoundaryTests.DefaultFactoryRejectsCatalogLeafSymlinkBeforeNativeLoad'
+              'MyCapture.App.Tests.TranslationNativeLoadPathBoundaryTests.DirectionFactoryRejectsCatalogLeafSymlinkBeforeNativeLoad'
+          )
+          if ($requiredTests.Count -ne 7 -or @($requiredTests | Select-Object -Unique).Count -ne 7) {
+              throw 'The hosted symlink gate requires seven distinct exact test names.'
           }
-          Write-Host $results[0].Line
+
+          function Assert-RequiredHostedPassResults {
+              param([AllowEmptyCollection()][string[]]$Lines)
+              $boundaryResultFailure = '^\s*(?:Skipped|Failed)\s+MyCapture\.App\.Tests\.(?:ModelDownloadPathBoundaryTests|TranslationNativeLoadPathBoundaryTests)\.'
+              $boundaryDiagnosticFailure = '^\s*\[xUnit\.net[^\]]*\]\s+MyCapture\.App\.Tests\.(?:ModelDownloadPathBoundaryTests|TranslationNativeLoadPathBoundaryTests)\.[^\r\n]*\[(?:FAIL|SKIP)\]\s*$'
+              if (@($Lines | Where-Object { $_ -cmatch $boundaryResultFailure -or $_ -cmatch $boundaryDiagnosticFailure }).Count -ne 0) {
+                  throw 'Every model-download and native-load boundary test must execute without Failed or Skipped results.'
+              }
+              $passed = [System.Collections.Generic.List[string]]::new()
+              foreach ($testName in $requiredTests) {
+                  $escaped = [regex]::Escape($testName)
+                  $resultPattern = '^\s*(Passed|Skipped|Failed)\s+' + $escaped + '\s+\[[^\]\r\n]+\]\s*$'
+                  $badDiagnosticPattern = '^\s*\[xUnit\.net[^\]]*\]\s+' + $escaped + '\s+\[(FAIL|SKIP)\]\s*$'
+                  $results = @($Lines | Where-Object { $_ -cmatch $resultPattern })
+                  $badDiagnostics = @($Lines | Where-Object { $_ -cmatch $badDiagnosticPattern })
+                  if ($results.Count -ne 1 -or $results[0] -cnotmatch '^\s*Passed\s+' -or $badDiagnostics.Count -ne 0) {
+                      throw "Required hosted regression must have exactly one Passed result, zero Skipped/Failed and no FAIL/SKIP diagnostic: $testName"
+                  }
+                  $passed.Add($results[0])
+              }
+              return $passed.ToArray()
+          }
+
+          # Exercise the exact parser before it can accept the real console log. These are
+          # synthetic strings only; they do not create links, change privileges or run tests.
+          $fixture = @($requiredTests | ForEach-Object { "  Passed $_ [1 ms]" })
+          $positive = @(Assert-RequiredHostedPassResults -Lines $fixture)
+          if ($positive.Count -ne 7) { throw 'Parser positive fixture did not return exactly seven results.' }
+          $noisy = @('Starting test execution, please wait...', '  Failed Unrelated.Tests.Case [2 ms]') + $fixture
+          if (@(Assert-RequiredHostedPassResults -Lines $noisy).Count -ne 7) { throw 'Parser noise fixture failed.' }
+          $negativeCases = [System.Collections.Generic.List[object]]::new()
+          $negativeCases.Add(@{ Name = 'empty log'; Lines = @() })
+          for ($index = 0; $index -lt $requiredTests.Count; $index++) {
+              $testName = $requiredTests[$index]
+              $missing = @(for ($other = 0; $other -lt $fixture.Count; $other++) { if ($other -ne $index) { $fixture[$other] } })
+              $negativeCases.Add(@{ Name = "missing $index"; Lines = $missing })
+              foreach ($status in @('Skipped', 'Failed')) {
+                  $changed = @($fixture)
+                  $changed[$index] = "  $status $testName [1 ms]"
+                  $negativeCases.Add(@{ Name = "$status $index"; Lines = $changed })
+              }
+              $negativeCases.Add(@{ Name = "duplicate pass $index"; Lines = @($fixture) + @($fixture[$index]) })
+              foreach ($suffix in @('.Other', '(argument: 1)')) {
+                  $changed = @($fixture)
+                  $changed[$index] = "  Passed $testName$suffix [1 ms]"
+                  $negativeCases.Add(@{ Name = "different exact name $index $suffix"; Lines = $changed })
+              }
+              $changed = @($fixture)
+              $changed[$index] = "  Passed $($testName.ToLowerInvariant()) [1 ms]"
+              $negativeCases.Add(@{ Name = "wrong case $index"; Lines = $changed })
+              $changed = @($fixture)
+              $changed[$index] = "  Passed $testName"
+              $negativeCases.Add(@{ Name = "truncated result $index"; Lines = $changed })
+              foreach ($diagnostic in @('FAIL', 'SKIP')) {
+                  $negativeCases.Add(@{ Name = "conflicting xUnit $diagnostic $index";
+                      Lines = @($fixture) + @("[xUnit.net 00:00:01.00]     $testName [$diagnostic]") })
+              }
+          }
+          foreach ($boundaryClass in @('ModelDownloadPathBoundaryTests', 'TranslationNativeLoadPathBoundaryTests')) {
+              foreach ($status in @('Skipped', 'Failed')) {
+                  $negativeCases.Add(@{ Name = "unlisted boundary $boundaryClass $status";
+                      Lines = @($fixture) + @("  $status MyCapture.App.Tests.$boundaryClass.UnlistedBoundary [1 ms]") })
+              }
+              foreach ($diagnostic in @('FAIL', 'SKIP')) {
+                  $negativeCases.Add(@{ Name = "unlisted boundary diagnostic $boundaryClass $diagnostic";
+                      Lines = @($fixture) + @("[xUnit.net 00:00:01.00] MyCapture.App.Tests.$boundaryClass.UnlistedBoundary [$diagnostic]") })
+              }
+          }
+          foreach ($case in $negativeCases) {
+              $accepted = $false
+              try { $null = Assert-RequiredHostedPassResults -Lines $case.Lines; $accepted = $true }
+              catch { }
+              if ($accepted) { throw "Required-test parser accepted an invalid synthetic log: $($case.Name)" }
+          }
+          Write-Host "Required-test parser self-check: 2 positive / $($negativeCases.Count) negative fixtures passed."
+
+          $lines = @(Get-Content -LiteralPath 'build/logs/test.log' -Encoding UTF8 -ErrorAction Stop)
+          $actual = @(Assert-RequiredHostedPassResults -Lines $lines)
+          if ($actual.Count -ne 7) { throw 'The real log did not produce exactly seven required pass results.' }
+          $actual | ForEach-Object { Write-Host $_ }
+          Write-Host 'Hosted file-symlink gate: 7 Passed, 0 Skipped, 0 Failed (Gallery 1 + model download 4 + native-load leaf 2).'
 
       - name: Upload source build and test logs
         if: always()
@@ -92,5 +179,51 @@ jobs:
         with:
           name: ci-x86-test-results-${{ github.sha }}-${{ github.run_attempt }}
           path: artifacts/ci-x86/results/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  # A library delete of many captures uses one Shell operation and Undo one Recycle Bin restore.
+  # The canary moves the 124 directories of the 2026-11-06 report both ways through the runner's
+  # real Recycle Bin, brings every one back, and fails when the batch is not faster.
+  recycle-bin-canary:
+    name: Windows Recycle Bin batch canary
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Move and restore 124 directories one at a time and together
+        shell: powershell
+        env:
+          MYCAPTURE_RECYCLE_CANARY: '1'
+          MYCAPTURE_RECYCLE_CANARY_COUNT: '124'
+        run: |
+          dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --artifacts-path artifacts/ci-recycle-canary --filter "FullyQualifiedName=MyCapture.App.Tests.WindowsRecycleBinTests.OwnedDirectories_MoveAndRestoreTogether_FasterThanOneAtATime" --logger "trx;LogFileName=recycle-bin-canary.trx" --results-directory artifacts/ci-recycle-canary/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Require the canary to have run and passed
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$trx = Get-Content -LiteralPath 'artifacts/ci-recycle-canary/results/recycle-bin-canary.trx' -Raw -Encoding UTF8
+          $namespace = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+          $results = @(Select-Xml -Xml $trx -XPath '//t:UnitTestResult' -Namespace $namespace | ForEach-Object { $_.Node })
+          $name = 'MyCapture.App.Tests.WindowsRecycleBinTests.OwnedDirectories_MoveAndRestoreTogether_FasterThanOneAtATime'
+          if ($results.Count -ne 1 -or $results[0].testName -cne $name -or $results[0].outcome -cne 'Passed') {
+              $found = @($results | ForEach-Object { "$($_.testName)=$($_.outcome)" }) -join ', '
+              throw "The Recycle Bin canary must have exactly one Passed result; found: $found"
+          }
+          $report = @(Select-Xml -Xml $trx -XPath '//t:UnitTestResult/t:Output/t:StdOut' -Namespace $namespace | ForEach-Object { $_.Node.InnerText.Trim() })
+          if ($report.Count -ne 1 -or $report[0] -notmatch '^124 directories: ') { throw 'The canary did not report its 124-directory timings.' }
+          Write-Host "Recycle Bin canary passed: $($report[0])"
+      - name: Upload Recycle Bin canary result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ci-recycle-bin-canary-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/ci-recycle-canary/results/*.trx
           if-no-files-found: warn
           retention-days: 14

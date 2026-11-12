@@ -110,6 +110,9 @@
     <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Warm300}" />
     <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
+    <!-- Warning and success words; State.Warning/State.Success stay for glyphs, fills and outlines. -->
+    <SolidColorBrush x:Key="Text.Warning" Color="{StaticResource Primitive.Orange400}" />
+    <SolidColorBrush x:Key="Text.Success" Color="{StaticResource Primitive.Emerald400}" />
     <SolidColorBrush x:Key="Text.Disabled" Color="#FF7A8290" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.Ink}" />
     <SolidColorBrush x:Key="Text.Badge" Color="{StaticResource Primitive.Warm100}" />
@@ -274,7 +277,10 @@
 
     <!-- ============================================================= -->
     <!-- Motion: shared Windows-aligned cadence. Render transforms and opacity only;
-         precision capture geometry and semantic state changes never wait on motion. -->
+         precision capture geometry and semantic state changes never wait on motion.
+         Intended exception: the delayed-capture countdown's digit lands over 200 ms
+         (CountdownWindow.LandingDuration), a beat longer than the Motion.Normal fade it lands
+         with, because it is the only thing moving on that surface. -->
     <!-- ============================================================= -->
     <Duration x:Key="Motion.Fast">0:0:0.083</Duration>
     <Duration x:Key="Motion.Normal">0:0:0.167</Duration>

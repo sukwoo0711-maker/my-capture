@@ -1,7 +1,10 @@
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Recording;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
@@ -17,6 +20,13 @@ public sealed class Mp4Nv12ExportTests
 {
     private static readonly VideoYuvEncoding Bt709 = new(Bt709: true, FullRange: false);
     private static readonly VideoYuvEncoding Bt601 = new(Bt709: false, FullRange: false);
+
+    /// <summary>
+    /// How far a plain trim's encoded NV12 pass-through may fall below the RGB path. Encoding two inputs
+    /// that differ only in out-of-gamut samples leaves the order to the encoder (#236: −0.07 to +0.09 dB
+    /// across the NVIDIA and Microsoft software encoders and the hardware encoder on the Windows 10 PC).
+    /// </summary>
+    private const double EncodedPsnrFloorDb = 0.25;
 
     [Theory]
     [InlineData(true, 104, 98, 182, 182)]
@@ -306,17 +316,107 @@ public sealed class Mp4Nv12ExportTests
         string root = OwnedTestDirectory.Create("mc-nv12-trim-");
         try
         {
+            string? evidence = TestDiagnosticArtifacts.Create("MYCAPTURE_NV12_QUALITY_EVIDENCE", $"plain-trim-{width}x{height}");
+            var nv12Requests = new List<VideoEncoderOptions>();
+            var rgbRequests = new List<VideoEncoderOptions>();
+            var nv12Input = new EncoderTap();
+            var rgbInput = new EncoderTap();
             RecordingResult recording = SyntheticDocumentClip.Encode(Path.Combine(root, "source.mp4"), width, height, 30, 45);
-            (Mp4RenderStatistics nv12, string nv12Path) = Trim(root, "nv12.mp4", recording, [], null);
-            (Mp4RenderStatistics rgb, string rgbPath) = Trim(root, "rgb.mp4", recording, [], new Mp4RenderOptions { PassThroughNv12 = false });
+            (Mp4RenderStatistics nv12, string nv12Path) = Trim(root, "nv12.mp4", recording, [], null,
+                observeEncoder: nv12Requests.Add, tap: nv12Input);
+            (Mp4RenderStatistics rgb, string rgbPath) = Trim(root, "rgb.mp4", recording, [], new Mp4RenderOptions { PassThroughNv12 = false },
+                observeEncoder: rgbRequests.Add, tap: rgbInput);
+            if (evidence is not null)
+            {
+                var retained = new List<object>();
+                foreach (string path in new[] { recording.OutputPath, nv12Path, rgbPath })
+                {
+                    string name = Path.GetFileName(path);
+                    string copy = DiagnosticOutputPaths.Child(evidence, name);
+                    File.Copy(path, copy, overwrite: false);
+                    string hash = TestDiagnosticArtifacts.HashFile(path);
+                    Assert.Equal(hash, TestDiagnosticArtifacts.HashFile(copy));
+                    retained.Add(new { file = name, bytes = new FileInfo(copy).Length, sha256 = hash,
+                        avc = Mp4ExportBenchmarkTests.ReadAvcConfiguration(copy),
+                        presentationMs = Mp4SampleTable.Read(copy).PresentationMs,
+                        syncSampleIndexes = Mp4SampleTable.Read(copy).SyncSampleIndexes,
+                        durationMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(copy) });
+                }
+                TestDiagnosticArtifacts.WriteJson(evidence, "encode-evidence.json", new
+                {
+                    runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
+                    platformAssemblySha256 = TestDiagnosticArtifacts.HashFile(typeof(MediaFoundationVideoEncoder).Assembly.Location),
+                    width, height, fps = 30, sourceFrames = 45, trimInMs = 300, trimOutMs = 1300,
+                    sourceFixture = "SyntheticDocumentClip.Encode; default BGRA32 options with derived bitrate",
+                    sourceBitrate = VideoEncoderOptions.DeriveBitrate(width, height, 30),
+                    encoderOptions = nv12Requests.Concat(rgbRequests).Select(value => value with { OutputPath = Path.GetFileName(value.OutputPath) }).ToArray(),
+                    selectedEncoders = new { nv12 = nv12Input.Diagnostics, rgb = rgbInput.Diagnostics },
+                    nv12, rgb, retained,
+                });
+            }
 
             Assert.StartsWith("nv12-", nv12.FrameSource, StringComparison.Ordinal);
             Assert.Equal("rgb-software", rgb.FrameSource);
             Assert.Equal((30, 0), (nv12.Frames, nv12.ComposedFrames));
             AssertSameTimeline(rgbPath, nv12Path);
-            double nv12Psnr = PsnrAgainstSource(recording.OutputPath, nv12Path, 300, nv12.Frames);
-            double rgbPsnr = PsnrAgainstSource(recording.OutputPath, rgbPath, 300, rgb.Frames);
-            Assert.True(nv12Psnr >= rgbPsnr, $"NV12 pass-through {nv12Psnr:F2} dB is below the RGB path's {rgbPsnr:F2} dB.");
+
+            // Both arms ask for the same encoder and hand it the same timestamps, so the comparisons
+            // below differ only in the frames.
+            VideoEncoderOptions nv12Encoder = nv12Requests[^1], rgbEncoder = rgbRequests[^1];
+            Assert.Equal((width, height, 30, VideoEncoderInputFormat.Nv12),
+                (nv12Encoder.Width, nv12Encoder.Height, nv12Encoder.Fps, nv12Encoder.InputFormat));
+            Assert.Equal(nv12Encoder with { OutputPath = "" }, rgbEncoder with { OutputPath = "" });
+            double[] timestamps = Enumerable.Range(0, 30).Select(index => index * (1000.0 / 30)).ToArray();
+            Assert.Equal(timestamps, nv12Input.Timestamps);
+            Assert.Equal(timestamps, rgbInput.Timestamps);
+
+            // The pass-through's fidelity is in the frames it hands the encoder: the decoded source
+            // itself, where the RGB round trip clips out-of-gamut samples. Which of those two inputs
+            // encodes closer to the source is the encoder's call (#236), so the encoded result keeps a
+            // floor that a real regression in the frames or in their stream description falls through.
+            bool hardwareDecode = nv12.FrameSource == "nv12-hardware";
+            double nv12InputPsnr = EncoderInputPsnr(recording.OutputPath, hardwareDecode, nv12Input, 300, nv12.Frames, width, height);
+            double rgbInputPsnr = EncoderInputPsnr(recording.OutputPath, hardwareDecode, rgbInput, 300, rgb.Frames, width, height);
+            var frameEvidence = new List<object>();
+            double nv12Psnr = PsnrAgainstSource(recording.OutputPath, nv12Path, 300, nv12.Frames, Capture("nv12", nv12.Frames));
+            double rgbPsnr = PsnrAgainstSource(recording.OutputPath, rgbPath, 300, rgb.Frames, Capture("rgb", rgb.Frames));
+            if (evidence is not null)
+                TestDiagnosticArtifacts.WriteJson(evidence, "quality-evidence.json", new
+                {
+                    nv12InputPsnr = nv12InputPsnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    rgbInputPsnr = rgbInputPsnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    nv12Psnr = nv12Psnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    rgbPsnr = rgbPsnr.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    encodedPsnrFloorDb = EncodedPsnrFloorDb,
+                    frameEvidence,
+                });
+            Assert.True(nv12InputPsnr >= rgbInputPsnr, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"NV12 pass-through handed the encoder frames at {nv12InputPsnr:F2} dB against the source, below the RGB path's {rgbInputPsnr:F2} dB."));
+            Assert.True(nv12Psnr >= rgbPsnr - EncodedPsnrFloorDb, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"NV12 pass-through encoded to {nv12Psnr:F4} dB, {rgbPsnr - nv12Psnr:F4} dB below the RGB path's {rgbPsnr:F4} dB "
+                + $"(floor {EncodedPsnrFloorDb:F2} dB). Encoders: NV12 {EncoderName(nv12Input.Diagnostics)}, RGB {EncoderName(rgbInput.Diagnostics)}."));
+
+            Action<int, DecodedVideoFrame, DecodedVideoFrame, double>? Capture(string arm, int frames) => evidence is null ? null : (index, reference, actual, squaredError) =>
+            {
+                var images = new List<string>();
+                if (index == 0 || index == frames / 2 || index == frames - 1)
+                    foreach ((string kind, DecodedVideoFrame frame) in new[] { ("source", reference), ("output", actual) })
+                    {
+                        string name = $"{arm}-{index:D3}-{kind}.png";
+                        BitmapSource bitmap = BitmapSource.Create(frame.Width, frame.Height, 96, 96,
+                            PixelFormats.Bgr32, null, frame.Pixels, frame.Stride);
+                        TestDiagnosticArtifacts.SavePng(evidence, name, bitmap);
+                        images.Add(name);
+                    }
+                frameEvidence.Add(new
+                {
+                    arm, index, referenceTimestampMs = reference.TimestampMs, outputTimestampMs = actual.TimestampMs,
+                    reference.Width, reference.Height, reference.Stride, squaredError,
+                    samples = reference.Width * reference.Height * 3L,
+                    sourceSha256 = Convert.ToHexString(SHA256.HashData(reference.Pixels)),
+                    outputSha256 = Convert.ToHexString(SHA256.HashData(actual.Pixels)), images,
+                });
+            };
         }
         finally
         {
@@ -595,7 +695,9 @@ public sealed class Mp4Nv12ExportTests
         IReadOnlyList<TimedTextOverlay> overlays,
         Mp4RenderOptions? options,
         double inMs = 300,
-        double outMs = 1300)
+        double outMs = 1300,
+        Action<VideoEncoderOptions>? observeEncoder = null,
+        EncoderTap? tap = null)
     {
         string path = Path.Combine(root, name);
         Mp4RenderStatistics statistics = TrimReencoder.ReencodeWithStatistics(
@@ -604,7 +706,13 @@ public sealed class Mp4Nv12ExportTests
             inMs,
             outMs,
             recording,
-            encoderOptions => new MediaFoundationVideoEncoder(encoderOptions, NullLogger.Instance),
+            encoderOptions =>
+            {
+                observeEncoder?.Invoke(encoderOptions);
+                var encoder = new MediaFoundationVideoEncoder(encoderOptions, NullLogger.Instance);
+                if (tap is null) return encoder;
+                return new TappedEncoder(encoder, encoderOptions, tap);
+            },
             NullLogger.Instance,
             overlays,
             renderOptions: options);
@@ -621,7 +729,8 @@ public sealed class Mp4Nv12ExportTests
         Assert.Equal(Mp4ExportBenchmarkTests.ReadAvcConfiguration(expected), Mp4ExportBenchmarkTests.ReadAvcConfiguration(actual));
     }
 
-    private static double PsnrAgainstSource(string source, string output, double inMs, int frames)
+    private static double PsnrAgainstSource(string source, string output, double inMs, int frames,
+        Action<int, DecodedVideoFrame, DecodedVideoFrame, double>? observeFrame = null)
     {
         using var expected = new MediaFoundationVideoFrameReader(source);
         using var actual = new MediaFoundationVideoFrameReader(output);
@@ -631,11 +740,69 @@ public sealed class Mp4Nv12ExportTests
         {
             DecodedVideoFrame reference = expected.ReadFrameAt(inMs + (index * 1000.0 / 30));
             DecodedVideoFrame encoded = actual.ReadFrameAt(index * 1000.0 / 30);
-            error += SquaredError(reference.Pixels, encoded.Pixels);
+            double squaredError = SquaredError(reference.Pixels, encoded.Pixels);
+            error += squaredError;
+            observeFrame?.Invoke(index, reference, encoded, squaredError);
             samples += reference.Width * reference.Height * 3L;
         }
 
         return Psnr(error / samples);
+    }
+
+    /// <summary>
+    /// PSNR against the source of the NV12 frames an encoder received. The reference is the source as
+    /// the pass-through's decoder (hardware or software) decodes it, and both sides go through the same
+    /// converter with the YUV encoding the trim's output is decoded with. An exact pass-through then
+    /// measures infinite on any decoder, while the RGB round trip keeps its clipping error.
+    /// Decoder-to-decoder identity is only observed, in <see cref="Mp4Nv12PassthroughIdentityTests"/>.
+    /// </summary>
+    private static double EncoderInputPsnr(string source, bool hardware, EncoderTap tap, double inMs, int frames, int width, int height)
+    {
+        Assert.Equal(frames, tap.Frames.Count);
+        VideoYuvEncoding encoding = VideoFrameRenderPipeline.DefaultYuvEncoding(height);
+        using var expected = new MediaFoundationVideoFrameReader(source, new MediaFoundationVideoFrameReaderOptions
+        {
+            OutputFormat = DecodedVideoPixelFormat.Nv12,
+            PreferHardwareDecode = hardware,
+        });
+        Assert.Equal(DecodedVideoPixelFormat.Nv12, expected.OutputFormat);
+        Assert.Equal((width, height), (expected.Width, expected.Height));
+        double error = 0;
+        long samples = 0;
+        for (int index = 0; index < frames; index++)
+        {
+            DecodedVideoFrame reference = expected.ReadFrameAt(inMs + (index * 1000.0 / 30));
+            Assert.True(expected.IsHardwareAccelerated == hardware, hardware
+                ? $"The pass-through decoded with hardware, but the reference reader did not ({expected.HardwareFallbackReason})."
+                : "The pass-through decoded in software, but the reference reader used hardware.");
+            Assert.Equal(DecodedVideoPixelFormat.Nv12, reference.Format);
+            Assert.Equal((width, width * height * 3 / 2), (reference.Stride, reference.Pixels.Length));
+            byte[] decoded = Nv12FrameConverter.ToBgra(reference.Pixels, width, height, encoding, width, height);
+            byte[] received = Nv12FrameConverter.ToBgra(tap.Frames[index], width, height, encoding, width, height);
+            Assert.Equal(decoded.Length, received.Length);
+            error += SquaredError(decoded, received);
+            samples += width * height * 3L;
+        }
+
+        return Psnr(error / samples);
+    }
+
+    private static string EncoderName(IReadOnlyDictionary<string, object?>? diagnostics)
+    {
+        if (diagnostics?.GetValueOrDefault("transforms") is not List<object> transforms || transforms.Count == 0)
+            return "not reported";
+        return string.Join(" + ", transforms.OfType<Dictionary<string, object?>>().Select(entry =>
+            Name(entry) + (entry.GetValueOrDefault("hardwareUrlPresent") is true ? " (hardware)" : " (no hardware URL)")));
+
+        static string Name(Dictionary<string, object?> entry)
+        {
+            if (entry.GetValueOrDefault("friendlyName") is string name)
+                return name;
+            // Some encoders answer no friendly name (0xC00D36E6, as on the Windows 10 PC in #236); the class ID still names them.
+            if ((entry.GetValueOrDefault("classId") ?? entry.GetValueOrDefault("persistClassId")) is Guid classId)
+                return $"class {classId:D}";
+            return "unnamed transform";
+        }
     }
 
     private static double PsnrAgainstComposedSource(RecordingResult recording, string output, IReadOnlyList<TimedTextOverlay> overlays)
@@ -749,5 +916,54 @@ public sealed class Mp4Nv12ExportTests
         using var stream = new MemoryStream();
         encoder.Save(stream);
         return Convert.ToBase64String(stream.ToArray());
+    }
+
+    /// <summary>
+    /// The NV12 frames (packed) and timestamps the completed encoder received, and the transform Media
+    /// Foundation chose.
+    /// </summary>
+    private sealed class EncoderTap
+    {
+        internal IReadOnlyList<byte[]> Frames { get; set; } = [];
+        internal IReadOnlyList<double> Timestamps { get; set; } = [];
+        internal IReadOnlyDictionary<string, object?>? Diagnostics { get; set; }
+    }
+
+    /// <summary>Hands every call to the real encoder and keeps an exact, packed copy of each NV12 input.</summary>
+    private sealed class TappedEncoder(MediaFoundationVideoEncoder inner, VideoEncoderOptions options, EncoderTap tap) : IVideoEncoder
+    {
+        private readonly List<byte[]> _frames = [];
+        private readonly List<double> _timestamps = [];
+
+        public int Width => inner.Width;
+        public int Height => inner.Height;
+
+        public void WriteFrame(in EncoderFrame frame)
+        {
+            Assert.Equal(VideoEncoderInputFormat.Nv12, frame.Format);
+            Assert.Equal((options.Width, options.Height), (frame.Width, frame.Height));
+            int width = frame.Width, height = frame.Height, stride = frame.Stride;
+            // The real encoder's bound: equal rows of stride bytes, the last one without its padding.
+            Assert.True(stride >= width && frame.Pixels.Length >= checked((stride * (height + (height / 2) - 1)) + width),
+                "The encoder received a short NV12 frame.");
+            byte[] packed = new byte[BgraToNv12Converter.RequiredLength(width, height)];
+            for (int row = 0; row < height; row++)
+                Array.Copy(frame.Pixels, row * stride, packed, row * width, width);
+            for (int row = 0; row < height / 2; row++)
+                Array.Copy(frame.Pixels, (stride * height) + (row * stride), packed, (width * height) + (row * width), width);
+            _frames.Add(packed);
+            _timestamps.Add(frame.TimestampMs);
+            inner.WriteFrame(frame);
+        }
+
+        public void Complete()
+        {
+            tap.Diagnostics = inner.CaptureDiagnostics();
+            inner.Complete();
+            tap.Frames = _frames;
+            tap.Timestamps = _timestamps;
+        }
+
+        public void Dispose() => inner.Dispose();
     }
 }

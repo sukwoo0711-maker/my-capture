@@ -3,6 +3,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Automation;
 using System.Windows.Data;
+using System.Windows.Interop;
+using MyCapture.Platform.Shell;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Gallery;
 
@@ -13,6 +16,10 @@ namespace MyCapture.App.Gallery;
 internal sealed partial class GalleryWindow
 {
     private ContextMenu? _tileMenu;
+    private OpenWithMenu? _openWithMenu;
+    private GalleryItemViewModel? _openWithTile;
+    private bool _openingWith;
+    internal IOpenWithHandlerSource OpenWithSource { get; set; } = new OpenWithService();
 
     /// <summary>The one card menu (the <c>Gallery.TileContextMenu</c> resource), created on first use.</summary>
     internal ContextMenu TileMenu
@@ -21,6 +28,10 @@ internal sealed partial class GalleryWindow
         {
             if (_tileMenu is not null) return _tileMenu;
             _tileMenu = (ContextMenu)FindResource("Gallery.TileContextMenu");
+            MenuItem openWith = _tileMenu.Items.OfType<MenuItem>().Single(item => item.Tag as string == "OpenWith");
+            _openWithMenu = new OpenWithMenu(openWith, _tileMenu, () => OpenWithSource,
+                () => _openWithTile?.IsVideo == true ? ".mp4" : ".png", OpenWithAsync,
+                () => new WindowInteropHelper(this).Handle);
             var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("Library.Properties"),
                 InputGestureText = ShortcutCatalog.Get(ShortcutScope.Library, "Info").Hint };
             info.SetBinding(MenuItem.CommandParameterProperty, new Binding());
@@ -29,7 +40,15 @@ internal sealed partial class GalleryWindow
             info.Click += OnMediaDetailsClick;
             _tileMenu.Items.Add(info);
             // A closed menu keeps no card: recycled cards are never held through the shared instance.
-            _tileMenu.Closed += (_, _) => _tileMenu.ClearValue(ContextMenu.PlacementTargetProperty);
+            _tileMenu.Closed += (_, _) =>
+            {
+                _tileMenu.ClearValue(ContextMenu.PlacementTargetProperty);
+                _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+                {
+                    if (!_tileMenu.IsOpen) _openWithTile = null;
+                }));
+            };
+            Closed += (_, _) => _openWithMenu.Dispose();
             return _tileMenu;
         }
     }
@@ -69,6 +88,8 @@ internal sealed partial class GalleryWindow
     /// </summary>
     internal void PrepareTileMenu(ContextMenu menu, GalleryItemViewModel tile)
     {
+        _openWithMenu?.Reset();
+        _openWithTile = tile;
         IReadOnlyList<GalleryItemViewModel> targets = CommandTargets(tile);
         foreach (MenuItem item in menu.Items.OfType<MenuItem>())
         {
@@ -94,11 +115,36 @@ internal sealed partial class GalleryWindow
                     item.Visibility = _viewModel.CanCompareSelected && _viewModel.Selection.Contains(tile.Id)
                         ? Visibility.Visible : Visibility.Collapsed;
                     break;
+                case "OpenWith":
+                    item.IsEnabled = targets.Count == 1 && !_openingWith;
+                    break;
             }
         }
 
         // A source-less card has no source group. Hide its separator rather than leave two in a row.
         foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorSource"))
             separator.Visibility = tile.HasSourceBadge ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async Task OpenWithAsync(Func<string, Task> invoke)
+    {
+        GalleryItemViewModel? tile = _openWithTile;
+        if (_openingWith || tile is null || CommandTargets(tile).Count != 1 || !EnsureRecordReady(tile.Id)) return;
+        var record = _controller.Find(tile.Id);
+        if (record is null) return;
+        _openingWith = true;
+        try
+        {
+            ShowStatus(UiText.Get("OpenWith.Preparing"));
+            string path = await _dragExport.PrepareOpenWithAsync(record);
+            await invoke(path);
+            ShowStatus(UiText.Get("OpenWith.Opened"));
+        }
+        catch (OperationCanceledException) { ShowStatus(string.Empty); }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            ShowStatus(OpenWithMenu.FailureMessage(error));
+        }
+        finally { _openingWith = false; }
     }
 }

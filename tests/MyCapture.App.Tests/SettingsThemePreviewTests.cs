@@ -28,7 +28,12 @@ public sealed partial class SettingsThemePreviewTests
     public Task ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette() =>
         RunIsolated(nameof(ThemeSelectionSavesImmediatelyAndDismissalRetainsSavedPalette), VerifyPreviewLifecycle);
 
-    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null)
+    /// <param name="hungAfter">
+    /// When the child counts as hung (150 s by default). A test whose own work is long on a slow
+    /// runner passes a longer limit; its assertions keep their own budgets.
+    /// </param>
+    internal static async Task RunIsolated(string testName, Action verify, Type? testClass = null,
+        IReadOnlyDictionary<string, string>? childEnvironment = null, TimeSpan? hungAfter = null)
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
@@ -65,6 +70,9 @@ public sealed partial class SettingsThemePreviewTests
         start.Environment[ChildFlag] = "1";
         start.Environment[ReceiptRoot] = receiptRoot;
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        // Lets a test hand its child the part of its work that child runs.
+        if (childEnvironment is not null)
+            foreach ((string name, string value) in childEnvironment) start.Environment[name] = value;
         using Process child = Process.Start(start) ?? throw new IOException("Could not start the isolated WPF test.");
         Task<string> output = child.StandardOutput.ReadToEndAsync();
         Task<string> error = child.StandardError.ReadToEndAsync();
@@ -73,7 +81,7 @@ public sealed partial class SettingsThemePreviewTests
             // The GIF preview check renders and plays real samples in six themes: about 20 s on a
             // developer PC but over 60 s on a loaded GPU-less CI runner. The limit only guards
             // against a hung child; no assertion depends on it.
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(150));
+            using var timeout = new CancellationTokenSource(hungAfter ?? TimeSpan.FromSeconds(150));
             try
             {
                 await child.WaitForExitAsync(timeout.Token);
@@ -82,7 +90,9 @@ public sealed partial class SettingsThemePreviewTests
             {
                 child.Kill(entireProcessTree: true);
                 await child.WaitForExitAsync();
-                Assert.Fail("The isolated WPF test timed out.\n" + await output + Environment.NewLine + await error);
+                string progressPath = Path.Combine(receiptRoot, "progress.log");
+                string progress = File.Exists(progressPath) ? File.ReadAllText(progressPath) : "No stage progress recorded.";
+                Assert.Fail("The isolated WPF test timed out.\n" + progress + "\n" + await output + Environment.NewLine + await error);
             }
             Assert.True(child.ExitCode == 0, await output + Environment.NewLine + await error);
             // VSTest may exit successfully when a filter matches no cases. Require proof
@@ -93,6 +103,19 @@ public sealed partial class SettingsThemePreviewTests
         finally
         {
             if (!child.HasExited) child.Kill(entireProcessTree: true);
+        }
+    }
+
+    private static void RecordIsolatedProgress(string stage)
+    {
+        string? root = Environment.GetEnvironmentVariable(ReceiptRoot);
+        if (root is not null)
+        {
+            using Process process = Process.GetCurrentProcess();
+            File.AppendAllText(DiagnosticOutputPaths.Child(root, "progress.log"),
+                $"{DateTime.UtcNow:O} {stage}; cpuMs={process.TotalProcessorTime.TotalMilliseconds:R}; "
+                + $"privateBytes={process.PrivateMemorySize64}; openWindows={Application.Current?.Windows.Count}; "
+                + $"gc={GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}{Environment.NewLine}");
         }
     }
 

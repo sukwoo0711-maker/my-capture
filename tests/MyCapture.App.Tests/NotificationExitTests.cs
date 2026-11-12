@@ -81,7 +81,7 @@ public sealed class NotificationExitTests
     });
 
     [Fact]
-    public void ANewerCardOfTheSameKindReplacesAtOnceAndAnotherKindLetsTheOldOneLeave() => Run(motion: true, presenter =>
+    public void ANewerCardOfTheSameKindReplacesAtOnceAndAnotherKindLetsTheOldOneLeave() => Run(motion: true, LingeringExit, presenter =>
     {
         presenter.ShowColorCopy(new ColorCopyFeedback("#604020", 96, 64, 32));
         Window first = Shown(presenter, drain: true);
@@ -103,7 +103,7 @@ public sealed class NotificationExitTests
     });
 
     [Fact]
-    public void ACaptureEndsEveryExitAtOnce() => Run(motion: true, presenter =>
+    public void ACaptureEndsEveryExitAtOnce() => Run(motion: true, LingeringExit, presenter =>
     {
         int foreground = 0;
         presenter.ForegroundDismissed += () => foreground++;
@@ -136,14 +136,21 @@ public sealed class NotificationExitTests
         Assert.Empty(presenter.LeavingCardsForTest);
     });
 
-    private static void Run(bool motion, Action<ThemedShellPresenter> body) => StaTestHost.Run(() =>
+    // Showing a card renders synchronously whenever Windows sizes its window, and each of those renders
+    // advances every animation on the thread; on a slow runner two of them land more than the 83 ms
+    // exit apart. Tests that check an exit still plays after another card shows make it last a minute.
+    private static readonly Duration LingeringExit = new(TimeSpan.FromMinutes(1));
+
+    private static void Run(bool motion, Action<ThemedShellPresenter> body) => Run(motion, exit: null, body);
+
+    private static void Run(bool motion, Duration? exit, Action<ThemedShellPresenter> body) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(true);
         using var language = UiText.UseLanguage("ko-KR");
         bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = motion;
         var monitor = new MonitorInfo("TEST", new RectD(-20000, -20000, 1080, 1920), new RectD(-20000, -20000, 1080, 1880), 96, false);
-        var presenter = new ThemedShellPresenter(() => false, () => false) { NotificationMonitor = () => monitor };
+        var presenter = new ThemedShellPresenter(() => false, () => false) { NotificationMonitor = () => monitor, ExitDuration = exit };
         try
         {
             body(presenter);

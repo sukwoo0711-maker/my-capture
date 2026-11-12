@@ -510,10 +510,18 @@ public sealed class CaptureFlightTests
         QuickAccessWindow card = Card(image, monitor, router);
         try
         {
-            flight.Land(card);
+            Assert.True(flight.Land(card));
             card.Show();
+            // A capture flies only where layered windows can be kept out of captures, so the card it
+            // lands in is layered and plays its exit, which the flight watches for. An opaque card has
+            // no flight to end (NoLiftWhenTheImageCannotBeKeptOutOfCaptures); it closes at once
+            // (QuickAccessMotionTests.EveryCloseOfAnOpaqueCardEndsItAtOnceEvenWithMotion).
+            Assert.True(card.AllowsTransparency);
             Assert.True(PumpUntil(() => flight.IsFlying || flight.IsDone));
-            CaptureFlightDecoration flying = flight.WindowForTest!;
+            // The card closes while the image is on its way, not after the flight has already ended.
+            Assert.True(flight.IsFlying);
+            CaptureFlightDecoration? flying = flight.WindowForTest;
+            Assert.NotNull(flying);
             card.RequestClose();
             Assert.True(FluidMotion.IsExiting(card));
             // The card leaves with its preview, and the image does not fly into a closing card.
@@ -574,7 +582,8 @@ public sealed class CaptureFlightTests
 
     private static QuickAccessWindow Card(BitmapSource image, MonitorInfo? monitor, ReceiptKeyboardRouter? router) =>
         new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { },
-            () => Task.FromResult("unused.png"), capturedRegion: SourceOn(), targetMonitor: monitor, keyboardRouter: router);
+            () => Task.FromResult("unused.png"), excludeFromCapture: false,
+            capturedRegion: SourceOn(), targetMonitor: monitor, keyboardRouter: router);
 
     private static bool PumpUntil(Func<bool> done)
     {

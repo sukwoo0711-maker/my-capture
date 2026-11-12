@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Capture;
 using MyCapture.App.Recording;
 using MyCapture.App.Gallery;
 using MyCapture.Core.Primitives;
@@ -13,18 +14,66 @@ using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-public sealed class RecordingSelectionPreparationTests
+public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
 {
-    [Fact]
-    public void ACompletedVideoEditorKeepsUnsavedEditsWhileAnotherRecordingStarts() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RecordingSelectorDefersAPreviousGuideWriteUntilSelectionCloses(bool native) => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-record-guide-write-");
+        RegionRecordingCoordinator recorder = Create(root, native);
+        using var releaseFrame = new ManualResetEventSlim();
+        var pending = new Queue<Action>();
+        int saves = 0;
+        var scheduler = new CaptureGuideWriteScheduler(() => recorder.IsSelecting, pending.Enqueue);
+        recorder.SelectorClosed += scheduler.NotifySelectorClosed;
+        recorder.AcquireSelectionFrame = () => { releaseFrame.Wait(TimeSpan.FromSeconds(8)); return Frame(); };
+        recorder.OpenControlsForTest = _ => { };
+        ExcludeSelection(recorder, native, _ => true);
+        try
+        {
+            scheduler.Schedule(() => saves++); // Previous screenshot closed before this recording started.
+            Assert.Single(pending);
+            recorder.Toggle();
+            Assert.True(recorder.IsSelecting);
+            pending.Dequeue()();
+            Assert.Equal(0, saves);
+            Assert.Empty(pending);
+            releaseFrame.Set();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            Assert.True(recorder.IsSelecting);
+            Assert.Empty(pending);
+            new RecordingSelector(recorder, native).CompleteSelection(new RectD(1, 1, 20, 12));
+            Assert.False(recorder.IsSelecting);
+            Assert.Single(pending);
+            pending.Dequeue()();
+            Assert.Equal(1, saves);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(RecordingSelectorDefersAPreviousGuideWriteUntilSelectionCloses)} native={native}");
+        }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
+        finally
+        {
+            releaseFrame.Set();
+            recorder.CancelRegionSelection();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACompletedVideoEditorKeepsUnsavedEditsWhileAnotherRecordingStarts(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-over-editor-");
-        RegionRecordingCoordinator recorder = Create(root);
+        RegionRecordingCoordinator recorder = Create(root, native);
         VideoEditorWindow? editor = null;
-        Window? selector = null;
+        RecordingSelector? selector = null;
         int acquired = 0;
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         try
@@ -34,7 +83,7 @@ public sealed class RecordingSelectionPreparationTests
             Assert.True(editor.HasUnsavedEditsForTest);
             editor.UnsavedEditsPromptForTest = () => throw new InvalidOperationException("Recording must keep the old editor.");
             typeof(RegionRecordingCoordinator).GetField("_editor", flags)!.SetValue(recorder, editor);
-            recorder.ExcludeSelectionWindow = window => { selector = window; return true; };
+            ExcludeSelection(recorder, native, window => { selector = window; return true; });
             recorder.AcquireSelectionFrame = () => { Interlocked.Increment(ref acquired); return Frame(); };
             Assert.True(recorder.IsActive);
             Assert.False(recorder.HasRecordingSession);
@@ -58,7 +107,9 @@ public sealed class RecordingSelectionPreparationTests
             editor.Close();
             Assert.True(recorder.HasRecordingSession);
             Assert.True(selector.IsVisible);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(ACompletedVideoEditorKeepsUnsavedEditsWhileAnotherRecordingStarts)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally
         {
             recorder.CancelRegionSelection();
@@ -68,11 +119,13 @@ public sealed class RecordingSelectionPreparationTests
         }
     });
 
-    [Fact]
-    public void LibraryHideConfirmationPrecedesOverlayCreationAndFrozenFrameAcquisition() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LibraryHideConfirmationPrecedesOverlayCreationAndFrozenFrameAcquisition(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-library-record-selection-");
-        RegionRecordingCoordinator recorder = Create(root);
+        RegionRecordingCoordinator recorder = Create(root, native);
         var confirmed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         bool hidden = false;
         bool hideConfirmed = false;
@@ -84,13 +137,13 @@ public sealed class RecordingSelectionPreparationTests
             await confirmed.Task;
             hideConfirmed = true;
         }, () => hidden = false);
-        recorder.ExcludeSelectionWindow = window =>
+        ExcludeSelection(recorder, native, window =>
         {
             Assert.True(hidden && hideConfirmed);
             Assert.False(window.IsVisible);
             overlays++;
             return false;
-        };
+        });
         recorder.AcquireSelectionFrame = () =>
         {
             Assert.True(hidden && hideConfirmed);
@@ -114,7 +167,9 @@ public sealed class RecordingSelectionPreparationTests
             Assert.Equal(1, acquired);
             Assert.True(recorder.IsActive);
             Assert.True(hidden);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(LibraryHideConfirmationPrecedesOverlayCreationAndFrozenFrameAcquisition)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally
         {
             confirmed.TrySetResult();
@@ -126,19 +181,21 @@ public sealed class RecordingSelectionPreparationTests
     });
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void DelayedAcquisition_LeavesDispatcherResponsive_AndCancelDiscardsLateFrame(bool excluded) => StaTestHost.Run(() =>
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void DelayedAcquisition_LeavesDispatcherResponsive_AndCancelDiscardsLateFrame(bool excluded, bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-selection-");
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        RegionRecordingCoordinator coordinator = Create(root);
-        Window? overlay = null;
+        RegionRecordingCoordinator coordinator = Create(root, native);
+        RecordingSelector? overlay = null;
         int calls = 0;
         int ended = 0;
         int ownerThread = Environment.CurrentManagedThreadId;
-        coordinator.ExcludeSelectionWindow = window => { overlay = window; Assert.False(window.IsVisible); return excluded; };
+        ExcludeSelection(coordinator, native, window => { overlay = window; Assert.False(window.IsVisible); return excluded; });
         coordinator.AcquireSelectionFrame = () =>
         {
             Assert.NotEqual(ownerThread, Environment.CurrentManagedThreadId);
@@ -147,11 +204,17 @@ public sealed class RecordingSelectionPreparationTests
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
             return Frame();
         };
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         coordinator.SessionEnded += (_, _) => ended++;
         try
         {
             coordinator.Toggle();
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.Empty(pendingGuideWrites);
             Assert.NotNull(overlay);
             Assert.False(overlay.IsVisible);
             bool responsive = false;
@@ -162,12 +225,20 @@ public sealed class RecordingSelectionPreparationTests
             coordinator.CancelRegionSelection();
             Assert.True(coordinator.IsActive); // reserve until native acquisition drains
             Assert.Equal(0, ended);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             release.Set();
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.False(coordinator.IsActive);
             Assert.False(overlay.IsVisible);
             Assert.Equal(1, ended);
+            Assert.False(coordinator.IsSelecting);
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            Assert.Equal(1, guideSaves);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(DelayedAcquisition_LeavesDispatcherResponsive_AndCancelDiscardsLateFrame)} excluded={excluded} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally
         {
             release.Set();
@@ -177,16 +248,22 @@ public sealed class RecordingSelectionPreparationTests
         }
     });
 
-    [Fact]
-    public void AcquisitionFailure_IsReportedOnOwner_AndNextSelectionCanOpen() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AcquisitionFailure_IsReportedOnOwner_AndNextSelectionCanOpen(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-selection-");
-        RegionRecordingCoordinator coordinator = Create(root);
+        RegionRecordingCoordinator coordinator = Create(root, native);
         int attempts = 0;
         int failures = 0;
         int ownerThread = Environment.CurrentManagedThreadId;
-        Window? overlay = null;
-        coordinator.ExcludeSelectionWindow = window => { overlay = window; return false; };
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
+        RecordingSelector? overlay = null;
+        ExcludeSelection(coordinator, native, window => { overlay = window; return false; });
         coordinator.AcquireSelectionFrame = () => ++attempts == 1 ? throw new InvalidOperationException("capture failed") : Frame();
         coordinator.SelectionPreparationFailed += error =>
         {
@@ -197,26 +274,40 @@ public sealed class RecordingSelectionPreparationTests
         try
         {
             coordinator.Toggle();
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.Equal(1, failures);
             Assert.False(coordinator.IsActive);
+            Assert.False(coordinator.IsSelecting);
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            pendingGuideWrites.Clear();
+            Assert.Equal(1, guideSaves);
             coordinator.Toggle();
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.NotNull(overlay);
             Assert.True(overlay.IsVisible);
             Assert.True(coordinator.IsActive);
+            Assert.Empty(pendingGuideWrites);
+            Assert.Equal(1, guideSaves);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(AcquisitionFailure_IsReportedOnOwner_AndNextSelectionCanOpen)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally { coordinator.CancelRegionSelection(); OwnedTestDirectory.Delete(root); }
     });
 
-    [Fact]
-    public void DisplayOriginChangedDuringAcquisition_RejectsStaleCoordinates_AndCanRetry() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DisplayOriginChangedDuringAcquisition_RejectsStaleCoordinates_AndCanRetry(bool native) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-record-selection-");
-        RegionRecordingCoordinator coordinator = Create(root);
+        RegionRecordingCoordinator coordinator = Create(root, native);
         int failures = 0;
-        Window? overlay = null;
-        coordinator.ExcludeSelectionWindow = window => { overlay = window; return true; };
+        RecordingSelector? overlay = null;
+        ExcludeSelection(coordinator, native, window => { overlay = window; return true; });
         coordinator.SelectionPreparationFailed += _ => failures++;
         coordinator.SelectionDesktopBounds = () => new RectD(-32, 0, 32, 20);
         coordinator.AcquireSelectionFrame = Frame;
@@ -232,18 +323,26 @@ public sealed class RecordingSelectionPreparationTests
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.True(overlay!.IsVisible);
             Assert.True(coordinator.IsActive);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(DisplayOriginChangedDuringAcquisition_RejectsStaleCoordinates_AndCanRetry)} native={native}");
         }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
         finally { coordinator.CancelRegionSelection(); OwnedTestDirectory.Delete(root); }
     });
 
-    private static RegionRecordingCoordinator Create(string root)
+    private static void ExcludeSelection(RegionRecordingCoordinator coordinator, bool native, Func<RecordingSelector, bool> exclude)
+    {
+        coordinator.ExcludeSelectionWindow = _ => exclude(new RecordingSelector(coordinator, native));
+        coordinator.ExcludeNativeSelectionWindow = _ => exclude(new RecordingSelector(coordinator, native));
+    }
+
+    private static RegionRecordingCoordinator Create(string root, bool native)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
         var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
         var library = new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance);
         return new RegionRecordingCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             paths, () => new RecordingSettings(), NullLoggerFactory.Instance, library)
-        { SelectionDesktopBounds = () => new RectD(0, 0, 32, 20) };
+        { UseNativeDibSelector = native, SelectionDesktopBounds = () => new RectD(0, 0, 32, 20) };
     }
 
     private static FrozenFrame Frame()

@@ -10,6 +10,58 @@ namespace MyCapture.App.Tests;
 public sealed class WorkspaceThemeTests
 {
     [Fact]
+    public Task ClosedWindowStopsReceivingThemeRefreshWhileStillReferenced() => SettingsThemePreviewTests.RunIsolated(
+        nameof(ClosedWindowStopsReceivingThemeRefreshWhileStillReferenced), () => VerifyRefreshLifetime(close: true),
+        typeof(WorkspaceThemeTests));
+
+    [Fact]
+    public Task HiddenWindowContinuesReceivingThemeRefresh() => SettingsThemePreviewTests.RunIsolated(
+        nameof(HiddenWindowContinuesReceivingThemeRefresh), () => VerifyRefreshLifetime(close: false),
+        typeof(WorkspaceThemeTests));
+
+    private static void VerifyRefreshLifetime(bool close)
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var window = new Window
+        {
+            Width = 160, Height = 120, Left = -10000, Top = -10000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        bool closed = false;
+        window.Closed += (_, _) => closed = true;
+        try
+        {
+            WorkspaceTheme.Attach(window, WorkspaceRole.Gallery);
+            window.Show();
+            if (close) window.Close();
+            else window.Hide();
+            Assert.Equal(close, closed);
+            Assert.False(window.IsVisible);
+            SolidColorBrush before = Brush(window.Resources, "Surface.Base");
+
+            WorkspaceTheme.Refresh(AppTheme.HighContrast);
+
+            SolidColorBrush after = Brush(window.Resources, "Surface.Base");
+            if (close)
+                Assert.Same(before, after);
+            else
+            {
+                Assert.NotSame(before, after);
+                Assert.Equal(Colors.Black, after.Color);
+                window.Show();
+                Assert.True(window.IsVisible);
+                Assert.Same(after, Brush(window.Resources, "Surface.Base"));
+            }
+            GC.KeepAlive(window);
+        }
+        finally
+        {
+            if (!closed) window.Close();
+            application.Shutdown();
+        }
+    }
+
+    [Fact]
     public void RoleBrushesAndSealedStylesStayIsolatedAndSupportHighContrastSwitch()
     {
         StaTestHost.Run(() =>

@@ -117,11 +117,15 @@ internal sealed class ThemedDialog : Window
     private Button MakeCommandButton(DialogCommand command)
     {
         Button button = CreateActionButton(command.Label, primary: false);
+        bool completed = false;
         button.Click += (_, _) =>
         {
+            if (completed) return;
             string? failure = command.Run();
             if (command.Closes && failure is null)
             {
+                completed = true;
+                button.IsEnabled = false;
                 Result = MessageBoxResult.OK;
                 Close();
                 return;
@@ -296,10 +300,29 @@ internal sealed class ThemedDialog : Window
         new(UiText.Get("Onboard_StartFailureBody"), UiText.Get("Onboard_StartFailureTitle"), MessageBoxButton.OK,
             MessageBoxResult.OK, error.ToString(), commands: [ReportProblemCommand()]);
 
-    /// <summary>The unexpected-error dialog, with [Report a problem] beside Close.</summary>
-    internal static ThemedDialog CreateUnhandled(Exception error) =>
-        new(UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK, MessageBoxResult.OK,
-            error.ToString(), commands: [ReportProblemCommand()]);
+    /// <summary>
+    /// The unexpected-error dialog, with a local report preview beside Close. The report keeps the time
+    /// and records of the moment the dialog opened, however long the person reads before choosing it.
+    /// </summary>
+    internal static ThemedDialog CreateUnhandled(Exception error)
+    {
+        Func<ErrorReport> report = ErrorReporting.Capture(error);
+        return new(UnhandledMessage(error), UiText.Get("Dialog.AppFailure"), MessageBoxButton.OK, MessageBoxResult.OK,
+            error.ToString(), commands: [new(UiText.Get("Support_ReportError"), () =>
+            {
+                ErrorReporting.Open(report());
+                return null;
+            }, Closes: true)]);
+    }
+
+    /// <summary>A next-launch notice; records are only previewed when its report command is chosen.</summary>
+    internal static ThemedDialog CreateUnexpectedExitNotice(Action report) =>
+        new(UiText.Get("Support_ExitNoticeBody"), UiText.Get("Support_ExitNoticeTitle"),
+            MessageBoxButton.OK, MessageBoxResult.OK, commands: [new(UiText.Get("Support_ReportError"), () =>
+            {
+                report();
+                return null;
+            }, Closes: true)]);
 
     internal static void ShowUnhandled(Exception error, Action<Exception>? showThemed = null,
         Action<string, string>? showFallback = null)
@@ -345,15 +368,24 @@ internal sealed class ThemedDialog : Window
     internal static MessageBoxResult Show(Window? owner, string text, string title, MessageBoxButton buttons = MessageBoxButton.OK,
         MessageBoxImage icon = MessageBoxImage.Information, MessageBoxResult defaultResult = MessageBoxResult.None,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null) =>
-        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon);
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, IntPtr ownerHandle = default) =>
+        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon, ownerHandle);
 
-    /// <summary>Shows a dialog built by one of the Create* factories modally over its owner.</summary>
-    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon)
+    /// <summary>
+    /// Shows a dialog built by one of the Create* factories modally over its owner; <paramref name="ownerHandle"/>
+    /// is a native window (a native-hosted pin) that owns it when no WPF owner is shown.
+    /// </summary>
+    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon, IntPtr ownerHandle = default)
     {
-        owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
+        owner = owner?.IsVisible == true ? owner : ownerHandle != IntPtr.Zero ? null : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
+        else if (ownerHandle != IntPtr.Zero)
+        {
+            new System.Windows.Interop.WindowInteropHelper(dialog).Owner = ownerHandle;
+            dialog.ShowInTaskbar = false;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
         else PlaceOwnerless(dialog, icon);
         dialog.ShowDialog();
         return dialog.Result;

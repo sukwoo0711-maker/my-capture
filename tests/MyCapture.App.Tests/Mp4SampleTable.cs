@@ -19,6 +19,18 @@ internal sealed record Mp4SampleTable(IReadOnlyList<double> PresentationMs, IRea
     {
         byte[] file = File.ReadAllBytes(path);
         (int Start, int End) moov = Find(file, 0, file.Length, "moov") ?? throw new InvalidDataException("moov box is missing.");
+        return Parse(file, moov);
+    }
+
+    /// <summary>
+    /// Parses bytes the caller already read, so a pinned input is hashed and parsed from one read
+    /// instead of being reopened by path.
+    /// </summary>
+    internal static Mp4SampleTable Parse(byte[] file) =>
+        Parse(file, Find(file, 0, file.Length, "moov") ?? throw new InvalidDataException("moov box is missing."));
+
+    private static Mp4SampleTable Parse(byte[] file, (int Start, int End) moov)
+    {
         int cursor = moov.Start;
         while (Find(file, cursor, moov.End, "trak") is { } trak)
         {

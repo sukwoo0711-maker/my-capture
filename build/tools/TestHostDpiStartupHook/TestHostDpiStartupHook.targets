@@ -1,0 +1,77 @@
+<Project>
+  <PropertyGroup>
+    <_MyCaptureDpiHookDirectory>$(MSBuildThisFileDirectory)</_MyCaptureDpiHookDirectory>
+    <_MyCaptureDpiRepository>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..'))</_MyCaptureDpiRepository>
+  </PropertyGroup>
+
+  <!-- Resolve paths in a target, after the SDK has applied TFM/RID/artifacts paths. -->
+  <Target Name="_MyCapturePrepareDpiPaths">
+    <PropertyGroup>
+      <_MyCaptureDpiHookPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(TargetDir)', 'MyCapture.TestHostDpiStartupHook.dll'))</_MyCaptureDpiHookPath>
+      <_MyCaptureDpiStampPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(TargetDir)', 'MyCapture.TestHostDpiStartupHook.inputs.sha256'))</_MyCaptureDpiStampPath>
+      <_MyCaptureDpiSettingsPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'MyCapture.App.Tests.pmv2.runsettings'))</_MyCaptureDpiSettingsPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_MyCaptureDpiSourceInput Include="$(_MyCaptureDpiHookDirectory)StartupHook.cs;$(_MyCaptureDpiHookDirectory)TestHostDpiStartupHook.csproj;$(_MyCaptureDpiHookDirectory)TestHostDpiStartupHook.targets;$(_MyCaptureDpiRepository)Directory.Build.props;$(_MyCaptureDpiRepository)Directory.Packages.props;$(_MyCaptureDpiRepository)global.json;$(MSBuildProjectFullPath)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The hook participates in restore/build, but is neither an assembly reference
+       nor a dependency of any product or installer project. Use the resolved output
+       rather than assuming Release/net10.0, especially for x86/artifacts builds. -->
+  <Target Name="_MyCaptureCopyDpiStartupHook" AfterTargets="Build"
+          DependsOnTargets="_MyCapturePrepareDpiPaths"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsTestProject)' == 'true'">
+    <Error Condition="'@(_MyCaptureTestHostDpiHook->Count())' != '1'"
+           Text="Expected exactly one built TestHostDpiStartupHook project output. Build AppTests with project references enabled." />
+    <Error Condition="!Exists('@(_MyCaptureTestHostDpiHook)')"
+           Text="The referenced TestHostDpiStartupHook output is missing. Build AppTests before testing." />
+    <Copy SourceFiles="@(_MyCaptureTestHostDpiHook)" DestinationFiles="$(_MyCaptureDpiHookPath)" />
+    <GetFileHash Files="@(_MyCaptureDpiSourceInput);$(_MyCaptureDpiHookPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_MyCaptureDpiBuiltHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_MyCaptureDpiBuiltFingerprint>$(Configuration)|$(TargetFramework)|$(RuntimeIdentifier)|$(PlatformTarget)|$(NETCoreSdkVersion)|@(_MyCaptureDpiBuiltHash->'%(FileHash)', '|')</_MyCaptureDpiBuiltFingerprint>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_MyCaptureDpiStampPath)" Lines="$(_MyCaptureDpiBuiltFingerprint)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <!-- The CLI settings option maps to VSTestSetting and wins in the SDK. A caller-specified
+       RunSettingsFilePath also remains untouched. This default changes only the
+       testhost environment; it does not set process-wide variables in MSBuild. -->
+  <Target Name="_MyCaptureDefaultDpiRunSettings" BeforeTargets="VSTest"
+          DependsOnTargets="_MyCapturePrepareDpiPaths"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsTestProject)' == 'true' and '$(VSTestSetting)' == '' and '$(RunSettingsFilePath)' == ''">
+    <Error Condition="'$(VSTestNoBuild)' == 'true' and (!Exists('$(_MyCaptureDpiHookPath)') or !Exists('$(_MyCaptureDpiStampPath)'))"
+           Text="The default PMv2 testhost hook or its build fingerprint is missing. Run dotnet build for this AppTests configuration before --no-build." />
+    <GetFileHash Files="@(_MyCaptureDpiSourceInput);$(_MyCaptureDpiHookPath)" Algorithm="SHA256"
+                 Condition="'$(VSTestNoBuild)' == 'true'">
+      <Output TaskParameter="Items" ItemName="_MyCaptureDpiCurrentHash" />
+    </GetFileHash>
+    <ReadLinesFromFile File="$(_MyCaptureDpiStampPath)" Condition="'$(VSTestNoBuild)' == 'true'">
+      <Output TaskParameter="Lines" ItemName="_MyCaptureDpiSavedFingerprint" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_MyCaptureDpiCurrentFingerprint>$(Configuration)|$(TargetFramework)|$(RuntimeIdentifier)|$(PlatformTarget)|$(NETCoreSdkVersion)|@(_MyCaptureDpiCurrentHash->'%(FileHash)', '|')</_MyCaptureDpiCurrentFingerprint>
+    </PropertyGroup>
+    <Error Condition="'$(VSTestNoBuild)' == 'true' and '@(_MyCaptureDpiSavedFingerprint)' != '$(_MyCaptureDpiCurrentFingerprint)'"
+           Text="The default PMv2 testhost hook inputs, configuration, SDK or copied DLL changed since the build. Rebuild this AppTests configuration before --no-build." />
+
+    <ItemGroup>
+      <_MyCaptureInheritedStartupHook Include="$(DOTNET_STARTUP_HOOKS)" Exclude="$(_MyCaptureDpiHookPath)" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_MyCaptureDpiHookList>$(_MyCaptureDpiHookPath)</_MyCaptureDpiHookList>
+      <_MyCaptureDpiHookList Condition="'@(_MyCaptureInheritedStartupHook)' != ''">$(_MyCaptureDpiHookPath);@(_MyCaptureInheritedStartupHook)</_MyCaptureDpiHookList>
+      <!-- XML text escaping and MSBuild item-list escaping are separate layers. -->
+      <_MyCaptureDpiHookListXml>$(_MyCaptureDpiHookList.Replace('&amp;', '&amp;amp;').Replace('&lt;', '&amp;lt;').Replace('&gt;', '&amp;gt;'))</_MyCaptureDpiHookListXml>
+      <_MyCaptureDpiSettingsXml>&lt;RunSettings&gt;&lt;RunConfiguration&gt;&lt;EnvironmentVariables&gt;&lt;DOTNET_STARTUP_HOOKS&gt;$(_MyCaptureDpiHookListXml)&lt;/DOTNET_STARTUP_HOOKS&gt;&lt;MYCAPTURE_TESTHOST_DPI_MODE&gt;PerMonitorV2&lt;/MYCAPTURE_TESTHOST_DPI_MODE&gt;&lt;/EnvironmentVariables&gt;&lt;/RunConfiguration&gt;&lt;/RunSettings&gt;</_MyCaptureDpiSettingsXml>
+      <RunSettingsFilePath>$(_MyCaptureDpiSettingsPath)</RunSettingsFilePath>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(_MyCaptureDpiSettingsPath)" Lines="$([MSBuild]::Escape(&quot;$(_MyCaptureDpiSettingsXml)&quot;))"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <Message Importance="Normal" Text="MyCapture AppTests PMv2 testhost settings: $(RunSettingsFilePath)" />
+  </Target>
+</Project>

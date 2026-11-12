@@ -538,8 +538,15 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!--   Selected state uses a primary-text outline and a neutral fill; focus is an overlay. -->
+    <!--   On fills with the selection ink pair: a Text.SelectionBackground fill under
+           Text.SelectionForeground content (Highlight and HighlightText in a Windows contrast
+           theme). On and off differ by fill, not by the 2-DIP primary-text outline that read
+           as the focus ring. Content follows Foreground, so it switches ink with the fill. -->
     <!-- ============================================================= -->
+    <Style x:Key="ToggleButton.CheckedLayer" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+        <Setter Property="Background" Value="{DynamicResource Text.SelectionBackground}" />
+        <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+    </Style>
     <Style TargetType="{x:Type ToggleButton}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
         <Setter Property="Background" Value="Transparent" />
@@ -563,7 +570,69 @@
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
-                        <!-- Above the hover wash, so a checked tool keeps its selected fill on hover. -->
+                        <!-- Above the hover wash, so a checked toggle keeps its fill on hover. -->
+                        <Border x:Name="CheckedLayer"
+                                Style="{StaticResource ToggleButton.CheckedLayer}" />
+                        <Border BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <Border x:Name="FocusRing"
+                                Margin="1"
+                                BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}"
+                                CornerRadius="{DynamicResource Radius.Sm}"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.SelectionForeground}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <!-- On and focused, Border.Focus is the fill's own colour (Text.Primary in the app
+                             palettes) or close to it (WindowText on Highlight in a contrast theme), so the
+                             ring takes the fill's ink. Place and size stay; after the focus trigger, so it wins. -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True" />
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource Text.SelectionForeground}" />
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.48" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
+    <!-- A disclosure header keeps the look from before the ink fill: the neutral selected tile with
+         its primary-text edge, under primary text. Its chevron already shows that it is open. -->
+    <Style x:Key="ToggleButton.Disclosure" TargetType="{x:Type ToggleButton}" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                    <Grid>
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.Md}" />
+                        <Border x:Name="HoverLayer"
+                                Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="CheckedLayer"
                                 Style="{StaticResource StateLayer.Selected}"
                                 BorderThickness="2" />
@@ -601,9 +670,8 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
 
-    <!-- Optional dialog settings use the same toggle chrome and live palette as the controls below. -->
+    <!-- Optional dialog settings open under the disclosure toggle and use the live palette of the controls below. -->
     <Style x:Key="Expander.Options" TargetType="Expander">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Template">
@@ -611,6 +679,7 @@
                 <ControlTemplate TargetType="Expander">
                     <StackPanel>
                         <ToggleButton x:Name="HeaderToggle" HorizontalAlignment="Left" Padding="6"
+                                      Style="{StaticResource ToggleButton.Disclosure}"
                                       IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
                             <StackPanel Orientation="Horizontal">
@@ -1003,8 +1072,15 @@
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
         <Setter Property="UseLayoutRounding" Value="True" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
-        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
+        <!-- The 1-DIP subtle edge of the notification and capture cards: without it a menu over a
+             white page had no visible boundary. -->
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <!-- The clear band the popup window keeps for the menu's Shadow.Card, as a notification card
+             has (ThemedShellPresenter.ShadowMargin); without it the shadow was cut off at the popup's
+             edge. A popup aligns the menu itself, not its margin, with the anchor, so the menu still
+             opens where it did; only its window is larger. -->
+        <Setter Property="Margin" Value="12" />
         <Setter Property="Padding" Value="5" />
         <Setter Property="HasDropShadow" Value="False" />
         <Setter Property="OverridesDefaultStyle" Value="True" />
@@ -1085,15 +1161,19 @@
                         <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
                                 BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False" Opacity="0" />
-                        <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement. -->
+                        <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement.
+                             The submenu has the menu's chrome: its 1-DIP subtle edge, its Shadow.Card
+                             and the 12-DIP clear band for the shadow, which the popup does not align
+                             with the row, so the submenu opens where it did. -->
                         <Popup x:Name="PART_Popup" Placement="Right" AllowsTransparency="True"
                                Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                             <Border Background="{DynamicResource Surface.Floating}"
-                                    BorderBrush="{DynamicResource Border.Strong}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
-                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5"
+                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5" Margin="12"
+                                    Effect="{DynamicResource Shadow.Card}"
                                     SnapsToDevicePixels="True"
-                                    MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
+                                    MaxHeight="{x:Static themes:PopupMetrics.SubmenuMaxHeight}">
                                 <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"

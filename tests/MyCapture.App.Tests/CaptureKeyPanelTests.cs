@@ -6,6 +6,7 @@ using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -232,21 +233,25 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData("ko-KR", 1)]
-    [InlineData("en-US", 1)]
-    [InlineData("ko-KR", 1.5)]
-    [InlineData("en-US", 1.5)]
-    public void PremeasuredRowSetsAlignLabelsAndRightEdgesIncludingFooter(string culture, double scale) => StaTestHost.Run(() =>
+    [InlineData(false, "ko-KR", 1)]
+    [InlineData(false, "en-US", 1)]
+    [InlineData(false, "ko-KR", 1.5)]
+    [InlineData(false, "en-US", 1.5)]
+    [InlineData(true, "ko-KR", 1)]
+    [InlineData(true, "en-US", 1)]
+    [InlineData(true, "ko-KR", 1.5)]
+    [InlineData(true, "en-US", 1.5)]
+    public void PremeasuredRowSetsAlignLabelsAndRightEdgesIncludingFooter(bool native, string culture, double scale) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage(culture);
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         try
         {
             view.ShowKeyPanel = true;
             Render(view, scale);
             view.NotifyFirstFramePresented();
             CaptureKeyPanel ready = Panel(view);
-            var selected = LogicalTreeHelper.GetChildren(view).OfType<CaptureKeyPanel>().Single(panel => !ReferenceEquals(panel, ready));
+            var selected = view.Panels.Single(panel => !ReferenceEquals(panel, ready));
             double readyWidth = CheckColumns(ready);
             double selectedWidth = CheckColumns(selected);
             Assert.True(selectedWidth > readyWidth, "The ready panel must not inherit the hidden selection panel's wider key column.");
@@ -325,13 +330,18 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         view.ReadCursor = () => pointer;
         view.ReadClock = () => now;
         view.SimulatedPointerInside = true;
+        // Both under a quarter of the screen, so the highlight glides from one to the other.
+        var notes = Notes with { ScreenBounds = new RectD(120, 90, 440, 420) };
+        var browser = Browser with { ScreenBounds = new RectD(760, 200, 400, 400) };
+        view.WindowCandidates = [browser, notes, Taskbar, Shell];
+        view.InitializePointer();
         try
         {
             view.ShowKeyPanel = true;
             Render(view);
             view.NotifyFirstFramePresented();
             Rect right = view.KeyPanelBoundsForTest!.Value;
-            Assert.True(right.Left > Notes.ScreenBounds.Right);
+            Assert.True(right.Left > notes.ScreenBounds.Right);
             pointer = new PointD(1100, 300);
             view.UpdatePointer(false, false);
             Render(view);
@@ -343,7 +353,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             now += TimeSpan.FromSeconds(1);
             Render(view);
             Rect left = view.KeyPanelBoundsForTest!.Value;
-            Assert.True(left.Right < Browser.ScreenBounds.Left);
+            Assert.True(left.Right < browser.ScreenBounds.Left);
             pointer = new PointD(1000, 120);
             view.UpdatePointer(false, false);
             Render(view);
@@ -394,10 +404,12 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         }
     });
 
-    [Fact]
-    public void UnrequestedSelectorDoesNotInitializePanelAndClaimsOnlyAfterPresentation() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnrequestedSelectorDoesNotInitializePanelAndClaimsOnlyAfterPresentation(bool native) => StaTestHost.Run(() =>
     {
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         int claims = 0, keyReads = 0;
         bool? guideAtClaim = null;
         var marks = new List<string>();
@@ -427,10 +439,12 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); MyCapture.App.Diagnostics.SelectorTimeline.Mark = oldMark; }
     });
 
-    [Fact]
-    public void FirstHelpRequestInitializesOnlyAfterTheStartCardLeaves() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FirstHelpRequestInitializesOnlyAfterTheStartCardLeaves(bool native) => StaTestHost.Run(() =>
     {
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         try
         {
             Render(view);
@@ -447,10 +461,12 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void EarlyF1RequestsQueueUntilPresentedAndRecordingNeverClaims() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarlyF1RequestsQueueUntilPresentedAndRecordingNeverClaims(bool native) => StaTestHost.Run(() =>
     {
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         try
         {
             view.HandleKeyDown(Overlay.KeyArgs(Key.F1), ModifierKeys.None);
@@ -460,7 +476,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             Assert.NotNull(view.KeyPanelForTest);
         }
         finally { view.ReleaseResources(); }
-        var recording = NewView();
+        var recording = new KeyPanelSelector(native);
         try
         {
             recording.RecordingSelection = true;
@@ -473,10 +489,12 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { recording.ReleaseResources(); }
     });
 
-    [Fact]
-    public void ConstructionWaitsForPresentedFrameAndReleasedCallbackDoesNothing() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConstructionWaitsForPresentedFrameAndReleasedCallbackDoesNothing(bool native) => StaTestHost.Run(() =>
     {
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         var marks = new List<string>();
         Action<string>? oldMark = MyCapture.App.Diagnostics.SelectorTimeline.Mark;
         MyCapture.App.Diagnostics.SelectorTimeline.Mark = marks.Add;
@@ -499,11 +517,13 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); MyCapture.App.Diagnostics.SelectorTimeline.Mark = oldMark; }
     });
 
-    [Fact]
-    public void F1TogglesPersistentPanelAndHelpShowsGuideThenPanelWithoutOverlap() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void F1TogglesPersistentPanelAndHelpShowsGuideThenPanelWithoutOverlap(bool native) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         try
         {
             Render(view);
@@ -537,11 +557,13 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void ConditionalRowsTrackModeSelectionAndActualPinAssignment() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConditionalRowsTrackModeSelectionAndActualPinAssignment(bool native) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         try
         {
             view.ShowKeyPanel = true;
@@ -576,11 +598,58 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void PanelIsTransparentToInputAndExposesOneGroupWithTextRows() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CaptureAndWindowBarModesRemoveAndRestoreTheClickRow(bool native) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
-        var view = NewView();
+        using var view = new KeyPanelSelector(native) { ShowKeyPanel = true };
+        view.Render();
+        view.NotifyFirstFramePresented();
+        Assert.Contains(Panel(view).RowTexts, row => row.StartsWith("클릭"));
+        CaptureModeBar bar = view.ModeBarForTest!;
+        bar.ActivateButton(bar.CaptureButton);
+        view.Render();
+        Assert.DoesNotContain(Panel(view).RowTexts, row => row.StartsWith("클릭"));
+        Assert.Contains(Panel(view).RowTexts, row => row.StartsWith("드래그"));
+        bar.ActivateButton(bar.WindowButton);
+        view.Render();
+        Assert.Contains(Panel(view).RowTexts, row => row.StartsWith("클릭"));
+        Assert.Contains(Panel(view).RowTexts, row => row.StartsWith("드래그"));
+    });
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void RatioAndFixedSizeBarChoicesDismissTheStartGuideAndRevealThePanel(bool native, bool fixedSize) => StaTestHost.Run(() =>
+    {
+        using var view = new KeyPanelSelector(native) { ShowKeyPanel = true };
+        view.Render();
+        view.NotifyFirstFramePresented();
+        view.ShowStartGuide = true;
+        Assert.True(view.ShowStartGuide);
+        Assert.Equal(Visibility.Visible, view.StartGuideCardForTest!.Visibility);
+        Assert.Equal(Visibility.Hidden, Panel(view).Visibility);
+        ContextMenu menu = view.ModeBarForTest!.CreateRatioMenu();
+        MenuItem choice = fixedSize
+            ? menu.Items.OfType<MenuItem>().First(item => !item.IsCheckable)
+            : menu.Items.OfType<MenuItem>().First(item => item.IsCheckable && !item.IsChecked);
+        choice.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.False(view.ShowStartGuide);
+        Assert.Equal(Visibility.Collapsed, view.StartGuideCardForTest.Visibility);
+        Assert.Equal(Visibility.Visible, Panel(view).Visibility);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PanelIsTransparentToInputAndExposesOneGroupWithTextRows(bool native) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        var view = new KeyPanelSelector(native);
         try
         {
             view.ShowKeyPanel = true;
@@ -603,7 +672,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             view.RecordingSelection = true;
             Assert.Empty(AccessibleGroups());
 
-            IEnumerable<AutomationPeer> AccessibleGroups() => LogicalTreeHelper.GetChildren(view).OfType<CaptureKeyPanel>()
+            IEnumerable<AutomationPeer> AccessibleGroups() => view.Panels
                 .Select(child => UIElementAutomationPeer.CreatePeerForElement(child)!).Where(child => child.IsControlElement());
         }
         finally { view.ReleaseResources(); }
@@ -634,11 +703,13 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         Assert.True(blocked.IsEmpty);
     }
 
-    [Fact]
-    public void MonitorAndPointerMovesDoNotRebuildRowsOrLoseWorkAreaContainment() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MonitorAndPointerMovesDoNotRebuildRowsOrLoseWorkAreaContainment(bool native) => StaTestHost.Run(() =>
     {
         PointD pointer = new(700, 100);
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         view.ReadCursor = () => pointer;
         view.ReadMonitors = () => new[]
         {
@@ -664,11 +735,13 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         finally { view.ReleaseResources(); }
     });
 
-    [Fact]
-    public void ReadyToDragAndPointerBurstUsePremeasuredRows() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReadyToDragAndPointerBurstUsePremeasuredRows(bool native) => StaTestHost.Run(() =>
     {
         PointD pointer = new(700, 120);
-        var view = NewView();
+        var view = new KeyPanelSelector(native);
         view.ReadCursor = () => pointer;
         view.SimulatedPointerInside = true;
         try
@@ -677,7 +750,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             Render(view);
             view.NotifyFirstFramePresented();
             CaptureKeyPanel ready = Panel(view);
-            var selected = LogicalTreeHelper.GetChildren(view).OfType<CaptureKeyPanel>().Single(panel => !ReferenceEquals(panel, ready));
+            var selected = view.Panels.Single(panel => !ReferenceEquals(panel, ready));
             var before = (ready.ContentBuildCount, ready.MeasureCount, ready.ArrangeCount,
                 selected.ContentBuildCount, selected.MeasureCount, selected.ArrangeCount);
             view.SimulatePointerDown();
@@ -737,6 +810,178 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         Assert.True(store.Load().Capture.AlwaysShowKeyPanel);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AlwaysShowPreferenceSurvivesTheCountLimitWithoutConsumingAnotherShowing(bool native) => StaTestHost.Run(() =>
+    {
+        var settings = new AppSettings
+        {
+            Capture = { StartGuideShownCount = 3, KeyPanelShownCount = 10, AlwaysShowKeyPanel = true },
+        };
+        var writes = new List<Action>();
+        var bookkeeping = new CaptureStartGuideBookkeeping(() => settings, _ => { }, writes.Add, NullLogger.Instance);
+        using var view = new KeyPanelSelector(native) { ClaimKeyPanel = bookkeeping.ClaimKeyPanel };
+        view.Render();
+        Assert.Null(view.KeyPanelForTest);
+        view.NotifyFirstFramePresented();
+        Assert.True(view.ShowKeyPanel);
+        Assert.NotNull(view.KeyPanelForTest);
+        Assert.Equal(10, settings.Capture.KeyPanelShownCount);
+        Assert.Empty(writes);
+    });
+
+    [Fact]
+    public void NativePanelIsRetainedButWaitsForEachOwnersFirstFrame() => StaTestHost.Run(() =>
+    {
+        var marks = new List<string>();
+        Action<string>? previous = MyCapture.App.Diagnostics.SelectorTimeline.Mark;
+        MyCapture.App.Diagnostics.SelectorTimeline.Mark = marks.Add;
+        NativeSelectorChromeCache.Trim();
+        try
+        {
+            using var first = new KeyPanelSelector(true, shown: true) { ShowKeyPanel = true };
+            Assert.Null(first.KeyPanelForTest);
+            first.Native!.Show();
+            Assert.Null(first.KeyPanelForTest);
+            Overlay.PumpUntil(() => first.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            var chrome = Assert.IsType<NativeSelectorChrome>(first.Native.Chrome);
+            var panel = Panel(first);
+            IntPtr[] handles = chrome.Windows.Select(window => new WindowInteropHelper(window).Handle).ToArray();
+            Assert.True(marks.IndexOf("native-first-full-frame-submitted") < marks.IndexOf("key-panel-controller"));
+            Assert.True(marks.IndexOf("native-first-full-frame-submitted") < marks.IndexOf("native-key-panel-ready"));
+            Assert.Equal(0, chrome.PendingFrameCount);
+            first.ReleaseResources();
+            Assert.Null(first.KeyPanelForTest);
+            Assert.True(chrome.IsDetached);
+            Assert.All(chrome.Windows, window => Assert.False(window.IsVisible));
+            Assert.All(handles, handle => Assert.True(NativeSelectorInterop.IsWindow(handle)));
+
+            marks.Clear();
+            using var second = new KeyPanelSelector(true, shown: true) { ShowKeyPanel = true };
+            Assert.Null(second.KeyPanelForTest);
+            second.Native!.Show();
+            Assert.Null(second.KeyPanelForTest);
+            Overlay.PumpUntil(() => second.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            Assert.Same(chrome, second.Native.Chrome);
+            Assert.Same(panel, second.KeyPanelForTest);
+            Assert.Equal(handles, chrome.Windows.Select(window => new WindowInteropHelper(window).Handle));
+            Assert.True(marks.IndexOf("native-first-full-frame-submitted") < marks.IndexOf("native-key-panel-ready"));
+        }
+        finally
+        {
+            NativeSelectorChromeCache.Trim();
+            MyCapture.App.Diagnostics.SelectorTimeline.Mark = previous;
+        }
+    });
+
+    [Fact]
+    public void NativeChromeWithMagnifierAndKeyPanelStaysCachedForTheNextCapture() => StaTestHost.Run(() =>
+    {
+        // The product selector shows the magnifier, so a key panel makes at least five retained
+        // windows. The cache must keep that whole set; discarding it rebuilds every chrome window
+        // on the next capture.
+        var marks = new List<string>();
+        Action<string>? previous = MyCapture.App.Diagnostics.SelectorTimeline.Mark;
+        MyCapture.App.Diagnostics.SelectorTimeline.Mark = marks.Add;
+        NativeSelectorChromeCache.Trim();
+        try
+        {
+            using var first = new KeyPanelSelector(true, magnifier: true, shown: true) { ShowKeyPanel = true };
+            first.Native!.Show();
+            Overlay.PumpUntil(() => first.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            var chrome = Assert.IsType<NativeSelectorChrome>(first.Native.Chrome);
+            int windows = chrome.Windows.Count;
+            Assert.True(windows >= 5, $"expected bar, size, guide, magnifier and key panel windows; found {windows}");
+            first.ReleaseResources();
+            Assert.Equal(windows, NativeSelectorChromeCache.RetainedWindowCount);
+
+            marks.Clear();
+            using var second = new KeyPanelSelector(true, magnifier: true, shown: true) { ShowKeyPanel = true };
+            second.Native!.Show();
+            Overlay.PumpUntil(() => second.Native.IsChromeReady && marks.Contains("native-key-panel-ready"));
+            Assert.Same(chrome, second.Native.Chrome);
+            Assert.Contains("native-chrome-cache-hit", marks);
+        }
+        finally
+        {
+            NativeSelectorChromeCache.Trim();
+            MyCapture.App.Diagnostics.SelectorTimeline.Mark = previous;
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativePanelPreservesTheReadoutWhenASelectionCrowdsTheOtherCorner(bool dib) => StaTestHost.Run(() =>
+    {
+        using var view = new KeyPanelSelector(true);
+        var native = view.Native!;
+        native.ChromeStrategy = dib ? NativeSelectorChromeStrategy.Dib : NativeSelectorChromeStrategy.Retained;
+        PointD pointer = new(700, 600);
+        native.ReadCursor = () => pointer;
+        native.DetectWindows = false;
+        native.BeginSelection(new PointD(0, 0));
+        native.MoveSelection(new PointD(600, 700));
+        native.ShowKeyPanel = true;
+        native.NotifyFirstFramePresented();
+        double panelWidth = native.KeyPanelForTest!.DesiredSize.Width;
+        // Keep the pointer outside the right panel's 48-pixel soft clearance, while its
+        // readout still reaches into that corner. The actual chip must win over the selection.
+        pointer = new PointD(native.ScreenBounds.Width - 12 - panelWidth - 80, 600);
+        native.Chrome!.Update(pointer, native.SelectionRectangle);
+        // The DIB stamp's 190 x 36 readout starts 20 physical pixels below/right of this pointer. The retained
+        // size chip sits at the selection's corner like the WPF selector, so read its actual bounds.
+        // The selection crowds the left corner; its soft preference must never cover the chip.
+        Rect readout = dib ? new(pointer.X + 20, 620, 190, 36) : RetainedChipBounds(native);
+        Rect panel = Assert.IsType<Rect>(native.KeyPanelBoundsForTest);
+        Assert.False(panel.IntersectsWith(readout));
+    });
+
+    private static Rect RetainedChipBounds(NativeCaptureOverlay native)
+    {
+        RectD chip = native.Chrome!.SizeChipBoundsForTest;
+        Assert.True(chip.Width > 0 && chip.Height > 0);
+        return new Rect(chip.Left - native.ScreenBounds.Left, chip.Top - native.ScreenBounds.Top, chip.Width, chip.Height);
+    }
+
+    [Fact]
+    public void NativeF1OnAVisibleSelectorDefersPanelWindowCreationPastTheKeyHandler() => StaTestHost.Run(() =>
+    {
+        var marks = new List<string>();
+        Action<string>? previous = MyCapture.App.Diagnostics.SelectorTimeline.Mark;
+        MyCapture.App.Diagnostics.SelectorTimeline.Mark = marks.Add;
+        NativeSelectorChromeCache.Trim();
+        try
+        {
+            using var view = new KeyPanelSelector(true, shown: true);
+            view.Native!.Show();
+            Overlay.PumpUntil(() => view.Native.IsChromeReady && view.FirstFramePresentedForTest);
+            var chrome = Assert.IsType<NativeSelectorChrome>(view.Native.Chrome);
+            Assert.Null(view.KeyPanelForTest);
+            IntPtr[] before = chrome.Windows.Select(window => new WindowInteropHelper(window).Handle).ToArray();
+            var key = Overlay.KeyArgs(Key.F1);
+            view.HandleKeyDown(key, ModifierKeys.None);
+            Assert.True(key.Handled);
+            Assert.True(view.ShowKeyPanel);
+            Assert.Null(view.KeyPanelForTest);
+            Assert.Equal(before, chrome.Windows.Select(window => new WindowInteropHelper(window).Handle));
+            Assert.DoesNotContain("key-panel-controller", marks);
+            Overlay.PumpUntil(() => marks.Contains("native-key-panel-ready"));
+            Assert.NotNull(view.KeyPanelForTest);
+            Assert.Equal(before.Length + 1, chrome.Windows.Count);
+            Assert.True(view.Native.IsChromeReady);
+        }
+        finally
+        {
+            NativeSelectorChromeCache.Trim();
+            MyCapture.App.Diagnostics.SelectorTimeline.Mark = previous;
+        }
+    });
+
     private static CaptureOverlayView NewView() => EvidenceView(Desktop(), AppTheme.Glass, "window-hover");
     private static CaptureKeyPanel Panel(CaptureOverlayView view) => Assert.IsType<CaptureKeyPanel>(view.KeyPanelForTest);
+    private static CaptureKeyPanel Panel(KeyPanelSelector view) => Assert.IsType<CaptureKeyPanel>(view.KeyPanelForTest);
+    private static RenderTargetBitmap Render(CaptureOverlayView view, double scale = 1) => CaptureCueEvidenceTests.Render(view, scale);
+    private static void Render(KeyPanelSelector view, double scale = 1) => view.Render(scale);
 }

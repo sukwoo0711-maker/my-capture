@@ -750,9 +750,10 @@ public sealed class PinSessionServiceTests
         {
             using var workspace = new TempWorkspace();
             var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
-            long oneImageBudget = ImageCodec.EncodePng(Image()).LongLength;
+            MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+            long oneImageBudget = MeasureSingleTextPinPngBudget(settings, monitor);
             var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: oneImageBudget);
-            var manager = new PinManager(() => settings, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance) { ReadPlacementMonitorForTest = () => monitor };
             int encodes = 0;
             using var service = Create(manager, store, settings, image => { Interlocked.Increment(ref encodes); return ImageCodec.EncodePng(image); });
             try
@@ -1256,10 +1257,11 @@ public sealed class PinSessionServiceTests
         {
             using var workspace = new TempWorkspace();
             var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+            long oneImageBudget = limitBytes ? MeasureSingleTextPinPngBudget(settings, monitor) : PinSessionStore.DefaultMaxPngBytes;
             var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance,
-                maxPins: limitBytes ? PinSessionStore.DefaultMaxPins : 1,
-                maxPngBytes: limitBytes ? ImageCodec.EncodePng(Image()).LongLength : PinSessionStore.DefaultMaxPngBytes);
-            var manager = new PinManager(() => settings, NullLogger.Instance);
+                maxPins: limitBytes ? PinSessionStore.DefaultMaxPins : 1, maxPngBytes: oneImageBudget);
+            var manager = new PinManager(() => settings, NullLogger.Instance) { ReadPlacementMonitorForTest = () => monitor };
             using var service = Create(manager, store, settings);
             try
             {
@@ -1335,11 +1337,53 @@ public sealed class PinSessionServiceTests
         Assert.True(completed(), "Pending pin-session work did not complete.");
     }
 
+    [Fact]
+    public void RestoredPinPicture_EncodesOnThreadsThatDidNotDecodeIt() => StaTestHost.Run(() =>
+    {
+        // Copy, quick save, the next session save and the closed list encode a restored pin's picture on
+        // other threads than the pool thread that decoded it at launch.
+        using var workspace = new TempWorkspace();
+        var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+        var manager = new PinManager(() => settings, NullLogger.Instance);
+        try
+        {
+            using (PinSessionService service = Create(manager, store, settings))
+            {
+                manager.PinImage(Image());
+                Assert.True(service.SaveNow().IsComplete);
+            }
+            manager.CloseAllForExit();
+            using PinSessionService restore = Create(manager, store, settings);
+            Wait(restore.RestoreAsync());
+
+            BitmapSource restored = Assert.Single(manager.SnapshotOpenPins()).Content.Image;
+            byte[] here = ImageCodec.EncodePng(restored);
+            Assert.Equal(here, DecodedPngEncodesOnAnyThreadTests.OnNewThread(() => ImageCodec.EncodePng(restored)));
+        }
+        finally { manager.CloseAllForExit(); }
+    });
+
     // SaveNow drops a write that outlasts its 3 s exit budget, by design; the timeout tests above set
     // their own short budget. Each save flushes a PNG and the manifest to disk, and on a hosted runner
     // busy with Core tests' gigabyte writes a save outlasted 3 s, so the next restore found no pin.
     // Saves that a test relies on get this budget instead; SaveNow still returns as soon as they finish.
     private static readonly TimeSpan SaveCompletionTimeout = TimeSpan.FromSeconds(30);
+
+    private static long MeasureSingleTextPinPngBudget(PinSettings settings, MonitorInfo monitor)
+    {
+        // Measure with a separate manager so the actual scenario remains restore ->
+        // newly opened pins -> save, including CloseAll while its service is alive.
+        var measurement = new PinManager(() => settings, NullLogger.Instance) { ReadPlacementMonitorForTest = () => monitor };
+        try
+        {
+            PinWindow older = measurement.PinRenderedText(Image(), "older", false);
+            PinWindow newest = measurement.PinRenderedText(Image(), "newest", false);
+            return Math.Max(ImageCodec.EncodePng(older.PinnedContent.Image).LongLength,
+                ImageCodec.EncodePng(newest.PinnedContent.Image).LongLength);
+        }
+        finally { measurement.CloseAllForExit(); }
+    }
 
     private static PinSessionService Create(PinManager manager, PinSessionStore store, PinSettings settings,
         Func<BitmapSource, byte[]>? encode = null, Func<byte[], BitmapSource?>? decode = null) =>

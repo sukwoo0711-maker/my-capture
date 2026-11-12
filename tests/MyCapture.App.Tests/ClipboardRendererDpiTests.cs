@@ -1,3 +1,5 @@
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
 using MyCapture.App.Threading;
@@ -156,6 +158,88 @@ public sealed class ClipboardRendererDpiTests
         Assert.Equal(expected.DpiY, actual.DpiY);
         Assert.Equal(CopyPixels(expected), CopyPixels(actual));
     }
+
+    /// <summary>
+    /// Every text picture fills its rectangle to the corners and to its last device pixel, so the
+    /// pin's one-DIP outline is the only edge it shows. A plain card with its own rounded border had
+    /// transparent corners: the desktop showed through them inside a square Windows 10 pin, a second
+    /// arc ran inside a Windows 11 pin's outline, and they were black wherever a copied bitmap's
+    /// alpha is dropped. At fractional scales every text picture also left its last column or row
+    /// half transparent, because its background stopped at the DIP size the pixels round up from.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.25)]
+    [InlineData(1.5)]
+    public async Task TextPictures_FillTheirCornersAndEdges(double scale)
+    {
+        await StaThreadTask.RunAsync(() =>
+        {
+            PinCodeDocument code = Assert.IsType<PinCodeDocument>(ClipboardCodeRenderer.TryParse(CodeText, CodeHtml));
+            PinCodeDocument Code(string text) => new(text, [], "#123456", "#DCDCDC");
+            List<(string Kind, string Name, BitmapSource Image, uint Fill)> pictures =
+            [
+                ("plain", "plain", ClipboardTextRenderer.Render(PlainText, false, scale), 0xFFFCFCFD),
+                ("plain", "short note", ClipboardTextRenderer.Render("sample", false, scale), 0xFFFCFCFD),
+                ("plain", "plain with a tab", ClipboardTextRenderer.Render("name\tvalue", false, scale), 0xFFFCFCFD),
+                ("table", "table", ClipboardTextRenderer.Render(TableText, true, scale), 0xFFFCFCFD),
+                ("table", "two by two", ClipboardTextRenderer.Render("a\tb\r\nc\td", true, scale), 0xFFFCFCFD),
+                ("table", "one row", ClipboardTextRenderer.Render("column\tlonger value", true, scale), 0xFFFCFCFD),
+                ("translation", "translation", ClipboardTextRenderer.RenderTranslation(PlainText, scale), 0xFFFFFFFF),
+                ("translation", "short translation", ClipboardTextRenderer.RenderTranslation("sample", scale), 0xFFFFFFFF),
+                ("translation", "Korean translation", ClipboardTextRenderer.RenderTranslation("번역 결과를 확인합니다.", scale), 0xFFFFFFFF),
+                ("code", "code", ClipboardCodeRenderer.Render(code, scale), 0xFF123456),
+                ("code", "one line", ClipboardCodeRenderer.Render(Code("return value;"), scale), 0xFF123456),
+                ("code", "three lines", ClipboardCodeRenderer.Render(Code("int a = 1;\nint bb = 22;\nint ccc = 333;"), scale), 0xFF123456),
+                ("markdown", "note", ClipboardMarkdownRenderer.Render("# Title\nA short note.", scale), 0xFFFFFFFF),
+                ("markdown", "list", ClipboardMarkdownRenderer.Render("- one\n- two\n- three", scale), 0xFFFFFFFF),
+                ("markdown", "Korean", ClipboardMarkdownRenderer.Render("## 점검\n배포 전에 이름을 확인합니다.", scale), 0xFFFFFFFF),
+            ];
+            // Pictures that grow a little at a time, so at a fractional scale every kind includes some
+            // whose pixel size rounds up past their DIP size. Code pictures have a 240 by 80 DIP minimum,
+            // so their samples are longer than that; Markdown pages have a fixed width, so they grow down.
+            string[] blocks = ["\n\nA paragraph.", "\n- item", "\n## Heading", "\n> quote", "\n1. first", "\n\nAnother paragraph.", "\n---", "\n- last"];
+            for (int extra = 1; extra <= blocks.Length; extra++)
+            {
+                string tail = "abcdefgh"[..extra];
+                pictures.Add(("plain", $"sample {tail}", ClipboardTextRenderer.Render("sample " + tail, false, scale), 0xFFFCFCFD));
+                pictures.Add(("table", $"table {tail}", ClipboardTextRenderer.Render("column\tvalue " + tail, true, scale), 0xFFFCFCFD));
+                pictures.Add(("translation", $"translation {tail}", ClipboardTextRenderer.RenderTranslation("sample " + tail, scale), 0xFFFFFFFF));
+                string codeText = "var total = items.Sum(item => item.Price); // " + tail + string.Concat(Enumerable.Repeat("\nreturn total;", extra));
+                pictures.Add(("code", $"code {tail}", ClipboardCodeRenderer.Render(Code(codeText), scale), 0xFF123456));
+                pictures.Add(("markdown", $"markdown {extra}", ClipboardMarkdownRenderer.Render("# Title" + string.Concat(blocks[..extra]), scale), 0xFFFFFFFF));
+            }
+            if (scale != Math.Floor(scale))
+            {
+                // Each kind has a picture whose pixel size rounds up, so its last column or row is tested.
+                foreach (string kind in pictures.Select(picture => picture.Kind).Distinct())
+                {
+                    Assert.Contains(pictures, picture => picture.Kind == kind
+                        && (IsFractional(picture.Image.PixelWidth / scale) || IsFractional(picture.Image.PixelHeight / scale)));
+                }
+            }
+            foreach ((_, string name, BitmapSource image, uint fill) in pictures)
+            {
+                var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+                int right = image.PixelWidth - 1, bottom = image.PixelHeight - 1;
+                (int X, int Y)[] samples =
+                [
+                    (0, 0), (right, 0), (0, bottom), (right, bottom),
+                    (image.PixelWidth / 2, 0), (image.PixelWidth / 2, bottom), (0, image.PixelHeight / 2), (right, image.PixelHeight / 2),
+                ];
+                foreach ((int x, int y) in samples)
+                {
+                    byte[] pixel = new byte[4];
+                    bgra.CopyPixels(new Int32Rect(x, y, 1, 1), pixel, 4, 0);
+                    uint actual = BitConverter.ToUInt32(pixel);
+                    Assert.True(actual == fill, $"{name} at {scale}x: pixel ({x}, {y}) is #{actual:X8}, not the fill #{fill:X8}.");
+                }
+            }
+            return true;
+        }, "text picture edge test");
+    }
+
+    private static bool IsFractional(double value) => Math.Abs(value - Math.Round(value)) > 1e-6;
 
     private static byte[] CopyPixels(BitmapSource image)
     {

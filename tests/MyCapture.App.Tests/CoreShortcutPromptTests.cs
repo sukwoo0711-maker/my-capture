@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -24,22 +26,55 @@ public sealed class CoreShortcutPromptTests
         Assert.True(pending.ShowCoreShortcuts);
         Assert.False(pending.ShowWelcome);
         Assert.False(pending.OpenLibrary);
+        Assert.False(pending.CoreShortcutsNotice);
+
+        LaunchPresentation forcedPending = FirstRunPlan.ForLaunch(firstRun, quiet, settings,
+            coreShortcutsAsked: false, coreShortcutsForced: true);
+        Assert.Equal(pending, forcedPending);
 
         LaunchPresentation answered = FirstRunPlan.ForLaunch(firstRun, quiet, settings, coreShortcutsAsked: true);
         Assert.False(answered.ShowCoreShortcuts);
         Assert.Equal(firstRun, answered.ShowWelcome);
         Assert.Equal(!firstRun && !quiet && !settings, answered.OpenLibrary);
+        Assert.False(answered.CoreShortcutsNotice);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void AssignedCoreShortcutsShowANoticeOnlyOnFirstRun(bool quiet, bool settings)
+    {
+        LaunchPresentation notice = FirstRunPlan.ForLaunch(isFirstRun: true, quiet, settings,
+            coreShortcutsAsked: true, coreShortcutsForced: true);
+        Assert.Equal(new LaunchPresentation(ShowWelcome: false, OpenLibrary: false,
+            ShowCoreShortcuts: true, CoreShortcutsNotice: true), notice);
+
+        LaunchPresentation welcome = FirstRunPlan.ForLaunch(isFirstRun: true, quiet, settings,
+            coreShortcutsAsked: true, coreShortcutsForced: false);
+        Assert.Equal(new LaunchPresentation(ShowWelcome: true, OpenLibrary: false), welcome);
+
+        LaunchPresentation later = FirstRunPlan.ForLaunch(isFirstRun: false, quiet, settings,
+            coreShortcutsAsked: true, coreShortcutsForced: true);
+        Assert.Equal(new LaunchPresentation(ShowWelcome: false, OpenLibrary: !quiet && !settings), later);
     }
 
     [Fact]
     public void ResidentProbeOpensNoLaunchWindowFromAFreshProfile()
     {
-        var settings = new AppSettings { General = { IsFirstRun = true } };
+        // A fresh profile loads the new-installation settings, which handle the core keys first.
+        AppSettings settings = NewInstallDefaults.Create();
+        settings.General.IsFirstRun = true;
+        Assert.True(settings.Hotkeys.ForceCoreShortcuts);
         App.ApplyResidentProbeSettings(settings);
 
         Assert.True(settings.Hotkeys.CoreShortcutsAsked);
+        // A defence only: the probe registers no global shortcuts, so it installs no keyboard hook
+        // whatever this flag says.
+        Assert.False(settings.Hotkeys.ForceCoreShortcuts);
         LaunchPresentation launch = FirstRunPlan.ForLaunch(settings.General.IsFirstRun, quietLaunch: true,
-            openSettings: false, settings.Hotkeys.CoreShortcutsAsked);
+            openSettings: false, settings.Hotkeys.CoreShortcutsAsked, settings.Hotkeys.ForceCoreShortcuts);
         Assert.Equal(new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: false), launch);
     }
 
@@ -62,14 +97,115 @@ public sealed class CoreShortcutPromptTests
             Assert.False(buttons[1].IsDefault);
             Assert.Null(answer);
             Assert.Equal(WelcomeStep.Consent, dialog.CurrentStep);
-            Assert.Contains("Ctrl+Shift+C", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
-            Assert.Contains("Ctrl+Shift+X", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
-            Assert.Contains("Ctrl+Shift+Z", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
-            Assert.Contains("F3", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
-            Assert.Contains(UiText.Get("SettingsUx_TabShortcuts"), UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
+            AssertCoreShortcutPage(dialog, notice: false);
             buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(answer);
             Assert.Equal(WelcomeStep.Capture, dialog.CurrentStep);
+            AssertCoreShortcutPageHidden(dialog);
+        }
+        finally { dialog.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", "확인", "단축키 설정")]
+    [InlineData("en-US", "OK", "Shortcut settings")]
+    public void NoticeUsesLocalizedLabelsAndAcknowledgementIsDefault(string language, string ok, string settings) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage(language);
+        WelcomeWindow dialog = CreateNotice();
+        try
+        {
+            Assert.Equal(WelcomeStep.Consent, dialog.CurrentStep);
+            Assert.Equal(UiText.Get("CoreShortcuts.NoticeTitle"), dialog.TitleText);
+            Assert.Equal(ok, dialog.TryNowButton.Content);
+            Assert.Equal(settings, dialog.SkipButton.Content);
+            Assert.True(dialog.TryNowButton.IsDefault);
+            Assert.False(dialog.TryNowButton.IsCancel);
+            Assert.False(dialog.SkipButton.IsDefault);
+            Assert.False(dialog.SkipButton.IsCancel);
+            Assert.Equal(settings, dialog.SkipButton.ToolTip);
+            AssertCoreShortcutPage(dialog, notice: true);
+        }
+        finally { dialog.Close(); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NoticeAcknowledgementContinuesTheGuideAndRaisesOnlyOneNoticeEvent(bool openSettings) => StaTestHost.Run(() =>
+    {
+        WelcomeWindow dialog = CreateNotice();
+        var acknowledgements = new List<bool>();
+        var answers = new List<bool>();
+        dialog.CoreShortcutsNoticeAcknowledged += acknowledgements.Add;
+        dialog.CoreShortcutsAnswered += answers.Add;
+        try
+        {
+            (openSettings ? dialog.SkipButton : dialog.TryNowButton).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(openSettings, Assert.Single(acknowledgements));
+            Assert.Empty(answers);
+            Assert.Equal(WelcomeStep.Capture, dialog.CurrentStep);
+            AssertCoreShortcutPageHidden(dialog);
+
+            dialog.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(openSettings, Assert.Single(acknowledgements));
+            Assert.Empty(answers);
+        }
+        finally { dialog.Close(); }
+        Assert.Equal(openSettings, Assert.Single(acknowledgements));
+        Assert.Empty(answers);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClosingNoticeRaisesNeitherAcknowledgementNorAnswer(bool escape) => StaTestHost.Run(() =>
+    {
+        WelcomeWindow dialog = CreateNotice();
+        var acknowledgements = new List<bool>();
+        var answers = new List<bool>();
+        dialog.CoreShortcutsNoticeAcknowledged += acknowledgements.Add;
+        dialog.CoreShortcutsAnswered += answers.Add;
+        try
+        {
+            dialog.Show();
+            if (escape)
+            {
+                var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(dialog)!, 0, Key.Escape)
+                {
+                    RoutedEvent = Keyboard.PreviewKeyDownEvent,
+                };
+                dialog.RaiseEvent(key);
+                Assert.True(key.Handled);
+            }
+            else dialog.Close();
+            Assert.False(dialog.IsVisible);
+            Assert.Equal(WelcomeOutcome.Closed, dialog.Outcome);
+            Assert.Empty(acknowledgements);
+            Assert.Empty(answers);
+        }
+        finally { dialog.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", false)]
+    [InlineData("ko-KR", true)]
+    [InlineData("en-US", false)]
+    [InlineData("en-US", true)]
+    public void CoreShortcutColumnsAndParagraphsUseTheInstructionTextScale(string language, bool notice) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage(language);
+        const double scale = 1.5;
+        WelcomeWindow dialog = OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
+            new WelcomeOptions { ShowCoreShortcutsConsent = !notice, CoreShortcutsNotice = notice, TextScale = scale });
+        try
+        {
+            AssertCoreShortcutPage(dialog, notice);
+            TextBlock instruction = dialog.MotionParts.OfType<TextBlock>()
+                .Single(block => KoreanWordWrap.Strip(block.Text) == dialog.InstructionText);
+            Assert.Equal(TypeScale.BodyLarge * scale, instruction.FontSize);
+            Assert.All(dialog.CoreShortcutKeyList.Children.OfType<TextBlock>(), block => Assert.Equal(instruction.FontSize, block.FontSize));
+            Assert.Equal(instruction.FontSize, dialog.CoreShortcutParagraphs.FontSize);
         }
         finally { dialog.Close(); }
     });
@@ -116,6 +252,70 @@ public sealed class CoreShortcutPromptTests
 
     private static WelcomeWindow CreateConsent() => OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
         new WelcomeOptions { ShowCoreShortcutsConsent = true });
+
+    private static WelcomeWindow CreateNotice() => OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
+        new WelcomeOptions { CoreShortcutsNotice = true });
+
+    private static void AssertCoreShortcutPage(WelcomeWindow dialog, bool notice)
+    {
+        Assert.Equal(UiText.Get(notice ? "CoreShortcuts.NoticeBody" : "CoreShortcuts.Body"), dialog.InstructionText);
+        Grid list = dialog.CoreShortcutKeyList;
+        Assert.Equal(Visibility.Visible, list.Visibility);
+        Assert.Equal(4, list.RowDefinitions.Count);
+        Assert.Equal(2, list.ColumnDefinitions.Count);
+        Assert.True(list.ColumnDefinitions[0].Width.IsAuto);
+        Assert.True(list.ColumnDefinitions[1].Width.IsStar);
+        Assert.Equal(new Thickness(0, 0, 0, 14), list.Margin);
+        Assert.Equal(8, list.Children.Count);
+        string[] chords = [CoreShortcuts.Capture.ToString(), CoreShortcuts.RecordRegion.ToString(),
+            CoreShortcuts.OpenLibrary.ToString(), CoreShortcuts.PasteToScreen.ToString()];
+        string[] names = ["CoreShortcuts.Capture", "CoreShortcuts.RecordRegion", "CoreShortcuts.OpenLibrary", "CoreShortcuts.PasteToScreen"];
+
+        list.Measure(new Size(650, double.PositiveInfinity));
+        list.Arrange(new Rect(new Point(), new Size(650, list.DesiredSize.Height)));
+        list.UpdateLayout();
+        Assert.True(list.ColumnDefinitions[0].ActualWidth > 0);
+        double? nameX = null;
+        double? keyWidth = null;
+        for (int row = 0; row < chords.Length; row++)
+        {
+            TextBlock key = Assert.Single(list.Children.OfType<TextBlock>(), block => Grid.GetRow(block) == row && Grid.GetColumn(block) == 0);
+            TextBlock name = Assert.Single(list.Children.OfType<TextBlock>(), block => Grid.GetRow(block) == row && Grid.GetColumn(block) == 1);
+            Assert.Equal(chords[row], key.Text);
+            Assert.Equal(UiText.Get(names[row]), KoreanWordWrap.Strip(name.Text));
+            Assert.Equal(FontWeights.SemiBold, key.FontWeight);
+            Assert.Equal(FontWeights.Normal, name.FontWeight);
+            Assert.Equal(TextWrapping.Wrap, name.TextWrapping);
+            double currentNameX = name.TranslatePoint(new Point(), list).X;
+            nameX ??= currentNameX;
+            keyWidth ??= key.ActualWidth;
+            Assert.InRange(Math.Abs(currentNameX - nameX.Value), 0, 0.5);
+            Assert.InRange(Math.Abs(key.ActualWidth - keyWidth.Value), 0, 0.5);
+            Assert.Equal(16, key.Margin.Right + name.Margin.Left);
+            Assert.Equal(row < 3 ? 4 : 0, key.Margin.Bottom);
+            Assert.Equal(row < 3 ? 4 : 0, name.Margin.Bottom);
+        }
+
+        string paragraphs = KoreanWordWrap.Strip(dialog.CoreShortcutParagraphs.Text);
+        Assert.Equal(Visibility.Visible, dialog.CoreShortcutParagraphs.Visibility);
+        Assert.Equal(UiText.Get("CoreShortcuts.Takeover") + "\n\n" + UiText.Get(notice ? "CoreShortcuts.NoticeChange" : "CoreShortcuts.Question"), paragraphs);
+        Assert.Contains(UiText.Get("SettingsUx_TabShortcuts"), paragraphs, StringComparison.Ordinal);
+        string helpText = AutomationProperties.GetHelpText(dialog.TryNowButton);
+        Assert.Contains(dialog.InstructionText, helpText, StringComparison.Ordinal);
+        for (int row = 0; row < chords.Length; row++)
+            Assert.Contains(chords[row] + " " + UiText.Get(names[row]), helpText, StringComparison.Ordinal);
+        Assert.Contains(paragraphs, helpText, StringComparison.Ordinal);
+        int instructionIndex = dialog.MotionParts.ToList().FindIndex(part => part is TextBlock block && KoreanWordWrap.Strip(block.Text) == dialog.InstructionText);
+        Assert.True(instructionIndex >= 0);
+        Assert.Same(list, dialog.MotionParts[instructionIndex + 1]);
+        Assert.Same(dialog.CoreShortcutParagraphs, dialog.MotionParts[instructionIndex + 2]);
+    }
+
+    private static void AssertCoreShortcutPageHidden(WelcomeWindow dialog)
+    {
+        Assert.Equal(Visibility.Collapsed, dialog.CoreShortcutKeyList.Visibility);
+        Assert.Equal(Visibility.Collapsed, dialog.CoreShortcutParagraphs.Visibility);
+    }
 
     [Fact]
     public void OrdinaryDialogKeepsItsExistingCancelLabel() => StaTestHost.Run(() =>

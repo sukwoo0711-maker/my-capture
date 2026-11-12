@@ -42,29 +42,49 @@ public sealed class EditorTextFitRenderingTests
         Assert.True(caption.HasOutline);
         Assert.Equal(ColorRgba.Transparent, caption.Background);
         Assert.Equal(ColorRgba.FromRgb(shade, shade, shade), caption.Foreground);
+        // The box is clear: the caption's contrasting outline, drawn by the surface under the
+        // live glyphs, keeps matching ink readable as it does after commit.
+        Assert.Equal(0, Assert.IsType<SolidColorBrush>(box.Background).Color.A);
+        box.CaretIndex = box.Text.Length;
+        host.Window.UpdateLayout();
 
-        // Render the actual live control and inspect the first glyph, excluding border and caret.
-        var rendered = new RenderTargetBitmap((int)Math.Ceiling(box.ActualWidth),
-            (int)Math.Ceiling(box.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-        var visual = new DrawingVisual();
-        using (DrawingContext dc = visual.RenderOpen())
-        {
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(shade, shade, shade)), null,
-                new Rect(0, 0, box.ActualWidth, box.ActualHeight));
-            dc.DrawRectangle(new VisualBrush(box), null, new Rect(0, 0, box.ActualWidth, box.ActualHeight));
-        }
-        rendered.Render(visual);
-        Rect first = box.GetRectFromCharacterIndex(0);
-        Rect next = box.GetRectFromCharacterIndex(1);
+        // The first glyph as the canvas shows it, the surface with the box over it, while typing
+        // and after commit. The caret sits after the last glyph.
+        var canvas = Field<Grid>(host.Editor, "_viewport");
+        GeneralTransform toCanvas = box.TransformToAncestor(canvas);
+        Rect first = toCanvas.TransformBounds(box.GetRectFromCharacterIndex(0));
+        Rect next = toCanvas.TransformBounds(box.GetRectFromCharacterIndex(1));
         var region = new Int32Rect((int)Math.Ceiling(first.Left), (int)Math.Ceiling(first.Top),
             (int)Math.Floor(next.Left - first.Left), (int)Math.Floor(first.Height));
-        byte[] pixels = new byte[region.Width * region.Height * 4];
-        rendered.CopyPixels(region, pixels, region.Width * 4, 0);
-        byte[] intensities = Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[index * 4]).ToArray();
-        Assert.Contains(intensities, value => value < 40);
-        Assert.Contains(intensities, value => value > 215);
+        byte[] live = Intensities(canvas, region);
         Invoke(host.Editor, "CommitActiveText");
+        controller.SetSelected(null);
+        host.Window.UpdateLayout();
+        byte[] committed = Intensities(canvas, region);
         Assert.Equal(ColorRgba.Transparent, caption.Background);
+        Assert.True(committed.Max() - committed.Min() >= 48,
+            $"The committed outline must show against glyph and picture ({committed.Min()}..{committed.Max()}).");
+        Assert.InRange(live.Min(), 0, committed.Min() + 24);
+        Assert.InRange(live.Max(), committed.Max() - 24, 255);
+
+        static byte[] Intensities(Grid canvas, Int32Rect region)
+        {
+            double width = canvas.ActualWidth, height = canvas.ActualHeight;
+            var visual = new DrawingVisual();
+            using (DrawingContext dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(new VisualBrush(canvas)
+                {
+                    Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top,
+                    ViewboxUnits = BrushMappingMode.Absolute, Viewbox = new Rect(0, 0, width, height),
+                }, null, new Rect(0, 0, width, height));
+            }
+            var rendered = new RenderTargetBitmap((int)Math.Ceiling(width), (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32);
+            rendered.Render(visual);
+            byte[] pixels = new byte[region.Width * region.Height * 4];
+            rendered.CopyPixels(region, pixels, region.Width * 4, 0);
+            return Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[index * 4]).ToArray();
+        }
     });
 
     [Fact]

@@ -218,7 +218,92 @@ internal sealed class AnnotationEditorController
 
     internal bool IsCreatingText { get; private set; }
 
-    internal TextAnnotation? EditingText { get; private set; }
+    internal TextAnnotation? EditingText
+    {
+        get => _editingText;
+        private set
+        {
+            _editingText = value;
+            // A new or finished edit has not shown any live text yet.
+            _liveTextShown = false;
+            LiveTextScroll = null;
+        }
+    }
+
+    private TextAnnotation? _editingText;
+
+    // The caption being edited as its live box reads, kept as one object so the renderer's
+    // caches for it last the whole edit (see LiveTextForPaint).
+    private readonly TextAnnotation _liveText = new();
+    private bool _liveTextShown;
+
+    /// <summary>
+    /// Records what the live text box shows: <paramref name="content"/> laid out as
+    /// <paramref name="layout"/>, the box committing now would store, in the edited caption's font.
+    /// </summary>
+    /// <returns>Whether that differs from what the surface last drew under the box.</returns>
+    internal bool UpdateLiveText(string content, TextLayout layout)
+    {
+        if (EditingText is not { } editing) return false;
+        bool changed = !_liveTextShown
+            || !string.Equals(_liveText.Text, content, StringComparison.Ordinal)
+            || TextLayout.Of(_liveText) != layout
+            || !string.Equals(_liveText.FontFamily, editing.FontFamily, StringComparison.Ordinal)
+            || _liveText.Bold != editing.Bold
+            || _liveText.Italic != editing.Italic
+            || !_liveText.RotationDegrees.Equals(editing.RotationDegrees);
+        _liveText.Text = content;
+        _liveText.FontFamily = editing.FontFamily;
+        _liveText.Bold = editing.Bold;
+        _liveText.Italic = editing.Italic;
+        _liveText.RotationDegrees = editing.RotationDegrees;
+        TextLayout.Apply(_liveText, layout);
+        _liveTextShown = true;
+        return changed;
+    }
+
+    /// <summary>
+    /// The longest caption whose outline is drawn while it is typed. A keystroke traces only the
+    /// glyphs it added or moved (see <see cref="GlyphOutlines"/>), but a change that moves every
+    /// glyph (a new font or size, typing at the start, a width that wraps every line again) traces
+    /// the whole caption (measured on 2026-11-07: about 11 ms for 256 characters, 66 ms for 1,024,
+    /// 3.6 s for 100,000), so past this length such a change would wait longer than a frame for it.
+    /// A longer caption shows its outline once committed and its plate throughout, which costs only
+    /// its layout.
+    /// </summary>
+    internal const int LiveOutlineLimit = 256;
+
+    /// <summary>
+    /// How far the live box has scrolled a caption taller than the canvas, for the surface to draw
+    /// its plate and outline where the box shows the glyphs; <see langword="null"/> while the box
+    /// shows all of it.
+    /// </summary>
+    internal LiveCaptionScroll? LiveTextScroll { get; private set; }
+
+    /// <returns>Whether that differs from what the surface last drew under the box.</returns>
+    internal bool UpdateLiveTextScroll(LiveCaptionScroll? scroll)
+    {
+        if (EditingText is null || Nullable.Equals(scroll, LiveTextScroll)) return false;
+        LiveTextScroll = scroll;
+        return true;
+    }
+
+    /// <summary>
+    /// The caption being edited as its live text box reads (<see cref="UpdateLiveText"/>), in the
+    /// caption's current colour, plate and outline, for the surface to draw the plate and outline
+    /// under the box. <see langword="null"/> until the box reports its text.
+    /// </summary>
+    internal TextAnnotation? LiveTextForPaint()
+    {
+        if (EditingText is not { } editing || !_liveTextShown) return null;
+        // Colour, plate and outline edits that leave the box open apply to the caption itself.
+        _liveText.Foreground = editing.Foreground;
+        _liveText.Background = editing.Background;
+        _liveText.HasOutline = editing.HasOutline && _liveText.Text.Length <= LiveOutlineLimit;
+        _liveText.OutlineStyle = editing.OutlineStyle;
+        _liveText.Opacity = editing.Opacity;
+        return _liveText;
+    }
 
     internal TextAnnotation? BeginSelectedTextEdit() =>
         _selection.Count == 1 && _selected is TextAnnotation text && BeginTextEdit(text) ? text : null;
@@ -669,10 +754,20 @@ internal sealed class AnnotationEditorController
                 }
                 else if (_selected is PolylineAnnotation line && _resizePointsBefore is { } original)
                 {
-                    RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
-                    line.Points = original.Select(p => new PointD(
-                        _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
-                        _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    if (original.Length == 2 && _resizeHandle is ResizeHandle.LineStart or ResizeHandle.LineEnd)
+                    {
+                        int moving = _resizeHandle == ResizeHandle.LineStart ? 0 : 1;
+                        PointD fixedPoint = original[1 - moving];
+                        PointD end = shift ? AnnotationGestureConstraints.Line(fixedPoint, resizePoint) : resizePoint;
+                        line.Points = moving == 0 ? [end, fixedPoint] : [fixedPoint, end];
+                    }
+                    else
+                    {
+                        RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
+                        line.Points = original.Select(p => new PointD(
+                            _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
+                            _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
+                    }
                     RaiseVisual();
                 }
                 else if (_selected is not null)
@@ -1197,12 +1292,25 @@ internal sealed class AnnotationEditorController
         bool toggle = _tool == EditorTool.Select && (shift || control);
         if (_tool == EditorTool.Select || editingStep)
         {
-            ResizeHandle handle = toggle ? ResizeHandle.None : HandleAt(point, HandleTolerance);
+            // Shift also constrains endpoint drags, including when held before the press.
+            bool endpointConstraint = shift && !control && _selected is PolylineAnnotation { Points.Count: 2 };
+            // The middle of a short line's body gives way to the item under it (the line itself,
+            // unless something is drawn over it), so the line can still be moved once selected.
+            bool lineBody = !toggle && _selection.Count == 1 && _selected is PolylineAnnotation { Points.Count: 2 } selectedLine
+                && PointerIntentGeometry.InLineMoveZone(selectedLine, point, DipPerPixel, HitTolerance);
+            ResizeHandle handle = (toggle && !endpointConstraint) || lineBody ? ResizeHandle.None : HandleAt(point, HandleTolerance);
             if (handle != ResizeHandle.None)
                 return new(PointerAction.Resize, _selected, handle,
                     PointerIntentGeometry.ResizeCursor(_selected!, handle));
             AnnotationItem? hit = step
                 ? (_selected!.DistanceTo(point) <= HitTolerance ? _selected : null) : HitTest(point);
+            // The gap between a selected caption's glyphs and its frame moves the caption rather
+            // than starting a marquee; an item drawn there still takes its own press.
+            if (hit is null && !step && _selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: false } caption)
+            {
+                PointD local = GeometryMath.Rotate(point, caption.Rect.Center, -caption.RotationDegrees);
+                if (PointerIntentGeometry.SelectionFrame(caption, DipPerPixel).Contains(local)) hit = caption;
+            }
             if (hit is not null)
                 return new(toggle ? PointerAction.ToggleSelection : PointerAction.Move, hit, Cursor: EditorCursorKind.Move);
             if (!step) return new(PointerAction.Marquee);
@@ -1226,11 +1334,15 @@ internal sealed class AnnotationEditorController
     /// <paramref name="item"/>: a caption's height always follows its text, so its top and
     /// bottom handles are not offered.
     /// </summary>
-    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle) =>
-        (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
-        || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
-            ? ResizeHandle.None
-            : handle;
+    internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle)
+    {
+        bool endpoint = handle is ResizeHandle.LineStart or ResizeHandle.LineEnd;
+        if (item is PolylineAnnotation { Points.Count: 2 }) return endpoint ? handle : ResizeHandle.None;
+        if (endpoint) return ResizeHandle.None;
+        return (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
+            || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
+                ? ResizeHandle.None : handle;
+    }
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
@@ -1249,7 +1361,10 @@ internal sealed class AnnotationEditorController
                 _resizePointsBefore = _selected is PolylineAnnotation line ? [.. line.Points] : null;
                 PointD local = _selected is TextAnnotation { RotationDegrees: not 0 } rotated
                     ? GeometryMath.Rotate(point, _transformBefore.Center, -rotated.RotationDegrees) : point;
-                PointD anchor = PointerIntentGeometry.HandlePoint(_transformBefore, handle);
+                PointD anchor = _resizePointsBefore is { Length: 2 } endpoints
+                    && handle is ResizeHandle.LineStart or ResizeHandle.LineEnd
+                        ? endpoints[handle == ResizeHandle.LineStart ? 0 : 1]
+                        : PointerIntentGeometry.HandlePoint(_transformBefore, handle);
                 _resizePointerOffset = new PointD(anchor.X - local.X, anchor.Y - local.Y);
                 return;
             }
@@ -1810,7 +1925,7 @@ internal sealed class AnnotationEditorController
     internal static ResizeHandle HitTestHandle(RectD bounds, PointD point, double tolerance)
     {
         return PointerIntentGeometry.NearestHandle(Enum.GetValues<ResizeHandle>()
-            .Where(h => h != ResizeHandle.None).Select(h => new SelectionHandle(h,
+            .Where(h => h is not (ResizeHandle.None or ResizeHandle.LineStart or ResizeHandle.LineEnd)).Select(h => new SelectionHandle(h,
                 PointerIntentGeometry.HandlePoint(bounds.Normalized(), h))), point, tolerance);
     }
 
@@ -1840,6 +1955,8 @@ internal enum ResizeHandle
     BottomCenter,
     BottomLeft,
     MiddleLeft,
+    LineStart,
+    LineEnd,
 }
 
 /// <summary>
@@ -1856,6 +1973,13 @@ internal readonly record struct TextLayout(RectD Rect, double FontSize, bool Aut
         text.Rect = layout.Rect;
     }
 }
+
+/// <summary>
+/// How the live box shows a caption taller than the canvas, in image pixels in the caption's own
+/// (unrotated) frame: its text moved up by <paramref name="Offset"/>, seen through the band that
+/// starts <paramref name="Top"/> below the caption's top and is <paramref name="Height"/> tall.
+/// </summary>
+internal readonly record struct LiveCaptionScroll(double Offset, double Top, double Height);
 
 /// <summary>
 /// Records an add for an item that was already inserted into the document during a live

@@ -292,7 +292,10 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
 
     private static double StableInspectorHeight(AnnotationEditorControl editor)
     {
-        double height = Field<FrameworkElement>(editor, "_inspectorPanel").Height;
+        FrameworkElement inspector = Field<FrameworkElement>(editor, "_inspectorPanel");
+        double? beforeGesture = Field<double?>(editor, "_inspectorHeightBeforeGesture");
+        if (beforeGesture.HasValue) Assert.Equal(inspector.ActualHeight, inspector.Height);
+        double height = beforeGesture ?? inspector.Height;
         Assert.True(double.IsFinite(height) && height > 0, $"Inspector height must retain a positive stable budget; actual: {height}.");
         return height;
     }

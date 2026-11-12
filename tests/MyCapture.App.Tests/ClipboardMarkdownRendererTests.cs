@@ -130,7 +130,12 @@ public sealed class ClipboardMarkdownRendererTests
             Assert.Single(inline.Inlines.OfType<Italic>());
             Assert.Contains(inline.Inlines.OfType<Span>(), span => span.TextDecorations == TextDecorations.Strikethrough);
             Assert.Contains(inline.Inlines.OfType<Span>(), span => span.FontFamily.Source == "Consolas");
-            Assert.Contains(inline.Inlines.OfType<Run>(), run => run.TextDecorations == TextDecorations.Underline && run.Foreground == Brushes.SteelBlue);
+            Run link = Assert.Single(inline.Inlines.OfType<Run>(), run => run.TextDecorations == TextDecorations.Underline);
+            Assert.Same(ClipboardMarkdownRenderer.LinkForeground, link.Foreground);
+            // A link stays at WCAG AA on the page and on a table header's background.
+            Color colour = ClipboardMarkdownRenderer.LinkForeground.Color;
+            Assert.True(ContrastRatio(colour, Colors.White) >= 4.5, $"Link on white: {ContrastRatio(colour, Colors.White):0.00}:1");
+            Assert.True(ContrastRatio(colour, Colors.WhiteSmoke) >= 4.5, $"Link on WhiteSmoke: {ContrastRatio(colour, Colors.WhiteSmoke):0.00}:1");
             Assert.Empty(inline.Inlines.OfType<Hyperlink>());
             var parent = document.Blocks.OfType<System.Windows.Documents.List>().First();
             Assert.Equal(TextMarkerStyle.Decimal, parent.MarkerStyle);
@@ -524,4 +529,9 @@ public sealed class ClipboardMarkdownRendererTests
             return true;
         }, "Markdown HTML export test");
     }
+
+    private static double ContrastRatio(Color foreground, Color background) =>
+        MyCapture.Core.Themes.ThemeContrast.Ratio(
+            MyCapture.Core.Themes.ThemeColor.Rgb(foreground.R, foreground.G, foreground.B),
+            MyCapture.Core.Themes.ThemeColor.Rgb(background.R, background.G, background.B));
 }

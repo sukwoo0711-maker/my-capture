@@ -62,6 +62,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Assets\Mermaid\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Assets\ThirdParty\**\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The pin preview host (the preview-pin switch) is a development and review tool; only Debug builds compile it. -->
@@ -69,4 +70,16 @@
     <Compile Remove="Preview\**\*.cs" />
     <Compile Remove="App.Preview.cs" />
   </ItemGroup>
+  <!-- RapidOcrNet copies its entire default Latin model set after Publish. The product
+       uses only its detector/classifier; recognition and dictionary are verified Korean
+       downloads selected explicitly by NeuralOcrEngine. Development output stays intact. -->
+  <Target Name="SelectMyCapturePublishedOcrModels" BeforeTargets="CopyModelsPublish"
+          Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <Models Remove="@(Models)"
+              Condition="'%(Models.Filename)%(Models.Extension)' == 'latin_PP-OCRv5_rec_mobile_infer.onnx' or '%(Models.Filename)%(Models.Extension)' == 'ppocrv5_latin_dict.txt'" />
+    </ItemGroup>
+  </Target>
+  <Import Project="..\..\build\WindowsProjectionTrim.targets" />
+  <Import Project="..\..\build\ReleasePackaging.targets" />
 </Project>

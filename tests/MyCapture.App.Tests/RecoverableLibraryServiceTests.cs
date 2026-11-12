@@ -345,6 +345,90 @@ public sealed class RecoverableLibraryServiceTests
         Assert.Empty(await fixture.Service.RecentDeletedAsync());
     }
 
+    [Fact]
+    public async Task BatchDelete_MovesWithOneShellOperation_ReportsProgress_AndUndoRestoresWithOne()
+    {
+        var fixture = new Fixture();
+        fixture.Queue.PrepareRemovals = fixture.Service.PrepareRemovals;
+        CaptureRecord[] records = [fixture.Record, fixture.AddRecord(3), fixture.AddRecord(2), fixture.AddRecord(1)];
+        string[] originals = records.Select(fixture.Queue.GetDirectory).ToArray();
+        var retired = new List<string[]>();
+        fixture.Service.BeforeRetiredFolderRecycleForTest = folder => retired.Add(Directory.GetFiles(folder));
+        var reported = new List<int>();
+        Guid batch = Guid.NewGuid();
+        Task<CaptureBatchRemovalResult> move;
+        // The scope ends as soon as the call returns, as in the library window; the removal worker still sees it.
+        using (fixture.Service.BeginBatch(batch, moved => { lock (reported) reported.Add(moved); }))
+            move = fixture.Queue.RemoveManyAsync(records.Select(record => record.Id));
+        Assert.Equal(4, (await move).RemovedCount);
+        Assert.Equal((1, 0), (fixture.Trash.RecycleBatches, fixture.Trash.Attempts));
+        Assert.Equal(new[] { 1, 2, 3, 4 }, reported);
+        Assert.All(originals, path => Assert.False(Directory.Exists(path)));
+        IReadOnlyList<DeletedLibraryCapture> deleted = fixture.Service.RecentDeleted();
+        Assert.Equal(4, deleted.Count);
+        Assert.All(deleted, entry => Assert.Equal(batch, entry.Batch));
+        Assert.Empty(retired);
+
+        Assert.Equal(new LibraryBatchRestoreResult(4, 0), await fixture.Service.RestoreBatchAsync(batch));
+        Assert.Equal((1, 0), (fixture.Trash.RestoreBatches, fixture.Trash.Restores));
+        Assert.All(originals, path => Assert.True(File.Exists(Path.Combine(path, CaptureFileNames.Original))));
+        Assert.Equal(4, fixture.Queue.Count);
+        Assert.Empty(fixture.JournalFiles());
+        // Every finished journal (intent, receipt and completion marker) left in one Recycle Bin item.
+        Assert.Equal(12, Assert.Single(retired).Length);
+    }
+
+    [Fact]
+    public async Task BatchDelete_KeepsTheJournalWithinItsCapacity_WithOneRetirement()
+    {
+        var fixture = new Fixture(); fixture.Service.JournalCapacity = 2;
+        fixture.Queue.PrepareRemovals = fixture.Service.PrepareRemovals;
+        CaptureRecord[] records = [fixture.Record, fixture.AddRecord(3), fixture.AddRecord(2), fixture.AddRecord(1)];
+        var retired = new List<string[]>();
+        fixture.Service.BeforeRetiredFolderRecycleForTest = folder => retired.Add(Directory.GetFiles(folder));
+        Assert.Equal(4, (await fixture.Queue.RemoveManyAsync(records.Select(record => record.Id))).RemovedCount);
+        Assert.Equal(2, fixture.Service.RecentDeleted().Count);
+        Assert.Equal(2, fixture.JournalFiles().Count(file => file.EndsWith(".intent.json", StringComparison.Ordinal)));
+        // The two oldest intents and their receipts, together.
+        Assert.Equal(4, Assert.Single(retired).Length);
+    }
+
+    [Fact]
+    public async Task BatchDelete_KeepsTheCaptureWindowsRefused_AndMovesTheRest()
+    {
+        var fixture = new Fixture();
+        fixture.Queue.PrepareRemovals = fixture.Service.PrepareRemovals;
+        CaptureRecord moved = fixture.AddRecord(1);
+        fixture.Trash.Refused.Add(fixture.Original);
+        CaptureBatchRemovalResult result = await fixture.Queue.RemoveManyAsync([fixture.Record.Id, moved.Id]);
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(fixture.Record.Id, Assert.Single(result.RecycleUnavailableIds));
+        Assert.NotNull(fixture.Queue.Find(fixture.Record.Id));
+        Assert.Null(fixture.Queue.Find(moved.Id));
+        Assert.Equal("original pixels", File.ReadAllText(Path.Combine(fixture.Original, CaptureFileNames.Original)));
+        Assert.Equal(moved.Id, Assert.Single(fixture.Service.RecentDeleted()).Record.Id); // the refusal left no restore entry
+        Assert.Equal(1, fixture.Trash.RecycleBatches);
+    }
+
+    [Fact]
+    public async Task BatchDelete_ReceiptFailure_PutsThatCaptureBackAndMovesTheRest()
+    {
+        var fixture = new Fixture();
+        fixture.Queue.PrepareRemovals = fixture.Service.PrepareRemovals;
+        CaptureRecord other = fixture.AddRecord(1);
+        int receipts = 0;
+        fixture.Service.BeforeJournalWriteForTest = phase =>
+        {
+            if (phase == "recycled" && ++receipts == 1) throw new IOException("receipt unavailable");
+        };
+        CaptureBatchRemovalResult result = await fixture.Queue.RemoveManyAsync([fixture.Record.Id, other.Id]);
+        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(1, fixture.Trash.Restores);
+        CaptureRecord kept = Assert.Single(fixture.Queue.Records);
+        Assert.True(File.Exists(Path.Combine(fixture.Queue.GetDirectory(kept), CaptureFileNames.Original)));
+        Assert.NotEqual(kept.Id, Assert.Single(fixture.Service.RecentDeleted()).Record.Id);
+    }
+
     private sealed class Fixture
     {
         public string[] JournalFiles() => Directory.GetFiles(Path.Combine(Paths.DataRoot, "deleted-captures"));
@@ -389,12 +473,49 @@ public sealed class RecoverableLibraryServiceTests
         public int Restores { get; private set; }
         public RecycledPathReceipt? Receipt { get; private set; }
         public string GetIdentity(string path) => _identity.GetIdentity(path);
+        /// <summary>Calls of the batch methods; each stands for one Shell operation.</summary>
+        public int RecycleBatches { get; private set; }
+        public int RestoreBatches { get; private set; }
+        /// <summary>Paths a batch move refuses, as Windows refuses an item it cannot recycle.</summary>
+        public HashSet<string> Refused { get; } = new(StringComparer.OrdinalIgnoreCase);
         public RecycledPathReceipt RecycleDirectory(string path)
         {
             Attempts++;
             BeforeRecycle?.Invoke();
             if (FailRecycle) throw new IOException("recycle unavailable");
             if (RecycleUnavailable) throw new RecycleBinUnavailableException();
+            return Move(path);
+        }
+        public IReadOnlyList<RecycleOutcome> RecycleDirectories(IReadOnlyList<string> paths, Action<int>? progress = null)
+        {
+            RecycleBatches++;
+            BeforeRecycle?.Invoke();
+            if (FailRecycle) throw new IOException("recycle unavailable");
+            var outcomes = new RecycleOutcome[paths.Count];
+            for (int index = 0; index < paths.Count; index++)
+            {
+                string path = paths[index];
+                outcomes[index] = RecycleUnavailable || Refused.Contains(path)
+                    ? new RecycleOutcome(path, null, new RecycleBinUnavailableException())
+                    : new RecycleOutcome(path, Move(path), null);
+                progress?.Invoke(index + 1);
+            }
+            return outcomes;
+        }
+        public IReadOnlyList<Exception?> RestoreDirectories(IReadOnlyList<RecycledPathReceipt> receipts)
+        {
+            RestoreBatches++;
+            var failures = new Exception?[receipts.Count];
+            for (int index = 0; index < receipts.Count; index++)
+            {
+                RecycledPathReceipt receipt = receipts[index];
+                if (FailRestore || Directory.Exists(receipt.OriginalPath)) failures[index] = new IOException("restore unavailable or collision");
+                else Directory.Move(receipt.RecycledPath, receipt.OriginalPath);
+            }
+            return failures;
+        }
+        private RecycledPathReceipt Move(string path)
+        {
             Directory.CreateDirectory(root);
             string target = Path.Combine(root, Guid.NewGuid().ToString("N"));
             string identity = GetIdentity(path); Directory.Move(path, target); Moves++;

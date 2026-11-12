@@ -3,6 +3,8 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.IO;
+using System.Security.Cryptography;
 using MyCapture.App.Editing;
 using MyCapture.Core.Localization;
 using Xunit;
@@ -183,24 +185,31 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline), in the
-    // shipped UI font (the bundled Pretendard) and its Ideal text formatting.
-    [InlineData("ko-KR", new[] { 855, 814, 767, 702, 682, 605 })]
-    [InlineData("en-US", new[] { 867, 831, 795, 733, 706, 625 })]
+    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline) and both output
+    // commands (save to file, pin) as bordered secondary buttons, in the shipped UI font (the bundled
+    // Pretendard) and its Ideal text formatting. The pin's outline adds 2 DIP while its name shows.
+    [InlineData("ko-KR", new[] { 857, 816, 769, 704, 682, 605 })]
+    [InlineData("en-US", new[] { 869, 833, 797, 735, 706, 625 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
+        using var dpiContext = TestDpiContext.At96Dpi();
         using var culture = UiText.UseLanguage(language);
         using var preference = new HintPreference(() => false);
-        using EditorWindowHost host = EditorWindowHost.Create();
-        UseShippedTheme(host.Window);
-        VisualTreeHelper.SetRootDpi(host.Window, new DpiScale(1, 1));
+        using EditorWindowHost host = EditorWindowHost.Create(beforeShow: window =>
+        {
+            UseShippedTheme(window);
+            TestDpiContext.Initialize96DpiWindow(window);
+        });
+        TestDpiContext.Assert96Dpi(host.Window);
         // Measure the bar's natural boundary separately from the supported 680-DIP floor.
         // The preceding test verifies the unchanged real minimum and every supported size.
         Assert.Equal(680, host.Window.MinWidth);
         host.Window.MinWidth = 1;
         host.Window.Width = 1280;
         host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
+        TestDpiContext.Assert96Dpi(host.Window);
         var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
+        WriteCommandFontEvidence(bar, language);
         double fullLabelWidth = RevealedWidth(bar) + host.Window.Width - bar.ActualWidth;
         Button[] ordered = Descendants(bar).OfType<Button>()
             .Where(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty) > 0)
@@ -242,6 +251,60 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         }
         Assert.Equal(boundaries, measuredWidths);
     });
+
+    private void WriteCommandFontEvidence(CommandGroupsPanel bar, string language)
+    {
+        var fonts = new HashSet<Uri>();
+        foreach (Button button in Descendants(bar).OfType<Button>().Where(button => button.IsVisible))
+        {
+            if (button.Content is not Grid face) continue;
+            output.WriteLine($"{language}/{AutomationProperties.GetAutomationId(button)}: desired={button.DesiredSize}; " +
+                $"caption={CommandButtonPresentation.CaptionWidth(face):R}; padding={button.Padding}; border={button.BorderThickness}.");
+            foreach (TextBlock label in PrimaryLabels(button).Where(label => label.IsVisible))
+            {
+                DpiScale dpi = VisualTreeHelper.GetDpi(label);
+                output.WriteLine($"  text='{label.Text}'; family={label.FontFamily.Source}; size={label.FontSize:R}; " +
+                    $"weight={label.FontWeight}; format={TextOptions.GetTextFormattingMode(label)}; " +
+                    $"dpi={dpi.DpiScaleX:R}/{dpi.DpiScaleY:R}; desired={label.DesiredSize}.");
+                GlyphRun[] runs = GlyphRuns(label).ToArray();
+                if (runs.Length == 0) output.WriteLine("  rendered font identity unavailable: no observable GlyphRunDrawing.");
+                foreach (GlyphRun run in runs)
+                {
+                    Uri uri = run.GlyphTypeface.FontUri;
+                    output.WriteLine($"  rendered font={uri}; pixelsPerDip={run.PixelsPerDip:R}; glyphs={string.Join(',', run.GlyphIndices)}.");
+                    if (!fonts.Add(uri)) continue;
+                    try
+                    {
+                        using Stream stream = uri.IsFile ? File.OpenRead(uri.LocalPath)
+                            : Application.GetResourceStream(uri)?.Stream ?? throw new IOException("Rendered font stream is unavailable.");
+                        output.WriteLine($"  font SHA256={Convert.ToHexString(SHA256.HashData(stream))}.");
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException
+                        or NotSupportedException or ArgumentException or System.Security.SecurityException)
+                    {
+                        output.WriteLine($"  font SHA256 unavailable: {error.GetType().Name}: {error.Message}");
+                    }
+                }
+            }
+        }
+
+        static IEnumerable<GlyphRun> GlyphRuns(Visual visual)
+        {
+            if (VisualTreeHelper.GetDrawing(visual) is { } drawing)
+                foreach (GlyphRun run in DrawingRuns(drawing)) yield return run;
+            for (int index = 0; index < VisualTreeHelper.GetChildrenCount(visual); index++)
+                if (VisualTreeHelper.GetChild(visual, index) is Visual child)
+                    foreach (GlyphRun run in GlyphRuns(child)) yield return run;
+        }
+
+        static IEnumerable<GlyphRun> DrawingRuns(Drawing drawing)
+        {
+            if (drawing is GlyphRunDrawing glyph) yield return glyph.GlyphRun;
+            else if (drawing is DrawingGroup group)
+                foreach (Drawing child in group.Children)
+                    foreach (GlyphRun run in DrawingRuns(child)) yield return run;
+        }
+    }
 
     // The theme, UI font and text settings the real editor window takes from Window.Standard.
     private static void UseShippedTheme(Window window)

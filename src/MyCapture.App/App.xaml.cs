@@ -77,6 +77,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MyCapture.App.Accessibility.ScreenReaderState? _screenReader;
     private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
@@ -101,6 +102,8 @@ public partial class App : Application
         // Before any window: a tooltip's default show duration would otherwise stop every
         // DispatcherTimer while it is open, self-tests included.
         MyCapture.App.Threading.ToolTipTimerGuard.Install();
+        // Before any window: keep text-box capture from outliving a left-button gesture.
+        TextBoxCaptureGuard.Install();
 
         // Windows 10 22H2 is the supported x64 baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
@@ -124,8 +127,15 @@ public partial class App : Application
         // The resident probe runs the whole resident app against an isolated data root beside any
         // normal instance; nothing it does may reach the user's clipboard.
         s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
+        IReadOnlySet<string> selectorVariants = s_residentProbe?.Variants ?? ResidentProbeOptions.ReadVariants(e.Args);
         if (s_residentProbe is not null)
             ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
+        if (s_residentProbe?.LibraryFirstPage == true) ValidateLibraryFirstPageInput(s_residentProbe, e.Args);
+        if (s_residentProbe?.LongRun == true || s_residentProbe?.LibraryFirstPage == true)
+        {
+            s_longRunPrivacy = new ResidentLongRunPrivacy();
+            ClipboardAvailability.InstallTestOverride(s_longRunPrivacy.ClipboardAvailable);
+        }
         if (s_residentProbe?.SoftwareRender == true)
             System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
@@ -187,6 +197,7 @@ public partial class App : Application
                     ObserveLaunchWindow(window);
                     ObserveIdleMemoryWindow(window);
                     ObserveEditorPrewarmWindow(window);
+                    OfferDeferredUnexpectedExitNotice(window);
                 }
             }));
 
@@ -194,12 +205,16 @@ public partial class App : Application
         {
             _services = BuildServiceProvider();
             _fileLog = _services.GetRequiredService<RollingFileLog>();
+            ErrorReporting.FileLog = _fileLog;
+            ErrorReporting.Exits = new UnexpectedExitLog(UnexpectedExitLog.FolderFor(_services.GetRequiredService<AppPaths>()));
             _launchTiming.Attach(_fileLog.Append);
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
             if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
-            InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
+            if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0, selectorVariants);
+            if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageShellFinished = System.Diagnostics.Stopwatch.GetTimestamp();
             StartActivationListener();
             _residentReady.MarkReady();
             _launchStatus.Complete();
@@ -215,7 +230,11 @@ public partial class App : Application
         }
 
         if (s_residentProbe is { } probe) _ = RunResidentProbeAsync(probe);
-        else _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+        else
+        {
+            _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+            _ = OfferUnexpectedExitAfterLaunchAsync(quietLaunch);
+        }
     }
 
     /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
@@ -224,7 +243,7 @@ public partial class App : Application
     /// <summary>First-instance switch that opens the settings window on launch.</summary>
     internal const string SettingsCommandLineSwitch = "--settings";
 
-    private void InitializeShell(bool quietLaunch, bool openSettings)
+    private void InitializeShell(bool quietLaunch, bool openSettings, IReadOnlySet<string> selectorVariants)
     {
         if (_services is null)
         {
@@ -271,7 +290,11 @@ public partial class App : Application
             () => _settings!.Pin,
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
+        // The message window is the hotkey service's own; the reader state only listens to it.
+        _screenReader = new MyCapture.App.Accessibility.ScreenReaderState(_services.GetRequiredService<NativeMessageWindow>());
+        _pins.AttachScreenReader(_screenReader);
         _pins.PinCreated += ShowFirstPinTip;
+        _pins.PinCreated += OnPinCreatedForStoreRating;
         // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
         // (+20 MB idle, +80 MB after a capture in the 4.11.0 gate) for users who never pin Markdown.
         // The first Markdown pin pays its layout cost instead.
@@ -293,6 +316,8 @@ public partial class App : Application
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
+        // A native pin's mouse-up never reaches WPF input; its manager reports the end of a gesture.
+        _pins.InteractionEnded += ScheduleIdleMemoryReclamation;
         _pins.OpenPinsChanged += () =>
         {
             if (_pins.IsInteractionActive) CancelIdleMemoryReclamation();
@@ -337,6 +362,8 @@ public partial class App : Application
                 _ocrModelPreparation.CancelForQuality(_settings!.Ocr.Quality);
                 _settingsWindow?.RefreshOcrQuality();
             }, new OcrAccuracyModel(_services.GetRequiredService<OcrModelStore>(), new WindowsOcrDownloadEnvironment())));
+        // Text copied from the OCR window counts toward the Store rating invitation; a refused copy blocks it.
+        _ocrPresenter.TextCopied += copied => _storeRating?.RecordCapture(copied);
         _ocrPresenter.PinRequested += (_, request) =>
         {
             request.Completion = OpenOcrPinAsync();
@@ -357,9 +384,12 @@ public partial class App : Application
             () => _settings!.Ocr);
         _overlay.PrivacyRedactionService = _privacyRedactionService;
 
-        // A pin's OCR is transient: recognise the pinned image bytes and show the shared result
-        // window, but never cache the text — a pin has no backing capture record.
+        // Pin recognition is shared in memory only; no capture record or persisted OCR is made.
         _pins.OcrRequested += OnPinOcrRequested;
+        _pins.RecognizeSelection = (image, token) => _ocrService is null
+            ? Task.FromResult(MyCapture.Ocr.OcrResult.Unavailable())
+            : PinTextCopyService.RecognizeAsync(image, _ocrService,
+                _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token);
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
@@ -464,6 +494,8 @@ public partial class App : Application
             _services.GetRequiredService<ILoggerFactory>(),
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
+        _recorder.SelectorClosed += () => _captureGuideWrites?.NotifySelectorClosed();
+        _recorder.RecordingSaved = saved => _storeRating?.RecordCapture(saved);
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.FrameCaptureService = _videoFrameCapture;
         _recorder.ShowFrameInLibrary = id => EnsureGalleryWindow()?.OpenCapture(id, edit: false);
@@ -485,6 +517,7 @@ public partial class App : Application
         };
         // Answers the record command while the previous recording is still being saved.
         _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));
+        ApplySelectorVariants(selectorVariants);
 
         // Add the icon first so registration failures have a non-modal place to be
         // reported. A tray utility must not interrupt logon with a message box merely
@@ -524,6 +557,7 @@ public partial class App : Application
                 _recorder?.RefreshWatermarkSettings(updated.Recording.Watermark);
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
+                _pins?.ApplySettings();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },
@@ -815,6 +849,7 @@ public partial class App : Application
             // Fail soft: a corrupt clipboard payload or a WPF decode failure must not crash
             // the tray. Report it and stay resident.
             _log?.LogError(ex, "Paste-to-screen failed");
+            _storeRating?.RecordCapture(succeeded: false);
             _tray?.ShowBalloon(
                 UiText.Get("Text_CE57D5CA2394"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
@@ -855,10 +890,20 @@ public partial class App : Application
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
     }
 
+    /// <summary>
+    /// Queues every settings save still waiting at exit, so the wait for pending saves that follows covers
+    /// it: the editor preferences' timer and the Store rating's idle writes.
+    /// </summary>
+    private void QueuePendingSettingsSavesForExit()
+    {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        _storeRating?.FlushDeferredWrites();
+    }
+
     /// <summary>Drains preference saves off the dispatcher after exit preparation.</summary>
     private async Task FlushPreferenceSavesForExitAsync()
     {
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !await Task.Run(() => store.WaitForPendingSaves(TimeSpan.FromSeconds(3))))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
@@ -1318,9 +1363,13 @@ public partial class App : Application
         // The normal path keeps its 4.10.0 notice; only a capture over a preserved window
         // (whose editor belongs to an older image) points to capturing again.
         bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord, opensCaptureEditor: true);
-        // Region, window, full-screen and scrolling captures all complete here. Only a durable,
-        // copied result counts toward the Store rating request; a save or copy failure resets it.
-        _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
+        // Region, window, full-screen and scrolling captures all complete here. Only a durable, copied
+        // result counts toward the Store rating invitation, and not one the practice window asked for; a
+        // capture taken as a pin is counted by its new pin. A save or copy failure blocks the invitation.
+        bool delivered = _currentRecord is not null && copiedToClipboard;
+        RecordStoreRatingCapture(delivered,
+            practice: e.PracticeTarget is not null, pinRequested: e.PinRequested);
+        ResolveStoreRatingCapture(first, delivered);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
         if (e.PinRequested && _currentRecord is { } pinRecord && _commit is not null)
@@ -1351,12 +1400,14 @@ public partial class App : Application
             // Hold the receipt until the deferred presentation owns its own lease.
             IDisposable? pendingReceipt = _queue?.AcquireEvictionLease(receipt.Id);
             bool copied = copiedToClipboard;
+            bool practice = e.PracticeTarget is not null;
             _ = QuickAccessWindow.Schedule(Dispatcher, new Action(() =>
             {
                 try
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor, copied);
+                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess)
+                        ShowQuickAccess(receipt, selected, region, monitor, copied, practice: practice);
                     else
                     {
                         if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
@@ -1467,8 +1518,9 @@ public partial class App : Application
         }
     }
 
+    /// <param name="practice">A capture the practice window asked for: its card never carries the rating invitation.</param>
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
+        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1478,15 +1530,18 @@ public partial class App : Application
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, image) ? lifted : null;
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
+        QuickAccessWindow? card = null;
+        // Decided before the card is built, so an invitation is on the card from its first appearance.
+        var invitation = OfferStoreRatingOnCard(practice);
         try
         {
-            QuickAccessWindow? card = null;
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
             card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
                 actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
+            if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) =>
             {
@@ -1501,6 +1556,7 @@ public partial class App : Application
             flight?.Land(card);
             ReceiptTimeline.Mark?.Invoke("card-show");
             card.Show();
+            if (invitation is not null) _storeRating?.NoteCardOfferShown(invitation);
             ReceiptTimeline.Mark?.Invoke("card-shown");
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
@@ -1508,6 +1564,8 @@ public partial class App : Application
         {
             flight?.Finish();
             lease.Dispose();
+            // An invitation on a card that never showed is not counted.
+            if (invitation is not null && card is not { IsVisible: true }) WithdrawStoreRatingCardOffer(invitation, card);
             _log?.LogWarning(ex, "Could not show the optional capture receipt");
         }
     }
@@ -1552,7 +1610,18 @@ public partial class App : Application
             () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
             actions.ExportAsync,
             _textCapture is { } textCapture
-                ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
+                ? async () =>
+                {
+                    TextCaptureOutcome outcome;
+                    try { outcome = await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None); }
+                    catch
+                    {
+                        _storeRating?.RecordCapture(succeeded: false);
+                        throw;
+                    }
+                    RecordStoreRatingTextCopy(outcome.Status);
+                    return outcome;
+                }
                 : null);
     }
 
@@ -1807,7 +1876,9 @@ public partial class App : Application
             _galleryWindow?.RefreshFromQueue();
             if (_tray?.IsInitialized == true) _tray.SetCaptureCount(queue.Count);
         });
+        if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageQueueLoadStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         queue.Load();
+        if (s_residentProbe?.LibraryFirstPage == true) _libraryFirstPageQueueLoadFinished = System.Diagnostics.Stopwatch.GetTimestamp();
 
         _queue = queue;
         _capturePaths = paths;
@@ -1925,6 +1996,7 @@ public partial class App : Application
     private async void OnPinOcrRequested(object? sender, System.Windows.Media.Imaging.BitmapSource image)
     {
         bool copied = false;
+        bool refused = false;
         try
         {
             if (_ocrService is not null)
@@ -1932,18 +2004,26 @@ public partial class App : Application
                 copied = await PinTextCopyService.CopyAsync(
                     image,
                     _ocrService,
-                    ClipboardImageService.CopyTextAsync,
+                    async text =>
+                    {
+                        bool done = await ClipboardImageService.CopyTextAsync(text);
+                        refused = !done;
+                        return done;
+                    },
                     _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings());
             }
         }
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "Could not copy text from pinned image");
+            refused = true;
         }
         finally
         {
             if (sender is PinWindow pin) pin.ReportOriginalTextCopyResult(copied);
         }
+        // Copied text counts toward the Store rating invitation and an error blocks it; a pin without text records nothing.
+        if (copied || refused) _storeRating?.RecordCapture(succeeded: copied);
     }
 
     /// <summary>Flips the tray to Busy during recognition and restores the prior state after.</summary>
@@ -2005,30 +2085,50 @@ public partial class App : Application
         }
 
         AppPaths paths = _capturePaths;
-        var viewModel = new GalleryViewModel(
-            _galleryController,
-            record => Path.Combine(_queue.GetDirectory(record), CaptureFileNames.Thumbnail),
-            _settings.Queue.ThumbnailLongEdge,
-            imageRetentionHours: () => _settings!.Queue.ImageRetentionHours);
+        CaptureQueue galleryQueue = _queue;
+        GalleryViewModel viewModel;
+        using (var timing = _libraryFirstPageTiming?.Begin("gallery-viewmodel-create-configure"))
+        {
+            viewModel = new GalleryViewModel(
+                _galleryController,
+                record => Path.Combine(galleryQueue.GetDirectory(record), CaptureFileNames.Thumbnail),
+                _settings.Queue.ThumbnailLongEdge,
+                imageRetentionHours: () => _settings!.Queue.ImageRetentionHours);
+            viewModel.ConfigureAsyncThumbnailPathRequests(
+                record => GalleryThumbnailLoader.CreateQueuePathRequest(galleryQueue, record));
+            timing?.Complete();
+        }
 
         OcrIndexingService ocrIndexing = _automaticIndexer
             ?? throw new InvalidOperationException("Capture indexing is unavailable.");
 
-        var window = new GalleryWindow(
-            viewModel,
-            _galleryController,
-            _reeditLoader,
-            _commit,
-            _queue,
-            _videoLibrary,
-            paths,
-            _services.GetRequiredService<ILoggerFactory>(),
-            _ocrPresenter!,
-            () => _settings!.Ocr,
-            ocrIndexing,
-            _privacyRedactionService
-                ?? throw new InvalidOperationException("Privacy redaction is unavailable."),
-            _services.GetRequiredService<ILogger<GalleryWindow>>());
+        GalleryWindow window;
+        using (var timing = _libraryFirstPageTiming?.Begin("gallery-window-constructor"))
+        {
+            window = new GalleryWindow(
+                viewModel,
+                _galleryController,
+                _reeditLoader,
+                _commit,
+                _queue,
+                _videoLibrary,
+                paths,
+                _services.GetRequiredService<ILoggerFactory>(),
+                _ocrPresenter!,
+                () => _settings!.Ocr,
+                ocrIndexing,
+                _privacyRedactionService
+                    ?? throw new InvalidOperationException("Privacy redaction is unavailable."),
+                _services.GetRequiredService<ILogger<GalleryWindow>>());
+            timing?.Complete();
+        }
+        if (_libraryFirstPageTiming is { } observer)
+        {
+            if (window.OpenTimingObserverForTest is not null)
+                throw new InvalidOperationException("Gallery timing observer already installed.");
+            observer.SubscribedToGallery(window.MetadataWidthChecks);
+            window.OpenTimingObserverForTest = observer.ObserveGallery;
+        }
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         window.FrameCaptureService = _videoFrameCapture;
@@ -2158,11 +2258,15 @@ public partial class App : Application
         }
 
         ScreenCaptureEngine captureEngine = _services.GetRequiredService<ScreenCaptureEngine>();
+        if (s_residentProbe?.Has("no-engine-prewarm") != true) _libraryFirstPageTiming?.Queued("engine-prewarm");
         if (s_residentProbe?.Has("no-engine-prewarm") != true) _ = Task.Run(() =>
         {
             try
             {
-                captureEngine.Prewarm();
+                using var timing = _libraryFirstPageTiming?.Begin("engine-prewarm");
+                if (s_longRunPrivacy is { } privacy) privacy.PrewarmSyntheticPixel();
+                else captureEngine.Prewarm();
+                timing?.Complete();
             }
             catch (Exception ex)
             {
@@ -2173,13 +2277,18 @@ public partial class App : Application
 
         // The selector's own first-use costs (mode bar templates, fonts, guide strips for this
         // desktop) are paid once while the app is idle after launch instead of on the first hotkey.
+        _libraryFirstPageTiming?.Queued("overlay-prewarm-callback");
         _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
         {
             if (_overlay?.IsActive == true) return;
             try
             {
                 if (s_residentProbe?.Has("no-overlay-prewarm") != true)
+                {
+                    using var timing = _libraryFirstPageTiming?.Begin("overlay-prewarm");
                     CaptureOverlayPrewarm.Run(MonitorEnumerator.GetVirtualDesktopBounds());
+                    timing?.Complete();
+                }
             }
             catch (Exception ex)
             {
@@ -2187,6 +2296,7 @@ public partial class App : Application
             }
 
             // Reader/window-list first use runs on its own idle turn, after shell startup.
+            _libraryFirstPageTiming?.Queued("reader-prewarm-callback");
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
                 if (_shutdownRequested || _overlay?.IsActive == true || _preparingAdvancedCapture
@@ -2206,11 +2316,15 @@ public partial class App : Application
         if (_services is null || _overlay is null) return;
         try
         {
+            using var timing = _libraryFirstPageTiming?.Begin("reader-prewarm-async");
             await CaptureReaderPrewarm.RunAsync(
-                () => _services.GetRequiredService<WindowCandidateService>()
-                    .GetCandidates(MonitorEnumerator.GetVirtualDesktopBounds()),
+                () => s_longRunPrivacy is { } privacy
+                    ? privacy.ReadWindows(MonitorEnumerator.GetVirtualDesktopBounds())
+                    : _services.GetRequiredService<WindowCandidateService>()
+                        .GetCandidates(MonitorEnumerator.GetVirtualDesktopBounds()),
                 windows => _overlay.ReadPageUrls(windows),
                 _overlay.ReadWindowSources is { } readApplications ? windows => readApplications(windows) : null);
+            timing?.Complete();
         }
         catch (Exception ex)
         {
@@ -2535,11 +2649,22 @@ public partial class App : Application
         services.AddSingleton<WindowCandidateService>();
         services.AddSingleton<WindowTitleService>();
         services.AddSingleton<IScrollInputSink, NativeScrollInputSink>();
-        services.AddSingleton(serviceProvider => new CaptureOverlayCoordinator(
-            serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
-            serviceProvider.GetRequiredService<WindowCandidateService>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
-            acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame));
+        services.AddSingleton(serviceProvider =>
+        {
+            ResidentLongRunPrivacy? privacy = s_longRunPrivacy;
+            var coordinator = new CaptureOverlayCoordinator(
+                serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
+                serviceProvider.GetRequiredService<WindowCandidateService>(),
+                serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
+                acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame,
+                readWindowCandidates: privacy is null ? null : privacy.ReadWindows);
+            if (privacy is not null)
+            {
+                coordinator.ReadPageUrls = privacy.ReadPages;
+                coordinator.ReadWindowSources = privacy.ReadSources;
+            }
+            return coordinator;
+        });
         services.AddSingleton<NativeMessageWindow>();
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
@@ -2553,7 +2678,9 @@ public partial class App : Application
             serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
         services.AddSingleton(serviceProvider => new NeuralOcrEngine(
             serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
+            serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>(),
+            wholeSessionInitializing: s_longRunPrivacy is null ? null : ObserveLongRunNeuralSession,
+            wholeResultObserved: s_longRunPrivacy is null ? null : ObserveLongRunNeural));
         services.AddSingleton<WindowsOcrService>();
         // OCR and text pins share the local translator; model downloads require an explicit install action.
         services.AddSingleton(serviceProvider => new TranslationModelStore(
@@ -2575,10 +2702,10 @@ public partial class App : Application
             }
             return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
         });
-        services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
+        services.AddSingleton<IOcrService>(serviceProvider => new CodeOcrService(new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>()));
+            serviceProvider.GetRequiredService<ILogger<CaptureOcrService>>())));
 
         // Launch-at-login through the per-user Run key, or through the manifest startup task
         // in the Microsoft Store build, whose Run key writes are virtualized and never run.
@@ -2652,6 +2779,7 @@ public partial class App : Application
         _log?.LogCritical(e.ExceptionObject as Exception,
             "Unhandled exception off the dispatcher thread (terminating: {IsTerminating})", e.IsTerminating);
         _fileLog?.Flush(TimeSpan.FromSeconds(2));
+        if (e.IsTerminating) RecordUnexpectedExit(e.ExceptionObject as Exception);
     }
 
     /// <summary>A faulted task nobody awaited. Recorded only; the runtime's own handling is unchanged.</summary>
@@ -2660,6 +2788,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        MarkUnexpectedExitNoticeForFinalExit();
         _memoryReclamationStopped = true;
         CancelIdleMemoryReclamation();
         _launchStatus?.Complete();
@@ -2675,7 +2804,8 @@ public partial class App : Application
         _quickAccess?.Close();
         _flightSpareRelease?.Stop();
         _flightSpare?.Release();
-        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        // A rating showing or its restoration still waiting for the idle UI is saved too.
+        QueuePendingSettingsSavesForExit();
         if (_services?.GetService<SettingsStore>() is { } store
             && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))
             _log?.LogWarning("Timed out waiting for preference saves on exit");
@@ -2769,6 +2899,9 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        // Media Foundation stays started from its first use to here (#243). After the services that
+        // record and export: one still finishing keeps its lease, and its release shuts MF down.
+        MyCapture.Platform.Recording.MediaFoundationPlatform.Shutdown();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
         _launchFallbackLog?.Dispose();

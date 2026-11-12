@@ -104,6 +104,7 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly TextBlock _loadingLabel;
     private readonly Border _loadingOverlay;
     private readonly ListBox _overlayList;
+    private readonly Border _layerListEmpty;
     private Button? _undoButton;
     private Button? _redoButton;
     private Button _addTextButton = null!;
@@ -413,6 +414,27 @@ internal sealed partial class VideoEditorWindow : Window
         // single layer took a row of its own in small windows.
         ScrollViewer.SetHorizontalScrollBarVisibility(_overlayList, ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(_overlayList, ScrollBarVisibility.Auto);
+        // An empty list left a blank band between the heading and the edit commands, while the
+        // tracks below said which layers were missing. The list says it in the same muted
+        // caption, in its first row: the padding is the list's 1 DIP and a row's 8 DIP, so the
+        // text starts where a row's icon would.
+        var layerListEmptyText = new TextBlock
+        {
+            Text = UiText.Get("Video.NoLayers"),
+            FontSize = TypeScale.Caption,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        layerListEmptyText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _layerListEmpty = new Border
+        {
+            Name = "VideoLayerListEmpty",
+            Padding = new Thickness(9, 0, 9, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false,
+            Child = layerListEmptyText,
+        };
+        _layerListEmpty.SetResourceReference(MinHeightProperty, "Size.HitTarget.Compact");
         _overlayList.SelectionChanged += OnOverlaySelectionChanged;
         _overlayList.MouseDoubleClick += (_, _) => EditSelectedOverlay();
         AutomationProperties.SetName(_overlayList, UiText.Get("Text_8D1EFD1B2B84"));
@@ -858,13 +880,20 @@ internal sealed partial class VideoEditorWindow : Window
     private async void ShowMediaDetails() => await MediaDetailsWindow.ShowAsync(this,
         [new(_recording.OutputPath, _recording.Width, _recording.Height, _durationMs > 0 ? _durationMs : _recording.DurationMs)]);
 
+    /// <summary>
+    /// The left inset of every text line in the details panel: the 3 DIP margin that
+    /// <see cref="CommandButtonPresentation.Apply"/> gives the buttons in the same column.
+    /// </summary>
+    internal const double DetailsTextInset = 3;
+
     private Border BuildDetailsPanel()
     {
         var content = new StackPanel();
         var heading = new TextBlock
         {
+            Name = "VideoDetailsHeading",
             Text = UiText.Get("VideoEditorUx_Details"), FontSize = TypeScale.Body,
-            FontWeight = FontWeights.SemiBold, Margin = new Thickness(3, 0, 0, 8),
+            FontWeight = FontWeights.SemiBold, Margin = new Thickness(DetailsTextInset, 0, 0, 8),
         };
         heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         content.Children.Add(heading);
@@ -916,7 +945,7 @@ internal sealed partial class VideoEditorWindow : Window
         frames.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
         precise.Children.Add(frames);
         _positionFrameLabel.FontSize = TypeScale.Caption;
-        _positionFrameLabel.Margin = new Thickness(3, 4, 0, 8);
+        _positionFrameLabel.Margin = new Thickness(DetailsTextInset, 4, 0, 8);
         _positionFrameLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         precise.Children.Add(_positionFrameLabel);
         return precise;
@@ -971,11 +1000,13 @@ internal sealed partial class VideoEditorWindow : Window
         _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _removedLengthLabel = new TextBlock { FontSize = TypeScale.Caption };
         _removedLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        // Text in the details panel starts on the heading's 3 DIP inset, where the command
+        // buttons' chromes start, so the column reads as one left edge.
         var summary = new StackPanel
         {
             Name = "VideoTrimSummary",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
+            Margin = new Thickness(DetailsTextInset, 0, 8, 0),
             MinWidth = 120,
         };
         summary.Children.Add(_keptLengthLabel);
@@ -985,7 +1016,7 @@ internal sealed partial class VideoEditorWindow : Window
         TextBox Input(string name)
         {
             var inputRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-            inputRow.Children.Add(new TextBlock { Text = name, FontSize = TypeScale.Caption, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
+            inputRow.Children.Add(new TextBlock { Text = name, FontSize = TypeScale.Caption, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(DetailsTextInset, 0, 4, 0) });
             var input = new TextBox
             {
                 Width = 120, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(8, 4, 8, 4),
@@ -1095,12 +1126,15 @@ internal sealed partial class VideoEditorWindow : Window
         // narrow enough to sit beside it; edit and delete moved under the list.
         var label = new TextBlock
         {
+            Name = "VideoLayersHeading",
             Text = UiText.Get("Video.Layers"),
             FontWeight = FontWeights.SemiBold,
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var layerHeader = new Grid();
+        // The heading starts at the panel's text edge. The inset sits on its row, not on the
+        // heading, so the heading's measured width stays the width it is arranged in.
+        var layerHeader = new Grid { Margin = new Thickness(DetailsTextInset, 0, 0, 0) };
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
         layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1114,6 +1148,10 @@ internal sealed partial class VideoEditorWindow : Window
         _overlayList.MaxHeight = 128;
         _overlayList.Margin = new Thickness(0, 6, 0, 6);
         lane.Children.Add(_overlayList);
+        // Over the list's first row, below the list's own 1 DIP top padding.
+        Grid.SetRow(_layerListEmpty, 1);
+        _layerListEmpty.Margin = new Thickness(0, 7, 0, 6);
+        lane.Children.Add(_layerListEmpty);
 
         var actions = new WrapPanel
         {
@@ -1180,16 +1218,25 @@ internal sealed partial class VideoEditorWindow : Window
         };
         Grid.SetColumn(_positionChip, 1);
         row.Children.Add(_positionChip);
+        StackPanel detailsFace = BuildIconLabel("Icon.ChevronDown", UiText.Get("VideoEditorUx_Details"));
+        // The Alt shortcut reveal scales a face's icon through its RenderTransform, and the
+        // chevron turns through its own; the chevron sits in a box the reveal scales instead.
+        var detailsChevron = (SymbolIcon)detailsFace.Children[0];
+        detailsFace.Children.RemoveAt(0);
+        detailsFace.Children.Insert(0, new Border { Child = detailsChevron, VerticalAlignment = VerticalAlignment.Center });
         _detailToggle = new System.Windows.Controls.Primitives.ToggleButton
         {
-            Name = "VideoDetailsToggle", Content = BuildIconLabel("Icon.ChevronDown", UiText.Get("VideoEditorUx_Details")),
+            Name = "VideoDetailsToggle", Content = detailsFace,
             ToolTip = UiText.Get("VideoEditorUx_DetailsHelp"), IsChecked = false,
         };
         CommandButtonPresentation.Apply(_detailToggle);
         AutomationProperties.SetName(_detailToggle, UiText.Get("VideoEditorUx_Details"));
         AutomationProperties.SetHelpText(_detailToggle, UiText.Get("VideoEditorUx_DetailsHelp"));
-        _detailToggle.Checked += (_, _) => ApplyDetailsVisibility();
-        _detailToggle.Unchecked += (_, _) => ApplyDetailsVisibility();
+        // The chevron turns over Motion.Normal as the details open, as the library tree's does,
+        // and points back down when they close; it snaps when Windows animations are off.
+        FluidMotion.SetTransition(detailsChevron, MotionSpeed.Normal);
+        _detailToggle.Checked += (_, _) => { FluidMotion.SetRotateTo(detailsChevron, 180); ApplyDetailsVisibility(); };
+        _detailToggle.Unchecked += (_, _) => { FluidMotion.SetRotateTo(detailsChevron, 0); ApplyDetailsVisibility(); };
         // Space follows the window rule for buttons (toggle after Tab, playback after a click); Enter also enters the opened details.
         _detailToggle.PreviewKeyDown += (_, args) =>
         {
@@ -1213,6 +1260,9 @@ internal sealed partial class VideoEditorWindow : Window
         row.Children.Add(_detailToggle);
         controls.Children.Add(row);
         ShortcutPresentation.Attach(_saveProgress.CancelButton, ShortcutScope.Video, "Cancel");
+        // Attach gives a command the command bar's 3 DIP margin, which left the button 4 DIP
+        // after the remaining time. It keeps the progress row's own 12 DIP gap, as in the export dialog.
+        _saveProgress.CancelButton.Margin = new Thickness(12, 0, 0, 0);
         _saveProgress.CancelButton.Click += (_, _) => _operationCts?.Cancel();
         Grid.SetRow(_saveProgress, 1);
         controls.Children.Add(_saveProgress);
@@ -2341,6 +2391,7 @@ internal sealed partial class VideoEditorWindow : Window
             AutomationProperties.SetHelpText(
                 _overlayList,
                 UiText.Format("Text_26FF7226E337", _editDocument.TextOverlays.Count, _editDocument.FrameEditLayers.Count));
+            _layerListEmpty.Visibility = _overlayList.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
             _layerTimeline.SelectLayer(SelectedLayerId());
             _layerCanvas.Select(SelectedLayerId());

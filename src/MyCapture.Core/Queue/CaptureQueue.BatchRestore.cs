@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MyCapture.Core.Storage;
 
 namespace MyCapture.Core.Queue;
@@ -43,15 +42,9 @@ public sealed partial class CaptureQueue
             _records.ReplaceWith(_records.Concat(admitted).OrderByDescending(item => item.CreatedAt).ToArray());
             _totalBytes += admitted.Sum(record => record.TotalBytes);
             UpdatePinPressureFlag();
-            var writes = new List<(string Path, string Content)>(admitted.Length + 2);
             Task publication;
             lock (_writeGate)
-            {
-                foreach (CaptureRecord record in admitted)
-                    writes.Add((GetFilePath(record, CaptureFileNames.Meta), JsonSerializer.Serialize(record, MetaSerializerOptions)));
-                writes.AddRange(BuildIndexWrites(JsonSerializer.Serialize(CreateIndexSnapshot(), SerializerOptions)));
-                publication = EnqueuePublication(reservation, writes.ToArray());
-            }
+                publication = EnqueuePublication(reservation, [.. admitted.Select(DetachedMetaWrite), .. DetachedIndexWrites()]);
 
             try
             {

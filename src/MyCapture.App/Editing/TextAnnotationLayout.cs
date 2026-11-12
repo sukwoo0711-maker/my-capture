@@ -39,6 +39,20 @@ internal static class TextAnnotationLayout
     private static readonly Lock MetricsGate = new();
     private static readonly Dictionary<FormatKey, TextMetrics> MetricsCache = [];
 
+    // The painted glyph extents only the selection frame reads, outlined once per distinct
+    // layout. Kept apart from MetricsCache so measuring a caption while typing never outlines it.
+    private static readonly Dictionary<FormatKey, Rect> GlyphBoundsCache = [];
+
+    /// <summary>
+    /// The longest caption whose selection frame follows its exact glyph outlines. Outlining every
+    /// glyph costs about 66 ms for 1,024 characters and 3.6 s for 100,000 (measured on 2026-11-07)
+    /// for each new layout, and the frame is needed on every selection and at each step of a width
+    /// drag. Past this length the frame takes the layout's black-box extents instead, which the
+    /// formatting that measures the caption gives at no extra pass. They always cover the glyphs,
+    /// by up to about 0.3 em more beside italic text.
+    /// </summary>
+    internal const int ExactInkLimit = 256;
+
     internal static FormattedText Format(TextAnnotation text, double pixelsPerDip) => Format(KeyOf(text, pixelsPerDip));
 
     /// <summary>Every value <see cref="Format(FormatKey)"/> reads from a caption and its surface.</summary>
@@ -98,6 +112,27 @@ internal static class TextAnnotationLayout
     /// Room for the glyph outline: the outline pen's full width, half on each side.
     /// </summary>
     internal static double OutlineMargin(TextAnnotation text) => Math.Max(1, text.FontSize / 12);
+
+    /// <summary>The stored caption box, grown for painted glyph overhang and its outline.</summary>
+    internal static RectD InkBounds(TextAnnotation text)
+    {
+        RectD box = text.Rect.Normalized();
+        if (text.IsStepNumber) return box;
+        FormatKey key = KeyOf(text, 1.0);
+        Rect glyphs = key.Text.Length > ExactInkLimit ? MetricsOf(key).Ink : GlyphBoundsOf(key);
+        if (glyphs.IsEmpty) return box;
+        if (text.HasOutline)
+        {
+            double halfPen = (text.OutlineStyle == TextOutlineStyle.Consistent
+                ? text.FontSize / 18 : OutlineMargin(text)) / 2;
+            glyphs.Inflate(halfPen, halfPen);
+        }
+        double left = Math.Min(box.Left, box.Left + glyphs.Left);
+        double top = Math.Min(box.Top, box.Top + glyphs.Top);
+        double right = Math.Max(box.Right, box.Left + glyphs.Right);
+        double bottom = Math.Max(box.Bottom, box.Top + glyphs.Bottom);
+        return new RectD(left, top, right - left, bottom - top);
+    }
 
     /// <summary>
     /// The box <paramref name="text"/> needs for its current text, size and wrapping mode,
@@ -179,13 +214,17 @@ internal static class TextAnnotationLayout
         }
 
         FormattedText formatted = Format(key);
+        // Read first, a long caption's black-box extents (see ExactInkLimit) measure every line
+        // once, for them and for the advance metrics below alike.
+        Rect ink = key.Text.Length > ExactInkLimit ? BlackBox(formatted) : Rect.Empty;
         double height = formatted.Height;
         var metrics = new TextMetrics(
             formatted.Width,
             formatted.WidthIncludingTrailingWhitespace,
             height,
             // One line of the same caption, for an empty one; the same layout with a single space.
-            height > 0 ? height : Format(key with { Text = " " }).Height);
+            height > 0 ? height : Format(key with { Text = " " }).Height,
+            ink);
 
         lock (MetricsGate)
         {
@@ -243,6 +282,54 @@ internal static class TextAnnotationLayout
         }
     }
 
-    /// <summary>The extents <see cref="Measure"/> and <see cref="GrowToText"/> read from a layout.</summary>
-    private readonly record struct TextMetrics(double Width, double WidthIncludingTrailingWhitespace, double Height, double LineHeight);
+    /// <summary>
+    /// The extents <see cref="Measure"/> and <see cref="GrowToText"/> read from a layout, and for a
+    /// caption past <see cref="ExactInkLimit"/> the inked extents its selection frame reads.
+    /// </summary>
+    private readonly record struct TextMetrics(double Width, double WidthIncludingTrailingWhitespace, double Height, double LineHeight, Rect Ink);
+
+    /// <summary>
+    /// <paramref name="formatted"/>'s inked extents relative to its origin, from its black-box
+    /// metrics: from the leading overhang to the trailing one of the widest line, and from the last
+    /// line's ink bottom up the whole ink height. <see cref="Rect.Empty"/> when nothing is inked.
+    /// </summary>
+    private static Rect BlackBox(FormattedText formatted)
+    {
+        double extent = formatted.Extent;
+        if (!(extent > 0) || !double.IsFinite(extent)) return Rect.Empty;
+        double left = formatted.OverhangLeading;
+        double right = formatted.Width - formatted.OverhangTrailing;
+        double bottom = formatted.Height + formatted.OverhangAfter;
+        return right > left && double.IsFinite(left) && double.IsFinite(bottom)
+            ? new Rect(left, bottom - extent, right - left, extent)
+            : Rect.Empty;
+    }
+
+    /// <summary>
+    /// The painted glyphs' extents in <paramref name="key"/>'s layout, relative to its origin,
+    /// outlined once per distinct key.
+    /// </summary>
+    private static Rect GlyphBoundsOf(in FormatKey key)
+    {
+        lock (MetricsGate)
+        {
+            if (GlyphBoundsCache.TryGetValue(key, out Rect cached))
+            {
+                return cached;
+            }
+        }
+
+        Rect bounds = Format(key).BuildGeometry(default).Bounds;
+        lock (MetricsGate)
+        {
+            if (GlyphBoundsCache.Count >= MetricsCacheLimit)
+            {
+                GlyphBoundsCache.Clear();
+            }
+
+            GlyphBoundsCache[key] = bounds;
+        }
+
+        return bounds;
+    }
 }

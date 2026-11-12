@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
@@ -22,7 +23,7 @@ public sealed class PracticeJourneyProducerTests
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var app = (App)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false])!;
         try
         {
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.C2);
@@ -46,7 +47,7 @@ public sealed class PracticeJourneyProducerTests
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var app = (App)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false])!;
         try
         {
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.A3);
@@ -114,7 +115,12 @@ public sealed class PracticeJourneyProducerTests
     public void PinSignalsUseTheClipboardVersionAndRestoreOnlyTheExpectedLogicalPin() => StaTestHost.Run(() =>
     {
         var signals = new List<PracticeEvent>();
-        var monitor = new MonitorInfo("synthetic", new RectD(-10000, -10000, 1600, 1000), new RectD(-10000, -10000, 1600, 1000), 96, true);
+        // Keep the offscreen DIP geometry, but describe its physical monitor at the
+        // actual display DPI used by an HWND created in this part of the desktop.
+        uint dpi = MonitorEnumerator.GetFromPoint(new PointD(-10000, -10000)).Dpi;
+        double scale = dpi / 96.0;
+        var bounds = new RectD(-10000 * scale, -10000 * scale, 1600 * scale, 1000 * scale);
+        var monitor = new MonitorInfo("synthetic", bounds, bounds, dpi, true);
         var manager = new PinManager(() => new PinSettings(), NullLogger.Instance)
         {
             ReadPlacementMonitorForTest = () => monitor, ReadRestoreMonitorsForTest = () => [monitor],
@@ -136,6 +142,7 @@ public sealed class PracticeJourneyProducerTests
             Assert.Equal(PasteResult.Pinned, PinHistoryTestSupport.Await(manager.PasteFromClipboardAsync(
                 () => Task.FromResult(ClipboardImageReader.PinReadAttempt.Success(content) with { ClipboardSequence = 42 }))));
             PinWindow pin = Assert.Single(manager.SnapshotOpenPinWindows());
+            Assert.Equal(monitor.ScaleFactor, VisualTreeHelper.GetDpi(pin).DpiScaleX);
             Assert.True(pin.Left < -8000 && pin.Top < -8000);
             PracticeEvent opened = Assert.Single(signals);
             Assert.Equal(PracticeEventKind.PinOpened, opened.Kind);
@@ -160,6 +167,7 @@ public sealed class PracticeJourneyProducerTests
             Assert.Null(PinHistoryTestSupport.Await(manager.RestoreLastClosedAsync(Guid.NewGuid())));
             Assert.Equal(1, manager.ClosedCount);
             PinWindow restored = Assert.IsType<PinWindow>(PinHistoryTestSupport.Await(manager.RestoreLastClosedAsync(logical)));
+            Assert.Equal(monitor.ScaleFactor, VisualTreeHelper.GetDpi(restored).DpiScaleX);
             Assert.Equal(logical, restored.LogicalPracticeId);
             Assert.NotEqual(oldWindow, restored.PracticeId);
             Assert.Equal(.6, restored.State.Opacity, 6);
@@ -170,9 +178,11 @@ public sealed class PracticeJourneyProducerTests
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void CapturePreparationFailureReportsTheOriginalRequest(bool asynchronous) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void CapturePreparationFailureReportsTheOriginalRequest(bool asynchronous, bool native) => StaTestHost.Run(() =>
     {
         var session = new PracticeSession(); Guid request = session.BeginCapture();
         var signals = new List<PracticeEvent>();
@@ -181,7 +191,7 @@ public sealed class PracticeJourneyProducerTests
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance,
             _ => throw new InvalidOperationException("Synthetic frame failure"),
             () => asynchronous ? new RectD(-10000, -10000, 32, 20) : throw new InvalidOperationException("Synthetic bounds failure"),
-            _ => []) { ReadWindowSources = null, ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()) };
+            _ => []) { UseNativeDibSelector = native, ReadWindowSources = null, ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()) };
         try
         {
             void Start() => coordinator.Start(false, false, false, practiceTarget: new(session.Id, request));

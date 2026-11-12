@@ -105,6 +105,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        InitializeGridResizeFocusRestoration();
         CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
@@ -119,6 +120,7 @@ internal sealed partial class GalleryWindow : Window
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
+        InitializeDeferredDetails();
         InitializeFolderActions();
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
@@ -139,9 +141,9 @@ internal sealed partial class GalleryWindow : Window
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible);
             if (IsVisible) UpdateMetadataMinimumWidths();
-            if (IsVisible && _refreshWhenShown)
+            if (IsVisible && (_refreshWhenShown || _viewModel.NeedsInitialRefresh))
             {
-                // Shown without ShowGallery (which refreshes itself): apply what arrived while hidden.
+                // Direct Show initializes an explicitly deferred model and applies hidden changes.
                 _refreshWhenShown = false;
                 _viewModel.Refresh();
                 RefreshOcrCoverageBanner();
@@ -185,22 +187,35 @@ internal sealed partial class GalleryWindow : Window
     /// </summary>
     internal void ShowGallery()
     {
+        Action<GalleryOpenTiming>? observer = OpenTimingObserverForTest;
+        long stageStarted = observer is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         UpdateCommandShortcuts();
         _refreshWhenShown = false;
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
+        if (observer is not null)
+            observer(new GalleryOpenTiming("commands-refresh-banner",
+                System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
 
         if (!IsVisible)
         {
+            if (observer is not null) stageStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             Show();
+            if (observer is not null)
+                observer(new GalleryOpenTiming("show",
+                    System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
         }
 
+        if (observer is not null) stageStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         if (WindowState == WindowState.Minimized)
         {
             WindowState = WindowState.Normal;
         }
 
         WindowForeground.BringForward(this);
+        if (observer is not null)
+            observer(new GalleryOpenTiming("foreground",
+                System.Diagnostics.Stopwatch.GetElapsedTime(stageStarted).TotalMilliseconds));
         ShowPendingRetentionNotice();
     }
 
@@ -383,9 +398,11 @@ internal sealed partial class GalleryWindow : Window
 
         UpdateMetadataMinimumWidths();
 
-        // The view model only rebuilds rows when the resulting column count actually changes,
-        // so this fires cheaply on every resize.
-        _ = _viewModel.SetColumnCountForWidth(RowsContentWidth(e.NewSize.Width));
+        // The row containers change only at a column breakpoint.
+        bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
+        IInputElement? focusedBeforeResize = Keyboard.FocusedElement;
+        if (_viewModel.SetColumnCountForWidth(RowsContentWidth(e.NewSize.Width)) && hadGridFocus)
+            QueueGridResizeFocusRestoration(focusedBeforeResize);
     }
 
     // ---- Tile selection / keyboard -------------------------------------------------
@@ -782,11 +799,12 @@ internal sealed partial class GalleryWindow : Window
     private static readonly string[] ConfirmationStatusKeys =
         ["Library.SourcePage.Copied", "Library.Source.PathCopied", "Library.Image.Copied"];
 
-    // Export lines that the outcome replaces.
+    // Export, delete and undo lines that the outcome replaces.
     private static readonly string[] ProgressStatusKeys =
     [
         "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
-        "LibraryUndo_Restoring",
+        "LibraryUndo_Restoring", "LibrarySelection_Moving", "LibrarySelection_MovingProgress",
+        "OpenWith.Preparing",
     ];
 
     private void InitializeActionStatus()
@@ -832,7 +850,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (text == UiText.Get("LibraryRecovery_Failed") || ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
             || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal)
-            || MatchesFormat(text, "LibraryUndo_PartlyRestored"))
+            || MatchesFormat(text, "LibraryUndo_PartlyRestored") || MatchesFormat(text, "OpenWith.Failed"))
         {
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }
@@ -931,8 +949,24 @@ internal sealed partial class GalleryWindow : Window
         return Task.CompletedTask;
     }
 
+    // #221: rendered.png decodes on the pool, so copying a large capture no longer holds the library. Copies can
+    // then finish out of order; one whose image arrives after a newer copy was asked for is dropped, so the
+    // newest copy stays on the clipboard and reports its own result, as when the decode ran on this thread.
+    private int _copyRequests;
+
+    /// <summary>Decodes the rendered image a copy puts on the clipboard, on a pool thread; tests replace it.</summary>
+    internal Func<string, BitmapSource?> DecodeCopyForTest { get; set; } = ImageCodec.TryLoad;
+
+    /// <summary>Receives a copy's clipboard data in place of the clipboard; tests set it.</summary>
+    internal Action<IDataObject>? WriteCopyForTest { get; set; }
+
     /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
-    private async Task<bool> CopyRenderedAsync(GalleryItemViewModel tile)
+    // At Send priority, as the preview (ShowPreview): the decode resumes on this thread before the clipboard
+    // write starts, and at Normal priority a UI Automation client's calls could hold that resume for seconds.
+    private Task<bool> CopyRenderedAsync(GalleryItemViewModel tile) =>
+        Dispatcher.InvokeAsync(() => CopyRenderedCoreAsync(tile), DispatcherPriority.Send).Task.Unwrap();
+
+    private async Task<bool> CopyRenderedCoreAsync(GalleryItemViewModel tile)
     {
         if (!tile.IsImage)
         {
@@ -952,8 +986,31 @@ internal sealed partial class GalleryWindow : Window
 
         // Copy the flattened rendered.png so the clipboard carries the annotated result. This
         // does not modify the capture, matching the editor's Ctrl+C intent.
+        int request = ++_copyRequests;
         string renderedPath = _queue.GetFilePath(record, CaptureFileNames.Rendered);
-        BitmapSource? rendered = ImageCodec.TryLoad(renderedPath);
+        Func<string, BitmapSource?> decode = DecodeCopyForTest;
+        BitmapSource? rendered;
+        try
+        {
+            rendered = await Task.Run(() =>
+            {
+                BitmapSource? image = decode(renderedPath);
+                // Only a frozen image may leave the thread that decoded it.
+                if (image is { IsFrozen: false }) image.Freeze();
+                return image;
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not read gallery capture {Id} to copy it", record.Id);
+            rendered = null;
+        }
+
+        if (request != _copyRequests)
+        {
+            return false;
+        }
+
         if (rendered is null)
         {
             ShowStatus(UiText.Get("Text_3BF4FEA88C51"));
@@ -963,7 +1020,7 @@ internal sealed partial class GalleryWindow : Window
         try
         {
             if (!await ClipboardImageService.CopyImageWithProvenanceAsync(rendered, record.SourcePageUrl,
-                    MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)))
+                    MyCapture.Core.Capture.CaptureProvenance.FromRecord(record), WriteCopyForTest))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
                 return false;

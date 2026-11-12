@@ -31,6 +31,25 @@ internal sealed class WindowTrackSizeScope : IDisposable
         _window.Closed += OnClosed;
     }
 
+    /// <summary>
+    /// Applies the same limit to a window whose HWND already exists. The HWND kept the real desktop's
+    /// limit from its creation, so its current size is negotiated again before a fixture resizes it.
+    /// </summary>
+    internal static WindowTrackSizeScope ForExisting(Window window, Size minimumMaximum)
+    {
+        var scope = new WindowTrackSizeScope(window, minimumMaximum);
+        window.SourceInitialized -= scope.Attach;
+        HwndSource source = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)
+            ?? throw new InvalidOperationException("The window has no HWND yet.");
+        scope._source = source;
+        source.AddHook(scope.Filter);
+        if (!GetWindowRect(source.Handle, out NativeRect bounds) || !SetWindowPos(source.Handle, 0, 0, 0,
+            bounds.Right - bounds.Left, bounds.Bottom - bounds.Top,
+            0x0002 | 0x0004 | 0x0010 | 0x0020 /* NOMOVE | NOZORDER | NOACTIVATE | FRAMECHANGED */))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return scope;
+    }
+
     private void Attach(object? sender, EventArgs args)
     {
         _source = HwndSource.FromHwnd(new WindowInteropHelper(_window).Handle)!;
@@ -81,6 +100,13 @@ internal sealed class WindowTrackSizeScope : IDisposable
     {
         public NativePoint Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint hwnd, out NativeRect rect);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

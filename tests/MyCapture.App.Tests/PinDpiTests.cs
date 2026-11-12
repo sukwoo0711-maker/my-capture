@@ -188,9 +188,10 @@ public sealed class PinDpiTests : KoreanCaptionTest
             Assert.Equal(ClipboardCodeRenderer.FontFamilyName, textBox.FontFamily.Source);
             Assert.Equal(ClipboardCodeRenderer.FontSizeDip * state.Zoom, textBox.FontSize);
             Assert.Equal(ClipboardCodeRenderer.LineHeightDip * state.Zoom, TextBlock.GetLineHeight(textBox));
-            Assert.Equal(new Thickness(ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+            Assert.Equal(new Thickness(
+                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom - TextBoxLayout.ContentInsetDip,
                 ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom,
-                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom - TextBoxLayout.ContentInsetDip,
                 ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom), textBox.Padding);
             Assert.Equal(Color.FromRgb(0x12, 0x34, 0x56), Assert.IsType<SolidColorBrush>(selection.Background).Color);
             Assert.Same(selection.Background, textBox.Background);
@@ -220,7 +221,9 @@ public sealed class PinDpiTests : KoreanCaptionTest
         var pin = new PinWindow(content, state, 0, 0) { ShowActivated = false };
         try
         {
+            Assert.Equal(content.LayoutWidthDip, pin.Width);
             pin.Show();
+            Size shownWindowSize = new(pin.Width, pin.Height);
             pin.SimulateDpiChangeForTest(1.25);
             Image image = Assert.IsType<Image>(Assert.IsType<Grid>(pin.Content).Children[0]);
             Assert.Equal(Stretch.None, image.Stretch);
@@ -228,7 +231,8 @@ public sealed class PinDpiTests : KoreanCaptionTest
             Assert.Equal(VerticalAlignment.Top, image.VerticalAlignment);
             Assert.True(pin.PinnedContent.Image.Width > state.ImageWidthDip);
             Assert.Equal(1, Assert.IsType<ScaleTransform>(image.LayoutTransform).ScaleX);
-            Assert.Equal(content.LayoutWidthDip, pin.Width);
+            Assert.Equal(shownWindowSize, new Size(pin.Width, pin.Height));
+            Assert.Equal(content.LayoutWidthDip, state.WidthDip);
 
             state.SetZoom(zoom);
             pin.Width = state.WidthDip;

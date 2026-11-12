@@ -25,6 +25,7 @@ public partial class App
 {
     private TextCaptureService? _textCapture;
     private CancellationTokenSource? _textCaptureCancellation;
+    private CaptureGuideWriteScheduler? _captureGuideWrites;
 
     private void InitializeTextCapture()
     {
@@ -45,13 +46,18 @@ public partial class App
         _overlay.ReadColorFormat = () => _settings?.Capture.ColorFormat ?? MyCapture.Core.Settings.ColorFormat.Hex;
         _overlay.TextCaptureRequested = OnTextCaptureSelected;
         ServiceProvider services = _services;
+        _captureGuideWrites = new CaptureGuideWriteScheduler(
+            () => _overlay?.IsSelecting == true || _recorder?.IsSelecting == true,
+            write => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
+            legacyGuideWrite: s_residentProbe?.Has("legacy-guide-write") == true);
         var startGuide = new CaptureStartGuideBookkeeping(
             () => _settings,
             settings => services.GetRequiredService<SettingsStore>().Save(settings),
-            write => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
+            _captureGuideWrites.Schedule,
             services.GetRequiredService<ILogger<CaptureOverlayCoordinator>>());
         _overlay.ClaimStartGuide = startGuide.Claim;
         _overlay.ClaimKeyPanel = startGuide.ClaimKeyPanel;
+        _overlay.SelectorClosed += _captureGuideWrites.NotifySelectorClosed;
         _overlay.ReadPasteToScreenHotkey = () => _settings?.Hotkeys.PasteToScreen ?? MyCapture.Core.Settings.Hotkey.None;
         if (_tray is not null) _tray.CaptureTextRequested += (_, _) => HandleCaptureTextRequested();
     }
@@ -135,6 +141,7 @@ public partial class App
         }
 
         if (outcome.Status == TextCaptureStatus.Cancelled || Dispatcher.HasShutdownStarted) return;
+        RecordStoreRatingTextCopy(outcome.Status);
         ShowTextCaptureOutcome(outcome, image, context);
     }
 

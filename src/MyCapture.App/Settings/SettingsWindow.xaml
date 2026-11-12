@@ -277,27 +277,39 @@
                                           FocusVisualStyle="{x:Null}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="Chrome"
-                                                Background="Transparent"
-                                                BorderBrush="Transparent"
-                                                BorderThickness="1"
-                                                CornerRadius="{DynamicResource Radius.Md}"
-                                                Padding="{TemplateBinding Padding}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <themes:SymbolIcon Size="16" x:Name="Chevron"
-                                                      Data="{StaticResource Icon.ChevronDown}"
-                                                      Stroke="{DynamicResource Text.Secondary}"
-                                                      VerticalAlignment="Center"
-                                                      RenderTransformOrigin="0.5,0.5">
-                                                    <themes:SymbolIcon.RenderTransform>
-                                                        <RotateTransform Angle="-90" />
-                                                    </themes:SymbolIcon.RenderTransform>
-                                                </themes:SymbolIcon>
-                                                <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"
-                                                                  TextElement.FontSize="{StaticResource FontSize.Subtitle}"
-                                                                  TextElement.FontWeight="Bold" />
-                                            </StackPanel>
-                                        </Border>
+                                        <Grid>
+                                            <Border x:Name="Chrome"
+                                                    Background="Transparent"
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{DynamicResource Radius.Md}"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <themes:SymbolIcon Size="16" x:Name="Chevron"
+                                                          Data="{StaticResource Icon.ChevronDown}"
+                                                          Stroke="{DynamicResource Text.Secondary}"
+                                                          VerticalAlignment="Center"
+                                                          RenderTransformOrigin="0.5,0.5">
+                                                        <themes:SymbolIcon.RenderTransform>
+                                                            <RotateTransform Angle="-90" />
+                                                        </themes:SymbolIcon.RenderTransform>
+                                                    </themes:SymbolIcon>
+                                                    <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                      TextElement.FontSize="{StaticResource FontSize.Subtitle}"
+                                                                      TextElement.FontWeight="Bold" />
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- The shared buttons' inset focus ring, as on the controls inside the
+                                                 section: no layout impact, toggled by opacity. The category tabs
+                                                 keep their own 1 px focus outline. -->
+                                            <Border x:Name="FocusRing"
+                                                    Margin="1"
+                                                    BorderBrush="{DynamicResource Border.Focus}"
+                                                    BorderThickness="{DynamicResource Focus.RingThickness}"
+                                                    CornerRadius="{DynamicResource Radius.Sm}"
+                                                    IsHitTestVisible="False"
+                                                    Opacity="0" />
+                                        </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="Chevron" Property="RenderTransform">
@@ -312,6 +324,7 @@
                                             </Trigger>
                                             <Trigger Property="IsKeyboardFocused" Value="True">
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -510,6 +523,18 @@
                                                   ContentSource="SelectedContent"
                                                   Margin="24,18,18,18" /></AdornerDecorator>
                             </Border>
+                            <!-- With no matching category the card above would be blank: the same state in
+                                 its centre (the card's 16 offset plus 24 on every side). The query has a
+                                 line of its own, so no particle has to follow what the user typed. -->
+                            <StackPanel x:Name="SettingsSearchNoMatch" Grid.Column="1" Visibility="Collapsed" MaxWidth="360"
+                                        Margin="40,24,24,24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Text Settings_SearchNoMatch}" Foreground="{DynamicResource Text.Primary}"
+                                           FontSize="{StaticResource FontSize.BodyLarge}" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" TextAlignment="Center" />
+                                <TextBlock x:Name="SettingsSearchNoMatchQuery" Style="{StaticResource Settings.Description}"
+                                           Margin="0,6,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           TextAlignment="Center" />
+                            </StackPanel>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -533,13 +558,15 @@
         <Style x:Key="About.Heading" TargetType="TextBlock" BasedOn="{StaticResource Settings.GroupHeading}">
             <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
-        <Style x:Key="About.Body" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
-            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
+        <!-- The privacy statements read as the tab's other descriptions: same size, colour and
+             weight. Only the gap between statements is wider than under a label. -->
+        <Style x:Key="About.Body" TargetType="TextBlock" BasedOn="{StaticResource Settings.Description}">
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
 
+        <!-- A guide button centres on the line it explains, not on its row's spacing below: beside a
+             checkbox or list it takes that control's vertical margins (0,0,0,6 or 0,4,0,8), and a label
+             beside it is centred without its own 2 below. SettingsField rows pin it to the top. -->
         <Style x:Key="Settings.GuideButton" TargetType="Button" BasedOn="{StaticResource Button.Compact}">
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -587,7 +614,7 @@
                                 <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.QuickAccess}" Content="{loc:Text Capture.AfterCard}" />
                                 <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.ClipboardOnly}" Content="{loc:Text Capture.AfterClipboard}" />
                             </ComboBox>
-                            <Button Grid.Column="1" Tag="G01" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,4,0,8" Grid.Column="1" Tag="G01" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -617,7 +644,7 @@
                             Content="{loc:Text Text_B9D242426446}"
                             AutomationProperties.Name="{loc:Text Text_B9D242426446}"
                             IsChecked="{Binding ShowMagnifier}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -631,7 +658,7 @@
                             Content="{loc:Text Settings.ShowSelectionGrid}"
                             AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
                             IsChecked="{Binding ShowSelectionGrid}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -645,7 +672,7 @@
                             Content="{loc:Text WindowDetect_Setting}"
                             AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
                             IsChecked="{Binding AutoDetectWindows}" />
-                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -658,7 +685,8 @@
                                     <ComboBoxItem Tag="theme" Content="{loc:Text Capture410.GuideColorTheme}" />
                                     <ComboBoxItem Tag="custom" Content="{loc:Text Capture410.GuideColorCustom}" />
                                 </ComboBox>
-                                <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="10,0,0,0" CornerRadius="4"
+                                <!-- The combo box's corner radius and the 8 spacing step beside it. -->
+                                <Border x:Name="CaptureGuideColorSwatch" Width="32" Height="32" Margin="8,0,0,0" CornerRadius="{DynamicResource Radius.Sm}"
                                         Background="{DynamicResource CaptureGuide.SelectionBorder}" BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
                                         AutomationProperties.Name="{loc:Text Capture410.GuideColorSwatch}" />
                             </StackPanel>
@@ -692,7 +720,7 @@
                                     Content="{loc:Text Settings.AlwaysShowKeyPanel}"
                                     AutomationProperties.Name="{loc:Text Settings.AlwaysShowKeyPanel}"
                                     IsChecked="{Binding AlwaysShowKeyPanel}" />
-                                    <Button Grid.Column="1" Tag="G03" Content="{loc:Text SettingsStructure_Guide}"
+                                    <Button Margin="12,0,0,6" Grid.Column="1" Tag="G03" Content="{loc:Text SettingsStructure_Guide}"
                                     AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                                 </Grid>
@@ -765,7 +793,7 @@
                             Content="{loc:Text Text_F0CFD62F0971}"
                             AutomationProperties.Name="{loc:Text Text_F0CFD62F0971}"
                             IsChecked="{Binding RecordingIncludeCursor}" />
-                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -779,7 +807,7 @@
                             Content="{loc:Text Recording_CursorHighlight}"
                             AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
                             IsChecked="{Binding RecordingCursorHighlight}" />
-                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -790,7 +818,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
                             <Button Grid.Column="1" Tag="G04" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -849,24 +877,27 @@
                                   Header="{loc:Text SettingsStructure_RecordingCompatibility}" AutomationProperties.Name="{loc:Text SettingsStructure_RecordingCompatibility}">
                             <StackPanel>
                                 <StackPanel Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
-                                                                    <Grid Margin="0,0,0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
-                                    <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}"
-                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
-                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
-                                </Grid>
-                                                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
-                                                                    <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
-                                                                              AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
-                                                                              AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
-                                                                              MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
-                                                                        <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
-                                                                        <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
-                                                                    </ComboBox>
+                                    <!-- The fold's title names the choice, so no label repeats it. The list and its guide
+                                         share one row, as the capture page's "After capture" list does, with the same
+                                         minimum width: 320 passed the list's column in the compact English window and
+                                         ran under the guide button. -->
+                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
+                                                  AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
+                                                  AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
+                                                  MinWidth="250" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                            <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
+                                            <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
+                                        </ComboBox>
+                                        <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}" Margin="12,4,0,0"
+                                        AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                        Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                    </Grid>
                                                                     <!-- Windows 10 has no borderless capture API, so the automatic method shows the
                                                                          system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
                                                                     <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
@@ -892,27 +923,38 @@
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Settings_FontName}" Note="{loc:Text Settings_FontScope}">
-                            <StackPanel>
-                            <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
-                                      SelectedValuePath="Value"
-                                      IsTextSearchEnabled="True" TextSearch.TextPath="Label"
-                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                      ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
-                                      AutomationProperties.Name="{loc:Text Settings_FontName}"
-                                      IsVisibleChanged="OnFontFamilyBoxShown" DropDownOpened="OnFontFamilyBoxLoaded"
-                                      SelectionChanged="OnFontFamilyChanged">
-                                <ComboBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <VirtualizingStackPanel />
-                                    </ItemsPanelTemplate>
-                                </ComboBox.ItemsPanel>
-                            </ComboBox>
-                            <Button x:Name="DefaultFontButton" Content="{loc:Text Settings_DefaultFont}"
-                                    Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnDefaultFontClick"
-                                    AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
-                            </StackPanel>
-                        </settings:SettingsField>
+                        <!-- The label names the font list, so the list alone takes the field's line;
+                             the reset button stands under it in the input column and the note under
+                             both. With the button inside the field the label centred between the two,
+                             18 below the list's line. -->
+                        <StackPanel Margin="0,0,0,12">
+                            <settings:SettingsField Header="{loc:Text Settings_FontName}" Margin="0">
+                                <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
+                                          SelectedValuePath="Value"
+                                          IsTextSearchEnabled="True" TextSearch.TextPath="Label"
+                                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                          ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
+                                          AutomationProperties.Name="{loc:Text Settings_FontName}"
+                                          IsVisibleChanged="OnFontFamilyBoxShown" DropDownOpened="OnFontFamilyBoxLoaded"
+                                          SelectionChanged="OnFontFamilyChanged">
+                                    <ComboBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ComboBox.ItemsPanel>
+                                </ComboBox>
+                            </settings:SettingsField>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="SettingsFieldLabel" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="DefaultFontButton" Grid.Column="1" Content="{loc:Text Settings_DefaultFont}"
+                                        HorizontalAlignment="Left" Click="OnDefaultFontClick"
+                                        AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0" Text="{loc:Text Settings_FontScope}" />
+                        </StackPanel>
 
                         <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsRange_FontSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
@@ -983,7 +1025,7 @@
                             AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
                             AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
                             IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
-                            <Button Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -995,6 +1037,11 @@
                         Content="{loc:Text Text_F0C27AB1BA08}"
                         AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                         IsChecked="{Binding CloseOnDoubleClick}" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                        Content="{loc:Text Pin_SnapWhileDragging}"
+                        AutomationProperties.Name="{loc:Text Pin_SnapWhileDragging}"
+                        IsChecked="{Binding SnapWhileDragging}" />
 
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
@@ -1030,6 +1077,15 @@
                                 </Grid>
                             </StackPanel>
                         </Expander>
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}" Margin="0,12,0,6"
+                        Content="{loc:Text Pin_LightweightLabel}"
+                        AutomationProperties.Name="{loc:Text Pin_LightweightLabel}"
+                        AutomationProperties.HelpText="{loc:Text Pin_LightweightDescription}"
+                        IsChecked="{Binding LightweightImagePins}" />
+
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                        Text="{loc:Text Pin_LightweightDescription}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -1045,7 +1101,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
                             <Button Grid.Column="1" Tag="G09" Content="{loc:Text SettingsStructure_Compare}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Compare}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1107,7 +1163,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
                             <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1145,7 +1201,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
                             <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
@@ -1270,7 +1326,7 @@
                                     Content="{loc:Text Settings.ShowSourceWindowTitle}"
                                     AutomationProperties.Name="{loc:Text Settings.ShowSourceWindowTitle}"
                                     IsChecked="{Binding ShowSourceWindowTitle}" />
-                                    <Button Grid.Column="1" Tag="G13" Content="{loc:Text SettingsStructure_Guide}"
+                                    <Button Margin="12,0,0,6" Grid.Column="1" Tag="G13" Content="{loc:Text SettingsStructure_Guide}"
                                     AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                                 </Grid>
@@ -1353,7 +1409,7 @@
                             AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
                             AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
                             IsChecked="{Binding AlwaysShowShortcutHints}" />
-                            <Button Grid.Column="1" Tag="G10" Content="{loc:Text SettingsStructure_Guide}"
+                            <Button Margin="12,0,0,6" Grid.Column="1" Tag="G10" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                         </Grid>
@@ -1448,7 +1504,7 @@
                                     <DockPanel LastChildFill="True" HorizontalAlignment="Left">
                                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                     </DockPanel>
-                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="Ctrl+Shift+Z" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                                 </StackPanel>
 
                                 <StackPanel Style="{StaticResource Settings.Field}">
@@ -1462,7 +1518,7 @@
                                     <DockPanel LastChildFill="True" HorizontalAlignment="Left">
                                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
                                     </DockPanel>
-                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="Ctrl+Shift+F3" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                                 </StackPanel>
 
                                 <StackPanel Style="{StaticResource Settings.Field}">
@@ -1571,7 +1627,9 @@
                             <TextBlock x:Name="UpdateDescription" Style="{StaticResource Settings.Description}" />
                         </StackPanel>
 
+                        <!-- Its own section: at the end of updates the guide read as an update feature. -->
                         <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_HelpHeading}" />
                             <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
                                     AutomationProperties.Name="{loc:Text Onboarding.Replay}"
                                     Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"

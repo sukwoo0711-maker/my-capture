@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
@@ -24,22 +25,83 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOverlayCoordinatorTests
 {
-    [Fact]
-    public void PinConfirmationPersistsBeforeEndingWithoutOpeningEditor() => RunSta(() =>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void GuideWriteWaitsForHiddenAndVisibleSelectorButNotForPersistence(bool native, bool confirm) => RunSta(() =>
     {
-        using var coordinator = Coordinator(_ => Frame());
+        using var releaseFrame = new ManualResetEventSlim();
+        using var coordinator = Coordinator(_ => { releaseFrame.Wait(TimeSpan.FromSeconds(8)); return Frame(); });
+        coordinator.UseNativeDibSelector = native;
         coordinator.ReadWindowSources = null;
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
-        CaptureOverlayWindow? selector = null;
-        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; return true; };
+        coordinator.ApplyCaptureExclusion = _ => true;
+        var pending = new Queue<Action>();
+        int saves = 0;
+        var settings = new AppSettings();
+        var scheduler = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pending.Enqueue);
+        var bookkeeping = new CaptureStartGuideBookkeeping(() => settings, _ => saves++, scheduler.Schedule, NullLogger.Instance);
+        coordinator.ClaimStartGuide = bookkeeping.Claim;
+        coordinator.ClaimKeyPanel = bookkeeping.ClaimKeyPanel;
+        coordinator.SelectorClosed += scheduler.NotifySelectorClosed;
+        var persisted = new TaskCompletionSource();
+        coordinator.SelectionPersistRequested = _ => persisted.Task;
+        coordinator.OpenEditorAfterCapture = () => false;
+        try
+        {
+            coordinator.Start(false, false, false);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Equal(1, settings.Capture.StartGuideShownCount);
+            Assert.Empty(pending);
+            Assert.Equal(0, saves);
+            releaseFrame.Set();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pending);
+            if (confirm)
+            {
+                new CoordinatorSelector(coordinator, native).SelectAll();
+                coordinator.ConfirmSelectionAsPin();
+                Assert.True(coordinator.IsActive); // Persistence continues after the selector closes.
+            }
+            else coordinator.Cancel();
+            Assert.False(coordinator.IsSelecting);
+            Assert.Single(pending);
+            Assert.Equal(0, saves);
+            pending.Dequeue()();
+            Assert.Equal(1, saves);
+            persisted.SetResult();
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.Empty(pending);
+        }
+        finally
+        {
+            releaseFrame.Set();
+            persisted.TrySetResult();
+            coordinator.Cancel();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted && coordinator.LastTransitionForTest.IsCompleted);
+        }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PinConfirmationPersistsBeforeEndingWithoutOpeningEditor(bool native) => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.UseNativeDibSelector = native;
+        coordinator.ReadWindowSources = null;
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ApplyCaptureExclusion = _ => true;
         var saved = new TaskCompletionSource();
         CaptureSelectionCompletedEventArgs? selection = null;
         coordinator.SelectionPersistRequested = value => { selection = value; return saved.Task; };
         coordinator.OpenEditorAfterCapture = () => throw new InvalidOperationException("Pin must bypass editor presentation.");
         coordinator.Start(false, false, false);
         PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
-        var view = Assert.IsType<CaptureOverlayView>(selector!.Content);
-        view.HandleKeyDown(WindowDetectOverlayTests.KeyArgs(System.Windows.Input.Key.A), System.Windows.Input.ModifierKeys.Control);
+        new CoordinatorSelector(coordinator, native).SelectAll();
         coordinator.ConfirmSelectionAsPin();
         Assert.NotNull(selection);
         Assert.True(selection.PinRequested);
@@ -70,13 +132,11 @@ public sealed class CaptureOverlayCoordinatorTests
         Window existing = OpenPreservedWindow(surface);
         int normalWrites = 0, separateWrites = 0, afterCaptureReads = 0, ended = 0, started = 0;
         var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        CaptureOverlayWindow? selector = null;
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = surface == "library"
             ? _ => Task.FromResult<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>(new Dictionary<IntPtr, WindowSourceSnapshot>())
             : null;
-        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; return true; };
         coordinator.SelectionPersistRequested = _ => { normalWrites++; return Task.CompletedTask; };
         // App wires this path to durable separate persistence, its usual clipboard copy and a
         // forced quick-access receipt. It must win over both normal after-capture preferences.
@@ -98,7 +158,7 @@ public sealed class CaptureOverlayCoordinatorTests
             {
                 coordinator.Start(false, false, false, preserveEditor: true);
                 PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
-                Assert.True(Assert.IsType<CaptureOverlayView>(selector!.Content).CaptureFullScreen());
+                Assert.True(new CoordinatorSelector(coordinator, native: true).CaptureFullScreen());
             }
             Assert.True(existing.IsVisible);
             Assert.Null(coordinator.CurrentEditor);
@@ -242,8 +302,6 @@ public sealed class CaptureOverlayCoordinatorTests
         using var coordinator = Coordinator(_ => Frame());
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = null;
-        CaptureOverlayWindow? selector = null;
-        coordinator.ApplyCaptureExclusion = window => { if (window is CaptureOverlayWindow overlay) selector = overlay; return true; };
         int persisted = 0, recognised = 0;
         coordinator.EditorScreenCaptureRequested = _ => { persisted++; return Task.CompletedTask; };
         coordinator.TextCaptureRequested = selection => { Assert.True(selection.TextCapture); recognised++; };
@@ -253,8 +311,9 @@ public sealed class CaptureOverlayCoordinatorTests
         var editor = (AnnotationEditorWindow)Window.GetWindow(original);
         coordinator.Start(false, false, false, textCapture: true, preserveEditor: true);
         PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
-        Assert.True(selector!.TextCaptureMode);
-        Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
+        var selector = new CoordinatorSelector(coordinator, native: true);
+        Assert.True(selector.TextCaptureMode);
+        Assert.True(selector.CaptureFullScreen());
         PumpUntil(() => coordinator.CanRetake);
         Assert.Equal(1, recognised);
         Assert.Equal(0, persisted);
@@ -263,15 +322,17 @@ public sealed class CaptureOverlayCoordinatorTests
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void CaptureOverEditorPreservesTheEditorAndUsesSeparatePersistence(bool cancel) => RunSta(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void CaptureOverEditorPreservesTheEditorAndUsesSeparatePersistence(bool cancel, bool native) => RunSta(() =>
     {
         using var coordinator = Coordinator(_ => Frame());
+        coordinator.UseNativeDibSelector = native;
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = null;
-        CaptureOverlayWindow? selector = null;
-        coordinator.ApplyCaptureExclusion = window => { if (window is CaptureOverlayWindow overlay) selector = overlay; return true; };
+        coordinator.ApplyCaptureExclusion = _ => true;
         int originalWrites = 0, screenshotWrites = 0, originalClosed = 0;
         coordinator.SelectionPersistRequested = _ => { originalWrites++; return Task.CompletedTask; };
         coordinator.EditorScreenCaptureRequested = _ => { screenshotWrites++; return Task.CompletedTask; };
@@ -285,25 +346,40 @@ public sealed class CaptureOverlayCoordinatorTests
         EditorKeysTests.Invoke(original, "CommitActiveText");
         Assert.Single(original.CreateCurrentImageSnapshot().Items);
         window.ConfirmClose = () => throw new InvalidOperationException("Capture must not ask to discard the editor.");
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         try
         {
             coordinator.Start(false, false, false, preserveEditor: true);
             PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            var selector = new CoordinatorSelector(coordinator, native);
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             Assert.NotNull(selector);
             Assert.Same(original, coordinator.CurrentEditor);
             Assert.True(window.IsVisible);
             Assert.Equal(CaptureBlock.Selecting, CaptureGuard.Find(coordinator.WithSession(new()), false));
+            selector.SelectAll();
             coordinator.ConfirmSelectionAsPin();
             Assert.Equal(0, screenshotWrites);
             Assert.True(selector!.IsVisible);
             if (cancel) coordinator.Cancel();
-            else Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
+            else Assert.True(selector.CaptureFullScreen());
             PumpUntil(() => coordinator.CanRetake);
             Assert.Same(original, coordinator.CurrentEditor);
             Assert.True(window.IsVisible);
             Assert.Equal(1, originalWrites);
             Assert.Equal(cancel ? 0 : 1, screenshotWrites);
             Assert.Equal(0, originalClosed);
+            Assert.False(coordinator.IsSelecting);
+            Assert.True(coordinator.IsActive); // The parent editor stays open after the nested selector.
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            pendingGuideWrites.Clear();
+            Assert.Equal(1, guideSaves);
             Assert.Single(original.CreateCurrentImageSnapshot().Items);
             Assert.True(original.HasUnsavedChanges);
         }
@@ -327,6 +403,9 @@ public sealed class CaptureOverlayCoordinatorTests
             NullLogger<CaptureOverlayCoordinator>.Instance,
             _ => WindowDetectOverlayTests.Frame(),
             () => new RectD(0, 0, 640, 360));
+        // This case exercises WPF's queued drag confirmation and routed key event specifically.
+        coordinator.UseNativeDibSelector = ResidentProbeOptions.UsesNativeSelector(
+            ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf"]));
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = null;
@@ -377,7 +456,7 @@ public sealed class CaptureOverlayCoordinatorTests
     [InlineData(false)]
     public void ColorCopyEndsOnlyOnSuccessAndNeverRecordsACapture(bool succeeds) => RunSta(() =>
     {
-        CaptureOverlayWindow? overlay = null;
+        CoordinatorSelector? overlay = null;
         int closed = 0;
         int persisted = 0;
         int edited = 0;
@@ -386,7 +465,7 @@ public sealed class CaptureOverlayCoordinatorTests
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             new Dictionary<IntPtr, BrowserDocumentSnapshot>());
         coordinator.ReadWindowSources = null;
-        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        ObservePreparation(coordinator, selector => { overlay = selector; return true; });
         coordinator.CopyColorText = _ => Task.FromResult(succeeds);
         coordinator.SelectionPersistRequested = _ => { persisted++; return Task.CompletedTask; };
         coordinator.EditingCompleted += (_, _) => edited++;
@@ -402,10 +481,8 @@ public sealed class CaptureOverlayCoordinatorTests
         coordinator.Start(false, false, true);
         PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
         Assert.NotNull(overlay);
-        var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
-        view.ReadCursor = () => new PointD(5, 5);
-        view.InitializePointer();
-        Task<string?> copy = view.CopyColorAtPointerAsync();
+        overlay.SetPointer(() => new PointD(5, 5));
+        Task<string?> copy = overlay.CopyColorAtPointerAsync();
         PumpUntil(() => copy.IsCompleted);
         Assert.True(copy.IsCompletedSuccessfully);
         Assert.Equal(succeeds ? "#7A7A7A" : null, copy.Result);
@@ -423,7 +500,7 @@ public sealed class CaptureOverlayCoordinatorTests
         else
         {
             Assert.Null(feedback);
-            Assert.Equal(MyCapture.Core.Localization.UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
+            Assert.Equal(MyCapture.Core.Localization.UiText.Get("ColorPick_CopyFailed"), overlay.ToastMessage);
         }
     });
 
@@ -451,7 +528,7 @@ public sealed class CaptureOverlayCoordinatorTests
         int calls = 0;
         int closed = 0;
         int windows = 0;
-        System.Windows.Window? pendingOverlay = null;
+        CoordinatorSelector? pendingOverlay = null;
         using var coordinator = Coordinator(includeCursor =>
         {
             Assert.NotEqual(ownerThread, Environment.CurrentManagedThreadId);
@@ -461,15 +538,21 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
             return Frame();
         });
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         coordinator.OverlayClosed += (_, _) => { Assert.Equal(ownerThread, Environment.CurrentManagedThreadId); closed++; };
         coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { windows++; pendingOverlay = window; return true; };
+        ObservePreparation(coordinator, selector => { windows++; pendingOverlay = selector; return true; });
         try
         {
             // Native WM_HOTKEY does not guarantee a WPF synchronization context.
             SynchronizationContext.SetSynchronizationContext(null);
             coordinator.Start(true, false, false);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.Empty(pendingGuideWrites);
             Assert.True(coordinator.IsActive);
             Assert.Equal(1, windows);
             Assert.NotNull(pendingOverlay);
@@ -485,6 +568,8 @@ public sealed class CaptureOverlayCoordinatorTests
             coordinator.Start(false, true, true);
             Assert.Equal(1, calls);
             Assert.Equal(0, closed);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
         }
         finally
         {
@@ -495,6 +580,10 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.False(coordinator.IsActive);
         Assert.Equal(1, windows);
         Assert.Equal(1, closed);
+        Assert.False(coordinator.IsSelecting);
+        Assert.Equal(0, guideSaves);
+        Assert.Single(pendingGuideWrites).Invoke();
+        Assert.Equal(1, guideSaves);
     });
 
     [Fact]
@@ -504,7 +593,7 @@ public sealed class CaptureOverlayCoordinatorTests
         int calls = 0;
         int failures = 0;
         int closed = 0;
-        System.Windows.Window? shown = null;
+        CoordinatorSelector? shown = null;
         using var coordinator = Coordinator(_ =>
         {
             if (Interlocked.Increment(ref calls) == 1) throw new IOException("synthetic acquisition failure");
@@ -518,13 +607,13 @@ public sealed class CaptureOverlayCoordinatorTests
         };
         coordinator.OverlayClosed += (_, _) => closed++;
         coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window =>
+        ObservePreparation(coordinator, selector =>
         {
             Assert.Equal(ownerThread, Environment.CurrentManagedThreadId);
-            Assert.False(window.IsVisible);
-            shown = window;
+            Assert.False(selector.IsVisible);
+            shown = selector;
             return true;
-        };
+        });
         SynchronizationContext.SetSynchronizationContext(null);
         coordinator.Start(false, false, false);
         PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
@@ -560,7 +649,7 @@ public sealed class CaptureOverlayCoordinatorTests
             return Frame();
         });
         coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = _ => { windows++; return true; };
+        ObservePreparation(coordinator, _ => { windows++; return true; });
         coordinator.TransitionFailed += _ => failures++;
         coordinator.Start(false, false, false);
         Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
@@ -582,7 +671,7 @@ public sealed class CaptureOverlayCoordinatorTests
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
         bool requiresExclusion = false;
-        System.Windows.Window? rejected = null;
+        CoordinatorSelector? rejected = null;
         int failures = 0;
         int closed = 0;
         using var coordinator = Coordinator(_ =>
@@ -592,7 +681,7 @@ public sealed class CaptureOverlayCoordinatorTests
             return Frame();
         });
         coordinator.RequiresCaptureExclusion = () => requiresExclusion;
-        coordinator.ApplyCaptureExclusion = window => { rejected = window; Assert.False(window.IsVisible); return false; };
+        ObservePreparation(coordinator, selector => { rejected = selector; Assert.False(selector.IsVisible); return false; }, requireNative: false);
         coordinator.TransitionFailed += _ => failures++;
         coordinator.OverlayClosed += (_, _) => closed++;
         coordinator.Start(false, false, false);
@@ -619,11 +708,11 @@ public sealed class CaptureOverlayCoordinatorTests
         var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
         int reads = 0;
         IReadOnlyList<WindowCandidate> asked = [];
-        CaptureOverlayWindow? overlay = null;
+        CoordinatorSelector? overlay = null;
         CaptureSelectionCompletedEventArgs? persisted = null;
         using var coordinator = Coordinator(_ => { events.Enqueue("pixels"); return Frame(); });
         coordinator.ReadWindowSources = null;
-        coordinator.ApplyCaptureExclusion = window => { events.Enqueue("selector built"); overlay = (CaptureOverlayWindow)window; return true; };
+        ObservePreparation(coordinator, selector => { events.Enqueue("selector built"); overlay = selector; return true; });
         coordinator.OpenEditorAfterCapture = () => false;
         coordinator.SelectionPersistRequested = selection => { persisted = selection; return Task.CompletedTask; };
         coordinator.ReadPageUrls = candidates =>
@@ -641,7 +730,7 @@ public sealed class CaptureOverlayCoordinatorTests
         PumpUntil(() => overlay?.IsVisible == true);
         Assert.Equal(1, reads); // Shown while the first read is still walking.
         Assert.True(coordinator.LastPreparationForTest.IsCompletedSuccessfully);
-        Assert.True(overlay!.SourceDetailsPendingForTest);
+        Assert.True(overlay!.SourceDetailsPending);
         Assert.False(coordinator.LastSourceDetailsForTest.IsCompleted);
 
         overlay.CompleteSelection(new RectD(4, 4, 16, 10));
@@ -672,11 +761,11 @@ public sealed class CaptureOverlayCoordinatorTests
         var confirming = new TaskCompletionSource<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         int reads = 0, acquisitions = 0;
-        CaptureOverlayWindow? overlay = null;
+        CoordinatorSelector? overlay = null;
         using var coordinator = Coordinator(_ => { Interlocked.Increment(ref acquisitions); return Frame(); });
         coordinator.ReadWindowSources = null;
         coordinator.TextCaptureRequested = _ => { };
-        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        ObservePreparation(coordinator, selector => { overlay = selector; return true; });
         coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) > 1
             ? confirming.Task
             : Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(candidates.ToDictionary(
@@ -709,10 +798,10 @@ public sealed class CaptureOverlayCoordinatorTests
         int reads = 0;
         int closed = 0;
         int acquisitions = 0;
-        CaptureOverlayWindow? overlay = null;
+        CoordinatorSelector? overlay = null;
         using var coordinator = Coordinator(_ => { Interlocked.Increment(ref acquisitions); return Frame(); });
         coordinator.ReadWindowSources = null;
-        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        ObservePreparation(coordinator, selector => { overlay = selector; return true; });
         coordinator.OverlayClosed += (_, _) => closed++;
         coordinator.ReadPageUrls = candidates => Interlocked.Increment(ref reads) == 2
             ? confirming.Task
@@ -728,7 +817,7 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.False(coordinator.IsActive);
 
         // The reader itself serializes native probes (waiting within its deadline); the capture does not.
-        CaptureOverlayWindow first = overlay;
+        CoordinatorSelector first = overlay;
         coordinator.Start(false, false, false);
         PumpUntil(() => overlay is { IsVisible: true } next && !ReferenceEquals(next, first));
         Assert.Equal(2, acquisitions);
@@ -795,6 +884,13 @@ public sealed class CaptureOverlayCoordinatorTests
         acquire,
         static () => new RectD(0, 0, 32, 20),
         static bounds => [new WindowCandidate(new IntPtr(1), bounds, "Synthetic browser", ProcessId: 42)]);
+
+    private static void ObservePreparation(CaptureOverlayCoordinator coordinator,
+        Func<CoordinatorSelector, bool> inspect, bool requireNative = true)
+    {
+        coordinator.ApplyCaptureExclusion = _ => inspect(new CoordinatorSelector(coordinator, requireNative ? true : null));
+        coordinator.ApplyNativeCaptureExclusion = _ => inspect(new CoordinatorSelector(coordinator, native: true));
+    }
 
     private static FrozenFrame Frame() => new(Solid(32, 20), new RectD(0, 0, 32, 20), null, 0);
 

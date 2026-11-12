@@ -130,7 +130,7 @@ internal static class ClipboardCodeRenderer
         var visual = new DrawingVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            drawing.DrawRectangle(ColorBrush(document.Background), null, new Rect(0, 0, width, height));
+            drawing.DrawRectangle(ColorBrush(document.Background), null, ClipboardTextRenderer.PixelBounds(width, height, scale));
             drawing.DrawText(formatted, new Point(HorizontalPaddingDip, VerticalPaddingDip));
         }
         return ClipboardTextRenderer.RenderFrozen(visual, width, height, scale);

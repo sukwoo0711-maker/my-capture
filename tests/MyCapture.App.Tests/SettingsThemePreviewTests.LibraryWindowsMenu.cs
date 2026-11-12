@@ -266,8 +266,9 @@ public sealed partial class SettingsThemePreviewTests
     {
         string root = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_MENU_EVIDENCE")!);
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_MENU_PHASE") ?? "after";
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth * 2),
-            (int)Math.Ceiling(element.ActualHeight * 2), 192, 192, PixelFormats.Pbgra32);
+        Size size = element is ContextMenu ? PopupSnapshot.ExtentOf(element) : element.RenderSize;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width * 2),
+            (int)Math.Ceiling(size.Height * 2), 192, 192, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

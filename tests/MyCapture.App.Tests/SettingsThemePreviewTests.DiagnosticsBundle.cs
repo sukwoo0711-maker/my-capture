@@ -25,8 +25,18 @@ public sealed partial class SettingsThemePreviewTests
     {
         Application application = CreateThemedApplication();
         string root = OwnedTestDirectory.Create("mc-settings-diagnostics-bundle-");
+        UnexpectedExitLog? previousExits = ErrorReporting.Exits;
         try
         {
+            // A support request from Settings carries the unexpected-exit records too.
+            var exits = new UnexpectedExitLog(Path.Combine(root, "unexpected-exits"), path =>
+            {
+                Directory.CreateDirectory(Path.Combine(root, "trash"));
+                File.Move(path, Path.Combine(root, "trash", Path.GetFileName(path)));
+            });
+            Assert.True(exits.TryWrite(ErrorReportTests.Record(ErrorReportTests.CaptureFailure())));
+            ErrorReporting.Exits = exits;
+            string exitEntry = "unexpected-exits/" + Assert.Single(exits.SafeEntries()).Name;
             foreach (string locale in new[] { "ko-KR", "en-US" })
             {
                 using var language = UiText.UseLanguage(locale);
@@ -65,7 +75,8 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(UiText.Get("About_DiagnosticsBundleSaved"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
                     using ZipArchive zip = ZipFile.OpenRead(bundle);
-                    Assert.Equal(["support.txt", "logs/mycapture.log"], zip.Entries.Select(entry => entry.FullName));
+                    Assert.Equal(["support.txt", "logs/mycapture.log", exitEntry], zip.Entries.Select(entry => entry.FullName));
+                    Assert.StartsWith(UnexpectedExitLog.Header, ReadEntry(zip, exitEntry), StringComparison.Ordinal);
                     string summary = ReadEntry(zip, "support.txt");
                     Assert.Contains("Windows:", summary, StringComparison.Ordinal);
                     Assert.Contains("Errors:", summary, StringComparison.Ordinal);
@@ -82,6 +93,7 @@ public sealed partial class SettingsThemePreviewTests
         }
         finally
         {
+            ErrorReporting.Exits = previousExits;
             application.Shutdown();
             OwnedTestDirectory.Delete(root);
         }

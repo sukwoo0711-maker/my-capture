@@ -75,8 +75,16 @@ public sealed class CompactCommandFaceClipTests
             VisualTreeHelper.SetRootDpi(host, new DpiScale(scale, scale));
             Layout(host);
 
-            ButtonBase[] buttons = QuickAccessDetachedFixture.Descendants(host).OfType<ButtonBase>().ToArray();
-            Assert.Equal(21, buttons.Length); // Thirteen capture commands and eight receipt commands.
+            ButtonBase[] all = QuickAccessDetachedFixture.Descendants(host).OfType<ButtonBase>().ToArray();
+            // The card's Store rating row (QuickAccessWindow.StoreRating) holds Review and Close: ordinary
+            // secondary buttons, collapsed until an invitation is offered, not compact command faces.
+            // Every other button on the bar and the card is one.
+            ButtonBase[] rating = all.Where(button => AutomationProperties.GetAutomationId(button)
+                is "QuickAccess.RatingReview" or "QuickAccess.RatingClose").ToArray();
+            Assert.Equal(2, rating.Length);
+            Assert.All(rating, button => Assert.Equal(0, button.ActualHeight));
+            ButtonBase[] buttons = all.Except(rating).ToArray();
+            Assert.Equal(22, buttons.Length); // Fourteen capture commands and eight receipt commands.
             foreach (ButtonBase button in buttons) CommandButtonPresentation.RefreshHint(button);
 
             var failures = new List<string>();

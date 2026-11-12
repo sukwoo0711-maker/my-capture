@@ -123,11 +123,13 @@ public static class AppSettingsClone
     {
         ClickThroughHintShownCount = s.ClickThroughHintShownCount,
         CloseOnDoubleClick = s.CloseOnDoubleClick,
+        SnapWhileDragging = s.SnapWhileDragging,
         RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,
         InitialOpacity = s.InitialOpacity,
         ClosedWindowRestoreLimit = s.ClosedWindowRestoreLimit,
         ZoomStep = s.ZoomStep,
+        LightweightImagePins = s.LightweightImagePins,
     };
 
     private static AnnotationDefaults Clone(AnnotationDefaults s) => new()
@@ -202,6 +204,8 @@ public static class AppSettingsClone
         LastCaptureFailed = s.LastCaptureFailed,
         RequestAttemptedUtc = s.RequestAttemptedUtc,
         InvitationShownUtc = s.InvitationShownUtc,
+        InvitationShownCount = s.InvitationShownCount,
+        InvitationDismissedUtc = s.InvitationDismissedUtc,
     };
 
     private static StoreUpdateState Clone(StoreUpdateState s) => new()

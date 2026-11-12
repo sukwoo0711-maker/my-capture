@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 5.0.1 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 5.3.1 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("5.0.1", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("5.0.1.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("5.0.1.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("5.3.1", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("5.3.1.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("5.3.1.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("5.0.1.0", identity.Attribute("version")?.Value);
+        Assert.Equal("5.3.1.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '5.0.1'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '5.0.1',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '5.3.1'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '5.3.1',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
@@ -346,17 +346,15 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(6, actions.Length);
+        // Three jobs (build and tests, x86, Recycle Bin canary), each with the same three actions.
+        Assert.Equal(9, actions.Length);
         Assert.Equal(
-            new[]
+            Enumerable.Repeat(new[]
             {
                 "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                 "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
                 "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-                "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
-                "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
-            },
+            }, 3).SelectMany(job => job).ToArray(),
             actions.Select(action => action.Trim()["uses:".Length..]
                 .Split([' ', '#'], StringSplitOptions.RemoveEmptyEntries)[0]).ToArray());
         foreach (string action in actions)
@@ -374,7 +372,7 @@ public sealed class ReleaseVersionContractTests
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("timeout-minutes: 50", workflow, StringComparison.Ordinal);
+        Assert.Contains("timeout-minutes: 75", workflow, StringComparison.Ordinal);
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.Contains("package-ecosystem: nuget", dependabot, StringComparison.Ordinal);

@@ -120,6 +120,93 @@ public sealed class EditorPrewarmSchedulerTests
         Assert.Equal(1, host.Runs);
     }
 
+    [Fact]
+    public void VisibleGalleryPausesAlreadyQueuedWorkWithoutPeriodicRetry()
+    {
+        var host = new FakeHost();
+        host.Scheduler.Request();
+        host.Scheduler.SetGalleryVisible(true);
+        host.IdleTurn();
+        for (int i = 0; i < 10; i++) host.Scheduler.Request();
+        Assert.Equal(0, host.Runs);
+        Assert.Equal(0, host.Retries);
+        Assert.Empty(host.Idle);
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        Assert.Single(host.Idle);
+        host.IdleTurn();
+        Assert.Equal(1, host.Runs);
+    }
+
+    [Fact]
+    public void ReopenedGalleryPausesDeferredIdleAgainUntilHidden()
+    {
+        var host = new FakeHost();
+        host.Scheduler.SetGalleryVisible(true);
+        host.Scheduler.Request();
+        Assert.Empty(host.Idle);
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        host.Scheduler.SetGalleryVisible(true);
+        host.IdleTurn();
+        Assert.Equal(0, host.Runs);
+        Assert.Equal(0, host.Retries);
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        host.IdleTurn();
+        Assert.Equal(1, host.Runs);
+    }
+
+    [Fact]
+    public void ImageEditorOpenedDuringGalleryPausePermanentlyCancelsPrewarm()
+    {
+        var host = new FakeHost();
+        host.Scheduler.SetGalleryVisible(true);
+        host.Scheduler.Request();
+        host.Scheduler.EditorOpened();
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        Assert.Empty(host.Idle);
+        Assert.Equal(0, host.Runs);
+        Assert.Equal(0, host.Retries);
+    }
+
+    [Fact]
+    public void CaptureStillBusyAfterGalleryHidesKeepsExistingDelayedRetry()
+    {
+        var host = new FakeHost { OtherCaptureBusy = true };
+        host.Scheduler.SetGalleryVisible(true);
+        host.Scheduler.Request();
+        Assert.Empty(host.Idle);
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        host.IdleTurn();
+        Assert.Equal(0, host.Runs);
+        Assert.Equal(1, host.Retries);
+        host.OtherCaptureBusy = false;
+        host.Scheduler.Request();
+        host.IdleTurn();
+        Assert.Equal(1, host.Runs);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ProbeSwitchOrShutdownIsStillCheckedAfterGalleryHides(bool disabled, bool shutdown)
+    {
+        var host = new FakeHost();
+        host.Scheduler.SetGalleryVisible(true);
+        host.Disabled = disabled;
+        host.Shutdown = shutdown;
+        host.Scheduler.Request();
+        host.Scheduler.SetGalleryVisible(false);
+        host.Scheduler.Request();
+        host.IdleTurn();
+        Assert.Equal(0, host.Runs);
+        Assert.Equal(0, host.Retries);
+        Assert.Empty(host.Idle);
+    }
+
     private sealed class FakeHost
     {
         internal readonly Queue<Action> Idle = new();

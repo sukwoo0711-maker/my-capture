@@ -32,6 +32,9 @@ internal sealed class RegionRecordingCoordinator
     private readonly VideoLibraryService _videoLibrary;
 
     private CaptureOverlayWindow? _selectionOverlay;
+    private NativeCaptureOverlay? _nativeSelectionOverlay;
+    private bool _nativeSelectionCompleted;
+    private SelectionPreparation? _nativeSelectionContext;
     private RecordingControlWindow? _controls;
     private VideoEditorWindow? _editor;
     private VideoCaptureWriteSession? _writeSession;
@@ -51,6 +54,14 @@ internal sealed class RegionRecordingCoordinator
     internal Func<RectD> SelectionDesktopBounds { get; set; } = MonitorEnumerator.GetVirtualDesktopBounds;
     internal Func<bool> ShowSelectionGrid { get; set; } = () => true;
     internal Func<Window, bool> ExcludeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
+    internal Func<IntPtr, bool> ExcludeNativeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
+    internal bool UseNativeDibSelector { get; set; } = true;
+    internal NativeSelectorChromeStrategy NativeChromeStrategy { get; set; } = NativeSelectorChromeStrategy.Retained;
+    internal NativeCaptureOverlay? NativeOverlayForProbe => _nativeSelectionOverlay;
+    internal Func<RectD, NativeCaptureOverlay> CreateNativeSelector { get; set; } =
+        bounds => new NativeCaptureOverlay(bounds, abortOnFocusLoss: false, showMagnifier: true);
+    internal Action<NativeCaptureOverlay> ShowNativeSelector { get; set; } = native => native.Show();
+    internal Action<RectD>? OpenControlsForTest { get; set; }
     internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
     internal event Action<Exception>? SelectionPreparationFailed;
     internal Action? CaptureSelectionRequested { get; set; }
@@ -67,6 +78,12 @@ internal sealed class RegionRecordingCoordinator
     {
         internal volatile bool Cancelled;
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
+        internal RectD DesktopBounds { get; set; }
+        internal bool ShowSelectionGrid { get; set; }
+        internal System.Drawing.Size? PresetSize { get; set; }
+        internal bool OffersOtherActions { get; set; }
+        internal FrozenFrame? Frame { get; set; }
+        internal bool NativeFallbackAttempted { get; set; }
     }
 
     internal RegionRecordingCoordinator(
@@ -86,6 +103,8 @@ internal sealed class RegionRecordingCoordinator
 
     /// <summary>Raised whenever the whole recording session (selection→record→edit) ends.</summary>
     internal event EventHandler? SessionEnded;
+    /// <summary>No selector or frame preparation remains, even if recording controls are open.</summary>
+    internal event Action? SelectorClosed;
 
     /// <summary>
     /// Committed edit that yielded a still image the caller should push into the
@@ -101,6 +120,14 @@ internal sealed class RegionRecordingCoordinator
     internal VideoFrameCaptureService? FrameCaptureService { get; set; }
     internal Action<Guid>? ShowFrameInLibrary { get; set; }
     internal Action<RecordingWatermarkSettings>? PersistWatermarkSettings { get; set; }
+
+    /// <summary>Called with true once a finished recording is in the library, false when the recording or its save failed.</summary>
+    internal Action<bool>? RecordingSaved { get; set; }
+
+    // Installed only by the explicit isolated resident long-run diagnostic before Toggle.
+    // The grabber snapshots the delegate for the lifetime of that recording.
+    internal Action<byte[], int, int, int>? SyntheticRecordingFrame { get; set; }
+
     internal bool IsWatermarkLocked => _controls is { CanEditWatermark: false };
 
     internal void RefreshWatermarkSettings(RecordingWatermarkSettings settings) =>
@@ -109,7 +136,7 @@ internal sealed class RegionRecordingCoordinator
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
     internal bool CanCaptureStill => !_finishing && !_completionInProgress
-        && (_controls?.CanCaptureStill == true || (_editor is not null && _controls is null && _selectionOverlay is null));
+        && (_controls?.CanCaptureStill == true || (_editor is not null && _controls is null && _selectionOverlay is null && _nativeSelectionOverlay is null));
 
     // Starting a new still and protecting a window during a stop transition are different decisions.
     internal bool RequiresCaptureExclusion => _controls?.IsRecording == true;
@@ -133,15 +160,17 @@ internal sealed class RegionRecordingCoordinator
     internal bool IsActive =>
         _selectionPreparation is not null
         || _selectionOverlay is not null
+        || _nativeSelectionOverlay is not null
         || _controls is not null
         || _editor is not null
         || _writeSession is not null
         || _finishing;
 
-    internal bool IsSelecting => _selectionPreparation is not null || _selectionOverlay is not null;
+    internal bool IsSelecting => _selectionPreparation is not null || _selectionOverlay is not null || _nativeSelectionOverlay is not null;
 
     /// <summary>A completed editor does not occupy the recorder's start/stop slot.</summary>
     internal bool HasRecordingSession => _selectionPreparation is not null || _selectionOverlay is not null
+        || _nativeSelectionOverlay is not null
         || _controls is not null || _writeSession is not null || _finishing || _completionInProgress;
 
     /// <summary>
@@ -231,6 +260,11 @@ internal sealed class RegionRecordingCoordinator
     /// <summary>Brings the recording's current window (its editor, controls or selector) forward.</summary>
     internal void ActivateExisting()
     {
+        if (_editor is null && _controls is null && _nativeSelectionOverlay is { } native)
+        {
+            native.Activate();
+            return;
+        }
         Window? active = _editor ?? (Window?)_controls ?? _selectionOverlay;
         if (active is null)
         {
@@ -249,44 +283,126 @@ internal sealed class RegionRecordingCoordinator
     {
         var preparation = new SelectionPreparation();
         _selectionPreparation = preparation;
-        CaptureOverlayWindow? overlay = null;
         try
         {
-            overlay = new CaptureOverlayWindow(SelectionDesktopBounds(), abortOnFocusLoss: false, showMagnifier: true,
-                showSelectionGrid: ShowSelectionGrid())
+            preparation.DesktopBounds = SelectionDesktopBounds();
+            preparation.ShowSelectionGrid = ShowSelectionGrid();
+            preparation.OffersOtherActions = CaptureSelectionRequested is not null;
+            RecordingSettings settings = _settings();
+            if (settings.PresetWidth is { } w && w > 0 && settings.PresetHeight is { } h && h > 0)
+                preparation.PresetSize = new System.Drawing.Size(w, h);
+            if (UseNativeDibSelector)
             {
-                // Says "record" and takes the recording colour, so it never reads as a screenshot.
-                RecordingSelection = true,
-                ShowModeBar = true,
-                OffersOtherActions = CaptureSelectionRequested is not null,
-            };
-            // A configured preset fixes the recording's size; the drag only positions it.
-            if (_settings().PresetWidth is { } w && w > 0
-                && _settings().PresetHeight is { } h && h > 0)
-            {
-                overlay.PresetSize = new System.Drawing.Size(w, h);
+                try { CreateNativeSelection(preparation); }
+                catch (Exception error) when (!preparation.Cancelled) { FallBackToWpfSelection(preparation, error); }
             }
-            _selectionOverlay = overlay;
-            overlay.GeometrySelectionCompleted = OpenControls;
-            overlay.SelectionCancelled += OnSelectionCancelled;
-            overlay.ActionRequested += OnSelectionActionRequested;
-            overlay.Closed += OnSelectionClosed;
-            overlay.ContentRendered += (_, _) => _log.LogInformation(
-                "Recording selector first rendered after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
-            // Prepare exclusion while hidden; an opaque window without its capture frame
-            // would visibly black out the desktop for the entire acquisition interval.
-            _ = ExcludeSelectionWindow(overlay);
-            LastSelectionPreparation = PrepareSelectionAsync(preparation, overlay);
+            else CreateWpfSelection(preparation);
+            LastSelectionPreparation = PrepareSelectionAsync(preparation);
         }
-        catch
+        catch (Exception error)
         {
+            bool cancelled = preparation.Cancelled;
+            preparation.Cancelled = true;
+            _selectionOverlay?.Close();
+            _nativeSelectionOverlay?.Close();
             _selectionPreparation = null;
-            overlay?.Close();
+            EndSessionIfIdle();
+            if (cancelled) return;
+            if (preparation.NativeFallbackAttempted) { ReportSelectionFailure(error); return; }
             throw;
         }
     }
 
-    private async Task PrepareSelectionAsync(SelectionPreparation preparation, CaptureOverlayWindow overlay)
+    private void CreateWpfSelection(SelectionPreparation preparation)
+    {
+        var overlay = new CaptureOverlayWindow(preparation.DesktopBounds, abortOnFocusLoss: false, showMagnifier: true,
+            showSelectionGrid: preparation.ShowSelectionGrid)
+        {
+            // Says "record" and takes the recording colour, so it never reads as a screenshot.
+            RecordingSelection = true,
+            ShowModeBar = true,
+            OffersOtherActions = preparation.OffersOtherActions,
+            PresetSize = preparation.PresetSize,
+        };
+        _selectionOverlay = overlay;
+        overlay.GeometrySelectionCompleted = OpenControls;
+        overlay.SelectionCancelled += OnSelectionCancelled;
+        overlay.ActionRequested += OnSelectionActionRequested;
+        overlay.Closed += OnSelectionClosed;
+        overlay.ContentRendered += (_, _) => _log.LogInformation(
+            "Recording selector first rendered after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
+        // Both renderers apply exclusion before the hidden window's frame is acquired.
+        _ = ExcludeSelectionWindow(overlay);
+    }
+
+    private void CreateNativeSelection(SelectionPreparation preparation)
+    {
+        NativeCaptureOverlay native = CreateNativeSelector(preparation.DesktopBounds);
+        _nativeSelectionOverlay = native;
+        _nativeSelectionCompleted = false;
+        _nativeSelectionContext = preparation;
+        native.ChromeStrategy = NativeChromeStrategy;
+        native.RecordingSelection = true;
+        native.OffersOtherActions = preparation.OffersOtherActions;
+        native.PresetSize = preparation.PresetSize;
+        native.ShowSelectionGrid = preparation.ShowSelectionGrid;
+        native.GeometrySelectionCompleted = OnNativeGeometrySelected;
+        native.ActionRequested += OnSelectionActionRequested;
+        native.InputReady += OnNativeInputReady;
+        native.Failed += OnNativeSelectionFailed;
+        // The same hidden-window exclusion boundary as the WPF recording selector.
+        native.Prepare(ExcludeNativeSelectionWindow);
+        if (!native.IsClosed) native.Closed += OnNativeSelectionClosed;
+        else OnNativeSelectionClosed(native, EventArgs.Empty);
+    }
+
+    private void ShowNativeSelection(NativeCaptureOverlay native, FrozenFrame frame)
+    {
+        // Show closes its HWND before rethrowing. Keep that failed startup from ending the
+        // capture before the coordinator can give the same frozen frame to WPF.
+        native.Closed -= OnNativeSelectionClosed;
+        bool completed = false;
+        try
+        {
+            native.AttachFrame(frame);
+            if (!native.IsVisible) ShowNativeSelector(native);
+            completed = true;
+        }
+        finally
+        {
+            if (!native.IsClosed) native.Closed += OnNativeSelectionClosed;
+            else if (completed) OnNativeSelectionClosed(native, EventArgs.Empty);
+        }
+    }
+
+    private void ShowWpfSelection(FrozenFrame frame)
+    {
+        CaptureOverlayWindow overlay = _selectionOverlay ?? throw new InvalidOperationException("The recording selector is unavailable.");
+        overlay.AttachFrame(frame);
+        if (!overlay.IsVisible) { overlay.Show(); _ = overlay.Activate(); }
+    }
+
+    private void FallBackToWpfSelection(SelectionPreparation preparation, Exception error)
+    {
+        if (!preparation.NativeFallbackAttempted)
+        {
+            preparation.NativeFallbackAttempted = true;
+            _log.LogWarning(error, "Native recording selector failed; using the WPF selector for this capture");
+        }
+        if (_nativeSelectionOverlay is { } native)
+        {
+            preparation.Frame ??= native.Frame;
+            DetachNativeSelection(native);
+            _nativeSelectionOverlay = null;
+            _nativeSelectionContext = null;
+            native.Close();
+        }
+        CreateWpfSelection(preparation);
+        if (preparation.Cancelled) return;
+        if (preparation.Frame is { } frame) ShowWpfSelection(frame);
+    }
+
+    private async Task PrepareSelectionAsync(SelectionPreparation preparation)
     {
         FrozenFrame? frame = null;
         Exception? failure = null;
@@ -314,19 +430,24 @@ internal sealed class RegionRecordingCoordinator
                 if (!ReferenceEquals(_selectionPreparation, preparation)) return;
                 try
                 {
-                    if (preparation.Cancelled || !ReferenceEquals(_selectionOverlay, overlay)) return;
+                    if (preparation.Cancelled || (_nativeSelectionOverlay is null && _selectionOverlay is null)) return;
                     if (failure is not null) throw failure;
-                    overlay.AttachFrame(frame!);
-                    if (!overlay.IsVisible) { overlay.Show(); _ = overlay.Activate(); }
+                    preparation.Frame = frame!;
+                    if (_nativeSelectionOverlay is { } native)
+                    {
+                        try { ShowNativeSelection(native, frame!); }
+                        catch (Exception error) when (!preparation.Cancelled) { FallBackToWpfSelection(preparation, error); }
+                    }
+                    else ShowWpfSelection(frame!);
                     _log.LogInformation("Recording selection frame attached after {Elapsed:0.0}ms",
                         preparation.Elapsed.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception ex)
                 {
-                    overlay.Close();
-                    _log.LogError(ex, "Recording selection preparation failed");
-                    if (SelectionPreparationFailed is { } reportFailure) reportFailure(ex);
-                    else MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_25E15E06C2EA"), ex);
+                    bool cancelled = preparation.Cancelled;
+                    _nativeSelectionOverlay?.Close();
+                    _selectionOverlay?.Close();
+                    if (!cancelled) ReportSelectionFailure(ex);
                 }
                 finally
                 {
@@ -344,6 +465,7 @@ internal sealed class RegionRecordingCoordinator
         _dispatcher.VerifyAccess();
         if (_selectionPreparation is { } preparation) preparation.Cancelled = true;
         _selectionOverlay?.Close();
+        _nativeSelectionOverlay?.Close();
     }
 
     private void OnSelectionCancelled(object? sender, EventArgs e) =>
@@ -352,7 +474,10 @@ internal sealed class RegionRecordingCoordinator
     private void OnSelectionActionRequested(object? sender, CaptureSelectorRequest request)
     {
         if (request.Action == CaptureSelectorAction.Capture && CaptureSelectionRequested is not null)
+        {
+            if (sender is NativeCaptureOverlay) _nativeSelectionCompleted = true;
             LastSelectorActionForTest = OpenCaptureAfterSelectionAsync();
+        }
     }
 
     private async Task OpenCaptureAfterSelectionAsync()
@@ -387,8 +512,76 @@ internal sealed class RegionRecordingCoordinator
         EndSessionIfIdle();
     }
 
+    private void OnNativeGeometrySelected(RectD screenRegion)
+    {
+        _nativeSelectionCompleted = true;
+        OpenControls(screenRegion);
+    }
+
+    private void OnNativeInputReady(object? sender, EventArgs e)
+    {
+        if (sender is NativeCaptureOverlay native) native.InputReady -= OnNativeInputReady;
+        if (_nativeSelectionContext is { } preparation)
+            _log.LogInformation("Recording selector input ready after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
+    }
+
+    private void OnNativeSelectionFailed(Exception error)
+    {
+        if (_nativeSelectionContext is not { } preparation || preparation.Cancelled || _nativeSelectionCompleted) return;
+        bool preparing = ReferenceEquals(_selectionPreparation, preparation);
+        _selectionPreparation = preparation;
+        try { FallBackToWpfSelection(preparation, error); }
+        catch (Exception fallbackError)
+        {
+            bool cancelled = preparation.Cancelled;
+            _selectionOverlay?.Close();
+            if (!cancelled) ReportSelectionFailure(fallbackError);
+        }
+        finally
+        {
+            if (!preparing)
+            {
+                _selectionPreparation = null;
+                EndSessionIfIdle();
+            }
+        }
+    }
+
+    private void ReportSelectionFailure(Exception error)
+    {
+        _log.LogError(error, "Recording selection preparation failed");
+        if (SelectionPreparationFailed is { } reportFailure) reportFailure(error);
+        else MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_25E15E06C2EA"), error);
+    }
+
+    private void OnNativeSelectionClosed(object? sender, EventArgs e)
+    {
+        if (sender is NativeCaptureOverlay native)
+        {
+            if (_selectionPreparation is { } preparation) preparation.Cancelled = true;
+            DetachNativeSelection(native);
+            if (ReferenceEquals(_nativeSelectionOverlay, native))
+            {
+                _nativeSelectionOverlay = null;
+                _nativeSelectionContext = null;
+                if (!_nativeSelectionCompleted) OnSelectionCancelled(sender, e);
+            }
+        }
+        EndSessionIfIdle();
+    }
+
+    private void DetachNativeSelection(NativeCaptureOverlay native)
+    {
+        native.GeometrySelectionCompleted = null;
+        native.ActionRequested -= OnSelectionActionRequested;
+        native.InputReady -= OnNativeInputReady;
+        native.Failed -= OnNativeSelectionFailed;
+        native.Closed -= OnNativeSelectionClosed;
+    }
+
     private void OpenControls(RectD screenRegion)
     {
+        if (OpenControlsForTest is { } open) { open(screenRegion); return; }
         RecordingControlWindow? controls = null;
         try
         {
@@ -407,8 +600,11 @@ internal sealed class RegionRecordingCoordinator
                     RecordingCaptureModeNames.ToSetting(settings.CaptureMode),
                     RecordingCaptureBackendSelection.EnvironmentVariable,
                     RecordingCaptureBackendSelection.ParseOverride(backendOverride)?.ToString() ?? "unset");
+                Action<byte[], int, int, int>? synthetic = SyntheticRecordingFrame;
                 var grabber = new RegionFrameGrabber(_captureEngine, settings.IncludeCursor, settings.CursorHighlight,
-                    backend, _loggerFactory.CreateLogger<RegionFrameGrabber>());
+                    backend, _loggerFactory.CreateLogger<RegionFrameGrabber>(), synthetic);
+                if (synthetic is not null)
+                    _log.LogInformation("Recording input source: synthetic BGRA; native capture backend: none");
                 return new RegionRecorder(
                     grabber,
                     options => new MediaFoundationVideoEncoder(
@@ -486,6 +682,7 @@ internal sealed class RegionRecordingCoordinator
         _writeSession = null;
         _completionInProgress = false;
         _finishing = false;
+        ReportRecordingSaved(false);
         MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_89CF3D468EC1"), e.Exception);
     }
 
@@ -541,6 +738,16 @@ internal sealed class RegionRecordingCoordinator
         EndSessionIfIdle();
     }
 
+    /// <summary>Tells the observer whether the finished recording reached the library; it never interrupts the flow.</summary>
+    private void ReportRecordingSaved(bool saved)
+    {
+        try { RecordingSaved?.Invoke(saved); }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            _log.LogWarning(error, "Could not report the saved recording");
+        }
+    }
+
     private async void OnRecordingFinished(object? sender, RecordingResult result)
     {
         RecordingOpenLatency openLatency = _openLatency ?? new RecordingOpenLatency(Stopwatch.GetTimestamp());
@@ -588,15 +795,21 @@ internal sealed class RegionRecordingCoordinator
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not persist completed recording in the gallery");
+            // Disposing a retained session keeps the finished clip and its recovery sidecar for
+            // the next startup; only a clip proven unusable has already been removed.
+            Exception shown = DescribeCompletionFailure(writeSession, ex);
             writeSession.Dispose();
             _writeSession = null;
             _completionInProgress = false;
             _finishing = false;
             controls?.CompleteAndClose();
-            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), ex);
+            ReportRecordingSaved(false);
+            MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), shown);
             EndSessionIfIdle();
             return;
         }
+
+        ReportRecordingSaved(true);
 
         if (controls is not null && ReferenceEquals(_controls, controls))
         {
@@ -663,6 +876,16 @@ internal sealed class RegionRecordingCoordinator
             EndSessionIfIdle();
         }
     }
+
+    /// <summary>
+    /// What the save-failure dialog explains. When the library kept the finished clip for startup
+    /// recovery, the notice says so and when recovery runs; the cause stays in the details.
+    /// </summary>
+    internal static Exception DescribeCompletionFailure(VideoCaptureWriteSession session, Exception error) =>
+        session.IsRetainedForRecovery
+            ? MyCapture.App.Themes.UserFacingError.Mark(
+                new IOException(UiText.Get("Text_C5AC44062ACA").TrimEnd(), error))
+            : error;
 
     /// <summary>
     /// Lets Saved reach the screen before the editor's construction holds the dispatcher: one
@@ -741,6 +964,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void EndSessionIfIdle()
     {
+        if (!IsSelecting) SelectorClosed?.Invoke();
         if (!IsActive)
         {
             SessionEnded?.Invoke(this, EventArgs.Empty);

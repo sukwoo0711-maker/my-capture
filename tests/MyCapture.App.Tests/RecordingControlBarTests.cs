@@ -53,7 +53,7 @@ public sealed class RecordingControlBarTests
             Assert.Equal("녹화 시작", RecordingControlWindow.ButtonLabel(primary));
             Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(primary));
             Assert.Equal("녹화 시작", AutomationProperties.GetName(primary));
-            Assert.Equal("녹화 영역 16×16 · 30fps", primary.ToolTip);
+            Assert.Equal("녹화 영역 16 × 16 · 30fps", primary.ToolTip);
             Assert.Equal(Visibility.Visible, cancel.Visibility);
             Assert.Equal(Visibility.Collapsed, pause.Visibility);
             Assert.Equal("녹화 옵션", AutomationProperties.GetName(more));
@@ -128,7 +128,7 @@ public sealed class RecordingControlBarTests
         int cancelled = 0;
         window.Cancelled += (_, _) => cancelled++;
         Assert.Equal("Record after delay", RecordingControlWindow.ButtonLabel(window.PrimaryButtonForTest));
-        Assert.Equal("Recording area 640×360 · 30fps", window.PrimaryButtonForTest.ToolTip);
+        Assert.Equal("Recording area 640 × 360 · 30fps", window.PrimaryButtonForTest.ToolTip);
         Assert.Equal("Show time", ((MenuItem)window.CreateMoreMenu().Items[0]).Header);
         window.CancelButtonForTest.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Assert.Equal(1, cancelled);

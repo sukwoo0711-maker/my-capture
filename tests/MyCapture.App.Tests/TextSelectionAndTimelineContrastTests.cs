@@ -141,6 +141,152 @@ public sealed class TextSelectionAndTimelineContrastTests
         Assert.Null(PresentationSource.FromVisual(root));
     });
 
+    // Over a layer bar the playhead and the pointer line alone kept 1.2 to 1.8:1 (2026-11-06
+    // aesthetic review). Each now has a Surface.Base edge, one DIP on each side, drawn first.
+    [Theory]
+    [MemberData(nameof(ThemeAndScale))]
+    public void PlayheadAndPointerLinesKeepASurfaceHaloOverLayerBars(string scenario, double scale) => Run(() =>
+    {
+        using Fixture fixture = CreateFixture(scenario, scale);
+        VideoLayerTimeline timeline = fixture.Timeline;
+        timeline.SetPlayhead(3000);
+        timeline.SetHover(6000);
+        Layout(fixture.Root);
+        Drawing[] drawn = Drawings(VisualTreeHelper.GetDrawing(timeline)!).ToArray();
+        Color halo = Solid((Brush)fixture.Resources["Surface.Base"]).Color;
+        GeometryDrawing textFill = Assert.Single(drawn.OfType<GeometryDrawing>(),
+            item => item.Brush is not null && item.Geometry.Bounds == fixture.TextBar);
+        ThemeColor bar = ToTheme(Solid(textFill.Brush).Color);
+        var measured = new List<object>();
+        foreach ((string name, string token, double thickness) in new[]
+        {
+            ("playhead", "Timeline.Playhead", 2d), ("pointer line", "Text.Secondary", 1d),
+        })
+        {
+            Color ink = Solid((Brush)fixture.Resources[token]).Color;
+            int line = Array.FindIndex(drawn, item => IsFullHeightLine(item, ink, thickness, timeline.ActualHeight));
+            Assert.True(line >= 0, $"{scenario}: the {name} is missing.");
+            double x = ((LineGeometry)((GeometryDrawing)drawn[line]).Geometry).StartPoint.X;
+            Assert.True(x > fixture.TextBar.Left && x < fixture.TextBar.Right, $"{scenario}: the {name} must cross the text bar.");
+            int edge = Array.FindIndex(drawn, item =>
+                IsFullHeightLine(item, halo, thickness + (2 * TimelineVisuals.HaloWidth), timeline.ActualHeight)
+                && ((LineGeometry)((GeometryDrawing)item).Geometry).StartPoint.X == x);
+            Assert.True(edge >= 0 && edge < line, $"{scenario}: the {name} needs its Surface.Base halo drawn under it.");
+            ThemeColor edgeOverBar = ThemeContrast.Composite(ToTheme(halo), bar);
+            double ratio = ThemeContrast.Ratio(ToTheme(ink), edgeOverBar);
+            measured.Add(new
+            {
+                line = name, ink = ink.ToString(), halo = halo.ToString(), bar = Solid(textFill.Brush).Color.ToString(),
+                lineAgainstBar = Math.Round(ThemeContrast.Ratio(ToTheme(ink), bar), 2),
+                lineAgainstHalo = Math.Round(ratio, 2),
+                haloAgainstBar = Math.Round(ThemeContrast.Ratio(edgeOverBar, bar), 2),
+            });
+            Assert.True(ratio >= 3,
+                $"{scenario}: the {name} keeps {ratio:F2}:1 against its halo over the text bar, expected at least 3:1.");
+        }
+        if (Environment.GetEnvironmentVariable("MYCAPTURE_FIX_EVIDENCE") is { Length: > 0 } requested)
+        {
+            string directory = MyCapture.App.Diagnostics.DiagnosticOutputPaths.Create(requested);
+            File.WriteAllText(MyCapture.App.Diagnostics.DiagnosticOutputPaths.Child(directory, $"halo-{scenario}-{scale * 100:0}.json"),
+                JsonSerializer.Serialize(new { scenario, scale, lines = measured }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+    });
+
+    // The row headers read "T  텍스트" and "F  프레임", and the letters read as a word of their own
+    // (2026-11-06 aesthetic review). Each header now starts with the icon the layer list draws
+    // beside the same layer: the 20x20 grid glyph at 16 DIP with the grid stroke, in Text.Secondary.
+    [Theory]
+    [MemberData(nameof(ThemeAndScale))]
+    public void RowHeadersDrawTheLayerListIconsBeforeTheirNames(string scenario, double scale) => Run(() =>
+    {
+        using var language = MyCapture.Core.Localization.UiText.UseLanguage("ko-KR");
+        using Fixture fixture = CreateFixture(scenario, scale);
+        VideoLayerTimeline timeline = fixture.Timeline;
+        timeline.InvalidateVisual();
+        Layout(fixture.Root);
+        DrawingGroup root = VisualTreeHelper.GetDrawing(timeline)!;
+        Color ink = Solid((Brush)fixture.Resources["Text.Secondary"]).Color;
+        foreach ((string key, string name, Rect bar) in new[]
+        {
+            ("Icon.Text", "텍스트", fixture.TextBar), ("Icon.Image", "프레임", fixture.FrameBar),
+        })
+        {
+            string glyph = ((Geometry)fixture.Resources[key]).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            DrawingGroup placed = Assert.Single(Drawings(root).OfType<DrawingGroup>(), group =>
+                group.Children.Count == 1 && group.Children[0] is GeometryDrawing { Brush: null, Pen: { } pen } icon
+                && icon.Geometry.ToString(System.Globalization.CultureInfo.InvariantCulture) == glyph
+                && pen.Brush is SolidColorBrush stroke && stroke.Color == ink
+                && Math.Abs(pen.Thickness - SymbolIcon.GridStrokeThickness) < 0.001
+                && pen.StartLineCap == PenLineCap.Round && pen.LineJoin == PenLineJoin.Round);
+            Matrix place = placed.Transform.Value;
+            double size = SymbolIcon.InlineSize;
+            Assert.Equal(size / SymbolIcon.GridSize, place.M11, 3);
+            Assert.Equal(size / SymbolIcon.GridSize, place.M22, 3);
+            Assert.Equal(8, place.OffsetX, 3);
+            Assert.True(Math.Abs(place.OffsetY + (size / 2) - (bar.Top + (bar.Height / 2))) < 0.01,
+                $"{scenario}: the {key} icon is not centred on its row.");
+            var label = Assert.Single(HeaderNames(root), header => header.Text == name);
+            Assert.True(label.Left >= 8 + size + 4, $"{scenario}: the {name} name starts at {label.Left} DIP, over its icon.");
+        }
+        Assert.Equal(2, HeaderNames(root).Length);
+    });
+
+    // With the icon in front, a numbered row name still fits the 82 DIP header untrimmed. The
+    // fixture keeps its theme on the root element, so the timeline draws with its system
+    // fallback (Segoe UI, Hangul from Malgun Gothic); the app draws with the bundled Pretendard,
+    // which is narrower in Hangul and wider in "Frame". Both have to fit.
+    [Theory]
+    [InlineData("ko-KR", "텍스트 12", "프레임 12")]
+    [InlineData("en-US", "Text 12", "Frame 12")]
+    public void NumberedRowNamesFitBesideTheirIcons(string culture, string lastText, string lastFrame) => Run(() =>
+    {
+        using var language = MyCapture.Core.Localization.UiText.UseLanguage(culture);
+        var product = new Typeface(ThemeFonts.Ui, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        foreach (string name in new[] { lastText, lastFrame })
+        {
+            var formatted = new FormattedText(name, System.Globalization.CultureInfo.GetCultureInfo(culture),
+                FlowDirection.LeftToRight, product, TypeScale.Caption, Brushes.Black, 1);
+            Assert.True(formatted.Width <= VideoLayerTimeline.RowNameMaxWidth,
+                $"{name} needs {formatted.Width:F2} DIP in the app's font, past the {VideoLayerTimeline.RowNameMaxWidth} DIP beside the icon.");
+        }
+
+        using Fixture fixture = CreateFixture("glass", 1);
+        VideoLayerTimeline timeline = fixture.Timeline;
+        timeline.SetLayers(
+            Enumerable.Range(0, 12).Select(index => new TimedTextOverlay { Text = $"Caption {index}", StartMs = 500, EndMs = 9500 }).ToArray(),
+            Enumerable.Range(0, 12).Select(index => new FrameEditLayer { Name = $"Frame {index}", StartMs = 500, EndMs = 9500 }).ToArray());
+        Layout(fixture.Root);
+        var headers = HeaderNames(VisualTreeHelper.GetDrawing(timeline)!);
+        Assert.Equal(24, headers.Length);
+        Assert.Contains(headers, header => header.Text == lastText);
+        Assert.Contains(headers, header => header.Text == lastFrame);
+        Assert.All(headers, header =>
+        {
+            Assert.DoesNotContain('…', header.Text);
+            Assert.True(header.Right <= VideoLayerTimeline.LabelWidth - 2,
+                $"{header.Text} ends at {header.Right} DIP, past the {VideoLayerTimeline.LabelWidth} DIP header.");
+        });
+    });
+
+    /// <summary>
+    /// The row names as drawn left of the tracks, one per baseline. A name may draw as several
+    /// glyph runs when a fallback font takes part of it, so the runs of a row are joined.
+    /// </summary>
+    private static (string Text, double Left, double Right)[] HeaderNames(DrawingGroup drawing) =>
+        Drawings(drawing).OfType<GlyphRunDrawing>()
+            .Where(run => run.GlyphRun.BaselineOrigin.X < VideoLayerTimeline.LabelWidth)
+            .GroupBy(run => Math.Round(run.GlyphRun.BaselineOrigin.Y, 1))
+            .Select(row => row.OrderBy(run => run.GlyphRun.BaselineOrigin.X).ToArray())
+            .Select(row => (string.Concat(row.Select(run => new string(run.GlyphRun.Characters.ToArray()))),
+                row[0].GlyphRun.BaselineOrigin.X, row.Max(run => run.Bounds.Right)))
+            .ToArray();
+
+    private static bool IsFullHeightLine(Drawing drawing, Color color, double thickness, double height) =>
+        drawing is GeometryDrawing { Geometry: LineGeometry line, Pen: { Brush: SolidColorBrush brush } pen }
+        && brush.Color == color && Math.Abs(pen.Thickness - thickness) < 0.001
+        && Math.Abs(line.StartPoint.X - line.EndPoint.X) < 0.001
+        && Math.Abs(line.StartPoint.Y) < 0.001 && Math.Abs(line.EndPoint.Y - height) < 0.001;
+
     // The scratch baseline runner links this very file and calls only this helper against
     // preserved pre-fix product DLLs. Before images therefore execute the original read site,
     // TextBox template and ThemeService, with identical fixture content and dimensions.

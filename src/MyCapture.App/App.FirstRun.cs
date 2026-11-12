@@ -25,11 +25,12 @@ public partial class App
     {
         if (_settings is null || _preparingExit) return;
         LaunchPresentation launch = FirstRunPlan.ForLaunch(_launchedFirstRun, quietLaunch, openSettings,
-            answeredThisLaunch || _settings.Hotkeys.CoreShortcutsAsked);
+            answeredThisLaunch || _settings.Hotkeys.CoreShortcutsAsked, _settings.Hotkeys.ForceCoreShortcuts);
         if (launch.ShowCoreShortcuts)
         {
             _coreShortcutsQuestionPending = true;
-            WelcomeWindow welcome = CreatePracticeWindow(replay: !_launchedFirstRun, consent: true);
+            WelcomeWindow welcome = CreatePracticeWindow(replay: !_launchedFirstRun, consent: true,
+                coreShortcutsNotice: launch.CoreShortcutsNotice);
             _coreShortcutsQuestion = welcome;
             CompleteLaunchPracticeWhenClosed(welcome, quietLaunch, openSettings);
             welcome.Closed += (_, _) =>
@@ -115,7 +116,8 @@ public partial class App
             }
             if (welcome.CurrentStep == WelcomeStep.Consent)
             {
-                // Closing the old question declined the keys, then showed the first-use guide.
+                // Closing the shortcut page continues the first-use guide. The question declines
+                // the keys, while the notice keeps the assignments already applied at installation.
                 // Its unseen startup/OCR defaults are not applied by closing this first screen.
                 if (route == PracticeCloseRoute.ContinueWelcome) ShowFirstRunWelcome(quietLaunch, openSettings);
                 else
@@ -404,6 +406,18 @@ public partial class App
         EnsureSettingsWindow()?.ShowShortcut(draftProperty);
     }
 
+    /// <summary>Opens the Shortcuts category after the first-install notice.</summary>
+    private void HandleCoreShortcutSettingsRequested()
+    {
+        if (_preparingExit || _storeInstallationPending)
+        {
+            HandleSettingsRequested();
+            return;
+        }
+        _log?.LogInformation("Shortcut settings requested from the core shortcut notice");
+        EnsureSettingsWindow()?.ShowSection(SettingsSection.Shortcuts);
+    }
+
     // Tips show while the user acts (a first pin, a capture, a save), so the write stays off the
     // dispatcher: a flushed file replace plus the serializer's first-use cost held the first pin ~30 ms.
     private void SaveFirstUseTips()
@@ -445,6 +459,7 @@ public partial class App
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log?.LogWarning(ex, "Could not pin the capture from its first-use tip");
+            _storeRating?.RecordCapture(succeeded: false);
             _shellPresenter?.ShowNotification(UiText.Get("QuickAccess.Pin"), UiText.Get("Onboard_PinFailed"), TrayBalloonKind.Error, answersCommand: true);
         }
     }

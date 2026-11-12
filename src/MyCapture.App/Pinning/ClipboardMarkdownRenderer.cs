@@ -23,6 +23,12 @@ internal static class ClipboardMarkdownRenderer
     private const int MaxPreviewHeightDip = 8_192;
     private const int MaxPreviewPixels = 16_000_000;
     private const int ContinuationHeightDip = 32;
+
+    /// <summary>
+    /// SteelBlue's hue and saturation at the lightness that keeps a link at WCAG AA on the white
+    /// page (5.3:1) and on a table header's WhiteSmoke (4.9:1); SteelBlue gave 4.1:1 and 3.8:1.
+    /// </summary>
+    internal static readonly SolidColorBrush LinkForeground = CreateLinkForeground();
     private static readonly Regex Heading = Pattern(@"^ {0,3}(#{1,6})\s+(\S.*)$");
     private static readonly Regex ClosingHeading = Pattern(@"\s+#+\s*$");
     private static readonly Regex ListItemPattern = Pattern(@"^(?<indent>[ \t]{0,64})(?:(?<bullet>[-+*])|(?<number>\d{1,6})[.)])[ \t]+(?<body>.+)$");
@@ -273,7 +279,8 @@ internal static class ClipboardMarkdownRenderer
             var composed = new DrawingVisual();
             using (DrawingContext drawing = composed.RenderOpen())
             {
-                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, PageWidthDip, height));
+                // The page covers every device pixel, including a last row the DIP height only half reaches.
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, pixelWidth / rasterScale, pixelHeight / rasterScale));
                 drawing.PushClip(new RectangleGeometry(new Rect(0, 0, PageWidthDip, contentHeight)));
                 for (int index = 0; index < pages.Count; index++)
                 {
@@ -711,7 +718,7 @@ internal static class ClipboardMarkdownRenderer
                 // Display destinations but never construct navigation-capable Hyperlink or Image objects.
                 string label = UnescapePunctuation(match.Groups["label"].Value);
                 string destination = UnescapePunctuation(match.Groups["destination"].Value);
-                paragraph.Inlines.Add(new Run(label + " (" + destination + ")") { Foreground = Brushes.SteelBlue, TextDecorations = TextDecorations.Underline });
+                paragraph.Inlines.Add(new Run(label + " (" + destination + ")") { Foreground = LinkForeground, TextDecorations = TextDecorations.Underline });
             }
             offset = match.Index + match.Length;
         }
@@ -817,6 +824,13 @@ internal static class ClipboardMarkdownRenderer
     }
 
     private static Regex Pattern(string pattern) => new(pattern, RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, TimeSpan.FromMilliseconds(100));
+
+    private static SolidColorBrush CreateLinkForeground()
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(0x3C, 0x6F, 0x9A));
+        brush.Freeze();
+        return brush;
+    }
     private enum MarkdownBlockKind { HorizontalRule }
     private readonly record struct SourceLine(string Text, int Start, int End);
 }

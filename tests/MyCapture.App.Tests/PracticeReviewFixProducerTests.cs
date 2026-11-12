@@ -6,6 +6,7 @@ using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
@@ -137,22 +138,25 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
     });
 
     [Theory]
-    [InlineData("preparing")]
-    [InlineData("selecting")]
-    [InlineData("saving")]
-    public void RepeatedCaptureKeepsTheFirstRequestUntilItsSavedResult(string phase) => StaTestHost.Run(() =>
+    [InlineData("preparing", false)]
+    [InlineData("selecting", false)]
+    [InlineData("saving", false)]
+    [InlineData("preparing", true)]
+    [InlineData("selecting", true)]
+    [InlineData("saving", true)]
+    public void RepeatedCaptureKeepsTheFirstRequestUntilItsSavedResult(string phase, bool native) => StaTestHost.Run(() =>
     {
         using var releaseFrame = new ManualResetEventSlim(false);
-        FrozenFrame frame = Frame();
+        FrozenFrame frame = SelectorFrame();
         using var coordinator = Coordinator(_ =>
         {
             if (!releaseFrame.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Synthetic frame was not released.");
             return frame;
-        });
-        var app = TestApp(); Set(app, "_overlay", coordinator);
+        }, frame.ScreenBounds);
+        coordinator.UseNativeDibSelector = native;
+        var app = TestApp(selectorProtocol: true); Set(app, "_overlay", coordinator);
         var guide = Guide(app);
-        CaptureOverlayWindow? selector = null;
-        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; Offscreen(window); return true; };
+        coordinator.ApplyCaptureExclusion = window => { Offscreen(window); return true; };
         var saved = new TaskCompletionSource();
         CaptureSelectionCompletedEventArgs? selection = null;
         coordinator.SelectionPersistRequested = async value =>
@@ -173,12 +177,15 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
             }
             releaseFrame.Set();
             PinHistoryTestSupport.Await(coordinator.LastPreparationForTest); Drain();
+            var selector = new CoordinatorSelector(coordinator, native);
             Assert.NotNull(selector);
-            Assert.True(selector.IsVisible && selector.Left < -8000 && selector.Top < -8000);
+            Assert.True(selector.IsVisible);
+            var (left, top, right, bottom) = WindowStyleFacade.GetWindowBounds(selector.Handle);
+            Assert.Equal(frame.ScreenBounds, new RectD(left, top, right - left, bottom - top));
             if (phase == "selecting") Capture(app);
             Assert.True(guide.CapturePending);
             Assert.Equal(request, guide.Session.CaptureRequestId);
-            Assert.True(((CaptureOverlayView)selector.Content).CaptureFullScreen());
+            Assert.True(selector.CaptureFullScreen());
             Assert.NotNull(selection);
             Assert.False(selector.IsVisible);
             if (phase == "saving") Capture(app);
@@ -193,15 +200,17 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         finally { releaseFrame.Set(); saved.TrySetResult(); guide.Close(); }
     });
 
-    [Fact]
-    public void TextModeSelectionEndsImagePracticeAndOffersAnotherCapture() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TextModeSelectionEndsImagePracticeAndOffersAnotherCapture(bool native) => StaTestHost.Run(() =>
     {
-        FrozenFrame frame = Frame();
-        using var coordinator = Coordinator(_ => frame);
-        var app = TestApp(); Set(app, "_overlay", coordinator);
+        FrozenFrame frame = SelectorFrame();
+        using var coordinator = Coordinator(_ => frame, frame.ScreenBounds);
+        coordinator.UseNativeDibSelector = native;
+        var app = TestApp(selectorProtocol: true); Set(app, "_overlay", coordinator);
         var guide = Guide(app);
-        CaptureOverlayWindow? selector = null;
-        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; Offscreen(window); return true; };
+        coordinator.ApplyCaptureExclusion = window => { Offscreen(window); return true; };
         int texts = 0, saves = 0;
         coordinator.TextCaptureRequested = value => { Assert.True(value.TextCapture); texts++; };
         coordinator.SelectionPersistRequested = _ => { saves++; return Task.CompletedTask; };
@@ -209,11 +218,11 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         {
             guide.DismissForCapture(); Capture(app);
             PinHistoryTestSupport.Await(coordinator.LastPreparationForTest); Drain();
-            var view = Assert.IsType<CaptureOverlayView>(selector!.Content);
+            var selector = new CoordinatorSelector(coordinator, native);
             var textKey = WindowDetectOverlayTests.KeyArgs(Key.T);
-            view.HandleKeyDown(textKey, ModifierKeys.None);
+            selector.HandleKeyDown(textKey, ModifierKeys.None);
             Assert.True(textKey.Handled && selector.TextCaptureMode);
-            Assert.True(view.CaptureFullScreen()); Drain();
+            Assert.True(selector.CaptureFullScreen()); Drain();
             Assert.False(selector.IsVisible);
             Assert.Equal(1, texts); Assert.Equal(0, saves);
             Assert.False(guide.CapturePending);
@@ -223,6 +232,7 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
             Guid previous = guide.Session.CaptureRequestId;
             PracticeJourneyDriver.Click(guide.TryNowButton); Drain();
             PinHistoryTestSupport.Await(coordinator.LastPreparationForTest); Drain();
+            selector = new CoordinatorSelector(coordinator, native);
             Assert.True(guide.CapturePending);
             Assert.NotEqual(previous, guide.Session.CaptureRequestId);
             Assert.True(selector.IsVisible);
@@ -259,20 +269,24 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
     private static void InvokeMenuItem(MenuItem item) =>
         ((IInvokeProvider)new MenuItemAutomationPeer(item).GetPattern(PatternInterface.Invoke)).Invoke();
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
-    private static App TestApp()
+    private static App TestApp(bool selectorProtocol = false)
     {
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
-        Set(app, "_settings", new AppSettings());
+        var settings = new AppSettings();
+        if (selectorProtocol) settings.Capture.AbortOnFocusLoss = false;
+        Set(app, "_settings", settings);
         return app;
     }
     private static void Set(App app, string name, object value) => typeof(App).GetField(name, Private)!.SetValue(app, value);
-    private static WelcomeWindow Guide(App app) => (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false])!;
+    private static WelcomeWindow Guide(App app) => (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false, false])!;
     private static void Capture(App app) => typeof(App).GetMethod("HandleCaptureRequested", Private)!.Invoke(app, null);
     private static FrozenFrame Frame() => new(EditorKeysTests.Solid(320, 200, 80), new RectD(-10000, -10000, 320, 200), null, 0);
-    private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
+    // A shown native HWND must intersect the desktop to submit its first frame. The pixels stay synthetic.
+    private static FrozenFrame SelectorFrame() => new(EditorKeysTests.Solid(320, 200, 80), new RectD(0, 0, 320, 200), null, 0);
+    private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire, RectD bounds) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance,
-        acquire, () => new RectD(-10000, -10000, 320, 200), _ => [])
+        acquire, () => bounds, _ => [])
     {
         RequiresCaptureExclusion = () => true, ReadWindowSources = null, OpenEditorAfterCapture = () => false,
         ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>()),
@@ -302,8 +316,14 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         }
     }
 
-    internal static ContextMenu OpenMenu(PinWindow pin) => Assert.IsType<ContextMenu>(
-        typeof(PinHoverBar).GetField("_opacityMenu", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pin.HoverBarForTest));
+    internal static ContextMenu OpenMenu(PinWindow pin)
+    {
+        object? menu = typeof(PinHoverBar).GetField("_opacityMenu", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(pin.HoverBarForTest);
+        return CaptureWindowExclusion.SupportsLayeredWindows
+            ? Assert.IsType<ContextMenu>(menu)
+            : Assert.IsType<OpaqueCaptureContextMenu>(menu);
+    }
     internal static void Drain() => Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 }
 

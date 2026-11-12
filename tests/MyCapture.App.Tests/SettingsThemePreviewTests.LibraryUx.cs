@@ -75,7 +75,7 @@ public sealed partial class SettingsThemePreviewTests
     private sealed record LibraryUxFixture(GalleryWindow Window, GalleryViewModel ViewModel, CaptureQueue Queue,
         CaptureFolder Empty, CaptureFolder Design, IReadOnlyList<CaptureRecord> Records);
 
-    private static LibraryUxFixture CreateLibraryUxFixture(string prefix)
+    private static LibraryUxFixture CreateLibraryUxFixture(string prefix, Action<GalleryViewModel>? beforeWindow = null)
     {
         string root = TestRecycleBin.CreateTempSubdirectory(prefix).FullName;
         var paths = AppPaths.CreateForRoot(root);
@@ -105,6 +105,7 @@ public sealed partial class SettingsThemePreviewTests
             NullLogger<OcrIndexingService>.Instance, Dispatcher.CurrentDispatcher);
         var vm = new GalleryViewModel(controller, record => queue.GetFilePath(record, CaptureFileNames.Thumbnail), 96,
             clock: () => today);
+        beforeWindow?.Invoke(vm);
         var window = new GalleryWindow(vm, controller,
             new GalleryReeditLoader(queue, NullLogger<GalleryReeditLoader>.Instance), commit, queue,
             new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance), paths,
@@ -388,7 +389,8 @@ public sealed partial class SettingsThemePreviewTests
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
-            Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
+            // No heading row repeats the folder's location header, so every row holds compact cards.
+            Assert.All(vm.Rows, row => Assert.True(row.IsCompact));
             AssertInsideClient(compactTile, client, label);
             Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
             Button compactMore = Descendants(compactTile).OfType<Button>()

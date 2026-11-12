@@ -26,7 +26,7 @@ internal sealed partial class OcrResultWindow
     {
         _editIndicator = new WrapPanel { Visibility = Visibility.Collapsed };
         _editCount = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        _editCount.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
+        _editCount.SetResourceReference(TextBlock.ForegroundProperty, "Text.Success");
         _editIndicator.Children.Add(_editCount);
         var revert = MakeButton(UiText.Get("Ocr_RevertEdits"), UiText.Get("Ocr_RevertEdits"));
         revert.SetResourceReference(StyleProperty, "Button.Ghost");
@@ -217,7 +217,8 @@ internal sealed partial class OcrResultWindow
                     int first = 0;
                     foreach (OcrParagraph paragraph in _currentExtraction.Paragraphs)
                     {
-                        int count = _joinLines.IsChecked == true ? 1 : paragraph.Lines.Count;
+                        int count = _joinLines.IsChecked == true && !paragraph.SourceLines.Any(source => source.IsCodePayload)
+                            ? 1 : paragraph.Lines.Count;
                         if (line >= first && line < first + count) { regions = [paragraph.Bounds]; break; }
                         first += count + 1;
                     }

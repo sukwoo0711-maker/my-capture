@@ -152,7 +152,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private bool _detectWindows;
     private bool _regionOnlySelected;
     private bool _windowSelected;
-    private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected;
+    private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected && !_freeformMode;
     private bool _textCaptureAvailable;
     private bool _showShortcutHints;
     private bool _offersOtherActions;
@@ -272,7 +272,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     /// <summary>
     /// A ratio can be locked unless the size is fixed by a setting or the colour mode is picking a pixel.
     /// </summary>
-    private bool RatioAvailable => PresetSize is null && !_colorPickMode;
+    private bool RatioAvailable => PresetSize is null && !_colorPickMode && !_freeformMode;
 
     /// <summary>The lock that shapes selections now; Free when none is available.</summary>
     private SelectionRatio ActiveRatio => RatioAvailable ? _selectionRatio : SelectionRatio.Free;
@@ -299,6 +299,15 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>Pointer travel, in DIPs, after which the start guide gets out of the way.</summary>
     internal const double StartGuideMoveDismissDip = 96;
+
+    /// <summary>
+    /// How long the window highlight glides to a new window: shorter than the fast motion token, so
+    /// the highlight lands before the pointer reaches the next window.
+    /// </summary>
+    internal static readonly TimeSpan HoverGlideLength = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Frame pixels the farthest edge must move before the window highlight glides.</summary>
+    internal const double HoverGlideMinimumShift = 8;
 
     /// <summary>
     /// Highlights the frontmost top-level window under the pointer and lets a click select it.
@@ -381,7 +390,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>What the next click or drag produces; the bar fills in the matching button.</summary>
     internal CaptureSelectorMode Mode =>
-        _colorPickMode ? CaptureSelectorMode.Color : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
+        _freeformMode ? CaptureSelectorMode.Freeform : _colorPickMode ? CaptureSelectorMode.Color : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
 
     /// <summary>Top-level windows in z-order (frontmost first), in virtual-desktop pixels.</summary>
     internal IReadOnlyList<WindowCandidate> WindowCandidates
@@ -478,6 +487,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         {
             if (_recordingSelection == value) return;
             _recordingSelection = value;
+            if (value && _freeformMode) LeaveFreeform();
             ConfigureGuides();
             _staticDirty = true;
             QueueFeedback();
@@ -518,6 +528,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         set
         {
             if (_textCaptureMode == value) return;
+            if (value && _freeformMode) LeaveFreeform();
             _textCaptureMode = value;
             if (value) _colorPickMode = false;
             OnModeChanged();
@@ -531,6 +542,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal void SelectMode(CaptureSelectorMode mode)
     {
         if (_ended) return;
+        if (mode == CaptureSelectorMode.Freeform)
+        {
+            if (!FreeformAvailable) return;
+            EnterFreeform();
+            return;
+        }
+        if (_freeformMode) LeaveFreeform();
         switch (mode)
         {
             case CaptureSelectorMode.Text when TextCaptureAvailable:
@@ -558,6 +576,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         // The colour mode never highlights a window; leaving it shows the one under the pointer again.
         if (_pointerInitialized) RefreshHover(_cursorPixel.Offset(_screenBounds.Left, _screenBounds.Top));
         _modeBar?.ShowMode(Mode, _windowSelected);
+        _keyPanelUpdate?.Invoke();
         QueueFeedback();
     }
 
@@ -580,6 +599,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _released = true;
         ThemeService.CaptureGuideChanged -= OnGuidePaletteChanged;
         _ended = true;
+        _elements?.Dispose(); _elements = null; CreateElementSource = null;
         EndPointerInteraction();
         _feedbackScheduler.Dispose();
         _toastTimer?.Stop();
@@ -614,6 +634,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _modeBar = null;
         _startGuide = null;
         _modeBarBounds = null;
+        ReleaseFreeformPreview();
         _frame = null;
         _magnifierCrop = null;
         _lastSample = null;
@@ -715,6 +736,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return false;
         }
 
+        region = TrackElements(window, region, screenPoint);
+        if (HoverElement) wholeMonitor = false;
         bool changed = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window)
             || _hoverWholeMonitor != wholeMonitor;
         _hoverWindow = window;
@@ -725,6 +748,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void ClearHover()
     {
+        _elements?.Reset();
         if (_hoverRegion is null && _hoverWindow is null) return;
         _hoverWindow = null;
         _hoverRegion = null;
@@ -840,6 +864,16 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         if (ratio == SelectionRatio.Free) return ResolveCompletedDrag(start, end, frameBounds);
         RectD pixels = SelectionRatios.FitDrag(start, end, frameBounds, ratio, evenSize);
         return pixels.Width >= MinimumSelectionPixels && pixels.Height >= MinimumSelectionPixels ? pixels : null;
+    }
+
+    /// <summary>A settings-fixed selection retains its exact physical size from preview through release.</summary>
+    internal static RectD? ResolvePresetSelection(PointD anchor, System.Drawing.Size? preset, RectD frameBounds)
+    {
+        if (preset is not { Width: > 0, Height: > 0 } size) return null;
+        // Like the existing fixed-size preview, odd presets remain exact. Even sizing applies to
+        // ratio-locked recording selections, whose existing fallback remains unchanged.
+        double width = Math.Min(size.Width, frameBounds.Width), height = Math.Min(size.Height, frameBounds.Height);
+        return new RectD(anchor.X, anchor.Y, width, height).ClampTo(frameBounds);
     }
 
     protected override void OnRender(DrawingContext drawingContext)
@@ -960,7 +994,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, OffersOtherActions,
-            CanRepeatLastRegion(), RecordingSelection, ratioAvailable: PresetSize is null);
+            CanRepeatLastRegion(), RecordingSelection, ratioAvailable: PresetSize is null,
+            freeformUnavailableReason: EffectiveFreeformUnavailableReason);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(_selectionRatio);
         _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
@@ -1124,6 +1159,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal bool CaptureFullScreen()
     {
         if (_ended || _copyingColor) return false;
+        if (_freeformMode) SelectMode(CaptureSelectorMode.Capture);
         RectD monitor = GuideArea.Bounds.ClampTo(FrameBounds).ToPixelBounds();
         if (monitor.Width < MinimumSelectionPixels || monitor.Height < MinimumSelectionPixels) return false;
         ResetRefitCycle();
@@ -1219,6 +1255,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
+            RebuildFreeformPreview();
             _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = _widestCoordinateText = null;
             _tabLabelText = _tabSizeText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
@@ -1253,8 +1290,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
         SelectionRatio ratio = ActiveRatio;
         if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != shownHover || _drawnHoverTarget != hover
-            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode || _drawnRatio != ratio)
+            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode || _drawnRatio != ratio
+            || _drawnElementHint != ElementWheelHint || _drawnElement != HoverElement)
         {
+            _drawnElementHint = ElementWheelHint; _drawnElement = HoverElement;
             _drawnRatio = ratio;
             _drawnSelection = _selection;
             _drawnHover = shownHover;
@@ -1265,9 +1304,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             _targetLabel = null;
             _dimensionLabelBounds = null;
             RectD? revealed = _selection ?? shownHover;
-            UpdateRevealedRegion(revealed);
+            if (!_freeformMode) UpdateRevealedRegion(revealed);
             using DrawingContext dc = _selectionVisual.RenderOpen();
-            if (_selection is { } selection) DrawSelection(dc, selection);
+            if (_freeformMode) DrawFreeform(dc);
+            else if (_selection is { } selection) DrawSelection(dc, selection);
             else if (shownHover is { } shown && hover is { } window) DrawDetectedWindow(dc, shown, window, hoverWholeMonitor);
         }
         PointD? anchor = _interaction == InteractionMode.Create && _pointerInitialized && !_ended ? _dragAnchor : null;
@@ -1337,15 +1377,17 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// Where the reveal clip, the band and the tab show the highlighted <paramref name="target"/>.
-    /// A new target glides there from the rectangle on screen over the fast motion token, so the
-    /// highlight follows the pointer from window to window instead of jumping; a new target during
-    /// a glide starts from where the highlight is at that moment.
+    /// A new target glides there from the rectangle on screen over <see cref="HoverGlideLength"/>,
+    /// so the highlight follows the pointer from window to window instead of jumping; a new target
+    /// during a glide snaps, so a pointer sweeping across windows never trails the highlight.
     /// </summary>
     /// <remarks>
     /// Only the picture moves. The hover a click captures and the tab's words change at once. The
-    /// first highlight, one that follows no highlight, and every highlight with Windows animation
-    /// effects off snap. A glide asks for the next composition frame until it lands; each of those
-    /// frames moves the reveal clip and redraws the selection layer, never the frozen desktop.
+    /// first highlight, one that follows no highlight, every highlight with Windows animation
+    /// effects off, a move of a few pixels and a move to or from a window larger than a quarter of
+    /// the screen snap: a large window's glide redraws most of the screen on every frame. A glide
+    /// asks for the next composition frame until it lands; each of those frames moves the reveal
+    /// clip and redraws the selection layer, never the frozen desktop.
     /// </remarks>
     private RectD? GlideHover(RectD? target)
     {
@@ -1359,14 +1401,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         TimeSpan now = ReadClock();
         if (_glideTarget != to)
         {
-            RectD? from = _gliding ? GlideAt(now) : _shownHover;
+            RectD? from = _gliding ? null : _shownHover;
             _glideTarget = to;
-            _gliding = from is { } start && start != to && FluidMotion.AnimationsEnabled;
+            _gliding = from is { } start && GlidesBetween(start, to);
             if (_gliding)
             {
                 _glideFrom = from!.Value;
                 _glideStart = now;
-                _glideLength = FluidMotion.FastDuration.TimeSpan;
+                _glideLength = HoverGlideLength;
                 _glideEasing = FluidMotion.StandardEasing;
             }
         }
@@ -1382,6 +1424,18 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         if (now - _glideStart >= _glideLength) _gliding = false;
         else QueueFeedback();
         return shown;
+    }
+
+    /// <summary>Whether the highlight glides from <paramref name="from"/> to <paramref name="to"/> instead of snapping.</summary>
+    private bool GlidesBetween(RectD from, RectD to)
+    {
+        if (!FluidMotion.AnimationsEnabled) return false;
+        double shift = Math.Max(
+            Math.Max(Math.Abs(to.Left - from.Left), Math.Abs(to.Top - from.Top)),
+            Math.Max(Math.Abs(to.Right - from.Right), Math.Abs(to.Bottom - from.Bottom)));
+        if (shift < HoverGlideMinimumShift) return false;
+        double quarter = (double)PixelWidth * PixelHeight / 4;
+        return from.Width * from.Height <= quarter && to.Width * to.Height <= quarter;
     }
 
     /// <summary>The glide's rectangle at <paramref name="now"/>, on whole frame pixels.</summary>
@@ -1441,10 +1495,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             if (anchor)
             {
                 FormattedText text = _anchorText ??= CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, TypeScale.Caption, _primaryTextBrush);
-                double x = Math.Clamp(p.X + 15, 4, Math.Max(4, ActualWidth - text.Width - 12));
-                double y = Math.Clamp(p.Y + 12, 4, Math.Max(4, ActualHeight - text.Height - 8));
-                dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
-                dc.DrawText(text, new Point(x, y));
+                Rect chip = AnchorChipBounds(p, new Size(text.Width, text.Height), new Size(ActualWidth, ActualHeight));
+                AnchorChipBoundsForTest = chip;
+                dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, chip, ReadoutRadius, ReadoutRadius);
+                dc.DrawText(text, new Point(chip.X + ReadoutPaddingX, chip.Y + ReadoutPaddingY));
             }
         }
         Target(anchor ? _dragAnchor : _cursorPixel);
@@ -1528,6 +1582,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         RectD pixels = target.ToPixelBounds();
         // The same words as the status above and the mode bar: what a click does in this mode.
         string label = UiText.Get(ClickKey(wholeMonitor));
+        if (!wholeMonitor && !HoverElement && ElementWheelHint) label += UiText.Get("CaptureGuide2_ElementWheelHint");
         (int Width, int Height) captured = ((int)pixels.Width, (int)pixels.Height);
         // A glide redraws the tab on every frame; its words are laid out once per target.
         if (_tabLabelText is null || _tabSizeText is null || _tabTextSize != captured
@@ -1576,7 +1631,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private static Rect Deflate(Rect rect, double inset) => new(rect.X + inset, rect.Y + inset,
         Math.Max(0, rect.Width - (inset * 2)), Math.Max(0, rect.Height - (inset * 2)));
 
-    private static StreamGeometry TabGeometry(Rect r, double radius, bool roundTop, bool roundBottom)
+    internal static StreamGeometry TabGeometry(Rect r, double radius, bool roundTop, bool roundBottom)
     {
         double limit = Math.Min(r.Width, r.Height) / 2;
         double top = roundTop ? Math.Min(radius, limit) : 0;
@@ -1701,22 +1756,45 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         string text = FormatReadout((int)pixels.Width, (int)pixels.Height, ActiveRatio);
         ReadoutForTest = text;
         FormattedText formatted = CreateText(text, _monoTypeface, TypeScale.Caption, _primaryTextBrush);
-        const double paddingX = 9;
-        const double paddingY = 5;
-        double width = formatted.Width + (paddingX * 2);
-        double height = formatted.Height + (paddingY * 2);
+        double width = formatted.Width + (ReadoutPaddingX * 2);
+        double height = formatted.Height + (ReadoutPaddingY * 2);
 
-        double x = Math.Clamp(selectionDip.Left, 8, Math.Max(8, ActualWidth - width - 8));
-        double y = selectionDip.Top - height - 8;
-        if (y < 8)
+        double x = Math.Clamp(selectionDip.Left, ReadoutEdge, Math.Max(ReadoutEdge, ActualWidth - width - ReadoutEdge));
+        double y = selectionDip.Top - height - ReadoutEdge;
+        if (y < ReadoutEdge)
         {
-            y = Math.Min(ActualHeight - height - 8, selectionDip.Bottom + 8);
+            y = Math.Min(ActualHeight - height - ReadoutEdge, selectionDip.Bottom + ReadoutEdge);
         }
 
         var background = new Rect(x, y, width, height);
         _dimensionLabelBounds = background;
-        dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, 7, 7);
-        dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
+        dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, ReadoutRadius, ReadoutRadius);
+        dc.DrawText(formatted, new Point(x + ReadoutPaddingX, y + ReadoutPaddingY));
+    }
+
+    // A drag shows two chips, the start point and the size read-out, with the same padding and
+    // corners and the same distance from the screen edges.
+    private const double ReadoutPaddingX = 9;
+    private const double ReadoutPaddingY = 5;
+    private const double ReadoutRadius = 7;
+    private const double ReadoutEdge = 8;
+
+    /// <summary>The start-point chip's last bounds, in DIPs.</summary>
+    internal Rect? AnchorChipBoundsForTest { get; private set; }
+
+    /// <summary>
+    /// The start-point chip around a <paramref name="text"/>-sized label: its top-left corner where it
+    /// has always been, just below and to the right of the point the drag started from, with the
+    /// size read-out's padding and its distance from the edges of a <paramref name="view"/>-sized
+    /// screen. It used to pad its label by 4 × 2 DIPs, under half the read-out's 9 × 5.
+    /// </summary>
+    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view)
+    {
+        double width = text.Width + (ReadoutPaddingX * 2);
+        double height = text.Height + (ReadoutPaddingY * 2);
+        double x = Math.Clamp(anchor.X + 11, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
+        double y = Math.Clamp(anchor.Y + 10, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
+        return new Rect(x, y, width, height);
     }
 
     /// <summary>
@@ -1891,6 +1969,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return parts;
         }
 
+        if (_freeformMode)
+        {
+            string drawing = UiText.Get("CaptureFreeform_Drawing");
+            parts.Add((drawing, [drawing]));
+            active = 0;
+            return parts;
+        }
+
         string drag = UiText.Get(_textCaptureMode ? "CaptureGuide2_DragText" : "CaptureGuide2_DragCapture");
         parts.Add((drag, [drag]));
         if (cue == CaptureCueState.Drag) active = 0;
@@ -1913,7 +1999,9 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>What a click on a highlighted window or monitor does in the current mode.</summary>
-    private string ClickKey(bool wholeMonitor) => (_textCaptureMode, wholeMonitor) switch
+    private string ClickKey(bool wholeMonitor) => HoverElement && !wholeMonitor
+        ? (_textCaptureMode ? "CaptureGuide2_ClickElementText" : "CaptureGuide2_ClickElement")
+        : (_textCaptureMode, wholeMonitor) switch
     {
         (true, true) => "CaptureGuide2_ClickMonitorText",
         (true, false) => "CaptureGuide2_ClickWindowText",
@@ -1923,6 +2011,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>The colour mode shows the magnifier even with the setting off: it is how a pixel is aimed at.</summary>
     private bool ShowsMagnifier => _showMagnifier || _colorPickMode;
+
+    // The panel sits 3 DIPs outside the image all round.
+    private const double MagnifierPanelRadius = 9;
+    private const double MagnifierImageRadius = MagnifierPanelRadius - 3;
+
+    /// <summary>Where the magnifier last drew its image, in DIPs.</summary>
+    internal Rect? MagnifierImageBoundsForTest { get; private set; }
 
     private void DrawMagnifier(DrawingContext dc)
     {
@@ -1987,8 +2082,17 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         y = Math.Clamp(y, 8, Math.Max(8, ActualHeight - imageHeight - footerHeight - 8));
 
         var panel = new Rect(x - 3, y - 3, width + 6, imageHeight + footerHeight + 6);
-        dc.DrawRoundedRectangle(_chromeBrush, _magnifierBorderPen, panel, 9, 9);
-        dc.DrawImage(_magnifierCrop, new Rect(x, y, width, imageHeight));
+        dc.DrawRoundedRectangle(_chromeBrush, _magnifierBorderPen, panel, MagnifierPanelRadius, MagnifierPanelRadius);
+        // The image's top corners follow the panel's, 3 DIPs further in; square, they touched the
+        // panel's border. The clip runs on past the image's foot, which meets the footer square.
+        var image = new Rect(x, y, width, imageHeight);
+        MagnifierImageBoundsForTest = image;
+        var corners = new RectangleGeometry(new Rect(x, y, width, imageHeight + MagnifierImageRadius),
+            MagnifierImageRadius, MagnifierImageRadius);
+        corners.Freeze();
+        dc.PushClip(corners);
+        dc.DrawImage(_magnifierCrop, image);
+        dc.Pop();
 
         double cellWidth = width / _magnifierCrop.PixelWidth;
         double cellHeight = imageHeight / _magnifierCrop.PixelHeight;
@@ -2093,6 +2197,11 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         if (_ended) return;
         PointD rawPixel = UpdatePointer();
+        if (_freeformMode && _interaction == InteractionMode.Create)
+        {
+            AppendFreeformPoint(rawPixel);
+            return;
+        }
         RectD? previous = _selection;
 
         if (_interaction == InteractionMode.Create)
@@ -2107,14 +2216,12 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             }
 
             ResetRefitCycle();
-            if (PresetSize is { } preset && preset.Width > 0 && preset.Height > 0)
+            if (ResolvePresetSelection(_dragAnchor, PresetSize, FrameBounds) is { } fixedSelection)
             {
                 // Fixed size: the drag only moves the box's top-left corner. The stored
                 // size is honoured exactly (clamped to the frame) so every capture from
                 // the same preset has identical dimensions.
-                double width = Math.Min(preset.Width, FrameBounds.Width);
-                double height = Math.Min(preset.Height, FrameBounds.Height);
-                _selection = new RectD(_dragAnchor.X, _dragAnchor.Y, width, height).ClampTo(FrameBounds);
+                _selection = fixedSelection;
             }
             else
             {
@@ -2155,9 +2262,16 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return true;
         }
 
+        if (_freeformMode)
+        {
+            BeginFreeform(rawPoint);
+            if (capture) _ = Mouse.Capture(this);
+            return true;
+        }
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _dragAnchor = point;
+        _elements?.Stop();
         _selectedWindow = null;
         _dragBeyondClick = false;
         ResetRefitCycle();
@@ -2185,6 +2299,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
 
         PointD rawPoint = UpdatePointer();
+        if (_freeformMode)
+        {
+            AppendFreeformPoint(rawPoint);
+            _interaction = InteractionMode.None;
+            if (releaseCapture) Mouse.Capture(null);
+            CompleteFreeform(pinRequested: false);
+            return true;
+        }
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         ResetRefitCycle();
@@ -2199,7 +2321,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
         else
         {
-            _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds, ActiveRatio, EvenSelection);
+            _selection = ResolvePresetSelection(_dragAnchor, PresetSize, FrameBounds)
+                ?? ResolveCompletedDrag(_dragAnchor, point, FrameBounds, ActiveRatio, EvenSelection);
         }
         _interaction = InteractionMode.None;
         if (releaseCapture) Mouse.Capture(null);
@@ -2258,7 +2381,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 return;
             }
 
-            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space) return;
+            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space or Key.PageUp or Key.PageDown) return;
         }
 
         switch (key)
@@ -2272,10 +2395,18 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 UpdatePointer();
                 return;
             case Key.Enter:
-                ConfirmSelection();
+                ConfirmHoveredOrSelected();
                 e.Handled = true;
                 return;
-            case Key.A when modifiers.HasFlag(ModifierKeys.Control):
+            case Key.PageDown when modifiers == ModifierKeys.None:
+                e.Handled = StepElement(1); return;
+            case Key.PageUp when modifiers == ModifierKeys.None:
+                e.Handled = StepElement(-1); return;
+            case Key.F when FreeformAvailable && IsPlainOrShift(modifiers):
+                SelectMode(_freeformMode ? CaptureSelectorMode.Capture : CaptureSelectorMode.Freeform);
+                e.Handled = true;
+                return;
+            case Key.A when !_freeformMode && modifiers.HasFlag(ModifierKeys.Control):
                 ResetRefitCycle();
                 _selection = FrameBounds;
                 _selectedWindow = null;
@@ -2326,6 +2457,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _precisionPointer.Reset();
         if (_interaction == InteractionMode.Create && !_ended)
         {
+            if (_freeformMode) { DiscardFreeform(); return; }
             _interaction = InteractionMode.None;
             ResetRefitCycle();
             _selection = null;
@@ -2351,7 +2483,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void NudgeSelection(Key key, ModifierKeys modifiers)
     {
-        if (_selection is not RectD selection)
+        if (_freeformMode || _selection is not RectD selection)
         {
             return;
         }
@@ -2400,6 +2532,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal void ConfirmSelectionAsPin()
     {
         if (_textCaptureMode || RecordingSelection) return;
+        if (_freeformMode) { CompleteFreeform(pinRequested: true); return; }
         ConfirmSelection(wholeMonitor: false, pinRequested: true);
     }
 
@@ -2534,6 +2667,11 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void RequestCancel()
     {
+        if (_freeformMode && _freeformPoints is { Count: > 0 })
+        {
+            DiscardFreeform();
+            return;
+        }
         if (_ended)
         {
             return;
@@ -2549,6 +2687,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         ArgumentNullException.ThrowIfNull(frame);
         if (_released) return;
         _frame = frame;
+        EnsureFreeformPreview();
         _staticDirty = true;
         _magnifierCrop = null;
         _magnifierCropX = -1;
@@ -2748,6 +2887,7 @@ internal sealed class RegionSelectionEventArgs : EventArgs
     }
 
     internal RectD BitmapRegion { get; }
+    internal FreeformMask? FreeformMask { get; init; }
 
     /// <summary>The auto-detected window a click selected, or null for a drag or keyboard selection.</summary>
     internal WindowCandidate? DetectedWindow { get; init; }

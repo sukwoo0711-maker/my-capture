@@ -227,6 +227,9 @@ internal sealed partial class OcrResultWindow : Window
     /// <summary>Raised when the user dismisses the reusable window with Esc or the close button.</summary>
     internal event EventHandler? Dismissed;
 
+    /// <summary>Raised after a copy command: true once the text is on the clipboard, false when the clipboard refused it.</summary>
+    internal event Action<bool>? TextCopied;
+
     /// <summary>Populates the window from a result and shows/activates it.</summary>
     internal void ShowResult(OcrResult result, string contextLabel,
         BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null,

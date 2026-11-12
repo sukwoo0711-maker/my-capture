@@ -26,8 +26,10 @@ public sealed class HotkeyRecorder : StackPanel
     internal static Func<Hotkey, bool>? CanRegister { get; set; }
     private readonly Button _record = new() { MinWidth = 210, MinHeight = 38, HorizontalContentAlignment = HorizontalAlignment.Left };
     private readonly Button? _reset;
-    // Collapsed while empty: an empty TextBlock still takes a line under every recorder.
-    private readonly TextBlock _conflict = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
+    // Collapsed while empty: an empty TextBlock still takes a line under every recorder. Normal
+    // weight, not the row's: it must not read as the next shortcut's name.
+    private readonly TextBlock _conflict = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Margin = new Thickness(0, 4, 0, 0),
+        FontWeight = FontWeights.Normal, Visibility = Visibility.Collapsed };
 
     public HotkeyRecorder()
     {
@@ -48,7 +50,7 @@ public sealed class HotkeyRecorder : StackPanel
         }
         Children.Add(row);
         RefreshResetButton();
-        _conflict.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        _conflict.SetResourceReference(TextBlock.ForegroundProperty, "State.Danger");
         AutomationProperties.SetLiveSetting(_conflict, AutomationLiveSetting.Assertive);
         Children.Add(_conflict);
         _record.Click += (_, _) => { Active?.Stop(); Active = this; Refresh(); _record.Focus(); };
@@ -144,7 +146,11 @@ public sealed class HotkeyRecorder : StackPanel
     private void ShowConflict(string message)
     {
         KoreanWordWrap.Show(_conflict, message);
-        _conflict.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        bool problem = message.Length > 0;
+        _conflict.Visibility = problem ? Visibility.Visible : Visibility.Collapsed;
+        // As an invalid number field in the same window does, the recorder's outline turns State.Danger.
+        if (problem) _record.SetResourceReference(Control.BorderBrushProperty, "State.Danger");
+        else _record.ClearValue(Control.BorderBrushProperty);
     }
 
     private void Refresh()
