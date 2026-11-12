@@ -289,7 +289,11 @@ public partial class App : Application
         _pins = new PinManager(
             () => _settings!.Pin,
             pinSaveService,
-            _services.GetRequiredService<ILogger<PinManager>>());
+            _services.GetRequiredService<ILogger<PinManager>>())
+        {
+            // A spreadsheet picture opens as large as its cells looked in the sheet window.
+            BeginSpreadsheetViewRead = PinManager.ReadSpreadsheetView,
+        };
         // The message window is the hotkey service's own; the reader state only listens to it.
         _screenReader = new MyCapture.App.Accessibility.ScreenReaderState(_services.GetRequiredService<NativeMessageWindow>());
         _pins.AttachScreenReader(_screenReader);
