@@ -5,7 +5,10 @@ namespace MyCapture.Ocr;
 
 public enum OcrExtractionMode { Table, Code, Text, Translation }
 
-public sealed record OcrTableCell(string Text, OcrRect Bounds, OcrRect Region);
+public sealed record OcrTableCell(string Text, OcrRect Bounds, OcrRect Region)
+{
+    public bool IsCodePayload { get; init; }
+}
 public sealed record OcrTableRow(IReadOnlyList<OcrTableCell> Cells);
 public sealed record OcrTableColumn(bool IsNumeric);
 
@@ -33,7 +36,7 @@ public sealed record OcrExtraction(OcrTable Table, OcrCode Code,
     IReadOnlyList<OcrParagraph> Paragraphs, bool HasGeometry)
 {
     public string Text(bool joinLines) => string.Join("\n\n", Paragraphs.Select(paragraph =>
-        string.Join(joinLines ? " " : "\n", paragraph.Lines)));
+        string.Join(joinLines && !paragraph.SourceLines.Any(line => line.IsCodePayload) ? " " : "\n", paragraph.Lines)));
 }
 
 /// <summary>Reconstructs in reading axes; returned geometry always uses original image pixels.</summary>
@@ -44,6 +47,9 @@ public static class OcrExtractionAnalyzer
         ArgumentNullException.ThrowIfNull(result);
         if (!result.HasText)
             return new(OcrTable.Empty, new("", null, null, 1, []), [], false);
+
+        if (result.Lines.Any(line => line.IsCodePayload))
+            return AnalyzeWithPayloads(result, selection, preferNeuralTable);
 
         var allWords = result.Lines.SelectMany(line => line.Words.Count > 0
                 ? line.Words
@@ -82,6 +88,37 @@ public static class OcrExtractionAnalyzer
         OcrTable returnedTable = preferNeuralTable ? NeuralTable(result, table, selection, orientation) : table;
         return ToOriginal(new(returnedTable, OcrCodeReconstructor.Build(codeRows, origin, referenceRows),
             OcrTextReconstructor.Build(rows), true), orientation);
+    }
+
+    private static OcrExtraction AnalyzeWithPayloads(OcrResult result, OcrRect? selection, bool preferNeuralTable)
+    {
+        OcrExtraction text = Analyze(CodeOcrResult.TextOnly(result), selection, preferNeuralTable);
+        OcrLine[] payloads = result.Lines.Where(line => line.IsCodePayload && (selection is null
+            || OcrGeometry.Contains(selection.Value, line.Bounds.X + line.Bounds.Width / 2,
+                line.Bounds.Y + line.Bounds.Height / 2))).ToArray();
+        if (payloads.Length == 0) return text;
+        // A symbol is an atomic paragraph. Its large square box must not absorb neighbouring
+        // text into a visual row, deduplicate equal multiline boxes, or trim payload whitespace.
+        OcrParagraph[] paragraphs = text.Paragraphs.Concat(payloads.GroupBy(line => line.Bounds)
+            .Select(group => new OcrParagraph(group.Select(line => line.Text).ToArray(), group.Key)
+                { SourceLines = group.ToArray() }))
+            .OrderBy(paragraph => result.ReadingOrientation.ToReading(paragraph.Bounds).Y)
+            .ThenBy(paragraph => result.ReadingOrientation.ToReading(paragraph.Bounds).X).ToArray();
+        OcrTable table;
+        if (text.Table.HasStructure)
+        {
+            var rows = text.Table.Rows.Concat(payloads.Select(line => new OcrTableRow(
+                Enumerable.Range(0, text.Table.Columns.Count).Select(column => new OcrTableCell(
+                    column == 0 ? line.Text : "", line.Bounds, line.Bounds) { IsCodePayload = true }).ToArray())))
+                .OrderBy(row => result.ReadingOrientation.ToReading(row.Cells[0].Bounds).Y).ToArray();
+            table = text.Table with { Rows = rows };
+        }
+        else
+            table = new(paragraphs.SelectMany(paragraph => paragraph.SourceLines).Select(line => new OcrTableRow(
+                [new(line.Text, line.Bounds, line.Bounds) { IsCodePayload = line.IsCodePayload }])).ToArray(), [new(false)], false);
+        string codeText = string.Join("\n", paragraphs.SelectMany(paragraph => paragraph.Lines));
+        return new(table, text.Code with { Text = codeText, Regions = paragraphs.Select(p => p.Bounds).ToArray() },
+            paragraphs, true);
     }
 
     private static OcrTable NeuralTable(OcrResult result, OcrTable mergedTable, OcrRect? selection,

@@ -280,6 +280,9 @@ public sealed class PinSettings
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
+    /// <summary>Snap interior drags to work-area and other visible pin edges.</summary>
+    public bool SnapWhileDragging { get; set; } = true;
+
     /// <summary>Save open pins on this PC and reopen them at the next launch.</summary>
     /// <remarks>Legacy settings stay off; new installations enable this through <see cref="NewInstallDefaults"/>.</remarks>
     public bool RestoreOpenPinsOnLaunch { get; set; } = false;
@@ -312,6 +315,13 @@ public sealed class PinSettings
 
     /// <summary>Scale step applied per mouse-wheel notch.</summary>
     public double ZoomStep { get; set; } = 0.1;
+
+    /// <summary>
+    /// Shows new and reopened picture pins in a native window that holds less memory. A pin that
+    /// starts a feature only the standard pin offers (text selection, translation) becomes one.
+    /// </summary>
+    /// <remarks>Off by default and on new installations.</remarks>
+    public bool LightweightImagePins { get; set; }
 }
 
 public sealed class AnnotationDefaults

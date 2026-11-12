@@ -129,9 +129,10 @@ internal sealed partial class NativeSelectorChrome
         public bool CanPresent => chrome._owner is { FirstFramePresentedForTest: true, Frame: not null };
         public CaptureKeyPanelContext Context => new(Owner.ShowKeyPanel, Owner.Mode != CaptureSelectorMode.Color,
             Owner.UsesWindowDetection && Owner.Mode != CaptureSelectorMode.Color,
-            Owner.SelectionRectangle.Width >= 2 && Owner.SelectionRectangle.Height >= 2,
-            Owner.Mode != CaptureSelectorMode.Color && Owner.PresetSize is null, Owner.CopyColorText is not null,
-            Owner.TextCaptureAvailable, Owner.TextCaptureMode, Owner.PinSelectionAvailable, Owner.PasteToScreenHotkey);
+            Owner.FreeformStrokeActive || (Owner.SelectionRectangle.Width >= 2 && Owner.SelectionRectangle.Height >= 2),
+            Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Owner.PresetSize is null, Owner.CopyColorText is not null,
+            Owner.TextCaptureAvailable, Owner.TextCaptureMode, Owner.PinSelectionAvailable, Owner.PasteToScreenHotkey,
+            Owner.FreeformAvailable, Owner.Mode == CaptureSelectorMode.Freeform);
         public FontFamily UiFont => ThemeFonts.Ui;
         public FontFamily MonoFont { get; } = new("Consolas");
         public IReadOnlyDictionary<string, Brush> Palette => CaptureGuidePalette.Resolve();

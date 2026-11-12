@@ -93,9 +93,21 @@ public sealed class CaptureSelectorFallbackTests
     {
         using var test = new Fixture();
         test.FailNative(phase);
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => test.Coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        test.Coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
+        test.Coordinator.ClaimStartGuide = () =>
+        {
+            guideWrites.Schedule(() => guideSaves++);
+            return false;
+        };
         test.Start();
         test.WaitForWpf();
         test.WaitForReady();
+        Assert.True(test.Coordinator.IsSelecting);
+        Assert.Empty(pendingGuideWrites); // Closing the failed native selector must not start the save.
+        Assert.Equal(0, guideSaves);
         test.Coordinator.Cancel();
         Drain();
         Assert.False(test.Coordinator.IsActive);
@@ -108,6 +120,9 @@ public sealed class CaptureSelectorFallbackTests
         Assert.Empty(test.Texts);
         Assert.Equal(1, test.Acquisitions);
         Assert.Equal(1, test.Ended);
+        Assert.False(test.Coordinator.IsSelecting);
+        Assert.Single(pendingGuideWrites).Invoke();
+        Assert.Equal(1, guideSaves); // Native and WPF claims still coalesce into one write.
     });
 
     [Theory]

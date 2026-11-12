@@ -43,6 +43,7 @@ internal sealed partial class PinWindow
         ClipboardCache.Clear();
         _imageElement.Source = DisplayContent.Display;
         UpdateImageRasterLayout();
+        if (_state.IsCollapsed) ShowThumbnail(System.Windows.Media.VisualTreeHelper.GetDpi(this));
         ContentChanged?.Invoke();
     }
 

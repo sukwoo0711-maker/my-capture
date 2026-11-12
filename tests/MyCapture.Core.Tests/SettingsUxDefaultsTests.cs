@@ -21,7 +21,7 @@ public sealed class SettingsUxDefaultsTests
     [
         keys.ToggleClickThrough, keys.RepeatLastRegion,
         keys.CaptureWindow, keys.CaptureFullScreen, keys.UploadGitHubImage, keys.ScrollingCapture, keys.DelayedCapture,
-        keys.RestoreClosedPin, keys.CaptureText, keys.PauseRecording,
+        keys.CaptureText, keys.PauseRecording,
     ];
 
     [Fact]
@@ -38,6 +38,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.True(fresh.Hotkeys.ForceCoreShortcuts);
         Assert.True(fresh.Hotkeys.CoreShortcutsAsked);
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        Assert.Equal("Ctrl+Shift+F3", fresh.Hotkeys.RestoreClosedPin.ToString());
         AssertNewPinDefaults(fresh);
         Assert.False(fresh.General.ShowShortcutHints);
         Assert.False(fresh.General.AlwaysShowShortcutHints);
@@ -65,6 +66,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.True(reloaded.Hotkeys.ForceCoreShortcuts);
         Assert.True(reloaded.Hotkeys.CoreShortcutsAsked);
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        Assert.Equal("Ctrl+Shift+F3", reloaded.Hotkeys.RestoreClosedPin.ToString());
         AssertNewPinDefaults(reloaded);
         Assert.False(reloaded.General.ShowShortcutHints);
         Assert.False(reloaded.General.AlwaysShowShortcutHints);
@@ -228,6 +230,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(mapped.Hotkeys.CoreShortcutsAsked);
         Assert.False(mapped.Hotkeys.ForceCoreShortcuts);
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        Assert.Equal("Ctrl+Shift+F3", mapped.Hotkeys.RestoreClosedPin.ToString());
         AssertNewPinDefaults(mapped);
         Assert.Equal(1, mapped.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), mapped.General.Theme);

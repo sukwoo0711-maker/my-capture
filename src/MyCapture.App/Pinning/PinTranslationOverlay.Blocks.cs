@@ -37,6 +37,16 @@ internal static partial class PinTranslationOverlay
     private static IReadOnlyList<PinOverlayBlock> BuildBlocksCore(OcrResult result, OcrExtraction extraction,
         byte[]? pixels, int width, int height)
     {
+        if (result.Lines.Any(line => line.IsCodePayload))
+        {
+            OcrResult ordinary = CodeOcrResult.TextOnly(result);
+            return BuildBlocksCore(ordinary, OcrExtractionAnalyzer.Analyze(ordinary), pixels, width, height)
+                .Concat(result.Lines.Where(line => line.IsCodePayload).GroupBy(line => line.Bounds)
+                    .Select(group => new PinOverlayBlock(string.Join("\n", group.Select(line => line.Text)),
+                        group.Key, group.ToArray()) { PreservePixels = true }))
+                .OrderBy(block => result.ReadingOrientation.ToReading(block.Bounds).Y)
+                .ThenBy(block => result.ReadingOrientation.ToReading(block.Bounds).X).ToArray();
+        }
         var blocks = new List<PinOverlayBlock>();
         OcrRect[] keycaps = pixels is null ? [] : FindKeyboardKeycaps(result.Lines, pixels, width, height);
         OcrRect[] codeLines = result.Lines.Where(line => FindComments(line.Text).Count == 0

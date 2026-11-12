@@ -27,7 +27,11 @@ internal static class OcrSourceSnapshot
             else if (!string.IsNullOrWhiteSpace(request.FilePath))
                 source = ImageCodec.TryLoad(request.FilePath);
             cancellationToken.ThrowIfCancellationRequested();
-            return source is null ? null : Freeze(source);
+            if (source is null) return null;
+            BitmapSource snapshot = Freeze(source);
+            // The window can float this picture as a pin, which copies and saves it on other threads.
+            ImageCodec.KeepFrameMetadata(snapshot);
+            return snapshot;
         }, cancellationToken);
     }
 

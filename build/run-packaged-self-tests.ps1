@@ -6,7 +6,10 @@ param(
     [string]$OutputRoot = '',
 
     [ValidateRange(30, 3600)]
-    [int]$TimeoutSeconds = 900
+    [int]$TimeoutSeconds = 900,
+
+    # Optional force-on for diagnostics. Trimmed or unknown projection bytes always verify.
+    [switch]$VerifyWindowsProjection
 )
 
 Set-StrictMode -Version 2.0
@@ -26,6 +29,52 @@ foreach ($requiredFile in @('MyCapture.exe', 'MyCapture.dll', 'coreclr.dll', 'ho
         throw "PublishRoot is not a complete self-contained MyCapture package; missing: $requiredFile"
     }
 }
+
+function Get-WindowsProjectionVerification {
+    param([string]$Root)
+
+    # Crossgen keeps the module identity; ILLink creates a new deterministic MVID. Read
+    # metadata only, without loading either assembly into an AppDomain. A missing
+    # cache, failed metadata read or unfamiliar SDK is conservative: verify it.
+    $detection = [ordered]@{ RequiresVerification = $true; State = 'unknown'; Reason = ''; PublishedMvid = ''; OriginalMvid = '' }
+    try {
+        $projection = Join-Path $Root 'Microsoft.Windows.SDK.NET.dll'
+        $dependencies = Get-Content -LiteralPath (Join-Path $Root 'MyCapture.deps.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $sdk = @($dependencies.libraries.PSObject.Properties.Name | Where-Object { $_ -cmatch '^runtimepack\.Microsoft\.Windows\.SDK\.NET\.Ref/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' })
+        if ($sdk.Count -ne 1) { throw 'The dependency manifest does not identify exactly one Windows SDK pack.' }
+        $sdkVersion = $sdk[0].Substring($sdk[0].IndexOf('/') + 1)
+        $cacheLines = @(& dotnet nuget locals global-packages --list --force-english-output)
+        if ($LASTEXITCODE -ne 0) { throw 'The NuGet package cache could not be located.' }
+        $cacheLine = @($cacheLines | Where-Object { $_ -cmatch '^global-packages: .+$' })
+        if ($cacheLine.Count -ne 1) { throw 'The NuGet package cache response was ambiguous.' }
+        $cache = $cacheLine[0].Substring('global-packages: '.Length).Trim()
+        $sdkRoot = Join-Path $cache ('microsoft.windows.sdk.net.ref\' + $sdkVersion + '\lib')
+        $originals = @(Get-ChildItem -LiteralPath $sdkRoot -Filter 'Microsoft.Windows.SDK.NET.dll' -File -Recurse)
+        if ($originals.Count -ne 1) { throw 'Exactly one original SDK projection is required for classification.' }
+        $metadataTool = Join-Path $PSScriptRoot 'tools\projection-identity.cs'
+        $metadataBuildRoot = Join-Path ([IO.Path]::GetTempPath()) ('mycapture-projection-identity-' + [guid]::NewGuid().ToString('N'))
+        $identityLines = @(& dotnet run --file $metadataTool --artifacts-path $metadataBuildRoot --verbosity quiet -- $projection $originals[0].FullName)
+        if ($LASTEXITCODE -ne 0) { throw "Projection module metadata could not be compared (exit $LASTEXITCODE)." }
+        $identity = ($identityLines -join "`n") | ConvertFrom-Json
+        if ($identity.SchemaVersion -ne 1 -or $identity.RequiresVerification -isnot [bool] -or
+            $identity.State -cnotin @('original-sdk', 'trimmed-or-modified')) {
+            throw 'Projection module metadata response is incomplete.'
+        }
+        $detection.PublishedMvid = [string]$identity.PublishedMvid
+        $detection.OriginalMvid = [string]$identity.OriginalMvid
+        $detection.RequiresVerification = $identity.RequiresVerification
+        $detection.State = [string]$identity.State
+        $detection.Reason = [string]$identity.Reason
+    }
+    catch {
+        $detection.Reason = $_.Exception.Message
+    }
+    return [pscustomobject]$detection
+}
+
+$projectionDetection = Get-WindowsProjectionVerification -Root $publish
+$VerifyWindowsProjection = [bool]$VerifyWindowsProjection -or $projectionDetection.RequiresVerification
+Write-Host "Windows projection: $($projectionDetection.State); verification=$([bool]$VerifyWindowsProjection). $($projectionDetection.Reason)"
 
 $runningInstances = @(Get-Process -Name 'MyCapture' -ErrorAction SilentlyContinue)
 if ($runningInstances.Count -gt 0) {
@@ -133,6 +182,10 @@ $previousIterationsOverride = if ($hadIterationsOverride) {
 else {
     $null
 }
+$previousProjectionDataRoot = $null
+if ($VerifyWindowsProjection) {
+    $previousProjectionDataRoot = [Environment]::GetEnvironmentVariable('MYCAPTURE_DATA_ROOT', 'Process')
+}
 
 try {
     # This runner is the eight-test release gate, not the optional 50-iteration soak.
@@ -145,6 +198,11 @@ try {
         $record = @($evidence | Where-Object { $_.Name -ceq $test.Name })[0]
         $testRoot = Join-Path $runRoot ([string]$test.Name)
         [IO.Directory]::CreateDirectory($testRoot) | Out-Null
+        if ($VerifyWindowsProjection) {
+            $isolatedDataRoot = Join-Path $testRoot 'data'
+            [IO.Directory]::CreateDirectory($isolatedDataRoot) | Out-Null
+            [Environment]::SetEnvironmentVariable('MYCAPTURE_DATA_ROOT', $isolatedDataRoot, 'Process')
+        }
 
         if ($testRoot.Contains('"')) {
             throw "A self-test output path cannot contain a quote: $testRoot"
@@ -226,6 +284,9 @@ try {
     }
 }
 finally {
+    if ($VerifyWindowsProjection) {
+        [Environment]::SetEnvironmentVariable('MYCAPTURE_DATA_ROOT', $previousProjectionDataRoot, 'Process')
+    }
     if ($hadIterationsOverride) {
         [Environment]::SetEnvironmentVariable(
             $iterationsVariable,
@@ -240,11 +301,115 @@ finally {
     }
 }
 
-[ordered]@{
+$projectionEvidence = $null
+if ($VerifyWindowsProjection) {
+    $projectionRoot = Join-Path $runRoot 'windows-projection'
+    $probeBuildRoot = Join-Path $runRoot 'projection-probe-build'
+    [IO.Directory]::CreateDirectory($projectionRoot) | Out-Null
+    [IO.Directory]::CreateDirectory((Join-Path $probeBuildRoot 'packages')) | Out-Null
+    $projectionEvidence = [ordered]@{ Result = 'FAIL'; ExitCode = $null; WgcSessions = 0 }
+    try {
+        # No package references or network source: this companion loads the exact WinRT DLLs
+        # directly from PublishRoot and leaves every published file untouched.
+        $probeProject = Join-Path $PSScriptRoot 'tools\WindowsProjectionProbe\WindowsProjectionProbe.csproj'
+        $appStream = [IO.File]::OpenRead($exe)
+        $appReader = New-Object IO.BinaryReader($appStream)
+        try {
+            if ($appReader.ReadUInt16() -ne 0x5A4D) { throw 'Published app has no DOS executable header.' }
+            $appStream.Position = 0x3C
+            $headerOffset = $appReader.ReadInt32()
+            if ($headerOffset -lt 0 -or $headerOffset -gt $appStream.Length - 6) { throw 'Published app PE header is outside the file.' }
+            $appStream.Position = $headerOffset
+            if ($appReader.ReadUInt32() -ne 0x4550) { throw 'Published app has no PE header.' }
+            $machine = $appReader.ReadUInt16()
+            $probeRuntime = switch ($machine) { 0x8664 { 'win-x64' } 0x014C { 'win-x86' } default { throw 'Projection validation requires an x64 or x86 app host.' } }
+        }
+        finally { $appReader.Dispose(); $appStream.Dispose() }
+        $appDependencies = Get-Content -LiteralPath (Join-Path $publish 'MyCapture.deps.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $runtimeTarget = [string]$appDependencies.runtimeTarget.name
+        if (-not $runtimeTarget.EndsWith('/' + $probeRuntime, [StringComparison]::Ordinal)) {
+            throw 'Published app host architecture does not match its dependency manifest.'
+        }
+        & dotnet restore $probeProject "-p:ProbeBuildRoot=$probeBuildRoot" -r $probeRuntime -p:SelfContained=true --source (Join-Path $probeBuildRoot 'packages') *> (Join-Path $projectionRoot 'restore.log')
+        if ($LASTEXITCODE -ne 0) { throw "Projection companion restore failed: $LASTEXITCODE" }
+        $probePublish = Join-Path $probeBuildRoot 'publish'
+        & dotnet publish $probeProject -c Release --no-restore -r $probeRuntime --self-contained true -m:1 -nr:false -p:UseSharedCompilation=false "-p:ProbeBuildRoot=$probeBuildRoot" -o $probePublish *> (Join-Path $projectionRoot 'build.log')
+        if ($LASTEXITCODE -ne 0) { throw "Projection companion publish failed: $LASTEXITCODE" }
+        $probeExe = Join-Path $probePublish 'WindowsProjectionProbe.exe'
+        $probe = $null
+        try {
+            $probe = Start-Process -FilePath $probeExe -ArgumentList ('"{0}" "{1}"' -f $publish, $projectionRoot) `
+                -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru `
+                -RedirectStandardOutput (Join-Path $projectionRoot 'stdout.log') `
+                -RedirectStandardError (Join-Path $projectionRoot 'stderr.log')
+            $probeHandle = $probe.Handle
+            if (-not $probe.WaitForExit($TimeoutSeconds * 1000)) {
+                Write-TimeoutEvidence -Process $probe -TestRoot $projectionRoot
+                Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+                $probe.WaitForExit()
+                throw 'Projection companion timed out.'
+            }
+            if ($null -eq $probe.ExitCode) { throw 'Projection companion exit code was not observed.' }
+            $projectionEvidence.ExitCode = [int]$probe.ExitCode
+            if ($probe.ExitCode -ne 0) { throw "Projection companion failed: $($probe.ExitCode)" }
+        }
+        finally { if ($null -ne $probe) { $probe.Dispose() } }
+
+        $probeResultPath = Join-Path $projectionRoot 'projection-probe-result.json'
+        $probeResult = Get-Content -LiteralPath $probeResultPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $probeReportPath = Join-Path $projectionRoot 'projection-probe-report.txt'
+        $probeLines = @(Get-Content -LiteralPath $probeReportPath -Encoding UTF8 |
+            Where-Object { $_.StartsWith('RESULT:', [StringComparison]::Ordinal) })
+        if ($probeResult.SchemaVersion -ne 1 -or $probeResult.ExitCode -ne 0 -or $probeResult.Result -cne 'PASS' -or
+            $probeResult.PublishRoot -ine $publish -or $probeLines.Count -ne 1 -or $probeLines[0] -cne 'RESULT: PASS') {
+            throw 'Projection companion evidence is incomplete or failed.'
+        }
+        $expectedAssemblies = @('Microsoft.Windows.SDK.NET', 'WinRT.Runtime')
+        if (@($probeResult.Assemblies).Count -ne $expectedAssemblies.Count) { throw 'Projection assembly evidence is incomplete.' }
+        foreach ($name in $expectedAssemblies) {
+            $loaded = @($probeResult.Assemblies | Where-Object { $_.Name -ceq $name })
+            $source = Join-Path $publish ($name + '.dll')
+            if ($loaded.Count -ne 1 -or $loaded[0].Path -ine $source -or
+                (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ine $loaded[0].Sha256) {
+                throw "Projection companion tested different bytes: $name"
+            }
+        }
+
+        # The ordinary recording self-test legitimately accepts GDI fallback. The trimming
+        # release gate must prove actual WinRT frames in ALL four sessions, not that fallback.
+        $recordingPath = Join-Path $runRoot 'recording\recording-selftest-report.txt'
+        $recordingLines = @(Get-Content -LiteralPath $recordingPath -Encoding UTF8)
+        foreach ($number in 1..4) {
+            $backend = @($recordingLines | Where-Object { $_ -ceq "Session ${number}: capture backend requested=WindowsGraphicsCapture active=WindowsGraphicsCapture" })
+            $frames = @($recordingLines | Where-Object { $_ -cmatch "^Session ${number}: WGC create=[0-9.]+ms, first frame wait=[0-9.]+ms, copied=[1-9][0-9]*, reused=[0-9]+$" })
+            if ($backend.Count -ne 1 -or $frames.Count -ne 1) {
+                throw "Projection validation requires live WGC frames without GDI fallback in recording session $number."
+            }
+        }
+        $projectionEvidence.Result = 'PASS'
+        $projectionEvidence.WgcSessions = 4
+        $projectionEvidence.Report = 'windows-projection/projection-probe-report.txt'
+        $projectionEvidence.ReportSha256 = (Get-FileHash -LiteralPath $probeReportPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $projectionEvidence.ResultFile = 'windows-projection/projection-probe-result.json'
+        $projectionEvidence.ResultSha256 = (Get-FileHash -LiteralPath $probeResultPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $projectionEvidence.NotExercised = @($probeResult.NotExercised | Where-Object { $_ -ne 'graphics device/frame events' -and $_ -ne 'OCR recognition' })
+        Write-Host 'PASS Windows projection: companion bytes verified; live WGC frames in four sessions.' -ForegroundColor Green
+    }
+    catch {
+        $projectionEvidence.Error = $_.Exception.Message
+        $failures.Add("Windows projection: $($_.Exception.Message)")
+        Write-Host "FAIL Windows projection: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+$result = [ordered]@{
     SchemaVersion = 1; PublishRoot = $publish; PassCount = $passCount
     Result = $(if ($failures.Count -eq 0 -and $passCount -eq $tests.Count) { 'PASS' } else { 'FAIL' })
     Tests = $evidence; Failures = @($failures.ToArray())
-} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runRoot 'result.json') -Encoding UTF8
+    WindowsProjectionDetection = $projectionDetection
+}
+if ($VerifyWindowsProjection) { $result.WindowsProjection = $projectionEvidence }
+$result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runRoot 'result.json') -Encoding UTF8
 
 if ($failures.Count -gt 0 -or $passCount -ne $tests.Count) {
     Write-Host "SELF_TESTS=FAIL PASSES=$passCount/$($tests.Count) OUTPUT=$runRoot" -ForegroundColor Red

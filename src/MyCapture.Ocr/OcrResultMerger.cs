@@ -14,6 +14,15 @@ internal static class OcrResultMerger
         if (windows.Status == OcrStatus.Cancelled || neural.Status == OcrStatus.Cancelled)
             return OcrResult.Cancelled();
 
+        if (windows.Lines.Any(line => line.IsCodePayload) || neural.Lines.Any(line => line.IsCodePayload))
+        {
+            OcrLine[] payloads = windows.Lines.Where(line => line.IsCodePayload).ToArray();
+            DecodedImageCode[] codes = payloads.Concat(neural.Lines.Where(line => line.IsCodePayload
+                && !payloads.Any(first => first.Text == line.Text && first.Bounds == line.Bounds)))
+                .Select(line => new DecodedImageCode(line.Text, line.Bounds, false)).ToArray();
+            return CodeOcrResult.Merge(Merge(CodeOcrResult.TextOnly(windows), CodeOcrResult.TextOnly(neural), elapsed), codes);
+        }
+
         // Windows records its winning rotation; PP-OCR currently returns source boxes without
         // orientation metadata. Use the explicit reading axes while leaving every box untouched.
         OcrReadingOrientation orientation = windows.HasText && windows.ReadingOrientation.OriginalWidth > 0

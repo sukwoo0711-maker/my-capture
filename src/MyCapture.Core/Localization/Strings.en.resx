@@ -1720,6 +1720,9 @@ This cannot be undone.</value>
   <data name="Pin_SelectText" xml:space="preserve">
     <value>Select text</value>
   </data>
+  <data name="Pin_SelectTextRecognizing" xml:space="preserve">
+    <value>Recognizing text…</value>
+  </data>
   <data name="Pin_SelectTextStarted" xml:space="preserve">
     <value>Select text: drag to choose, then press Ctrl+C. Press Esc to finish.</value>
   </data>
@@ -5611,4 +5614,67 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="Pin_Collapse" xml:space="preserve"><value>Collapse</value></data>
+  <data name="Pin_Expand" xml:space="preserve"><value>Expand</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+Double-click</value></data>
+  <data name="Pin_CollapsedTip" xml:space="preserve"><value>Double-click to expand the pin.</value></data>
+  <data name="Tray_PinCollapsed" xml:space="preserve"><value>Collapsed</value></data>
+  <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>Snap to edges and other pins while dragging</value></data>
+  <data name="Pin_LightweightLabel" xml:space="preserve"><value>Show picture pins with less memory</value></data>
+  <data name="Pin_LightweightDescription" xml:space="preserve"><value>Picture pins use less memory, and a pin that starts text selection or translation becomes a standard pin.</value></data>
+  <data name="Pin_CollapseToggle" xml:space="preserve"><value>Collapse or expand pin</value></data>
+  <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>Expand collapsed pin</value></data>
+  <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>Double-click</value></data>
+  <data name="Pin_SnapBypass" xml:space="preserve"><value>Move without snapping</value></data>
+  <data name="Pin_ShiftDragGesture" xml:space="preserve"><value>Shift+Drag</value></data>
+  <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>Zoom · stop at 100%</value></data>
+  <data name="Pin_ZoomGesture" xml:space="preserve"><value>Wheel / + / -</value></data>
+  <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+double-click collapses or expands the pin. Hold Shift while dragging to bypass snapping. Wheel and + or - zoom steps stop once at 100%.</value></data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>Wheel</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>Select an element in the window (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>Click: Capture element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>Click: Copy text from element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · Wheel: Select element</value></data>
+  <data name="CaptureFreeform_Name" xml:space="preserve">
+    <value>Freeform</value>
+  </data>
+  <data name="CaptureFreeform_Help" xml:space="preserve">
+    <value>Draw an area with the pointer to capture it.</value>
+  </data>
+  <data name="CaptureFreeform_Drawing" xml:space="preserve">
+    <value>Draw a freeform area · Release to capture</value>
+  </data>
+  <data name="CaptureFreeform_KeyHelp" xml:space="preserve">
+    <value>Toggle freeform · Draw with the pointer</value>
+  </data>
+  <data name="CaptureFreeform_Unavailable" xml:space="preserve">
+    <value>Freeform is unavailable for this selection.</value>
+  </data>
+  <data name="CaptureFreeform_Text" xml:space="preserve">
+    <value>Freeform is unavailable for text copy.</value>
+  </data>
+  <data name="CaptureFreeform_Color" xml:space="preserve">
+    <value>Freeform is unavailable for colour copy.</value>
+  </data>
+  <data name="CaptureFreeform_Recording" xml:space="preserve">
+    <value>Recording regions use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Scrolling" xml:space="preserve">
+    <value>Scrolling capture uses rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Delay" xml:space="preserve">
+    <value>Delayed capture uses a rectangular selection.</value>
+  </data>
+  <data name="CaptureFreeform_Editor" xml:space="preserve">
+    <value>Additional captures while editing use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Discard" xml:space="preserve"><value>Discard the stroke</value></data>
+  <data name="OpenWith.Menu" xml:space="preserve"><value>Open with</value></data>
+  <data name="OpenWith.Choose" xml:space="preserve"><value>Choose another app…</value></data>
+  <data name="OpenWith.Loading" xml:space="preserve"><value>Loading</value></data>
+  <data name="OpenWith.Preparing" xml:space="preserve"><value>Preparing file</value></data>
+  <data name="OpenWith.Opened" xml:space="preserve"><value>Sent to app</value></data>
+  <data name="OpenWith.Failed" xml:space="preserve"><value>Could not open the app. {0}</value></data>
+  <data name="OpenWith.Unavailable" xml:space="preserve"><value>The selected app is unavailable.</value></data>
+  <data name="OpenWith.AccessDenied" xml:space="preserve"><value>Access to the file was denied.</value></data>
 </root>

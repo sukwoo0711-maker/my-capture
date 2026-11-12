@@ -95,7 +95,7 @@ internal sealed partial class CaptureOverlayView
     internal bool DeferredGuideCanDrag => !_colorPickMode;
     internal bool DeferredGuideRatioAvailable => RatioAvailable;
     internal bool DeferredGuideWindowDetection => UsesWindowDetection && !_colorPickMode;
-    internal bool DeferredGuideHasSelection => _selection is { Width: >= MinimumSelectionPixels, Height: >= MinimumSelectionPixels };
+    internal bool DeferredGuideHasSelection => FreeformDrawing || _selection is { Width: >= MinimumSelectionPixels, Height: >= MinimumSelectionPixels };
     internal FontFamily DeferredGuideUiFont => _uiTypeface.FontFamily;
     internal FontFamily DeferredGuideMonoFont => _monoTypeface.FontFamily;
     internal RectD DeferredGuideScreenBounds => _screenBounds;
@@ -103,7 +103,7 @@ internal sealed partial class CaptureOverlayView
     internal IReadOnlyList<MonitorInfo> DeferredGuideMonitors => _monitors ??= ReadMonitors();
     internal double DeferredGuideDipPerPixelX => DipPerPixelX;
     internal double DeferredGuideDipPerPixelY => DipPerPixelY;
-    internal Rect? DeferredGuideHighlight => (_selection ?? _shownHover) is { } highlighted ? ToDipRect(highlighted) : null;
+    internal Rect? DeferredGuideHighlight => (FreeformStrokeBounds ?? _selection ?? _shownHover) is { } highlighted ? ToDipRect(highlighted) : null;
     internal Rect? DeferredGuideHoverTab => _targetTab;
     internal Rect DeferredGuideMagnifier => _magnifierVisual.ContentBounds;
     internal Rect? DeferredGuideReadout => _dimensionLabelBounds ?? _targetTab;
@@ -121,6 +121,7 @@ internal sealed partial class CaptureOverlayView
     internal void EndSelection()
     {
         _ended = true;
+        _elements?.Dispose(); _elements = null; CreateElementSource = null;
         ReleaseKeyPanel();
     }
 

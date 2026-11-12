@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '5.3.0',
+    [string]$Version = '5.3.1',
     [switch]$StoreOnly,
     [ValidateSet('x64', 'x86')][string]$Architecture = 'x64'
 )
@@ -23,6 +23,7 @@ if ($StoreOnly -and $Version -cnotmatch '\A[1-9][0-9]{0,4}\.(?:0|[1-9][0-9]{0,4}
 $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMatch.Groups['minor'].Value, $versionMatch.Groups['patch'].Value
 $binaryVersion = "$baseVersion.0"
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
+. (Join-Path $PSScriptRoot 'release-size-budget.ps1')
 
 [xml]$sourceProps = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props') -Raw -Encoding UTF8
 $productVersionNodes = @($sourceProps.SelectNodes('/Project/PropertyGroup/Version'))
@@ -239,6 +240,7 @@ function Assert-SelfContainedPublish([string]$PublishRoot) {
     $requiredRuntimeFiles = @(
         'MyCapture.exe',
         'MyCapture.dll',
+        'zxing.dll',
         'coreclr.dll',
         'hostfxr.dll',
         'hostpolicy.dll',
@@ -280,6 +282,7 @@ function Assert-SelfContainedPublish([string]$PublishRoot) {
 }
 
 try {
+    & (Join-Path $PSScriptRoot 'prepare-projection-linker.ps1')
     & dotnet publish $project -c Release -r $runtime --self-contained true `
         "-p:Platform=$Architecture" "-p:PublishProfile=$runtime-self-contained" -o $publish `
         -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion `
@@ -319,6 +322,8 @@ try {
         if ($totalExpandedBytes -gt 2147483648) { throw 'Published payload exceeds the 2 GiB installer safety limit.' }
     }
 
+    Assert-ReleaseSizeBudget -PublishRoot $publish -Architecture $Architecture
+
     if ($StoreOnly) {
         # Same verified publish; Store does not consume the ZIP/IExpress bootstrap.
         $selfTestRoot = Join-Path $artifactRoot 'packaged-self-tests'
@@ -353,6 +358,7 @@ try {
 
     New-InventoryZip $publish $portable $inventory
     Assert-ZipMatchesInventory $portable $inventory
+    Assert-ReleaseSizeBudget -PublishRoot $publish -Architecture $Architecture -PortableZip $portable
 
     $payload = Join-Path $stage 'payload.zip'
     Copy-Item -LiteralPath $portable -Destination $payload -Force

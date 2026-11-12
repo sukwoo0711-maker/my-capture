@@ -31,7 +31,7 @@ public sealed class NativeSelectorFocusTests
             Show(owner);
             NativeSelectorChrome chrome = owner.Chrome!;
             CaptureModeBar bar = owner.ModeBar;
-            ButtonBase[] order = [bar.CaptureButton, bar.WindowButton, bar.FullScreenButton,
+            ButtonBase[] order = [bar.CaptureButton, bar.WindowButton, bar.FreeformButton, bar.FullScreenButton,
                 bar.RatioButton, bar.TextButton, bar.ColorButton, bar.HelpButton, bar.CancelButton];
             if (reverse) Array.Reverse(order);
             Assert.True(chrome.Windows.Count >= 5, "The passive key panel and magnifier must be present during the focus walk.");
@@ -64,6 +64,8 @@ public sealed class NativeSelectorFocusTests
             owner.HandleKey(Key.Tab, ModifierKeys.None);
             AssertBarFocus(bar.CaptureButton);
             Press(bar.CaptureButton, Key.Tab);
+            AssertBarFocus(bar.FreeformButton);
+            Press(bar.FreeformButton, Key.Tab);
             AssertBarFocus(bar.ColorButton);
             Press(bar.ColorButton, Key.Tab);
             AssertBarFocus(bar.HelpButton);
@@ -129,7 +131,7 @@ public sealed class NativeSelectorFocusTests
             Show(owner);
             CaptureModeBar bar = owner.ModeBar;
             owner.HandleKey(Key.Tab, ModifierKeys.None);
-            for (int i = 0; i < 4; i++) owner.Chrome!.NavigateTab(false);
+            for (int i = 0; i < 5; i++) owner.Chrome!.NavigateTab(false);
             AssertBarFocus(bar.TextButton);
             Press(bar.TextButton, Key.Enter);
             Assert.Equal(CaptureSelectorMode.Text, owner.Mode);

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
@@ -9,6 +10,7 @@ using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
@@ -17,10 +19,95 @@ namespace MyCapture.App.Tests;
 /// desktop pixels come from the selector's DIB and the bounded windows are rendered from their actual
 /// content. Nothing reads the screen, moves the cursor, shows a window or uses a user profile.
 /// </summary>
-public sealed class NativeSelectorVisualEvidenceTests
+public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
 {
     private const int Width = CaptureCueEvidenceTests.Width;
     private const int Height = CaptureCueEvidenceTests.Height;
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    public void RenderWindowAndElementLevels(double scale) => StaTestHost.Run(() =>
+    {
+        if (Environment.GetEnvironmentVariable("MYCAPTURE_ELEMENT_EVIDENCE") != "1") return;
+        string directory = OwnedTestDirectory.Create($"selector-elements-{scale * 100:0}-");
+        output.WriteLine("Element evidence: " + directory);
+        using var language = UiText.UseLanguage("ko-KR");
+        var desktop = new DrawingVisual();
+        using (DrawingContext dc = desktop.RenderOpen())
+        {
+            dc.DrawRectangle(Brushes.DimGray, null, new Rect(0, 0, 1024, 768));
+            dc.DrawImage(CaptureCueEvidenceTests.Desktop().Bitmap, new Rect(0, 0, Width, Height));
+        }
+        var pixels = new RenderTargetBitmap(1024, 768, 96, 96, PixelFormats.Pbgra32); pixels.Render(desktop);
+        var bitmap = new FormatConvertedBitmap(pixels, PixelFormats.Bgr32, null, 0); bitmap.Freeze();
+        FrozenFrame frame = new(bitmap, new RectD(0, 0, 1024, 768), null, 0);
+        RectD root = new(560, 200, 464, 400), panel = new(584, 250, 416, 310), element = new(604, 280, 200, 80);
+        PointD point = element.Center;
+        var window = new WindowCandidate(new IntPtr(88), root, "", ProcessId: uint.MaxValue);
+        MonitorInfo[] monitors = [new("element-evidence", frame.ScreenBounds, frame.ScreenBounds, (uint)(scale * 96), true)];
+        var nativeSource = new ElementSelectionControllerTests.FakeSource();
+        var wpfSource = new ElementSelectionControllerTests.FakeSource();
+        using var owner = new NativeCaptureOverlay(frame.ScreenBounds, false, false)
+        {
+            DetectWindows = true, SourceWindows = [window], ReadCursor = () => point, PlaceCursor = _ => false,
+            ReadMonitors = () => monitors, CreateElementSource = () => nativeSource,
+        };
+        owner.AttachFrame(frame);
+        using var chrome = new NativeSelectorChrome(owner, false, false);
+        var view = new CaptureOverlayView(frame, false)
+        {
+            DetectWindows = true, WindowCandidates = [window], ReadCursor = () => point, PlaceCursor = _ => false,
+            ReadMonitors = () => monitors, CreateElementSource = () => wpfSource, SimulatedPointerInside = true, ShowModeBar = true,
+        };
+        try
+        {
+            CaptureCueEvidenceTests.UsePalette(view, CaptureGuidePalette.Resolve());
+            owner.PreparePointerFeedback(); owner.PrepareVisualFeedback(); owner.UpdatePointer(false, false);
+            owner.RefreshHover(); view.InitializePointer();
+            chrome.Update(point, owner.DisplayedRegionForTest); chrome.FlushHoverTabForTest();
+            SaveComparison(directory, "01-window-level", RenderElements(), RenderNative(owner, chrome, scale));
+            Assert.Contains(UiText.Get("CaptureGuide2_ElementWheelHint"), chrome.TargetLabelForTest);
+            ElementSelectorInputTests.Ready(owner); view.NotifyFirstFramePresented();
+            owner.StepElement(1); view.StepElement(1);
+            var result = new ElementGeometryResult(ElementGeometryStatus.Success, [new(root, 50032), new(panel, 50026), new(element, 50000)]);
+            nativeSource.Complete(result); wpfSource.Complete(result);
+            WindowDetectOverlayTests.PumpUntil(() => !owner.ElementPending && !view.ElementPending);
+            Assert.Equal(element, owner.HoverRegion); Assert.Equal(element, view.HoverRegionForTest);
+            owner.FlushFeedbackForTest(); chrome.Update(point, owner.DisplayedRegionForTest); chrome.FlushHoverTabForTest();
+            Assert.Equal(UiText.Get("CaptureGuide2_ClickElement") + "  200 × 80", chrome.TargetLabelForTest);
+            SaveComparison(directory, "02-finest-level", RenderElements(), RenderNative(owner, chrome, scale));
+            owner.StepElement(-1); view.StepElement(-1);
+            Assert.Equal(panel, owner.HoverRegion); Assert.Equal(panel, view.HoverRegionForTest);
+            owner.FlushFeedbackForTest(); chrome.Update(point, owner.DisplayedRegionForTest); chrome.FlushHoverTabForTest();
+            SaveComparison(directory, "03-wider-level", RenderElements(), RenderNative(owner, chrome, scale));
+        }
+        finally { view.ReleaseResources(); }
+        BitmapSource RenderElements()
+        {
+            VisualTreeHelper.SetRootDpi(view, new DpiScale(scale, scale));
+            if (Math.Abs(view.GuidePixelSizeX - 1 / scale) > 0.000001)
+                typeof(CaptureOverlayView).GetMethod("OnDpiChanged", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .Invoke(view, [new DpiScale(1 / view.GuidePixelSizeX, 1 / view.GuidePixelSizeY), new DpiScale(scale, scale)]);
+            view.InvalidateVisual();
+            view.Measure(new Size(1024 / scale, 768 / scale));
+            view.Arrange(new Rect(0, 0, 1024 / scale, 768 / scale)); view.UpdateLayout();
+            view.UpdatePointer(false, false); view.FlushFeedbackForTest();
+            var rendered = new RenderTargetBitmap(1024, 768, 96 * scale, 96 * scale, PixelFormats.Pbgra32); rendered.Render(view);
+            Assert.Equal(1024 / scale, view.ActualWidth, 6); Assert.Equal(768 / scale, view.ActualHeight, 6);
+            Assert.Equal(chrome.TargetLabelForTest, view.TargetLabelForTest);
+            Assert.True(new Rect(0, 0, 1024 / scale, 768 / scale).Contains(view.TargetTabForTest!.Value));
+            Assert.All(chrome.Windows, window =>
+            {
+                if (window.Content is Border { Child: Image })
+                {
+                    RectD bounds = chrome.BoundsForTest(window);
+                    Assert.True(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= 1024 && bounds.Bottom <= 768);
+                }
+            });
+            return rendered;
+        }
+    });
 
     [Theory]
     [InlineData(1.0)]
