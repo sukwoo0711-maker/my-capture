@@ -8,7 +8,19 @@ using MyCapture.Platform.Interop;
 namespace MyCapture.Platform.Capture;
 
 /// <summary>A browser document observed before the capture selector takes focus.</summary>
-public sealed record BrowserDocumentSnapshot(uint ProcessId, string WindowTitle, string DocumentId, string Url);
+/// <param name="Url">
+/// The document's address: a web page, or a <c>file:</c> address for a local file
+/// (<see cref="SourcePageUrl.NormalizeDocument"/>). Only a web page becomes the capture's page link;
+/// a local file becomes its document path (<see cref="PageUrl"/>, <see cref="LocalFilePath"/>).
+/// </param>
+public sealed record BrowserDocumentSnapshot(uint ProcessId, string WindowTitle, string DocumentId, string Url)
+{
+    /// <summary>The web page address; empty for a local file.</summary>
+    public string PageUrl => SourcePageUrl.Normalize(Url);
+
+    /// <summary>The local file the tab shows; empty for a web page.</summary>
+    public string LocalFilePath => SourcePageUrl.LocalFilePath(Url);
+}
 
 /// <summary>
 /// Reads actual browser document URLs, never editable address-bar contents. One background
@@ -222,8 +234,10 @@ public sealed class BrowserPageUrlService
                     return;
                 }
                 BrowserDocumentValues values = node.ReadDocumentValues();
-                string value = SourcePageUrl.Normalize(values.Value);
-                string legacyValue = SourcePageUrl.Normalize(values.LegacyValue);
+                // A web page, or a local file the browser shows (a PDF opened from disk), which the
+                // capture keeps as its document path instead of a page link.
+                string value = SourcePageUrl.NormalizeDocument(values.Value);
+                string legacyValue = SourcePageUrl.NormalizeDocument(values.LegacyValue);
                 if (value.Length != 0 && legacyValue.Length != 0 && value != legacyValue)
                 {
                     complete = false;

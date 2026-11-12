@@ -653,7 +653,8 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         get => _sourceDetails;
         init => _sourceDetails = value is null
             ? CaptureSourceDetails.Empty
-            : CaptureSourceDetails.Create(value.AppName, value.AppPath, value.DocumentPath);
+            : CaptureSourceDetails.Create(value.AppName, value.AppPath, value.DocumentPath, value.AppUserModelId,
+                value.DocumentOrigin);
     }
 
     private readonly CaptureSourceDetails _sourceDetails = CaptureSourceDetails.Empty;
