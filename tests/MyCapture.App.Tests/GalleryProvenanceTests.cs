@@ -111,17 +111,18 @@ public sealed class GalleryProvenanceTests
         Assert.Contains("github.com", AutomationProperties.GetName(button));
         Assert.DoesNotContain("private", AutomationProperties.GetName(button));
         Assert.True(button.Focusable && button.IsTabStop);
-        Assert.Equal(SourceChip.GlyphFor(web.Kind), Assert.IsType<TextBlock>(button.Content).Text);
+        Assert.Equal(SourceChip.GlyphFor(web.Kind), BadgeGlyph(button).Text);
         Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyUrl"), UiText.Get("Source.ShowSame") },
             GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
         CaptureProvenance document = CaptureProvenance.Create(documentPath: @"C:\Work\Project specs\사양서.xlsx", appName: "Excel");
         GallerySourceBadge.SetProvenance(button, document);
         Assert.Same(document, GallerySourceBadge.GetProvenance(button));
-        Assert.Equal(SourceChip.GlyphFor(document.Kind), Assert.IsType<TextBlock>(button.Content).Text);
+        Assert.Equal(SourceChip.GlyphFor(document.Kind), BadgeGlyph(button).Text);
         Assert.Equal(UiText.Format("Source.BadgeOpen", document.BadgeText), PreviewText(button));
         Assert.Equal(PreviewText(button), AutomationProperties.GetHelpText(button));
-        Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyPath"), UiText.Get("Source.OpenLocation"), UiText.Get("Source.ShowSame") },
+        // Explorer's order: open, open file location, copy path, then the library's view.
+        Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.OpenLocation"), UiText.Get("Source.CopyPath"), UiText.Get("Source.ShowSame") },
             GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
         string? requestedQuery = null;
@@ -188,6 +189,10 @@ public sealed class GalleryProvenanceTests
 
     private static string PreviewText(Button button) =>
         Assert.IsType<TextBlock>(Assert.IsType<ToolTip>(button.ToolTip).Content).Text;
+
+    /// <summary>The kind's glyph, which the application's icon replaces in place once it is in memory.</summary>
+    private static TextBlock BadgeGlyph(Button button) =>
+        Assert.IsType<Grid>(button.Content).Children.OfType<TextBlock>().Single(block => block.Name == SourceAppIcon.GlyphName);
 
     private static GalleryItemViewModel Tile(CaptureRecord record) => new(record,
         _ => throw new InvalidOperationException("Source presentation must not resolve thumbnails."), 320);

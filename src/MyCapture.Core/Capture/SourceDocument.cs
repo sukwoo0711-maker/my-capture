@@ -10,7 +10,13 @@ public static class SourceDocument
 
     public static bool IsSupportedApp(string? appPath) => AppId(appPath) is
         "excel" or "winword" or "powerpnt" or "notepad" or "acrord32" or "acrobat" or "sumatrapdf"
-        or "foxitpdfreader" or "foxitreader" or "code";
+        or "foxitpdfreader" or "foxitreader" or "code" or "code - insiders" or "notepad++" or "hwp";
+
+    /// <summary>
+    /// Whether a source's document path names a file rather than a folder: a document application's
+    /// document, or the local file a browser showed. Explorer's path is its folder.
+    /// </summary>
+    public static bool IsFileSource(string? appPath) => IsSupportedApp(appPath) || SourceAppLaunch.IsBrowser(appPath);
 
     public static string ResolvePath(string? appPath, string title, IEnumerable<string> properties)
     {
@@ -41,7 +47,7 @@ public static class SourceDocument
             "winword" => @"^(Document\d+|문서\s*\d+)$",
             "powerpnt" => @"^(Presentation\d+|프레젠테이션\s*\d+)$",
             "notepad" => @"^(Untitled|제목 없음)$",
-            "code" => @"^(Untitled-\d+|제목 없음-\d+)(?: [—–-] .+)?$",
+            "code" or "code - insiders" => @"^(Untitled-\d+|제목 없음-\d+)(?: [—–-] .+)?$",
             _ => string.Empty,
         };
         return pattern.Length > 0 && Regex.IsMatch(RemoveAppSuffix(title ?? string.Empty), pattern,
@@ -52,14 +58,45 @@ public static class SourceDocument
     {
         string text = title.Trim().TrimStart('*', '●', '•').Trim();
         string[] apps = ["Excel", "Word", "PowerPoint", "Notepad", "메모장", "Adobe Acrobat Reader",
-            "Adobe Acrobat", "SumatraPDF", "Foxit PDF Reader", "Visual Studio Code"];
+            "Adobe Acrobat", "SumatraPDF", "Foxit PDF Reader", "Visual Studio Code - Insiders", "Visual Studio Code",
+            "Notepad++", "한글"];
         foreach (string app in apps)
-        foreach (string separator in new[] { " - ", " — ", " – " })
+        foreach (string separator in TitleSeparators)
         {
             string suffix = separator + app;
             if (text.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return text[..^suffix.Length].TrimEnd();
         }
         return text;
+    }
+
+    private static readonly string[] TitleSeparators = [" - ", " — ", " – "];
+
+    /// <summary>
+    /// File names a document application's title can carry: the title without the application's name,
+    /// and its first part before a separator (VS Code adds the folder: <c>main.cs - Project</c>). Only
+    /// names with an extension qualify; a title alone never yields a folder.
+    /// </summary>
+    public static IReadOnlyList<string> TitleFileNames(string? appPath, string? title)
+    {
+        if (!IsSupportedApp(appPath) || string.IsNullOrWhiteSpace(title) || IsUnsaved(appPath, title)) return [];
+        string document = RemoveAppSuffix(title);
+        var names = new List<string>(2);
+        Add(document);
+        int cut = TitleSeparators.Select(separator => document.IndexOf(separator, StringComparison.Ordinal))
+            .Where(index => index > 0).DefaultIfEmpty(-1).Min();
+        if (cut > 0) Add(document[..cut]);
+        return names;
+
+        void Add(string candidate)
+        {
+            string name = candidate.Trim();
+            if (name.Length is 0 or > 255 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                || name.EndsWith('.') || names.Contains(name, StringComparer.OrdinalIgnoreCase)) return;
+            string extension = Path.GetExtension(name);
+            if (extension.Length is < 2 or > 9 || !extension.Skip(1).All(char.IsAsciiLetterOrDigit)
+                || Path.GetFileNameWithoutExtension(name).Trim().Length == 0) return;
+            names.Add(name);
+        }
     }
 
     public static string ShortenPath(string path, int maxLength)
@@ -96,17 +133,23 @@ public static class SourceDocument
         return start;
     }
 
-    /// <summary>Builds a launch plan for an existing source file; the caller checks its existence before opening.</summary>
-    public static ProcessStartInfo? CreateOpenStartInfo(string path, string textEditorPath, Func<string, bool>? exists = null)
+    /// <summary>
+    /// Builds a launch plan for an existing source file; the caller checks its existence before opening.
+    /// The captured application opens it when it is a known document application that still exists
+    /// (<see cref="SourceAppLaunch.CreateDocument"/>); otherwise the safe plan below applies.
+    /// </summary>
+    public static ProcessStartInfo? CreateOpenStartInfo(string path, string textEditorPath, Func<string, bool>? exists = null,
+        string? sourceAppPath = null)
     {
         string normalized = CaptureSourceText.NormalizeLocalPath(path);
         if (normalized.Length == 0) return null;
+        if (SourceAppLaunch.CreateDocument(sourceAppPath, normalized, exists) is { } captured) return captured;
         // Only known document formats use file associations. Scripts, executables, shortcuts,
         // and unknown extensions go to an explicit editor, never their default shell action.
         if (Path.GetExtension(normalized).ToLowerInvariant() is
             ".doc" or ".docx" or ".docm" or ".odt" or ".rtf"
             or ".xls" or ".xlsx" or ".xlsm" or ".xlsb" or ".ods" or ".csv"
-            or ".ppt" or ".pptx" or ".pptm" or ".odp" or ".pdf")
+            or ".ppt" or ".pptx" or ".pptm" or ".odp" or ".pdf" or ".hwp" or ".hwpx")
             return new ProcessStartInfo(normalized) { UseShellExecute = true, Verb = "open" };
 
         string editor = CaptureSourceText.NormalizeLocalPath(textEditorPath);

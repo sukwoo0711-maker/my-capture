@@ -30,11 +30,7 @@ internal static class SourceChip
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var symbol = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
-        symbol.Children.Add(new TextBlock
-        {
-            Text = GlyphFor(source.Kind), FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-            FontSize = TypeScale.Body, VerticalAlignment = VerticalAlignment.Center,
-        });
+        symbol.Children.Add(SourceAppIcon.Create(source, TypeScale.Body));
         if (source.Kind == CaptureProvenanceKind.Document && Path.GetExtension(source.DocumentPath) is { Length: > 0 } extension)
             symbol.Children.Add(new TextBlock
             {
@@ -52,7 +48,7 @@ internal static class SourceChip
         content.Children.Add(text);
         var button = new Button
         {
-            Name = "CaptureSourceChip", Content = content, ToolTip = source.Tooltip, MaxWidth = 320,
+            Name = "CaptureSourceChip", Content = content, ToolTip = TooltipFor(source), MaxWidth = 320,
             MinWidth = 0, MinHeight = 24, Height = 26, Padding = new Thickness(6, 2, 6, 2),
             FontSize = TypeScale.Caption, HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
@@ -62,7 +58,7 @@ internal static class SourceChip
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
         AutomationProperties.SetAutomationId(button, "CaptureSourceChip");
         AutomationProperties.SetName(button, UiText.Format(source.CanOpen ? "Source.OpenAutomation" : "Source.Label", source.DisplayText));
-        AutomationProperties.SetHelpText(button, source.Tooltip);
+        AutomationProperties.SetHelpText(button, TooltipFor(source));
         button.Click += async (_, e) =>
         {
             e.Handled = true;
@@ -86,8 +82,18 @@ internal static class SourceChip
         return button;
     }
 
+    /// <summary>The source's tooltip, saying so when only the application is known.</summary>
+    internal static string TooltipFor(CaptureProvenance source) => source.IsAppOnly
+        ? source.Tooltip + Environment.NewLine + UiText.Get("Source.AppOnly")
+        : source.Tooltip;
+
+    /// <summary>
+    /// Explorer's order: open, open file location, copy, then the library's own views. The card menu
+    /// follows the same order.
+    /// </summary>
     internal static ContextMenu CreateMenu(CaptureProvenance source, Action<string>? status = null,
-        Action<string>? search = null, CaptureSourceActions? actions = null, ContextMenu? menu = null)
+        Action<string>? search = null, CaptureSourceActions? actions = null, ContextMenu? menu = null,
+        Action? details = null)
     {
         actions ??= CaptureSourceActions.Default;
         menu ??= new ContextMenu();
@@ -98,7 +104,14 @@ internal static class SourceChip
             status?.Invoke(result);
         });
         open.IsEnabled = source.CanOpen;
+        open.Icon = SourceAppIcon.Create(source, TypeScale.Body);
         menu.Items.Add(open);
+        if (source.Kind == CaptureProvenanceKind.Document)
+            menu.Items.Add(Item("Source.OpenLocation", async () =>
+            {
+                string result = await actions.OpenLocationAsync(source, allowMissingParent: true);
+                status?.Invoke(result);
+            }));
         if (source.Kind == CaptureProvenanceKind.Web)
             menu.Items.Add(Item("Source.CopyUrl", () =>
             {
@@ -106,23 +119,15 @@ internal static class SourceChip
                 status?.Invoke(result);
             }));
         if (source.Kind == CaptureProvenanceKind.Document)
-        {
             menu.Items.Add(Item("Source.CopyPath", () =>
             {
                 string result = actions.CopyPath(source.DocumentPath);
                 status?.Invoke(result);
             }));
-            menu.Items.Add(Item("Source.OpenLocation", async () =>
-            {
-                string result = await actions.OpenLocationAsync(source, allowMissingParent: true);
-                status?.Invoke(result);
-            }));
-        }
-        if (search is not null && source.SearchQuery.Length > 0)
-        {
-            menu.Items.Add(new Separator());
-            menu.Items.Add(Item("Source.ShowSame", () => search(source.SearchQuery)));
-        }
+        bool showSame = search is not null && source.SearchQuery.Length > 0;
+        if (showSame || details is not null) menu.Items.Add(new Separator());
+        if (showSame) menu.Items.Add(Item("Source.ShowSame", () => search!(source.SearchQuery)));
+        if (details is not null) menu.Items.Add(Item("LibraryUx_SourceDetails", details));
         return menu;
     }
 
