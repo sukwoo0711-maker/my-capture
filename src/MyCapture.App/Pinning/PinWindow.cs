@@ -94,6 +94,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     private double _labeledHoverBarWidth;
 
     private bool _liveZooming;
+    private int _wheelRemainder;
     private bool _dragging;
     private PinResizeEdge _resizeEdge;
     private RectD _resizeStartBounds;
@@ -942,6 +943,9 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
+        // A zoom that carried the pin onto another monitor ends at its zoom once Windows has placed it.
+        if (_zoomMotion is { IsActive: true })
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(FinishZoomMotion));
         RerenderAt(newDpi.DpiScaleX, _liveZooming ? newDpi.DpiScaleX : ZoomRasterScale(newDpi.DpiScaleX, _state.Zoom));
         // A picture keeps its DIP size, so only its device size changes.
         ShowDisplayAt(_imageElement.RenderSize, newDpi);
@@ -1016,15 +1020,15 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         _imageElement.Stretch = Stretch.None;
         _imageElement.HorizontalAlignment = HorizontalAlignment.Left;
         _imageElement.VerticalAlignment = VerticalAlignment.Top;
-        _imageElement.LayoutTransform = new ScaleTransform(_state.Zoom * TranslationFitScale, _state.Zoom * TranslationFitScale);
+        _imageElement.LayoutTransform = new ScaleTransform(ShownZoom * TranslationFitScale, ShownZoom * TranslationFitScale);
         if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
     }
 
     private void UpdateImageClip(Size imageSize)
     {
         bool textLayout = !_state.IsCollapsed && _content.CanRerender;
-        double zoom = textLayout ? _state.Zoom * TranslationFitScale : 1;
-        Rect bounds = ImageClipBounds(textLayout ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
+        double zoom = textLayout ? ShownZoom * TranslationFitScale : 1;
+        Rect bounds = ImageClipBounds(textLayout ? new Size(ShownWidthDip, ShownHeightDip) : imageSize);
         _imageClip.Rect = new Rect(bounds.X / zoom, bounds.Y / zoom, bounds.Width / zoom, bounds.Height / zoom);
         _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
     }
@@ -1165,6 +1169,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
         // Recognized text is remembered per bitmap instance; a picture without one has nothing to forget.
         if (TranslationSourceContent.ImageIfPresent is { } recognized) PinTextCopyService.Forget(recognized);
+        // The closed placement is the zoom the pin has, not a step of its motion towards it.
+        FinishZoomMotion();
         _closeStarted = true;
         // Snapshot while the native window still exists and nothing has moved it.
         ClosedPlacement = CaptureClosedPlacement();
@@ -1398,6 +1404,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
         EndDrag();
         HideHoverBar();
+        FinishZoomMotion();
         try
         {
             // Capture can fail (for example while another native control owns input).
@@ -1539,10 +1546,20 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             return;
         }
 
-        int notches = e.Delta / 120;
+        Point pointer = e.GetPosition(this);
+        if (WheelAt(e.Delta, modifiers, pointer.X + Left, pointer.Y + Top)) e.Handled = true;
+    }
+
+    // A wheel turn over the pin at a DIP screen point: opacity with Ctrl, else zoom anchored there.
+    private bool WheelAt(int delta, ModifierKeys modifiers, double pointerXDip, double pointerYDip)
+    {
+        // A precise wheel or touchpad sends parts of a notch; they add up to notches, as on the native host.
+        _wheelRemainder += delta;
+        int notches = _wheelRemainder / 120;
+        _wheelRemainder %= 120;
         if (notches == 0)
         {
-            return;
+            return true;
         }
 
         if (modifiers.HasFlag(ModifierKeys.Control))
@@ -1552,12 +1569,14 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         }
         else
         {
-            Point pointer = e.GetPosition(this);
-            ZoomAt(notches, pointer.X + Left, pointer.Y + Top);
+            ZoomAt(notches, pointerXDip, pointerYDip);
         }
 
-        e.Handled = true;
+        return true;
     }
+
+    /// <summary>A zoom transition is still moving the pin on the screen (never true before the zoom motion).</summary>
+    internal bool ResidentProbeZoomMotionActive => IsZoomMoving;
 
     // ----- Keyboard -----
 
@@ -1749,6 +1768,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
     private void MoveBy(double dx, double dy)
     {
+        FinishZoomMotion();
         if (_native is { } host)
         {
             RectD bounds = host.Window.Bounds;
@@ -1812,15 +1832,14 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             return;
         }
 
-        (double newLeft, double newTop) = PinGeometry.AnchorTopLeftForZoom(
-            Left, Top, oldZoom, newZoom, pointerXDip, pointerYDip);
-
-        ApplyZoom(newZoom, newLeft, newTop);
+        // The state, readout and session have the new zoom now; the window moves to it (PinWindow.ZoomMotion).
+        ZoomToState(oldZoom, pointerXDip, pointerYDip);
         UserZoomChanged?.Invoke(PracticeId);
     }
 
     private void ApplyZoom(double zoom, double left, double top, bool physicalPosition = false)
     {
+        StopZoomMotion();
         double newZoom = _state.SetZoom(zoom);
         Width = _state.WidthDip;
         Height = _state.HeightDip;
@@ -1849,18 +1868,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double oldZoom = _state.Zoom;
         double newZoom = _state.ResetZoom();
 
-        (double newLeft, double newTop) = PinGeometry.AnchorTopLeftForZoom(
-            Left, Top, oldZoom, newZoom, centerX, centerY);
-
-        Width = _state.WidthDip;
-        Height = _state.HeightDip;
-        ApplyPositionKeepingGrabbable(newLeft, newTop);
-        BeginLiveZoom();
+        ZoomToState(oldZoom, centerX, centerY);
         ShowFeedback("100%");
         if (Math.Abs(newZoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
 
-    private void BeginLiveZoom()
+    private void BeginLiveZoom(bool settle = true)
     {
         _textSelection?.SetZoom(_state.Zoom * TranslationFitScale);
         _liveZooming = true;
@@ -1871,7 +1884,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         _pinScale.ScaleX = 1;
         _pinScale.ScaleY = 1;
         _zoomSettleTimer.Stop();
-        _zoomSettleTimer.Start();
+        // A moving zoom starts the timer when its motion ends, so the crisp picture is drawn once.
+        if (settle) _zoomSettleTimer.Start();
     }
 
     private void OnZoomSettleTick(object? sender, EventArgs e)
@@ -2643,6 +2657,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         ReleaseTranslationProgress();
         _ctrlClickTimer.Stop();
         _ctrlClickTimer.Tick -= OnCtrlClickTimerTick;
+        StopZoomMotion();
         _zoomSettleTimer.Stop();
         _zoomSettleTimer.Tick -= OnZoomSettleTick;
         _hoverHideTimer.Stop();

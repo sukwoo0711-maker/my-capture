@@ -29,7 +29,7 @@ namespace MyCapture.App.Pinning;
 /// surface. <see cref="Bounds"/>, <see cref="PixelWidth"/> and <see cref="PixelHeight"/> always
 /// describe the whole surface.
 /// </summary>
-internal sealed class NativePinWindow : IDisposable
+internal sealed class NativePinWindow : IDisposable, INativeMotionTarget
 {
     // CS_DBLCLKS: a second press inside the double-click time arrives as WM_LBUTTONDBLCLK.
     private const string ClassName = "MyCapture.PinNative.2";
@@ -74,6 +74,13 @@ internal sealed class NativePinWindow : IDisposable
     private Point _gesturePointer, _lastGesturePointer, _gestureAnchorDip;
     private RectD _gestureBounds;
     private bool _gestureMoved;
+    // A wheel or key zoom moves the zoom shown on the screen to the state's zoom (PinZoomMotion); the point
+    // under the pointer stays where it is, so the surface's top-left follows from where the motion started.
+    private PinZoomMotion? _zoomMotion;
+    private double _shownZoom = 1, _motionZoom = 1;
+    // The motion's base and the last step's place before rounding to pixels.
+    private double _motionLeft, _motionTop, _stepLeft, _stepTop;
+    private Point _motionAnchor;
     // Snapping while a pin moves (#259): read once when the move starts, as the WPF drag does.
     private IReadOnlyList<PinSnap.Target> _snapTargets = [];
     private IReadOnlyList<PinDisplayArea> _snapDisplays = [];
@@ -332,8 +339,21 @@ internal sealed class NativePinWindow : IDisposable
     internal static int LiveDibCount => NativePinWindowDib.LiveBitmapCount;
     internal static int LiveDcCount => NativePinWindowDib.LiveDcCount;
     internal event Action? Presented;
-    private int DesiredWidth => Math.Max(1, checked((int)Math.Round(State.WidthDip * DpiScale)));
-    private int DesiredHeight => Math.Max(1, checked((int)Math.Round(State.HeightDip * DpiScale)));
+    private int DesiredWidth => Math.Max(1, checked((int)Math.Round(ShownWidthDip * DpiScale)));
+    private int DesiredHeight => Math.Max(1, checked((int)Math.Round(ShownHeightDip * DpiScale)));
+    private double ShownWidthDip => IsZoomMoving ? Math.Max(1.0, State.ImageWidthDip * _shownZoom) : State.WidthDip;
+    private double ShownHeightDip => IsZoomMoving ? Math.Max(1.0, State.ImageHeightDip * _shownZoom) : State.HeightDip;
+
+    /// <summary>A wheel or key zoom is still moving the pin on the screen towards <see cref="Zoom"/>.</summary>
+    internal bool IsZoomMoving => _zoomMotion is { IsActive: true };
+
+    /// <summary>The zoom the screen shows now: <see cref="Zoom"/>, or a step of the motion towards it.</summary>
+    internal double ShownZoom => IsZoomMoving ? _shownZoom : Zoom;
+
+    /// <summary>Replaces the zoom motion's clock (milliseconds); tests step it by hand.</summary>
+    internal Func<double>? ZoomMotionClockForTest { get; set; }
+
+    private double MotionNow => ZoomMotionClockForTest?.Invoke() ?? PinZoomMotionTiming.Now();
 
     internal void Show()
     {
@@ -370,6 +390,7 @@ internal sealed class NativePinWindow : IDisposable
         VerifyOpen();
         if (!IsVisible || IsHiding || IsExiting) return;
         EndGesture();
+        FinishZoomMotion();
         _landingStarted = _findStarted = 0;
         _revealing = false;
         if (!FluidMotion.AnimationsEnabled) { FinishHide(); return; }
@@ -418,6 +439,7 @@ internal sealed class NativePinWindow : IDisposable
     internal void SetZoom(double zoom, Point? anchorPhysical = null, bool live = false)
     {
         VerifyOpen(); ValidateScale(zoom);
+        FinishZoomMotion();
         double old = Zoom;
         State.SetZoom(zoom);
         ApplyZoomChange(old, anchorPhysical, live, user: false);
@@ -455,6 +477,15 @@ internal sealed class NativePinWindow : IDisposable
         if (user) _movedSinceDpiChange = true;
         InvalidateSettle();
         Point anchor = anchorPhysical ?? new Point(_left, _top);
+        if (user && live && _product && IsVisible && FluidMotion.AnimationsEnabled)
+        {
+            StartZoomMotion(IsZoomMoving ? _shownZoom : old, anchor);
+            LastLiveSubmitMilliseconds = LastLiveUiMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            BoundsChanged?.Invoke();
+            UserZoomChanged?.Invoke();
+            return;
+        }
+        FinishZoomMotion(present: false);
         (double left, double top) = PinGeometry.AnchorTopLeftForZoom(_left, _top, old, Zoom, anchor.X, anchor.Y);
         if (user && _product) (left, top) = KeepGrabbable(left, top, DesiredWidth, DesiredHeight);
         _left = Coordinate(left); _top = Coordinate(top);
@@ -466,6 +497,53 @@ internal sealed class NativePinWindow : IDisposable
         BoundsChanged?.Invoke();
         if (user) UserZoomChanged?.Invoke();
     }
+
+    // The motion starts (or turns) from the zoom shown now, around the anchor, and draws its first step now.
+    private void StartZoomMotion(double shown, Point anchor)
+    {
+        _zoomMotion ??= PinZoomMotionTiming.Create();
+        // A notch during the motion starts from the step's exact place, not its rounded pixels, so quick
+        // notches do not walk the anchor by a rounding each.
+        (_motionLeft, _motionTop) = IsZoomMoving ? (_stepLeft, _stepTop) : (_left, _top);
+        _motionZoom = shown; _motionAnchor = anchor;
+        _shownZoom = _zoomMotion.Retarget(shown, Zoom, MotionNow);
+        ShowZoomStep();
+        if (IsZoomMoving) StartMotion();
+        else BeginLiveZoom();
+    }
+
+    // The surface at the shown zoom with the anchor where it was when the motion started, drawn as a live frame.
+    private void ShowZoomStep()
+    {
+        PlaceZoomStep();
+        Render(highQuality: false);
+        if (IsVisible) Present();
+    }
+
+    private void PlaceZoomStep()
+    {
+        (double left, double top) = PinGeometry.AnchorTopLeftForZoom(_motionLeft, _motionTop, _motionZoom,
+            ShownZoom, _motionAnchor.X, _motionAnchor.Y);
+        if (_product) (left, top) = KeepGrabbable(left, top, DesiredWidth, DesiredHeight);
+        (_stepLeft, _stepTop) = (left, top);
+        _left = Coordinate(left); _top = Coordinate(top);
+    }
+
+    /// <summary>Ends a running zoom motion at the state's zoom, drawn now; the full-quality picture follows as after a notch.</summary>
+    internal void FinishZoomMotion() => FinishZoomMotion(present: true);
+
+    private void FinishZoomMotion(bool present)
+    {
+        if (_zoomMotion is not { IsActive: true } motion) return;
+        _shownZoom = motion.Finish();
+        if (!present || IsClosed) return;
+        ShowZoomStep();
+        BeginLiveZoom();
+        BoundsChanged?.Invoke();
+    }
+
+    /// <summary>Test hook: one motion tick, as the DWM clock gives it.</summary>
+    internal void TickMotionForTest() => UpdateMotion();
 
     // As PinWindow.ApplyPositionKeepingGrabbable: some of the pin stays on the desktop to grab.
     private (double Left, double Top) KeepGrabbable(double left, double top, double width, double height)
@@ -553,6 +631,7 @@ internal sealed class NativePinWindow : IDisposable
     internal void MovePhysical(double x, double y)
     {
         VerifyOpen();
+        FinishZoomMotion();
         int left = Coordinate(x), top = Coordinate(y);
         long started = Stopwatch.GetTimestamp();
         LastMoveDrewLive = false;
@@ -713,6 +792,7 @@ internal sealed class NativePinWindow : IDisposable
     {
         VerifyOpen(); ValidateScale(scale);
         if (Math.Abs(scale - DpiScale) < 1e-9) return;
+        FinishZoomMotion(present: false);
         InvalidateSettle();
         DpiScale = scale;
         // Like PinWindow.OnDpiChanged, keep image DIP dimensions and zoom. Only the
@@ -836,6 +916,7 @@ internal sealed class NativePinWindow : IDisposable
             if (!IsCaptureExcluded) { Close(); return; }
         }
         EndGesture();
+        FinishZoomMotion(present: false);
         CancelSettle();
         _exitStartOpacity = _motionOpacity * DisplayedOpacity / Math.Max(State.Opacity, 1e-9);
         _opacityAnimating = false;
@@ -1163,6 +1244,8 @@ internal sealed class NativePinWindow : IDisposable
         _motionDrain = _motionDrain.IsCompletedSuccessfully ? clock.Completion : Task.WhenAll(_motionDrain, clock.Completion);
     }
 
+    void INativeMotionTarget.OnNativeMotionTick(NativePinMotionClock clock, int result) => OnNativeMotionTick(clock, result);
+
     internal void OnNativeMotionTick(NativePinMotionClock clock, int result)
     {
         _dispatcher.VerifyAccess();
@@ -1243,6 +1326,13 @@ internal sealed class NativePinWindow : IDisposable
             _motionOpacity = _hideStartOpacity * (1 - FluidMotion.StandardEasing.Ease(progress));
             present = true;
         }
+        bool zoomStep = false;
+        if (IsZoomMoving)
+        {
+            _shownZoom = _zoomMotion!.Sample(MotionNow);
+            PlaceZoomStep();
+            zoomStep = raster = present = true;
+        }
         if (IsExiting)
         {
             double progress = Math.Clamp(Elapsed(_exitStarted) / 120, 0, 1);
@@ -1255,7 +1345,14 @@ internal sealed class NativePinWindow : IDisposable
         if (raster) Render(highQuality: false);
         else if (edge) RedrawEdges();
         if (raster || edge || present) Present();
-        if (!IsLanding && !_revealing && !_colorAnimating && !IsExiting && !IsHiding && !IsFindCueRunning && !_opacityAnimating)
+        if (zoomStep)
+        {
+            // The full-quality picture is drawn once, after the motion has ended (as after a notch without it).
+            if (!IsZoomMoving) BeginLiveZoom();
+            BoundsChanged?.Invoke();
+        }
+        if (!IsLanding && !_revealing && !_colorAnimating && !IsExiting && !IsHiding && !IsFindCueRunning && !_opacityAnimating
+            && !IsZoomMoving)
             StopMotion();
     }
 
@@ -1267,6 +1364,7 @@ internal sealed class NativePinWindow : IDisposable
     {
         VerifyOpen();
         if (IsExiting) return;
+        FinishZoomMotion();
         _landingStarted = _findStarted = 0;
         _revealing = _colorAnimating = _opacityAnimating = false;
         if (IsHiding) FinishHide();
@@ -1283,6 +1381,7 @@ internal sealed class NativePinWindow : IDisposable
     {
         VerifyOpen();
         EndGesture(notify: false);
+        FinishZoomMotion();
         CancelSettle();
     }
 
@@ -1334,6 +1433,7 @@ internal sealed class NativePinWindow : IDisposable
     {
         if (State.IsClickThrough || IsExiting || IsHiding) return;
         EndGesture();
+        FinishZoomMotion();
         _gesturePointer = _lastGesturePointer = pointer; _gestureBounds = Bounds; _gestureZoom = Zoom; _gestureDpi = DpiScale;
         _gestureAnchorDip = new Point((pointer.X - _left) / DpiScale, (pointer.Y - _top) / DpiScale);
         _gestureMoved = false;

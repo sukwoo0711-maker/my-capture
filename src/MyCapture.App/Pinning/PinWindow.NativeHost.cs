@@ -449,6 +449,38 @@ internal sealed partial class PinWindow
 
     internal bool ResidentProbeHasRasterCache => _imageElement.CacheMode is BitmapCache;
 
+    /// <summary>The probe's zoom to <paramref name="zoom"/> around a physical screen point (not a user zoom).</summary>
+    internal void ResidentProbeSetZoomAt(double zoom, Point anchorPhysical)
+    {
+        if (_native is { } host)
+        {
+            host.Window.SetZoom(zoom, anchorPhysical);
+            return;
+        }
+        (double x, double y) = PhysicalToDip(anchorPhysical);
+        (double left, double top) = PinGeometry.AnchorTopLeftForZoom(Left, Top, _state.Zoom, zoom, x, y);
+        ApplyZoom(zoom, left, top);
+    }
+
+    /// <summary>The probe's wheel notch through the host's own wheel path, at a physical screen point.</summary>
+    internal void ResidentProbeWheelAt(int delta, Point anchorPhysical)
+    {
+        if (_native is { } host)
+        {
+            host.Window.Wheel(delta, anchorPhysical);
+            return;
+        }
+        (double x, double y) = PhysicalToDip(anchorPhysical);
+        WheelAt(delta, ModifierKeys.None, x, y);
+    }
+
+    private (double X, double Y) PhysicalToDip(Point physical)
+    {
+        (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        return (Left + ((physical.X - left) / dpi.DpiScaleX), Top + ((physical.Y - top) / dpi.DpiScaleY));
+    }
+
     /// <summary>The probe's wheel notch through the host's own wheel path, at the pin's centre.</summary>
     internal void ResidentProbeWheel(int delta)
     {
