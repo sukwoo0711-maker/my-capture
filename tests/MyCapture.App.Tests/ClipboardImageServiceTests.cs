@@ -33,10 +33,17 @@ public sealed class ClipboardImageServiceTests
                 writes++;
                 Assert.Equal(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
                 Assert.Equal(text, data.GetData(DataFormats.UnicodeText, autoConvert: false));
-                Assert.Same(image, data.GetData(DataFormats.Bitmap, autoConvert: false));
+                var legacy = Assert.IsAssignableFrom<BitmapSource>(data.GetData(DataFormats.Bitmap, autoConvert: false));
+                byte[] legacyPixels = new byte[image.PixelWidth * image.PixelHeight * 4];
+                legacy.CopyPixels(legacyPixels, image.PixelWidth * 4, 0);
+                Assert.All(legacyPixels, channel => Assert.Equal((byte)255, channel));
                 using var bytes = new MemoryStream();
                 Assert.IsAssignableFrom<Stream>(data.GetData("PNG", autoConvert: false)).CopyTo(bytes);
                 pngs.Add(bytes.ToArray());
+                BitmapSource png = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryDecodePng(pngs[^1]));
+                byte[] pngPixels = new byte[legacyPixels.Length];
+                png.CopyPixels(pngPixels, image.PixelWidth * 4, 0);
+                Assert.All(pngPixels, channel => Assert.Equal((byte)0, channel));
                 tokens.Add(Assert.IsType<string>(data.GetData(ClipboardProvenance.Format, autoConvert: false)));
             }, source, encodePng: Encode, pngCache: cache));
             Assert.Equal(1, writes);

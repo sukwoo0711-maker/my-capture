@@ -5635,4 +5635,38 @@ Install the model?</value></data>
   <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>Click: Capture element · Wheel: Widen or narrow</value></data>
   <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>Click: Copy text from element · Wheel: Widen or narrow</value></data>
   <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · Wheel: Select element</value></data>
+  <data name="CaptureFreeform_Name" xml:space="preserve">
+    <value>Freeform</value>
+  </data>
+  <data name="CaptureFreeform_Help" xml:space="preserve">
+    <value>Draw an area with the pointer to capture it.</value>
+  </data>
+  <data name="CaptureFreeform_Drawing" xml:space="preserve">
+    <value>Draw a freeform area · Release to capture</value>
+  </data>
+  <data name="CaptureFreeform_KeyHelp" xml:space="preserve">
+    <value>Toggle freeform · Draw with the pointer</value>
+  </data>
+  <data name="CaptureFreeform_Unavailable" xml:space="preserve">
+    <value>Freeform is unavailable for this selection.</value>
+  </data>
+  <data name="CaptureFreeform_Text" xml:space="preserve">
+    <value>Freeform is unavailable for text copy.</value>
+  </data>
+  <data name="CaptureFreeform_Color" xml:space="preserve">
+    <value>Freeform is unavailable for colour copy.</value>
+  </data>
+  <data name="CaptureFreeform_Recording" xml:space="preserve">
+    <value>Recording regions use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Scrolling" xml:space="preserve">
+    <value>Scrolling capture uses rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Delay" xml:space="preserve">
+    <value>Delayed capture uses a rectangular selection.</value>
+  </data>
+  <data name="CaptureFreeform_Editor" xml:space="preserve">
+    <value>Additional captures while editing use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Discard" xml:space="preserve"><value>Discard the stroke</value></data>
 </root>

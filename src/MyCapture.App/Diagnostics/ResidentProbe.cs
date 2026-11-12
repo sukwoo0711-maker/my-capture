@@ -65,6 +65,7 @@ internal sealed class ResidentProbeOptions
          "no-reader-prewarm", "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
          "selector-breakdown", "receipt-breakdown", "no-key-panel", "selector-native-dib", "selector-wpf",
          "selector-chrome-fresh", "selector-chrome-parallel", "selector-chrome-dib", "selector-elements",
+         "selector-freeform", "selector-freeform-once",
          "legacy-guide-write", "selector-show-owned",
          "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
          "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];
@@ -187,6 +188,8 @@ internal sealed class ResidentProbeOptions
             throw new ArgumentException("Native selector experiments cannot be combined with selector-wpf.");
         if (chromeVariants > 1 || (chromeVariants != 0 && !variants.Contains("selector-native-dib")))
             throw new ArgumentException("Choose one chrome strategy together with selector-native-dib.");
+        if (variants.Contains("selector-freeform") && variants.Contains("selector-freeform-once"))
+            throw new ArgumentException("Choose every-capture or first-capture freeform measurement, not both.");
         if (variants.Contains("pin-native") && variants.Overlaps(
             ["pin-opaque", "pin-scale-linear", "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-light"]))
             throw new ArgumentException("pin-native uses its own CPU renderer; choose it without a WPF pin renderer variant.");

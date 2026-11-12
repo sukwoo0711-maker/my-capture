@@ -51,6 +51,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private BitmapSource? _magnifierSource;
     private readonly string _defaultGuide = DefaultGuide;
     private readonly string _precisionGuide = UiText.Get("CapturePrecisionActive");
+    private string? _freeformGuide;
     private readonly Size _precisionGuideSize;
     private bool _precisionGuideShown;
     private bool _guideLayoutDirty = true;
@@ -490,7 +491,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.ActiveRatio);
         }
         bool precision = owner.PrecisionActive && owner.ToastMessage is null;
-        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide : _defaultGuide);
+        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide
+            : owner.Mode == CaptureSelectorMode.Freeform ? _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing") : _defaultGuide);
         if (_guideText.Text != guideText) _guideText.Text = guideText;
         if (_guideLayoutDirty || precision != _precisionGuideShown)
         {

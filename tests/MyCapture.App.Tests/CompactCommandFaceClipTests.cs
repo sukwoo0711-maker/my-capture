@@ -84,7 +84,7 @@ public sealed class CompactCommandFaceClipTests
             Assert.Equal(2, rating.Length);
             Assert.All(rating, button => Assert.Equal(0, button.ActualHeight));
             ButtonBase[] buttons = all.Except(rating).ToArray();
-            Assert.Equal(21, buttons.Length); // Thirteen capture commands and eight receipt commands.
+            Assert.Equal(22, buttons.Length); // Fourteen capture commands and eight receipt commands.
             foreach (ButtonBase button in buttons) CommandButtonPresentation.RefreshHint(button);
 
             var failures = new List<string>();

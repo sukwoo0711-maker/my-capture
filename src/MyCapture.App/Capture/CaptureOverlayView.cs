@@ -152,7 +152,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private bool _detectWindows;
     private bool _regionOnlySelected;
     private bool _windowSelected;
-    private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected;
+    private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected && !_freeformMode;
     private bool _textCaptureAvailable;
     private bool _showShortcutHints;
     private bool _offersOtherActions;
@@ -272,7 +272,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     /// <summary>
     /// A ratio can be locked unless the size is fixed by a setting or the colour mode is picking a pixel.
     /// </summary>
-    private bool RatioAvailable => PresetSize is null && !_colorPickMode;
+    private bool RatioAvailable => PresetSize is null && !_colorPickMode && !_freeformMode;
 
     /// <summary>The lock that shapes selections now; Free when none is available.</summary>
     private SelectionRatio ActiveRatio => RatioAvailable ? _selectionRatio : SelectionRatio.Free;
@@ -390,7 +390,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>What the next click or drag produces; the bar fills in the matching button.</summary>
     internal CaptureSelectorMode Mode =>
-        _colorPickMode ? CaptureSelectorMode.Color : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
+        _freeformMode ? CaptureSelectorMode.Freeform : _colorPickMode ? CaptureSelectorMode.Color : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
 
     /// <summary>Top-level windows in z-order (frontmost first), in virtual-desktop pixels.</summary>
     internal IReadOnlyList<WindowCandidate> WindowCandidates
@@ -487,6 +487,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         {
             if (_recordingSelection == value) return;
             _recordingSelection = value;
+            if (value && _freeformMode) LeaveFreeform();
             ConfigureGuides();
             _staticDirty = true;
             QueueFeedback();
@@ -527,6 +528,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         set
         {
             if (_textCaptureMode == value) return;
+            if (value && _freeformMode) LeaveFreeform();
             _textCaptureMode = value;
             if (value) _colorPickMode = false;
             OnModeChanged();
@@ -540,6 +542,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal void SelectMode(CaptureSelectorMode mode)
     {
         if (_ended) return;
+        if (mode == CaptureSelectorMode.Freeform)
+        {
+            if (!FreeformAvailable) return;
+            EnterFreeform();
+            return;
+        }
+        if (_freeformMode) LeaveFreeform();
         switch (mode)
         {
             case CaptureSelectorMode.Text when TextCaptureAvailable:
@@ -567,6 +576,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         // The colour mode never highlights a window; leaving it shows the one under the pointer again.
         if (_pointerInitialized) RefreshHover(_cursorPixel.Offset(_screenBounds.Left, _screenBounds.Top));
         _modeBar?.ShowMode(Mode, _windowSelected);
+        _keyPanelUpdate?.Invoke();
         QueueFeedback();
     }
 
@@ -624,6 +634,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _modeBar = null;
         _startGuide = null;
         _modeBarBounds = null;
+        ReleaseFreeformPreview();
         _frame = null;
         _magnifierCrop = null;
         _lastSample = null;
@@ -983,7 +994,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, OffersOtherActions,
-            CanRepeatLastRegion(), RecordingSelection, ratioAvailable: PresetSize is null);
+            CanRepeatLastRegion(), RecordingSelection, ratioAvailable: PresetSize is null,
+            freeformUnavailableReason: EffectiveFreeformUnavailableReason);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(_selectionRatio);
         _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
@@ -1147,6 +1159,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal bool CaptureFullScreen()
     {
         if (_ended || _copyingColor) return false;
+        if (_freeformMode) SelectMode(CaptureSelectorMode.Capture);
         RectD monitor = GuideArea.Bounds.ClampTo(FrameBounds).ToPixelBounds();
         if (monitor.Width < MinimumSelectionPixels || monitor.Height < MinimumSelectionPixels) return false;
         ResetRefitCycle();
@@ -1242,6 +1255,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
+            RebuildFreeformPreview();
             _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = _widestCoordinateText = null;
             _tabLabelText = _tabSizeText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
@@ -1290,9 +1304,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             _targetLabel = null;
             _dimensionLabelBounds = null;
             RectD? revealed = _selection ?? shownHover;
-            UpdateRevealedRegion(revealed);
+            if (!_freeformMode) UpdateRevealedRegion(revealed);
             using DrawingContext dc = _selectionVisual.RenderOpen();
-            if (_selection is { } selection) DrawSelection(dc, selection);
+            if (_freeformMode) DrawFreeform(dc);
+            else if (_selection is { } selection) DrawSelection(dc, selection);
             else if (shownHover is { } shown && hover is { } window) DrawDetectedWindow(dc, shown, window, hoverWholeMonitor);
         }
         PointD? anchor = _interaction == InteractionMode.Create && _pointerInitialized && !_ended ? _dragAnchor : null;
@@ -1954,6 +1969,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return parts;
         }
 
+        if (_freeformMode)
+        {
+            string drawing = UiText.Get("CaptureFreeform_Drawing");
+            parts.Add((drawing, [drawing]));
+            active = 0;
+            return parts;
+        }
+
         string drag = UiText.Get(_textCaptureMode ? "CaptureGuide2_DragText" : "CaptureGuide2_DragCapture");
         parts.Add((drag, [drag]));
         if (cue == CaptureCueState.Drag) active = 0;
@@ -2174,6 +2197,11 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         if (_ended) return;
         PointD rawPixel = UpdatePointer();
+        if (_freeformMode && _interaction == InteractionMode.Create)
+        {
+            AppendFreeformPoint(rawPixel);
+            return;
+        }
         RectD? previous = _selection;
 
         if (_interaction == InteractionMode.Create)
@@ -2234,6 +2262,12 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return true;
         }
 
+        if (_freeformMode)
+        {
+            BeginFreeform(rawPoint);
+            if (capture) _ = Mouse.Capture(this);
+            return true;
+        }
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         _dragAnchor = point;
@@ -2265,6 +2299,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         }
 
         PointD rawPoint = UpdatePointer();
+        if (_freeformMode)
+        {
+            AppendFreeformPoint(rawPoint);
+            _interaction = InteractionMode.None;
+            if (releaseCapture) Mouse.Capture(null);
+            CompleteFreeform(pinRequested: false);
+            return true;
+        }
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
         ResetRefitCycle();
@@ -2360,7 +2402,11 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 e.Handled = StepElement(1); return;
             case Key.PageUp when modifiers == ModifierKeys.None:
                 e.Handled = StepElement(-1); return;
-            case Key.A when modifiers.HasFlag(ModifierKeys.Control):
+            case Key.F when FreeformAvailable && IsPlainOrShift(modifiers):
+                SelectMode(_freeformMode ? CaptureSelectorMode.Capture : CaptureSelectorMode.Freeform);
+                e.Handled = true;
+                return;
+            case Key.A when !_freeformMode && modifiers.HasFlag(ModifierKeys.Control):
                 ResetRefitCycle();
                 _selection = FrameBounds;
                 _selectedWindow = null;
@@ -2411,6 +2457,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _precisionPointer.Reset();
         if (_interaction == InteractionMode.Create && !_ended)
         {
+            if (_freeformMode) { DiscardFreeform(); return; }
             _interaction = InteractionMode.None;
             ResetRefitCycle();
             _selection = null;
@@ -2436,7 +2483,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void NudgeSelection(Key key, ModifierKeys modifiers)
     {
-        if (_selection is not RectD selection)
+        if (_freeformMode || _selection is not RectD selection)
         {
             return;
         }
@@ -2485,6 +2532,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal void ConfirmSelectionAsPin()
     {
         if (_textCaptureMode || RecordingSelection) return;
+        if (_freeformMode) { CompleteFreeform(pinRequested: true); return; }
         ConfirmSelection(wholeMonitor: false, pinRequested: true);
     }
 
@@ -2619,6 +2667,11 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void RequestCancel()
     {
+        if (_freeformMode && _freeformPoints is { Count: > 0 })
+        {
+            DiscardFreeform();
+            return;
+        }
         if (_ended)
         {
             return;
@@ -2634,6 +2687,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         ArgumentNullException.ThrowIfNull(frame);
         if (_released) return;
         _frame = frame;
+        EnsureFreeformPreview();
         _staticDirty = true;
         _magnifierCrop = null;
         _magnifierCropX = -1;
@@ -2833,6 +2887,7 @@ internal sealed class RegionSelectionEventArgs : EventArgs
     }
 
     internal RectD BitmapRegion { get; }
+    internal FreeformMask? FreeformMask { get; init; }
 
     /// <summary>The auto-detected window a click selected, or null for a drag or keyboard selection.</summary>
     internal WindowCandidate? DetectedWindow { get; init; }

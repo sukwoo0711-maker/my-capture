@@ -44,12 +44,12 @@ internal sealed partial class NativeCaptureOverlay
     internal bool TextCaptureMode
     {
         get => _textCaptureMode;
-        set { if (_closed) return; _textCaptureMode = value; _mode = value ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture; RefreshModeBar(); RefreshHover(); }
+        set { if (_closed) return; DiscardFreeformStroke(); _textCaptureMode = value; _mode = value ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture; RefreshModeBar(); RefreshHover(); }
     }
     internal bool RecordingSelection
     {
         get => _recordingSelection;
-        set { _recordingSelection = value; RefreshModeBar(); }
+        set { _recordingSelection = value; if (value && Mode == CaptureSelectorMode.Freeform) SelectMode(CaptureSelectorMode.Capture); RefreshModeBar(); }
     }
     internal bool OffersOtherActions { get; set; }
     internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
@@ -60,7 +60,7 @@ internal sealed partial class NativeCaptureOverlay
         set { _detectWindows = value; _windowSelected = value; RefreshModeBar(); }
     }
     internal RectD? HoverRegion => _hoverRegion;
-    internal bool UsesWindowDetection => DetectWindows && _windowSelected && !RecordingSelection;
+    internal bool UsesWindowDetection => DetectWindows && _windowSelected && !RecordingSelection && Mode != CaptureSelectorMode.Freeform;
     internal System.Drawing.Size? PresetSize
     {
         get => _presetSize;
@@ -71,7 +71,7 @@ internal sealed partial class NativeCaptureOverlay
     internal RectD? Selection => _selection.Width > 0 && _selection.Height > 0
         ? new RectD(_selection.X, _selection.Y, _selection.Width, _selection.Height) : null;
     private RectD FrameBounds => new(0, 0, _bounds.Width, _bounds.Height);
-    private bool RatioAvailable => Mode != CaptureSelectorMode.Color && PresetSize is null;
+    private bool RatioAvailable => Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && PresetSize is null;
     internal SelectionRatio ActiveRatio => RatioAvailable ? Ratio : SelectionRatio.Free;
     internal string Readout => CaptureOverlayView.FormatReadout(_selection.Width, _selection.Height, ActiveRatio);
     internal string? ToastMessage { get; private set; }
@@ -152,7 +152,8 @@ internal sealed partial class NativeCaptureOverlay
     private void RefreshModeBar()
     {
         _modeBar?.Configure(detectWindows: DetectWindows, textAvailable: TextCaptureAvailable, colorAvailable: CopyColorText is not null,
-            otherActions: OffersOtherActions, canRepeatLastRegion: CanRepeatLastRegion(), recording: RecordingSelection, ratioAvailable: PresetSize is null);
+            otherActions: OffersOtherActions, canRepeatLastRegion: CanRepeatLastRegion(), recording: RecordingSelection,
+            ratioAvailable: PresetSize is null, freeformUnavailableReason: ResolvedFreeformUnavailableReason);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(Ratio);
         UpdateDeferredGuides();
@@ -161,7 +162,20 @@ internal sealed partial class NativeCaptureOverlay
     internal void SelectMode(CaptureSelectorMode mode)
     {
         if (_closed || (mode == CaptureSelectorMode.Text && !TextCaptureAvailable)
-            || (mode == CaptureSelectorMode.Color && CopyColorText is null)) return;
+            || (mode == CaptureSelectorMode.Color && CopyColorText is null)
+            || (mode == CaptureSelectorMode.Freeform && !FreeformAvailable)) return;
+        if (mode != Mode)
+        {
+            DiscardFreeformStroke();
+            if (mode == CaptureSelectorMode.Freeform)
+            {
+                _selectedWindow = null;
+                ClearHover();
+                StopHoverFrames();
+                _shownHover = _glideTarget = null;
+                SetSelection(Int32Rect.Empty);
+            }
+        }
         _mode = mode;
         _textCaptureMode = mode == CaptureSelectorMode.Text;
         ClearHover();
@@ -225,11 +239,13 @@ internal sealed partial class NativeCaptureOverlay
         {
             case Key.Tab when modifiers is ModifierKeys.None or ModifierKeys.Shift:
                 FocusChrome(modifiers == ModifierKeys.Shift); return true;
-            case Key.Escape: Close(); return true;
+            case Key.Escape: if (!DiscardFreeformStroke()) Close(); return true;
             case Key.Enter: ConfirmCurrent(); return true;
+            case Key.F when modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                SelectMode(Mode == CaptureSelectorMode.Freeform ? CaptureSelectorMode.Capture : CaptureSelectorMode.Freeform); return true;
             case Key.PageDown when modifiers == ModifierKeys.None: return StepElement(1);
             case Key.PageUp when modifiers == ModifierKeys.None: return StepElement(-1);
-            case Key.A when modifiers.HasFlag(ModifierKeys.Control):
+            case Key.A when Mode != CaptureSelectorMode.Freeform && modifiers.HasFlag(ModifierKeys.Control):
                 ResetRefitCycle(); _selectedWindow = null; ClearHover(); SetSelection(FrameBounds); return true;
             case Key.R when RatioAvailable && modifiers is ModifierKeys.None or ModifierKeys.Shift:
                 SelectRatio(SelectionRatios.Next(Ratio)); return true;
@@ -245,7 +261,7 @@ internal sealed partial class NativeCaptureOverlay
 
     internal void NudgeSelection(Key key, ModifierKeys modifiers)
     {
-        if (_closed || Selection is not { } selection) return;
+        if (_closed || Mode == CaptureSelectorMode.Freeform || Selection is not { } selection) return;
         double step = modifiers.HasFlag(ModifierKeys.Control) ? 10 : 1;
         bool resize = modifiers.HasFlag(ModifierKeys.Shift);
         ResetRefitCycle();
@@ -338,7 +354,7 @@ internal sealed partial class NativeCaptureOverlay
         _hoverWindow = null;
         _hoverRegion = null;
         _hoverWholeMonitor = false;
-        if (DetectWindows && _windowSelected && !RecordingSelection && Mode != CaptureSelectorMode.Color && Selection is null)
+        if (DetectWindows && _windowSelected && !RecordingSelection && Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Selection is null)
         {
             _hoverWindow = WindowDetectHitTest.FindTopmost(SourceWindows, pointer, Handle);
             if (_hoverWindow is { } window)
