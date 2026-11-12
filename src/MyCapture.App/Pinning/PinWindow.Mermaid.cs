@@ -15,6 +15,7 @@ internal sealed partial class PinWindow
         if (_isClosed) return;
         PinContent? target = translated ? _translationResult : _translationOriginal ?? _content;
         if (target is null || !target.IsMarkdown) return;
+        FinishZoomMotion();
         PinContent updated = target.WithMermaidResults(results, scale);
         if (translated) _translationResult = updated;
         else if (_translationOriginal is not null) _translationOriginal = updated;

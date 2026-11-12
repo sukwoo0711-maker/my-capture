@@ -68,7 +68,8 @@ internal sealed class ResidentProbeOptions
          "selector-freeform", "selector-freeform-once",
          "legacy-guide-write", "selector-show-owned",
          "sw-pin", "sw-pin-aux", "sw-pin-idle", "pin-scale-linear", "pin-opaque", "pin-150", "pin-native",
-         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen"];
+         "pin-native-full", "pin-light", "pin-switch", "pin-zoom", "pin-hold-whole", "pin-move-live", "pin-reopen",
+         "pin-zoom-motion", "pin-motion-small", "pin-motion-once", "pin-motion-83", "pin-motion-167", "pin-motion-trace"];
 
     /// <summary>
     /// The release table's steps, in order. The large library delete runs last: the captures it adds

@@ -148,6 +148,7 @@ internal sealed partial class PinWindow
         var revealBefore = RevealSnapshot();
         _showingMarkdownSource = false;
         EndDrag();
+        FinishZoomMotion();
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
         if (!translated) _showingTranslationDocument = false;
         PinContent next = translated
