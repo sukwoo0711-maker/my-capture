@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -94,20 +95,79 @@ internal static partial class PinTranslationOverlay
 
     internal static string NormalizeWhitespace(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    internal static double[] EstimateFontSizes(IReadOnlyList<PinOverlayBlock> blocks)
+    internal static double[] EstimateFontSizes(IReadOnlyList<PinOverlayBlock> blocks) => EstimateFontSizes(blocks, null, NewUnitInk());
+
+    /// <summary>
+    /// Estimates every block and then limits it to the em its source pixels show, before equal
+    /// sizes are grouped. Both divide by the same text's ink at em 1, so labels with and without
+    /// descenders keep one size. OCR rectangles include padding and blur rows, so the pixel em is
+    /// the better measure; the rectangle estimate remains for blocks without measurable ink.
+    /// </summary>
+    internal static double[] EstimateFontSizes(IReadOnlyList<PinOverlayBlock> blocks, byte[] pixels, int width, int height, int stride)
+    {
+        Func<string, double> wordInk = NewWordInk();
+        double[] sourceEms = blocks.Select(block => SourceInkEm(block, pixels, width, height, stride, wordInk)).ToArray();
+        return EstimateFontSizes(blocks, sourceEms, NewUnitInk());
+    }
+
+    private static readonly ConcurrentDictionary<(string Culture, string Element), (double Top, double Bottom)> GlyphExtents = new();
+
+    /// <summary>
+    /// A word's glyph ink height at em 1, composed from per-character extents around the baseline.
+    /// Characters repeat far more than words, and the typeface never changes, so the process measures
+    /// each glyph once (per UI culture, which can choose the fallback font) instead of every word.
+    /// </summary>
+    private static Func<string, double> NewWordInk()
+    {
+        string culture = CultureInfo.CurrentUICulture.Name;
+        return text =>
+        {
+            double top = double.PositiveInfinity, bottom = double.NegativeInfinity;
+            TextElementEnumerator elements = StringInfo.GetTextElementEnumerator(text);
+            while (elements.MoveNext())
+            {
+                string element = elements.GetTextElement();
+                if (!GlyphExtents.TryGetValue((culture, element), out (double Top, double Bottom) extent))
+                {
+                    FormattedText formatted = Format(element, 1, Brushes.Black);
+                    Rect bounds = formatted.BuildGeometry(new Point()).Bounds;
+                    extent = bounds.IsEmpty ? (double.PositiveInfinity, double.NegativeInfinity)
+                        : (bounds.Top - formatted.Baseline, bounds.Bottom - formatted.Baseline);
+                    // Bounded: a page of unusual combining sequences cannot grow the cache without limit.
+                    if (GlyphExtents.Count < 32768) GlyphExtents.TryAdd((culture, element), extent);
+                }
+                top = Math.Min(top, extent.Top);
+                bottom = Math.Max(bottom, extent.Bottom);
+            }
+            double ink = bottom - top;
+            return double.IsFinite(ink) && ink > 0 ? ink : .85;
+        };
+    }
+
+    /// <summary>The height of a text's glyph geometry at em 1, cached by text.</summary>
+    private static Func<string, double> NewUnitInk()
     {
         var inkHeights = new Dictionary<string, double>(StringComparer.Ordinal);
-        double[] sizes = blocks.Select(block => Math.Clamp(Median(block.Lines.Select(line =>
+        return text =>
         {
-            // OCR rectangles describe ink, not the font's em or its line box.
             // Extent includes WPF's raster padding (even at em=1); glyph geometry is scale-linear ink.
-            if (!inkHeights.TryGetValue(line.Text, out double ink))
+            if (!inkHeights.TryGetValue(text, out double ink))
             {
-                ink = Format(line.Text, 1, Brushes.Black).BuildGeometry(new Point()).Bounds.Height;
-                inkHeights.Add(line.Text, ink);
+                ink = Format(text, 1, Brushes.Black).BuildGeometry(new Point()).Bounds.Height;
+                inkHeights.Add(text, ink);
             }
-            return line.Bounds.Height / (double.IsFinite(ink) && ink > 0 ? ink : .85);
-        })), MinimumFontSize, 32768)).ToArray();
+            return double.IsFinite(ink) && ink > 0 ? ink : .85;
+        };
+    }
+
+    private static double[] EstimateFontSizes(IReadOnlyList<PinOverlayBlock> blocks, IReadOnlyList<double>? sourceEms, Func<string, double> unitInk)
+    {
+        // OCR rectangles describe ink, not the font's em or its line box.
+        double[] sizes = blocks.Select(block => Math.Clamp(Median(block.Lines.Select(line =>
+            line.Bounds.Height / unitInk(line.Text))), MinimumFontSize, 32768)).ToArray();
+        if (sourceEms is not null)
+            for (int index = 0; index < sizes.Length; index++)
+                if (sourceEms[index] > 0) sizes[index] = Math.Min(sizes[index], sourceEms[index]);
         int[] ordered = Enumerable.Range(0, sizes.Length).OrderBy(index => sizes[index]).ToArray();
         for (int start = 0; start < ordered.Length;)
         {
@@ -246,9 +306,34 @@ internal static partial class PinTranslationOverlay
             _ => bounds.X,
         };
 
+        // The free space to the right is a limit, not a target. A greedy wrap at the widest
+        // allowed width can make a block as wide as the page; take the narrowest width that keeps
+        // the stage's line limit (balanced lines), validated by the same Attempt.
+        PinOverlayFit? Narrowest(PinOverlayFit? wide, int lineLimit, Func<double, int, PinOverlayFit?> attempt)
+        {
+            if (wide is null || wide.Bounds.Width <= bounds.Width + .01) return wide;
+            // An unlimited stage keeps the line count it found; a source-limited stage may use all of its lines.
+            int lines = lineLimit == int.MaxValue ? wide.RenderText.Count(character => character == '\n') + 1 : lineLimit;
+            if (lines <= 1) return wide;
+            double low = bounds.Width, high = wide.Bounds.Width;
+            PinOverlayFit best = wide;
+            while (high - low > 1)
+            {
+                double middle = (low + high) / 2;
+                if (attempt(middle, lines) is { } narrower)
+                {
+                    best = narrower;
+                    high = Math.Min(middle, narrower.Bounds.Width);
+                }
+                else low = middle;
+            }
+            return best;
+        }
+
         // Preserve size and line count first, then use the free space to the right.
         PinOverlayFit? fit = Attempt(initial, bounds.Width, lineAreaHeight, Math.Max(1, sourceLineCount))
-            ?? Attempt(initial, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
+            ?? Narrowest(Attempt(initial, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount)), Math.Max(1, sourceLineCount),
+                (width, lines) => Attempt(initial, width, lineAreaHeight, lines));
         if (fit is not null) return fit;
         double comfortableMinimum = Math.Max(minimumEm, initial * .85);
         PinOverlayFit? SearchSizes(double first, double minimum, double factor, int lineLimit)
@@ -280,9 +365,12 @@ internal static partial class PinTranslationOverlay
             }
             // Ink ascenders/descenders and a changed wrap can make the predicate non-monotone.
             // Verify the larger candidates with the cached metrics before accepting the binary result.
-            for (int index = 0; index < low; index++)
-                if (At(index) is { } earlier) return earlier;
-            return low < sizes.Count ? At(low) : null;
+            PinOverlayFit? chosen = null;
+            int chosenIndex = low;
+            for (int index = 0; index < low && chosen is null; index++)
+                if (At(index) is { } earlier) { chosen = earlier; chosenIndex = index; }
+            chosen ??= low < sizes.Count ? At(low) : null;
+            return Narrowest(chosen, lineLimit, (width, lines) => Attempt(sizes[chosenIndex], width, lineAreaHeight, lines));
         }
         fit = SearchSizes(Math.Max(comfortableMinimum, initial * .95), comfortableMinimum, .95, Math.Max(1, sourceLineCount));
         if (fit is not null) return fit;
@@ -290,7 +378,7 @@ internal static partial class PinTranslationOverlay
         // Additional lines are allowed only after the modest shrink, then the existing minimum.
         fit = SearchSizes(comfortableMinimum, minimumEm, .9, int.MaxValue);
         if (fit is not null) return fit;
-        PinOverlayFit? GrowDown(double width)
+        PinOverlayFit? GrowDown(double width, int lineLimit = int.MaxValue)
         {
             findingWidth = true;
             double bottom = imageHeight;
@@ -299,9 +387,9 @@ internal static partial class PinTranslationOverlay
                 if (obstacle.X < x + width + Padding && obstacle.Right > x - Padding
                     && obstacle.Bottom > bounds.Y && obstacle.Y >= bounds.Bottom - .01)
                     bottom = Math.Min(bottom, obstacle.Y - Padding * 2);
-            return Attempt(minimumEm, width, Math.Max(bounds.Height, bottom - bounds.Y), int.MaxValue);
+            return Attempt(minimumEm, width, Math.Max(bounds.Height, bottom - bounds.Y), lineLimit);
         }
-        fit = GrowDown(maxWidth);
+        fit = Narrowest(GrowDown(maxWidth), int.MaxValue, GrowDown);
         if (fit is not null) return fit;
         // A staggered block below may obstruct the wide area but leave a narrow vertical passage.
         for (double width = bounds.Width; width < maxWidth;)
@@ -674,12 +762,7 @@ internal static partial class PinTranslationOverlay
         try
         {
             byte[] pixels = preparation.Pixels;
-            double[] fontSizes = preparation.FontSizes = EstimateFontSizes(blocks);
-            for (int index = 0; index < blocks.Count; index++)
-            {
-                double inkHeight = SourceInkHeight(blocks[index], pixels, width, height, stride);
-                if (inkHeight > 0) fontSizes[index] = Math.Min(fontSizes[index], inkHeight * 1.1);
-            }
+            preparation.FontSizes = EstimateFontSizes(blocks, pixels, width, height, stride);
             OcrRect[] protectedRegions = blocks.SelectMany(block => block.ProtectedRegions).ToArray();
             var inkDistances = new InkDistances();
             for (int index = 0; index < blocks.Count; index++)
@@ -880,11 +963,6 @@ internal static partial class PinTranslationOverlay
                     OcrRect inner = Inflate(draw.Fit.Bounds, Padding - 1, width, height);
                     drawing.DrawRoundedRectangle(draw.Surface.Brush(inner, background, opacity), null, Rect(inner), 2, 2);
                 }
-                else if (draw.Fit.Grew)
-                {
-                    OcrRect grown = Inflate(draw.Fit.Bounds, Padding, width, height);
-                    drawing.DrawRectangle(draw.Surface.Brush(grown, background), null, Rect(grown));
-                }
                 if (drawText)
                 {
                     var key = (draw.Fit.RenderText, draw.Fit.FontSize, foreground, draw.PitchScale, draw.Alignment,
@@ -988,15 +1066,25 @@ internal static partial class PinTranslationOverlay
         return bitmap;
     }
 
-    private static double SourceInkHeight(PinOverlayBlock block, byte[] pixels, int width, int height, int stride)
+    /// <summary>
+    /// The em the source pixels show: each word's measured ink rows divided by that word's
+    /// glyph ink at em 1, so a word without descenders reports the same em as one with them.
+    /// Zero when no word has measurable ink.
+    /// </summary>
+    internal static double SourceInkEm(PinOverlayBlock block, byte[] pixels, int width, int height, int stride) =>
+        SourceInkEm(block, pixels, width, height, stride, NewWordInk());
+
+    private static double SourceInkEm(PinOverlayBlock block, byte[] pixels, int width, int height, int stride, Func<string, double> unitInk)
     {
         var heights = new List<double>();
         foreach (OcrLine line in block.Lines)
         {
             Color background = EstimateBackground(pixels, width, height, stride, line.Bounds).Color;
             var words = new List<double>();
-            IEnumerable<OcrRect> areas = line.Words.Count > 0 ? line.Words.Select(word => word.Bounds) : [line.Bounds];
-            foreach (OcrRect area in areas)
+            IEnumerable<(OcrRect Bounds, string Text)> areas = line.Words.Count > 0
+                ? line.Words.Select(word => (word.Bounds, string.IsNullOrWhiteSpace(word.Text) ? line.Text : word.Text))
+                : [(line.Bounds, line.Text)];
+            foreach ((OcrRect area, string text) in areas)
             {
                 OcrRect bounds = Clamp(area, width, height);
                 if (!OcrGeometry.IsValid(bounds)) continue;
@@ -1012,13 +1100,14 @@ internal static partial class PinTranslationOverlay
                         strongest = Math.Max(strongest, contrast);
                     }
                 if (strongest < 4) continue;
-                // Low-contrast labels still have source ink. Scale the threshold with their
-                // strongest stroke instead of treating all gray text as an empty fixture.
-                double threshold = Math.Min(40 * 40, strongest * .25);
+                // A row is ink when its strongest pixel reaches half the word's contrast
+                // (variance is squared, so a quarter). Antialiased edge rows below half
+                // coverage are blur, not ink; counting them made every estimate too large.
+                double threshold = strongest * .25;
                 for (int row = 0; row < rowContrast.Length; row++)
                     if (rowContrast[row] >= threshold)
                     { top = Math.Min(top, firstRow + row); bottom = Math.Max(bottom, firstRow + row); }
-                if (bottom >= top) words.Add(bottom - top + 1);
+                if (bottom >= top) words.Add((bottom - top + 1) / unitInk(text));
             }
             // A checkbox, superscript or inflated OCR union must not set the text size.
             // Word medians also avoid treating short translations as a reason to grow.
