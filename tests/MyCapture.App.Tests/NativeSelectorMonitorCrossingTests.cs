@@ -97,6 +97,7 @@ public sealed class NativeSelectorMonitorCrossingTests
     public void WpfSelectorPointerMovesAcrossEveryMonitorKeepItOpen(int layout) => StaTestHost.Run(() =>
     {
         (RectD desktop, MonitorInfo[] monitors) = Layout(layout);
+        if (!FitsThisDesktop(desktop)) return;
         foreach (bool recording in new[] { false, true })
         {
             PointD cursor = Center(monitors[0].Bounds);
@@ -141,6 +142,7 @@ public sealed class NativeSelectorMonitorCrossingTests
 
     private static void Exercise(RectD desktop, MonitorInfo[] monitors, int layout, bool emulateDpi)
     {
+        if (!FitsThisDesktop(desktop)) return;
         NativeSelectorChromeCache.Trim();
         // Capture with the key panel, capture with the first-use start guide, and recording.
         foreach ((bool recording, bool startGuide) in new[] { (false, false), (false, true), (true, false) })
@@ -360,6 +362,21 @@ public sealed class NativeSelectorMonitorCrossingTests
         return windows;
     }
 
+    /// <summary>
+    /// The selector reports ready only after a paint covering its whole HWND, and Windows clips that
+    /// paint to the real virtual screen. A layout larger than the desktop running the test cannot be
+    /// swept (a hosted CI runner has one 1024x768 display), so the sweep runs only where it fits:
+    /// on development machines with a large desktop.
+    /// </summary>
+    private static bool FitsThisDesktop(RectD desktop)
+    {
+        int left = GetSystemMetrics(76), top = GetSystemMetrics(77), width = GetSystemMetrics(78), height = GetSystemMetrics(79);
+        return desktop.Left >= left && desktop.Top >= top && desktop.Right <= left + width && desktop.Bottom <= top + height;
+    }
+
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 }
