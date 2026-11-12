@@ -109,9 +109,13 @@ public sealed class NativeSelectorChromeDpiSeamTests
             if (overlay.IsClosed) return bounds;
             setCursor(point);
             _ = SendMessage(overlay.Handle, 0x0200, IntPtr.Zero, IntPtr.Zero);
-            // The hover tab (1 ms) and DPI repair work run between hand-moved pointer samples.
+            // DPI repair work runs between hand-moved pointer samples.
             var elapsed = System.Diagnostics.Stopwatch.StartNew();
             do Pump(); while (elapsed.ElapsedMilliseconds < 20);
+            // The hover tab is drawn from a 1 ms timer, and WM_TIMER waits behind posted messages, of which this
+            // pump makes one each turn: without recording the tab was still pending here on most samples, and
+            // one pass ended on an older tab than the next. Draw it as the timer does, so every sample places it.
+            overlay.Chrome?.FlushHoverTabForTest();
         }
         if (overlay.IsClosed || overlay.Chrome is null) return bounds;
         foreach (System.Windows.Window window in overlay.Chrome.Windows)
