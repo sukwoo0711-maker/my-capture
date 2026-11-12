@@ -200,7 +200,7 @@
                       AutomationProperties.Name="{loc:Text Source.Open}"
                       Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}">
                 <MenuItem.Icon>
-                    <Border TextElement.FontSize="16" sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
+                    <Border TextElement.FontSize="{x:Static themes:TypeScale.IconGlyph}" sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
                 </MenuItem.Icon>
             </MenuItem>
             <MenuItem Tag="OpenSourceLocation" Header="{loc:Text Source.OpenLocation}" CommandParameter="{Binding}" Click="OnOpenSourceFolderClick"
@@ -1457,7 +1457,7 @@
                             <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
                             <DockPanel Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}">
                                 <!-- The kind's glyph until the application's icon is in memory, at a fixed 16 DIP slot. -->
-                                <Border DockPanel.Dock="Left" Width="16" Margin="0,0,6,0" VerticalAlignment="Top" TextElement.FontSize="14"
+                                <Border DockPanel.Dock="Left" Width="16" Margin="0,0,6,0" VerticalAlignment="Top" TextElement.FontSize="{x:Static themes:TypeScale.Body}"
                                         AutomationProperties.AutomationId="LibrarySourceAppIcon"
                                         Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}"
                                         sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
