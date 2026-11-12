@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using MyCapture.App.Capture;
+using MyCapture.App.Sources;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
@@ -51,6 +52,8 @@ internal sealed class PinHoverBar : Window
     private readonly Border _surface;
     private ContextMenu? _opacityMenu;
     private bool _compact;
+    private readonly UIElement _sourceGlyph;
+    private int _sourceIconVersion;
 
     internal PinHoverBar(CaptureProvenance? provenance = null)
     {
@@ -70,16 +73,35 @@ internal sealed class PinHoverBar : Window
         StandardWindowTheme.ApplyFloatingText(this);
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
-        CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
+        CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), CopyKey);
         TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_Translate"), key: null);
         TranslationButton.Visibility = Visibility.Collapsed;
         TranslationButton.Click += (_, _) => TranslationRequested?.Invoke();
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");
         SourceButton = BarButton(SourceGlyph, UiText.Get("Source.Open"), key: null, showLabel: false);
+        // The source application's icon takes the glyph's place at the glyph's size once it is in memory.
+        var sourceContent = (StackPanel)SourceButton.Content;
+        _sourceGlyph = sourceContent.Children[0];
+        sourceContent.Children.RemoveAt(0);
+        SourceIcon = new Image
+        {
+            Name = SourceAppIcon.ImageName, Width = CommandButtonPresentation.IconSize, Height = CommandButtonPresentation.IconSize,
+            Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed, VerticalAlignment = VerticalAlignment.Center,
+            SnapsToDevicePixels = true,
+        };
+        RenderOptions.SetBitmapScalingMode(SourceIcon, BitmapScalingMode.HighQuality);
+        var sourceSymbol = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        sourceSymbol.Children.Add(_sourceGlyph);
+        sourceSymbol.Children.Add(SourceIcon);
+        sourceContent.Children.Insert(0, sourceSymbol);
         SetProvenance(provenance ?? CaptureProvenance.None);
         OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: "O");
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
+        CopyButton.ToolTipOpening += (_, _) =>
+        {
+            if (CopyNameProvider?.Invoke() is { } copyName) SetCopyAction(copyName);
+        };
         SaveButton.Click += (_, _) => SaveRequested?.Invoke();
         SourceButton.Click += (_, _) => SourceRequested?.Invoke();
         OpacityButton.Click += (_, _) => OpenOpacityMenu();
@@ -119,7 +141,24 @@ internal sealed class PinHoverBar : Window
         };
     }
 
+    private const string CopyKey = "Ctrl+C";
+
     internal event Action? CopyRequested;
+
+    /// <summary>What the copy button places on the clipboard now; read each time its tooltip opens.</summary>
+    internal Func<string?>? CopyNameProvider { get; set; }
+
+    /// <summary>
+    /// Names what copy places on the clipboard in the tooltip, the automation name and its help.
+    /// The visible name stays "Copy", so the bar never changes width.
+    /// </summary>
+    internal void SetCopyAction(string name)
+    {
+        string help = $"{name} ({CopyKey})";
+        CopyButton.ToolTip = help;
+        AutomationProperties.SetName(CopyButton, name);
+        AutomationProperties.SetHelpText(CopyButton, help);
+    }
 
     internal event Action? TranslationRequested;
 
@@ -166,14 +205,35 @@ internal sealed class PinHoverBar : Window
 
     internal Button SourceButton { get; }
 
-    internal void SetProvenance(CaptureProvenance source)
+    /// <summary>The source application's icon, shown in the glyph's place once the icon cache has it.</summary>
+    internal Image SourceIcon { get; }
+
+    internal void SetProvenance(CaptureProvenance source, SourceIconCache? icons = null)
     {
         SourceButton.Visibility = source.HasSource ? Visibility.Visible : Visibility.Collapsed;
-        SourceButton.ToolTip = source.HasSource ? $"{source.DisplayText}\n{source.Tooltip}" : null;
+        string tooltip = SourceChip.TooltipFor(source);
+        SourceButton.ToolTip = source.HasSource ? $"{source.DisplayText}\n{tooltip}" : null;
         AutomationProperties.SetName(SourceButton, source.HasSource
             ? UiText.Format(source.CanOpen ? "Source.OpenAutomation" : "Source.Label", source.DisplayText)
             : UiText.Get("Source.Open"));
-        AutomationProperties.SetHelpText(SourceButton, source.Tooltip);
+        AutomationProperties.SetHelpText(SourceButton, tooltip);
+
+        int version = ++_sourceIconVersion;
+        ShowSourceIcon(null);
+        if (!source.HasAppIdentity) return;
+        icons ??= SourceIconCache.Shared;
+        if (icons.TryGet(source, out ImageSource? icon)) ShowSourceIcon(icon);
+        else icons.Request(source, ready =>
+        {
+            if (version == _sourceIconVersion) ShowSourceIcon(ready);
+        });
+    }
+
+    private void ShowSourceIcon(ImageSource? icon)
+    {
+        SourceIcon.Source = icon;
+        SourceIcon.Visibility = icon is null ? Visibility.Collapsed : Visibility.Visible;
+        _sourceGlyph.Visibility = icon is null ? Visibility.Visible : Visibility.Hidden;
     }
 
     internal Button OpacityButton { get; }

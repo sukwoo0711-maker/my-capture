@@ -14,7 +14,7 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 
 ## 기본 캡처 도구와 다른 점
 
-**엑셀 표와 코드를 원문째 띄우는 핀.** 엑셀에서 범위를 복사해 핀으로 띄우면 엑셀이 클립보드에 함께 넣는 그림을 그대로 보여 주므로 글꼴·채우기·테두리가 시트에서 보던 모양 그대로입니다. 셀 값은 탭 구분 원문으로 핀에 붙어 있습니다. 색 정보를 함께 복사하는 에디터에서 복사한 코드는 에디터 색과 들여쓰기를 유지한 코드 핀이 되고, 그 밖의 텍스트는 글자 그대로 그린 핀이 됩니다. 엑셀이나 에디터에서 `Ctrl+C`를 누른 뒤 `F3`을 누르면 복사한 내용이 핀으로 뜨고, 에디터의 입력 위치는 그대로 남습니다. 핀에서 `Ctrl+C`나 `Ctrl+더블클릭`을 누르면 원문을 그대로 복사하므로 에디터나 시트에 바로 붙여 넣습니다.
+**엑셀 표와 코드를 원문째 띄우는 핀.** 엑셀에서 범위를 복사해 핀으로 띄우면 엑셀이 클립보드에 함께 넣는 그림을 그대로 보여 주므로 글꼴·채우기·테두리가 시트에서 보던 모양 그대로입니다. 셀 값은 탭 구분 원문으로 핀에 붙어 있습니다. 색 정보를 함께 복사하는 에디터에서 복사한 코드는 에디터 색과 들여쓰기를 유지한 코드 핀이 되고, 그 밖의 텍스트는 글자 그대로 그린 핀이 됩니다. 엑셀이나 에디터에서 `Ctrl+C`를 누른 뒤 `F3`을 누르면 복사한 내용이 핀으로 뜨고, 에디터의 입력 위치는 그대로 남습니다. 핀에서 `Ctrl+더블클릭`은 원문 텍스트만, `Ctrl+C`는 원문 텍스트와 이미지를 함께 복사합니다. 알림과 오른쪽 클릭 메뉴가 무엇을 복사하는지 알려 주며, 메뉴의 **이미지만 복사**는 텍스트를 넣지 않습니다.
 
 **코드를 덮지 않는 핀 조작.** 핀 위에서 `Ctrl+휠`을 굴리면 투명도가 20–100%로 바뀌고, 오른쪽 클릭 메뉴의 '뒤 창 클릭 허용'을 켜면 핀이 떠 있는 자리에서도 아래 창을 클릭해 입력합니다. 휠로 10–800% 확대·축소합니다. `Shift+F3`으로 핀을 모두 숨기거나 다시 보이고, 앱을 다시 실행하면 열려 있던 핀이 다시 뜹니다. 최근 닫은 핀은 20개까지 위치·배율·투명도 그대로 다시 엽니다. 핀은 작업 표시줄과 `Alt+Tab` 목록에 나타나지 않습니다.
 
@@ -28,7 +28,8 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 
 | 핀에서 | 동작 |
 |---|---|
-| `Ctrl+C`, `Ctrl+더블클릭` | 원문 복사. 이미지 핀은 `Ctrl+더블클릭`으로 이 PC에서 인식한 글자를 복사 |
+| `Ctrl+C` | 원문이 있는 핀은 원문 텍스트와 이미지, 그림 핀은 이미지 복사 |
+| `Ctrl+더블클릭` | 원문 텍스트만 복사. 이미지 핀은 이 PC에서 인식한 글자를 복사 |
 | `Shift+더블클릭` | 작은 미리 보기로 접기·펼치기 |
 | 접힌 핀 더블클릭 | 원래 크기로 펼치기 |
 | `Ctrl+휠` | 투명도 20–100% |
@@ -95,7 +96,7 @@ The 32-bit (x86) compatibility edition for Windows 10 version 22H2 uses Windows 
 
 ### What it adds to Snipping Tool
 
-**Pins that keep Excel tables and code as text.** Copy a range in Excel and pin it: the pin shows the picture Excel puts on the clipboard, so fonts, fills and borders look the way they do in the sheet, and the cell values stay attached as tab-separated text. Code copied from an editor that includes colors becomes a code pin with the editor's colors and indentation; other text is drawn as plain text. Press `Ctrl+C` in Excel or your editor, then `F3`, and what you copied becomes a pin while your cursor stays in the editor. `Ctrl+C` or `Ctrl`+double-click on a pin copies its original text, ready to paste into the editor or the sheet.
+**Pins that keep Excel tables and code as text.** Copy a range in Excel and pin it: the pin shows the picture Excel puts on the clipboard, so fonts, fills and borders look the way they do in the sheet, and the cell values stay attached as tab-separated text. Code copied from an editor that includes colors becomes a code pin with the editor's colors and indentation; other text is drawn as plain text. Press `Ctrl+C` in Excel or your editor, then `F3`, and what you copied becomes a pin while your cursor stays in the editor. On a pin, `Ctrl`+double-click copies only the original text and `Ctrl+C` copies the original text together with the image. The notice and the right-click menu say which one is copied, and **Copy image only** in the menu leaves the text out.
 
 **Pins that stay out of your way.** `Ctrl`+wheel over a pin sets its opacity from 20 to 100%, and Click through to windows behind in its right-click menu lets you click and type in the window underneath. The wheel zooms from 10 to 800%. `Shift+F3` hides or shows all pins, pins that are open when you quit come back at the next launch, and up to 20 recently closed pins reopen with their position, zoom and opacity. Pins stay out of the taskbar and the `Alt+Tab` list.
 
@@ -109,7 +110,8 @@ The 32-bit (x86) compatibility edition for Windows 10 version 22H2 uses Windows 
 
 | On a pin | Action |
 |---|---|
-| `Ctrl+C`, `Ctrl`+double-click | Copy the original text; `Ctrl`+double-click on an image pin copies text recognized on this PC |
+| `Ctrl+C` | Copy the original text and the image on a pin that keeps its source, only the image on an image pin |
+| `Ctrl`+double-click | Copy only the original text; on an image pin, copy text recognized on this PC |
 | `Shift`+double-click | Collapse to a thumbnail or expand |
 | Double-click a collapsed pin | Expand to the original size |
 | `Ctrl`+wheel | Opacity, 20–100% |
