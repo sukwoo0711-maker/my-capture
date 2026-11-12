@@ -1012,7 +1012,7 @@ internal sealed partial class PinManager
 
         if (sender is PinWindow pin && !pin.IsClosed)
         {
-            pin.ReportCopyResult(copied);
+            pin.ReportCopyResult(copied, request.OriginalText is not null);
         }
     }
 

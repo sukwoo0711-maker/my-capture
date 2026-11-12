@@ -63,7 +63,7 @@ public sealed class PinHoverBarTests
             Assert.True(bar.IsCaptureExcluded);
             // Reduced motion: no fade, fully visible at once.
             Assert.Equal(1, bar.Opacity);
-            Assert.Equal(["복사", "저장", "투명도", "닫기"],
+            Assert.Equal(["이미지 복사", "저장", "투명도", "닫기"],
                 new[] { bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton }.Select(AutomationProperties.GetName));
             Assert.Equal("Ctrl+C", AutomationProperties.GetAcceleratorKey(bar.CopyButton));
             Assert.Equal("닫기 (Esc)", bar.CloseButton.ToolTip);
@@ -231,7 +231,9 @@ public sealed class PinHoverBarTests
                     Assert.Equal("Ctrl+C", shortcut.Text);
                     ShortcutMotionTestScope.AssertState(shortcut, false);
                     // The names stay in the tooltips and automation names.
-                    Assert.Equal("복사", AutomationProperties.GetName(bar.CopyButton));
+                    // The copy button names what it copies; the visible name and the bar's width stay as they were.
+                    Assert.Equal("이미지 복사", AutomationProperties.GetName(bar.CopyButton));
+                    Assert.Equal("이미지 복사 (Ctrl+C)", bar.CopyButton.ToolTip);
                     if (compact) Assert.True(bar.ActualWidth < labeled, $"compact {bar.ActualWidth} vs {labeled}");
                     else Assert.InRange(bar.ActualWidth, labeled - 2, labeled + 2);
                 }

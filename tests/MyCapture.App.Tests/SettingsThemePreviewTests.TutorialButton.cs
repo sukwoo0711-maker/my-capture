@@ -94,13 +94,12 @@ public sealed partial class SettingsThemePreviewTests
                         view.Search.Text = "Ctrl+C";
                         Drain(help);
                         Border[] rows = view.VisibleResults();
-                        Assert.Equal(5, rows.Length);
-                        Border originalText = Assert.Single(rows, row => Descendants(row).OfType<TextBlock>()
+                        // Editor, library, the pin and the quick-access alias. The pin's original-text row is
+                        // Ctrl+double-click only, so it no longer answers a search for Ctrl+C.
+                        Assert.Equal(4, rows.Length);
+                        Assert.DoesNotContain(rows, row => Descendants(row).OfType<TextBlock>()
                             .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Text_976A6C92B870")));
-                        Assert.Empty(Descendants(originalText).OfType<Button>());
-                        Assert.Contains(Descendants(originalText).OfType<WrapPanel>(),
-                            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
-                        foreach (Border row in rows.Where(row => !ReferenceEquals(row, originalText)))
+                        foreach (Border row in rows)
                         {
                             // A result's name and category stack in one block; a tutorial button stands beside it.
                             var line = Assert.IsType<Grid>(row.Child).Children.OfType<DockPanel>().Single();
@@ -116,6 +115,15 @@ public sealed partial class SettingsThemePreviewTests
                             VerifyTutorialButton(help, button, (string)button.Tag, searchResult: true);
                             VerifyTutorialRouting(help, [button]);
                         }
+
+                        // Found by its name, the original-text row still has no tutorial button and shows its gesture.
+                        view.Search.Text = UiText.Get("Text_976A6C92B870");
+                        Drain(help);
+                        Border originalText = Assert.Single(view.VisibleResults(), row => Descendants(row).OfType<TextBlock>()
+                            .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Text_976A6C92B870")));
+                        Assert.Empty(Descendants(originalText).OfType<Button>());
+                        Assert.Contains(Descendants(originalText).OfType<WrapPanel>(),
+                            keys => AutomationProperties.GetName(keys) == UiText.Get("Text_C7011B8D345C"));
                     }
                     finally { help.Close(); }
                 }
