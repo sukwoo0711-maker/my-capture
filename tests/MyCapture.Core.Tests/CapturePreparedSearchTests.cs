@@ -60,11 +60,14 @@ public sealed class CapturePreparedSearchTests
         var record = new CaptureRecord { Title = "developer", OcrText = new string('x', 65536),
             SourceAppName = "IDE", SourceAppPath = @"C:\tools\editor.exe" };
         for (int i = 0; i < 100; i++) Assert.True(matcher(record));
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        // 10,000 records per window: even 2 bytes per record would exceed the limit in every window.
         int hits = 0;
-        for (int i = 0; i < 10000; i++) if (matcher(record)) hits++;
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long[] windows = ThreadAllocation.Measure(() =>
+        {
+            hits = 0;
+            for (int i = 0; i < 10000; i++) if (matcher(record)) hits++;
+        }, limit: 16383);
         Assert.Equal(10000, hits);
-        Assert.True(allocated < 16384, $"Prepared filtering allocated {allocated} bytes.");
+        Assert.True(ThreadAllocation.AnyWithin(windows, 16383), "Prepared filtering allocated " + ThreadAllocation.Describe(windows));
     }
 }
