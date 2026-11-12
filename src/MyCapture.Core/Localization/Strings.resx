@@ -5669,4 +5669,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>편집 중 추가 캡처는 사각형으로 선택합니다.</value>
   </data>
   <data name="CaptureFreeform_Discard" xml:space="preserve"><value>그린 윤곽 취소</value></data>
+  <data name="OpenWith.Menu" xml:space="preserve"><value>연결 프로그램</value></data>
+  <data name="OpenWith.Choose" xml:space="preserve"><value>다른 앱 선택…</value></data>
+  <data name="OpenWith.Loading" xml:space="preserve"><value>불러오는 중</value></data>
+  <data name="OpenWith.Preparing" xml:space="preserve"><value>파일 준비 중</value></data>
+  <data name="OpenWith.Opened" xml:space="preserve"><value>앱으로 전달됨</value></data>
+  <data name="OpenWith.Failed" xml:space="preserve"><value>앱을 열지 못했습니다. {0}</value></data>
+  <data name="OpenWith.Unavailable" xml:space="preserve"><value>선택한 앱을 사용할 수 없습니다.</value></data>
+  <data name="OpenWith.AccessDenied" xml:space="preserve"><value>파일에 접근할 권한이 없습니다.</value></data>
 </root>

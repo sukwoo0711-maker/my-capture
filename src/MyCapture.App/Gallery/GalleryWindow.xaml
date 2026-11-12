@@ -163,6 +163,7 @@
             <MenuItem Tag="Compare" Header="{loc:Text Gallery.Compare}"
                       Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                       CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Tag="OpenWith" Header="{loc:Text OpenWith.Menu}" AutomationProperties.Name="{loc:Text OpenWith.Menu}" />
             <Separator />
             <MenuItem Tag="Copy" Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
                       AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
