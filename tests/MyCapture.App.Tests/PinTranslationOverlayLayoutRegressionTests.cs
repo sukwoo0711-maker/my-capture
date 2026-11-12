@@ -243,7 +243,10 @@ public sealed class PinTranslationOverlayLayoutRegressionTests
             observeFit: (_, fit, _) => chosen = fit);
         Assert.Equal(1, result.RenderedBlocks);
         Assert.NotNull(chosen);
-        Assert.Equal(26, chosen.FontSize, 5);
+        // The fringe must not shrink the translation: it keeps the estimated size, which the source pixels put at 26.
+        using (PinOverlayPreparation preparation = PinTranslationOverlay.Prepare(image, [block]))
+            Assert.Equal(preparation.FontSizes[0], chosen.FontSize, 5);
+        Assert.InRange(chosen.FontSize, 26 * .97, 26 * 1.03);
         Assert.True(chosen.Bounds.Width > block.Bounds.Width);
     });
 
