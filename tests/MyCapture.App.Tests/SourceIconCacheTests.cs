@@ -6,11 +6,15 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
+using MyCapture.Core.Storage;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
-/// <summary>Source application icons: one read per application, memory first, a pruned disk cache, a deadline.</summary>
+/// <summary>
+/// Source application icons: one read per application, memory first, a disk cache pruned into the
+/// Recycle Bin, a deadline.
+/// </summary>
 public sealed class SourceIconCacheTests
 {
     private static readonly SourceIconCache.FileStamp Stamp = new(638_000_000_000_000_000, 4096);
@@ -134,20 +138,123 @@ public sealed class SourceIconCacheTests
             for (int index = 0; index < 6; index++)
             {
                 string file = Path.Combine(root, $"{index:x32}.png");
-                File.WriteAllBytes(file, new byte[1000]);
+                File.WriteAllBytes(file, IconBytes(index));
                 File.SetLastWriteTimeUtc(file, now.AddMinutes(index));
             }
             File.WriteAllText(Path.Combine(root, "keep.txt"), "not an icon");
-            SourceIconCache.Prune(root, fileLimit: 4, byteLimit: 1_000_000);
+            // No recycler is given: this is the application's own path, Windows' Recycle Bin.
+            IReadOnlyList<CleanupReceipt> overCount = SourceIconCache.Prune(root, fileLimit: 4, byteLimit: 1_000_000);
             Assert.Equal(new[] { 2, 3, 4, 5 }.Select(i => $"{i:x32}.png"),
                 Directory.GetFiles(root, "*.png").Select(Path.GetFileName).Order());
-            SourceIconCache.Prune(root, fileLimit: 100, byteLimit: 2_500);
+            IReadOnlyList<CleanupReceipt> overSize = SourceIconCache.Prune(root, fileLimit: 100, byteLimit: 2_500);
             Assert.Equal(new[] { 4, 5 }.Select(i => $"{i:x32}.png"),
                 Directory.GetFiles(root, "*.png").Select(Path.GetFileName).Order());
-            Assert.True(File.Exists(Path.Combine(root, "keep.txt")));
+            // Only the icons over a limit went, the oldest first; what stays keeps its bytes.
+            Assert.Equal(new[] { 0, 1 }.Select(i => $"{i:x32}.png"), overCount.Select(receipt => Path.GetFileName(receipt.OriginalPath)));
+            Assert.Equal(new[] { 2, 3 }.Select(i => $"{i:x32}.png"), overSize.Select(receipt => Path.GetFileName(receipt.OriginalPath)));
+            Assert.Equal("not an icon", File.ReadAllText(Path.Combine(root, "keep.txt")));
+            foreach (int kept in new[] { 4, 5 })
+                Assert.Equal(IconBytes(kept), File.ReadAllBytes(Path.Combine(root, $"{kept:x32}.png")));
+            // Each icon that went is in the Recycle Bin, and comes back whole.
+            var trash = new RecoverableFileRemoval();
+            foreach (CleanupReceipt receipt in overCount.Concat(overSize))
+            {
+                Assert.False(File.Exists(receipt.OriginalPath));
+                Assert.True(File.Exists(receipt.RecycledPath));
+                trash.RestoreFile(receipt);
+            }
+            for (int index = 0; index < 6; index++)
+                Assert.Equal(IconBytes(index), File.ReadAllBytes(Path.Combine(root, $"{index:x32}.png")));
         }
         finally { OwnedTestDirectory.Delete(root); }
     }
+
+    [Fact]
+    public void PruningMovesTheOldestFirstAndOnlyAFewInOnePass()
+    {
+        string root = OwnedTestDirectory.Create("mc-srcicons");
+        string aside = OwnedTestDirectory.Create("mc-srcicons-aside");
+        try
+        {
+            DateTime now = DateTime.UtcNow;
+            int count = SourceIconCache.PruneMoveLimit + 3;
+            for (int index = 0; index < count; index++)
+            {
+                string file = Path.Combine(root, $"{index:x32}.png");
+                File.WriteAllBytes(file, IconBytes(index));
+                File.SetLastWriteTimeUtc(file, now.AddMinutes(index));
+            }
+            var moved = new List<string>();
+            CleanupReceipt MoveAside(string path)
+            {
+                string target = Path.Combine(aside, Path.GetFileName(path));
+                File.Move(path, target);
+                moved.Add(Path.GetFileName(path));
+                return new CleanupReceipt(path, target, string.Empty, string.Empty, isDirectory: false);
+            }
+
+            // One icon may stay, so all but the newest are over the limit: more than one pass can move.
+            Assert.Equal(SourceIconCache.PruneMoveLimit,
+                SourceIconCache.Prune(root, fileLimit: 1, byteLimit: 1_000_000, MoveAside).Count);
+            Assert.Equal(Enumerable.Range(0, SourceIconCache.PruneMoveLimit).Select(i => $"{i:x32}.png"), moved);
+            moved.Clear();
+            Assert.Equal(2, SourceIconCache.Prune(root, fileLimit: 1, byteLimit: 1_000_000, MoveAside).Count);
+            Assert.Equal(new[] { SourceIconCache.PruneMoveLimit, SourceIconCache.PruneMoveLimit + 1 }.Select(i => $"{i:x32}.png"), moved);
+            Assert.Equal($"{count - 1:x32}.png", Path.GetFileName(Assert.Single(Directory.GetFiles(root))));
+            Assert.Empty(SourceIconCache.Prune(root, fileLimit: 1, byteLimit: 1_000_000, MoveAside));
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(root);
+            OwnedTestDirectory.Delete(aside);
+        }
+    }
+
+    [Fact]
+    public void AnIconThatCannotBeRecycledStaysAndTheCacheGoesOn() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-srcicons");
+        try
+        {
+            // One more icon than the cache keeps, all of them older than the one about to be stored.
+            DateTime old = DateTime.UtcNow.AddDays(-1);
+            for (int index = 0; index <= SourceIconCache.DiskFileLimit; index++)
+            {
+                string file = Path.Combine(root, $"{index:x32}.png");
+                File.WriteAllBytes(file, [(byte)index]);
+                File.SetLastWriteTimeUtc(file, old.AddSeconds(index));
+            }
+            // Windows refuses every move, as it does with the Recycle Bin turned off.
+            int refused = 0;
+            CleanupReceipt Refuse(string path)
+            {
+                Interlocked.Increment(ref refused);
+                throw new IOException("Windows cannot move this item to the Recycle Bin; it was left in place.");
+            }
+            CaptureProvenance source = App(1);
+            using (var first = new SourceIconCache(root, readExecutable: _ => Icon(Colors.SeaGreen), readPackagedApp: _ => null,
+                stamp: _ => Stamp, recycle: Refuse))
+            {
+                bool done = false;
+                first.Request(source, _ => done = true);
+                // The new icon puts the folder two over the limit; both are tried once it is delivered.
+                PumpUntil(() => done && Volatile.Read(ref refused) == 2);
+            }
+            Assert.Equal(SourceIconCache.DiskFileLimit + 2, Directory.GetFiles(root, "*.png").Length);
+            for (int index = 0; index <= SourceIconCache.DiskFileLimit; index++)
+                Assert.Equal(new[] { (byte)index }, File.ReadAllBytes(Path.Combine(root, $"{index:x32}.png")));
+
+            // The icon that was stored is read back from the folder, with no shell read.
+            using var second = new SourceIconCache(root, readExecutable: _ => throw new InvalidOperationException("read the shell"),
+                readPackagedApp: _ => null, stamp: _ => Stamp, recycle: Refuse);
+            ImageSource? loaded = null;
+            second.Request(source, icon => loaded = icon);
+            PumpUntil(() => loaded is not null);
+            Assert.Equal(Colors.SeaGreen, CenterPixel(Assert.IsAssignableFrom<BitmapSource>(loaded)));
+            Assert.Equal(2, Volatile.Read(ref refused));
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
 
     [Fact]
     public void AnIconMadeOnTheIconThreadIsUsableOnTheUiThread() => StaTestHost.Run(() =>
@@ -211,6 +318,10 @@ public sealed class SourceIconCacheTests
 
     internal static CaptureProvenance App(int index) =>
         CaptureProvenance.Create(appName: "App " + index, appExecutablePath: $@"C:\Apps\app{index}.exe");
+
+    /// <summary>1,000 bytes that differ from one icon to the next, so a restored file is known by its content.</summary>
+    private static byte[] IconBytes(int index) =>
+        Enumerable.Range(0, 1000).Select(offset => (byte)(index * 37 + offset)).ToArray();
 
     internal static BitmapSource Icon(Color? color = null, bool freeze = true)
     {

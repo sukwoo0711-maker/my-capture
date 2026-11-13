@@ -1261,7 +1261,7 @@
                                 <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}" Content="{loc:Text LibraryFolder_KeepAfterClose}" Margin="0"
                                           AutomationProperties.Name="{loc:Text LibraryFolder_KeepAfterClose}"
                                           IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
-                                <Button VerticalAlignment="Top" Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
+                                <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
                             AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
                             Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                             </Grid>

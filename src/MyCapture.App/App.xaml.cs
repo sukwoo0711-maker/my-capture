@@ -1546,6 +1546,7 @@ public partial class App : Application
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
+            card.PlacementMissed = error => _log?.LogWarning(error, "The capture card missed its bounds; the card stays open");
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) =>
             {
