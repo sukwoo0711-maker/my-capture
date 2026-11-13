@@ -108,6 +108,27 @@ MyCapture는 윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
+### 이 버전의 새로운 기능 (5.4.0)
+
+입력 한도는 1,500자입니다. Store의 5.3.1에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
+
+- 선택 화면에서 휠로 창 안의 UI 요소를 골라 캡처합니다.
+- F로 자유형 영역을 캡처합니다.
+- 그림 핀에서 F2로 글자를 끌어 골라 복사합니다.
+- 핀을 접고, 끌 때 가장자리와 다른 핀에 붙입니다.
+- 핀 확대·축소가 부드럽게 바뀌고 100%에서 한 번 멈춥니다.
+- 핀 복사가 텍스트와 이미지 중 무엇을 넣었는지 표시합니다.
+- 핀 번역이 제자리에서 전환 효과와 함께 바뀝니다. 번역문 글자 크기와, 맞는 번역을 버리던 문제를 고쳤습니다.
+- 번역 모델 내려받기의 진행과 실패 이유를 보여 주고, 취소할 수 있습니다.
+- 글자 인식이 QR 코드와 바코드의 내용도 읽습니다.
+- 출처 열기가 캡처한 문서와 주소를 그대로 열고, 출처 앱 아이콘을 보여 줍니다.
+- 캡처를 Windows 연결 프로그램으로 엽니다.
+- PDF로 만들 때 이미지 순서를 바꾸고 일부를 뺍니다.
+- 편집기 워터마크가 바탕에 스미게 표시됩니다.
+- 설정에서 켜면 그림 핀이 메모리를 덜 씁니다.
+- 설치 파일 크기를 줄였습니다.
+- 녹화 영역 선택을 Esc로 취소하지 못하던 문제와, 배율이 다른 모니터 사이를 넘을 때 단축키 안내판 크기가 틀어지던 문제를 고쳤습니다.
+
 ### 이 버전의 새로운 기능 (5.3.1)
 
 입력 한도는 1,500자입니다. Store의 5.3.0에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
@@ -229,6 +250,27 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
+
+### What's new in this version (5.4.0)
+
+Limit: 1,500 characters. Covers changes since the Store version, 5.3.1. Enter the lines below in the Store.
+
+- Pick a UI element inside a window with the mouse wheel on the capture selector.
+- Capture a freeform region with F.
+- Press F2 on a picture pin to select text by dragging and copy it.
+- Collapse pins, and snap them to edges and other pins while dragging.
+- Pin zoom changes smoothly and pauses once at 100%.
+- Copying a pin now says whether it copied text and an image, or an image only.
+- Pin translation changes in place with a transition. Fixed the size of translated text and correct translations being discarded.
+- The translation model download shows progress, can be cancelled, and explains failures.
+- Text recognition also reads QR codes and barcodes.
+- Open source opens the captured document or address itself, and source app icons are shown.
+- Open a capture with a Windows associated app.
+- When making a PDF, reorder the images and leave some out.
+- The editor watermark now blends into the page.
+- Turn on a setting to make picture pins use less memory.
+- The installation package is smaller.
+- Fixed Esc not cancelling recording region selection, and the shortcut guide being sized wrong when crossing between monitors with different scaling.
 
 ### What's new in this version (5.3.1)
 
