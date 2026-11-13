@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -55,6 +56,8 @@ internal static class ImageCodeDecoder
             [DecodeHintType.TRY_HARDER] = true,
             [DecodeHintType.TRY_HARDER_WITHOUT_ROTATION] = true,
         };
+        // ZXing's BaseLuminanceSource copies its array and makes two more copies per rotation or crop,
+        // and an inverted source materialises a negative copy. This source reads `luminance` in place.
         var sourcePixels = new DeadlineLuminance(luminance, width, height, token);
         var verticalReader = new ZXing.OneD.MultiFormatOneDReader(otherHints);
         var found = new List<Result>();
@@ -68,34 +71,37 @@ internal static class ImageCodeDecoder
         foreach (bool inverted in new[] { false, true })
         {
             token.ThrowIfCancellationRequested();
-            LuminanceSource polarity = inverted ? sourcePixels.invert() : sourcePixels;
+            // The negative pass flips the pixels in place (255 - p); they are flipped back before
+            // Bounds reads them. Nothing from the positive pass reads the pixels after this point.
+            if (inverted) Invert(luminance);
             // The QR multi detector preserves equal payloads at separate locations. The generic
             // recursive multi reader deduplicates by text and would silently lose those symbols.
-            var binary = new BinaryBitmap(new HybridBinarizer(polarity));
+            var binary = new BinaryBitmap(new HybridBinarizer(sourcePixels));
             found.AddRange(qr.decodeMultiple(binary, hints) ?? []);
             token.ThrowIfCancellationRequested();
             Result? other = reader.decode(binary, otherHints);
-            if (other is not null && !Confirmed(other, luminance, width, height, inverted, wholeImage, otherHints, token))
+            if (other is not null && !Confirmed(other, luminance, width, height, wholeImage, otherHints, token))
                 other = null;
             if (other is null)
             {
                 // 2-D detectors resolve orientation themselves and 1-D readers scan both
                 // directions. Only the perpendicular scan is needed, not four full copies.
                 token.ThrowIfCancellationRequested();
-                var rotated = new BinaryBitmap(new HybridBinarizer(polarity.rotateCounterClockwise()));
+                var rotated = new BinaryBitmap(new HybridBinarizer(sourcePixels.rotateCounterClockwise()));
                 Result? vertical = verticalReader.decode(rotated, otherHints);
                 if (vertical is not null)
                 {
                     other = new Result(vertical.Text, vertical.RawBytes, vertical.ResultPoints.Select(point =>
                         new ResultPoint(width - point.Y - 1, point.X)).ToArray(), vertical.BarcodeFormat);
                     if (vertical.ResultMetadata is { } metadata) other.putAllMetadata(metadata);
-                    if (!Confirmed(other, luminance, width, height, inverted, wholeImage, otherHints, token)) other = null;
+                    if (!Confirmed(other, luminance, width, height, wholeImage, otherHints, token)) other = null;
                 }
             }
             if (other is not null) found.Add(other);
             // Data Matrix/Aztec's white-rectangle search starts near the image centre.
             // Find bounded, connected ink tiles for off-centre symbols; only small crops are
             // materialised, from this same bounded luminance image, never from the screen.
+            // Each crop reuses one buffer, so a crop is finished with before the next is taken.
             foreach (Int32Rect region in CandidateRegions(binary.BlackMatrix, token))
             {
                 token.ThrowIfCancellationRequested();
@@ -104,10 +110,11 @@ internal static class ImageCodeDecoder
                 var mapped = new Result(candidate.Text, candidate.RawBytes, candidate.ResultPoints.Select(point =>
                     new ResultPoint(point.X + region.X, point.Y + region.Y)).ToArray(), candidate.BarcodeFormat);
                 if (candidate.ResultMetadata is { } metadata) mapped.putAllMetadata(metadata);
-                if (!Confirmed(mapped, luminance, width, height, inverted, region, otherHints, token)) continue;
+                if (!Confirmed(mapped, luminance, width, height, region, otherHints, token)) continue;
                 found.Add(mapped);
             }
         }
+        Invert(luminance); // Back to the positive image for Bounds.
         token.ThrowIfCancellationRequested();
         var codes = new List<DecodedImageCode>();
         foreach (Result result in found)
@@ -278,9 +285,11 @@ internal static class ImageCodeDecoder
     /// A 1-D read comes from a single scan row. Accept it only if the lines at about 25% and 75% of
     /// the bar extent (perpendicular to the scan) each decode to the same format and text. Points are
     /// in <paramref name="pixels"/> coordinates; <paramref name="span"/> limits the scan line the same
-    /// way the decoding pass was limited (whole image or the candidate crop).
+    /// way the decoding pass was limited (whole image or the candidate crop). <paramref name="pixels"/>
+    /// are in the polarity of the pass that read the symbol (negated in place for the inverted pass);
+    /// BarExtent compares darkness for equality, which negation (p &lt; 128 against 255 - p &lt; 128) preserves.
     /// </summary>
-    private static bool Confirmed(Result result, byte[] pixels, int width, int height, bool inverted, Int32Rect span,
+    private static bool Confirmed(Result result, byte[] pixels, int width, int height, Int32Rect span,
         IDictionary<DecodeHintType, object> hints, CancellationToken token)
     {
         if (!IsOneDimensional(result.BarcodeFormat)) return true;
@@ -304,10 +313,7 @@ internal static class ImageCodeDecoder
             token.ThrowIfCancellationRequested();
             int across = Math.Clamp((int)Math.Round(start + (end - 1 - start) * fraction), 0, (vertical ? width : height) - 1);
             for (int i = 0; i < length; i++)
-            {
-                byte value = pixels[vertical ? (scanStart + i) * width + across : across * width + scanStart + i];
-                line[i] = inverted ? (byte)(255 - value) : value;
-            }
+                line[i] = pixels[vertical ? (scanStart + i) * width + across : across * width + scanStart + i];
             // Same row binarization the 1-D readers use (HybridBinarizer inherits it for rows).
             BitArray? row = new GlobalHistogramBinarizer(new DeadlineLuminance(line, length, 1, token)).getBlackRow(0, null);
             if (row is null) return false;
@@ -336,15 +342,106 @@ internal static class ImageCodeDecoder
         return Math.Max(1, (right - left + 1) / 3.0);
     }
 
-    // Cancellation is checked while binarizers request rows/matrices and between rotations.
-    // The outer service deadline also bounds delivery during ZXing's non-interruptible math.
-    private sealed class DeadlineLuminance(byte[] pixels, int width, int height, CancellationToken token)
-        : BaseLuminanceSource(pixels, width, height)
+    /// <summary>Negates every pixel in place; 255 - p equals the bitwise complement of a byte.</summary>
+    internal static void Invert(Span<byte> pixels)
     {
-        public override byte[] Matrix { get { token.ThrowIfCancellationRequested(); return base.Matrix; } }
+        Span<ulong> words = MemoryMarshal.Cast<byte, ulong>(pixels);
+        for (int i = 0; i < words.Length; i++) words[i] = ~words[i];
+        for (int i = words.Length * sizeof(ulong); i < pixels.Length; i++) pixels[i] = (byte)~pixels[i];
+    }
+
+    // Cancellation is checked while binarizers request rows/matrices and when rotating or cropping.
+    // The outer service deadline also bounds delivery during ZXing's non-interruptible math.
+    /// <summary>
+    /// Row-major luminance read in place: unlike ZXing's BaseLuminanceSource, the array is not copied,
+    /// a rotation is a view, and every crop of one source shares a single buffer owned by that source
+    /// (so one crop must be finished with before the next is taken). The buffer lives only as long as
+    /// the source, which lives only for one decode call.
+    /// </summary>
+    internal sealed class DeadlineLuminance : LuminanceSource
+    {
+        private const int CropCapacity = MaximumSide / 2 * (MaximumSide / 2);
+        private readonly byte[] pixels;
+        private readonly CancellationToken token;
+        private byte[]? cropPixels;
+
+        internal DeadlineLuminance(byte[] pixels, int width, int height, CancellationToken token) : base(width, height)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(pixels.Length, checked(width * height), nameof(pixels));
+            this.pixels = pixels;
+            this.token = token;
+        }
+
+        public override byte[] Matrix { get { token.ThrowIfCancellationRequested(); return pixels; } }
+
         public override byte[] getRow(int y, byte[]? row)
-        { token.ThrowIfCancellationRequested(); return base.getRow(y, row); }
-        protected override LuminanceSource CreateLuminanceSource(byte[] newLuminances, int newWidth, int newHeight)
-        { token.ThrowIfCancellationRequested(); return new DeadlineLuminance(newLuminances, newWidth, newHeight, token); }
+        {
+            token.ThrowIfCancellationRequested();
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)y, (uint)Height, nameof(y));
+            if (row is null || row.Length < Width) row = new byte[Width];
+            Buffer.BlockCopy(pixels, y * Width, row, 0, Width);
+            return row;
+        }
+
+        public override bool CropSupported => true;
+
+        public override LuminanceSource crop(int left, int top, int width, int height)
+        {
+            token.ThrowIfCancellationRequested();
+            if (left < 0 || top < 0 || width < 1 || height < 1 || left + width > Width || top + height > Height)
+                throw new ArgumentException("Crop rectangle does not fit within image data.");
+            int size = width * height;
+            if (cropPixels is null || cropPixels.Length < size)
+                cropPixels = new byte[Math.Max(size, Math.Min(Width * Height, CropCapacity))];
+            for (int y = 0; y < height; y++)
+                Buffer.BlockCopy(pixels, (top + y) * Width + left, cropPixels, y * width, width);
+            return new DeadlineLuminance(cropPixels, width, height, token);
+        }
+
+        public override bool RotateSupported => true;
+
+        public override LuminanceSource rotateCounterClockwise()
+        {
+            token.ThrowIfCancellationRequested();
+            return new RotatedLuminance(pixels, Width, Height, token);
+        }
+    }
+
+    /// <summary>
+    /// ZXing's 90-degree counter-clockwise rotation as a view: rotated (x, y) is source (W - 1 - y, x)
+    /// for a source W wide. 1-D readers only fetch rows; a 2-D reader asking for the matrix gets a copy.
+    /// </summary>
+    internal sealed class RotatedLuminance(byte[] pixels, int sourceWidth, int sourceHeight, CancellationToken token)
+        : LuminanceSource(sourceHeight, sourceWidth)
+    {
+        private byte[]? matrix;
+
+        public override byte[] Matrix
+        {
+            get
+            {
+                token.ThrowIfCancellationRequested();
+                if (matrix is not null) return matrix;
+                var copy = new byte[Width * Height];
+                for (int y = 0; y < Height; y++) Fill(y, copy.AsSpan(y * Width, Width));
+                return matrix = copy;
+            }
+        }
+
+        public override byte[] getRow(int y, byte[]? row)
+        {
+            token.ThrowIfCancellationRequested();
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)y, (uint)Height, nameof(y));
+            if (row is null || row.Length < Width) row = new byte[Width];
+            Fill(y, row.AsSpan(0, Width));
+            return row;
+        }
+
+        // The source is Height pixels wide; rotated row y is source column Height - 1 - y read downwards.
+        private void Fill(int y, Span<byte> row)
+        {
+            int sourceWidth = Height, column = sourceWidth - 1 - y;
+            for (int x = 0; x < row.Length; x++) row[x] = pixels[x * sourceWidth + column];
+        }
     }
 }
