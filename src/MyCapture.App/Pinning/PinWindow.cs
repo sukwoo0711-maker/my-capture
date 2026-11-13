@@ -1353,9 +1353,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
     // ----- Mouse: interior drag to move, edge drag/wheel to zoom, Ctrl+wheel opacity -----
 
+    // On the size the screen shows: a running zoom motion places steps without setting Width and Height.
     internal PinResizeEdge ResizeEdgeAt(Point point) =>
         _isClosed || _state.IsCollapsed || _state.IsClickThrough || IsTextSelectionMode || _dragInput.Modifiers.HasFlag(ModifierKeys.Control)
-            ? PinResizeEdge.None : PinResize.HitTest(point.X, point.Y, Width, Height);
+            ? PinResizeEdge.None
+            : _zoomMotion is { IsActive: true } ? PinResize.HitTest(point.X, point.Y, ShownWidthDip, ShownHeightDip)
+            : PinResize.HitTest(point.X, point.Y, Width, Height);
 
     internal static Cursor? ResizeCursor(PinResizeEdge edge) => edge switch
     {
@@ -1406,6 +1409,10 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
         EndDrag();
         HideHoverBar();
+        // The edge is the one the user saw under the pointer: a running zoom motion shows a step short of (or
+        // past) the state's size, so it is judged before the press ends the motion. The gesture then starts
+        // from the state's geometry, and a resize follows the pointer's travel from the press.
+        PinResizeEdge pressedEdge = ResizeEdgeAt(_dragInput.LocalAnchor(e, this));
         FinishZoomMotion();
         try
         {
@@ -1415,7 +1422,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             {
                 Point anchor = _dragInput.LocalAnchor(e, this);
                 DpiScale dpi = VisualTreeHelper.GetDpi(this);
-                _resizeEdge = ResizeEdgeAt(anchor);
+                _resizeEdge = pressedEdge;
                 if (_resizeEdge != PinResizeEdge.None)
                 {
                     (int left, int top, _, _) = PhysicalBounds;
