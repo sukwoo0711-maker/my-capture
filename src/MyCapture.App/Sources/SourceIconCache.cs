@@ -16,14 +16,18 @@ namespace MyCapture.App.Sources;
 /// icon. Reads run on one background STA thread: first the disk cache, then the shell. A read that
 /// outlives <see cref="ReadDeadline"/> is abandoned with its thread, and that application keeps its
 /// glyph for the session. Icons are frozen before they leave the thread. Nothing per capture is
-/// stored: the disk cache holds one small PNG per application and prunes itself.
+/// stored: the disk cache holds one small PNG per application, and the icons it outgrows go to the
+/// Recycle Bin.
 /// </summary>
 internal sealed class SourceIconCache : IDisposable
 {
     internal const int MemoryCapacity = 128;
     internal const int DiskFileLimit = 300;
     internal const long DiskByteLimit = 4L * 1024 * 1024;
+    /// <summary>How many icons one pruning pass tries to move; a new icon puts the cache one over.</summary>
+    internal const int PruneMoveLimit = 4;
     internal static readonly TimeSpan ReadDeadline = TimeSpan.FromSeconds(2);
+    private static readonly RecoverableFileRemoval Removal = new();
 
     internal readonly record struct FileStamp(long WriteTicksUtc, long Length);
 
@@ -36,6 +40,7 @@ internal sealed class SourceIconCache : IDisposable
     private readonly Func<string, BitmapSource?> _readPackagedApp;
     private readonly Func<string, FileStamp?> _stamp;
     private readonly Func<long> _now;
+    private readonly Func<string, CleanupReceipt>? _recycle;
     private readonly object _gate = new();
     private readonly Dictionary<string, LinkedListNode<Entry>> _memory = new(StringComparer.Ordinal);
     private readonly LinkedList<Entry> _order = new();
@@ -46,6 +51,7 @@ internal sealed class SourceIconCache : IDisposable
     private Work? _current;
     private long _currentStarted;
     private bool _disposed;
+    private volatile bool _pruneDue;
 
     internal static SourceIconCache Shared { get; private set; } = new(diskRoot: null);
 
@@ -58,13 +64,15 @@ internal sealed class SourceIconCache : IDisposable
     }
 
     internal SourceIconCache(string? diskRoot, Func<string, BitmapSource?>? readExecutable = null,
-        Func<string, BitmapSource?>? readPackagedApp = null, Func<string, FileStamp?>? stamp = null, Func<long>? now = null)
+        Func<string, BitmapSource?>? readPackagedApp = null, Func<string, FileStamp?>? stamp = null, Func<long>? now = null,
+        Func<string, CleanupReceipt>? recycle = null)
     {
         _diskRoot = ValidatedRoot(diskRoot);
         _readExecutable = readExecutable ?? SourceAppIconReader.ReadExecutable;
         _readPackagedApp = readPackagedApp ?? SourceAppIconReader.ReadPackagedApp;
         _stamp = stamp ?? ReadStamp;
         _now = now ?? (static () => Environment.TickCount64);
+        _recycle = recycle;
     }
 
     /// <summary>The application a source's icon belongs to; empty when none is known.</summary>
@@ -212,12 +220,30 @@ internal sealed class SourceIconCache : IDisposable
                 Remember(work.Identity, image);
                 _waiting.Remove(work.Identity, out waiting);
             }
-            if (image is null || waiting is null) continue;
-            foreach (var (dispatcher, ready) in waiting)
+            if (image is not null && waiting is not null)
             {
-                if (dispatcher.HasShutdownStarted) continue;
-                dispatcher.BeginInvoke(DispatcherPriority.Background, ready, image);
+                foreach (var (dispatcher, ready) in waiting)
+                {
+                    if (dispatcher.HasShutdownStarted) continue;
+                    dispatcher.BeginInvoke(DispatcherPriority.Background, ready, image);
+                }
             }
+            PruneAfterStore();
+        }
+    }
+
+    /// <summary>
+    /// Runs once the icon is on its way, outside the read that <see cref="ReadDeadline"/> times: a move
+    /// to the Recycle Bin is a Shell operation, and a slow one must not cost the application its icon.
+    /// </summary>
+    private void PruneAfterStore()
+    {
+        if (!_pruneDue || _diskRoot is null) return;
+        _pruneDue = false;
+        try { Prune(_diskRoot, DiskFileLimit, DiskByteLimit, _recycle); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Upkeep only: what is still over a limit is tried again after the next new icon.
         }
     }
 
@@ -286,7 +312,7 @@ internal sealed class SourceIconCache : IDisposable
             using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
                 encoder.Save(stream);
             File.Move(temporary, file, overwrite: true);
-            Prune(_diskRoot!, DiskFileLimit, DiskByteLimit);
+            _pruneDue = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
             or InvalidOperationException or System.Runtime.InteropServices.COMException)
@@ -295,18 +321,32 @@ internal sealed class SourceIconCache : IDisposable
         }
     }
 
-    /// <summary>Drops the least recently used icons beyond the file count or total size.</summary>
-    internal static void Prune(string root, int fileLimit, long byteLimit)
+    /// <summary>
+    /// Moves the least recently used icons beyond the file count or total size to the Recycle Bin, the
+    /// oldest first, and returns what was moved. Nothing is deleted outright: an icon Windows cannot
+    /// recycle stays in the folder. One pass tries at most <see cref="PruneMoveLimit"/> icons, so a
+    /// Recycle Bin that refuses them costs each new icon no more than that many attempts.
+    /// </summary>
+    internal static IReadOnlyList<CleanupReceipt> Prune(string root, int fileLimit, long byteLimit,
+        Func<string, CleanupReceipt>? recycle = null)
     {
+        recycle ??= Removal.RecycleFile;
         var files = new DirectoryInfo(ValidatedFilePaths.DirectoryRoot(root)).GetFiles("*.png").OrderByDescending(f => f.LastWriteTimeUtc).ToList();
+        // Newest first: from the first icon over a limit to the end, every icon is over it.
+        int kept = 0;
         long total = 0;
-        for (int index = 0; index < files.Count; index++)
+        for (; kept < files.Count && kept < fileLimit; kept++)
         {
-            total += files[index].Length;
-            if (index < fileLimit && total <= byteLimit) continue;
-            try { files[index].Delete(); }
+            total += files[kept].Length;
+            if (total > byteLimit) break;
+        }
+        var moved = new List<CleanupReceipt>();
+        for (int index = files.Count - 1, tried = 0; index >= kept && tried < PruneMoveLimit; index--, tried++)
+        {
+            try { moved.Add(recycle(files[index].FullName)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
+        return moved;
     }
 
     /// <summary>The cache folder only when it is a plain local path; otherwise the cache stays in memory.</summary>
