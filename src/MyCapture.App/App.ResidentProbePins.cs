@@ -17,6 +17,11 @@ public partial class App
         string scenario, ResidentProbePinDiagnostics? pinDiagnostics)
     {
         if (_pins is null || pinDiagnostics is null) throw new InvalidOperationException("Pin diagnostics unavailable.");
+        if (options.Has("pin-zoom-motion"))
+        {
+            await ProbePinZoomMotionAsync(options, recorder, scenario);
+            return;
+        }
         if (options.Has("pin-native") && scenario != "pin-text")
         {
             await ProbeNativePinMemoryAsync(options, recorder, scenario);

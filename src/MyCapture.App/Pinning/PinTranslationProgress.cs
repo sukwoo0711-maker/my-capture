@@ -40,6 +40,16 @@ internal sealed class PinTranslationProgress(PinWindow pin, CancellationToken ca
         }
         if (!cancellation.IsCancellationRequested) pin.ShowTranslationProgress(value.Completed, value.Total, at);
     }
+
+    /// <summary>A picture's text has been read; queued behind any count already on its way, so it never overtakes one.</summary>
+    internal void ReadingEnded()
+    {
+        if (cancellation.IsCancellationRequested) return;
+        _ = pin.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            if (!cancellation.IsCancellationRequested) pin.EndTranslationReading();
+        }));
+    }
 }
 
 /// <summary>

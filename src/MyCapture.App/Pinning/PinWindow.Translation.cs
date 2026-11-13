@@ -103,12 +103,13 @@ internal sealed partial class PinWindow
             // Every other state ends the progress, including one that shows nothing of its own (an install question).
             EndTranslationProgress();
             if (state == PinTranslationState.Failed)
-                ShowFeedback(UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
+                ShowFeedback(_translationFailureMessage ?? UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
             else if (state is PinTranslationState.Unavailable or PinTranslationState.Available or PinTranslationState.Disabled)
                 DismissFeedback();
         }
         // Checking and translating look the same; the button and the menu are rebuilt only when what they show changes.
         if (TranslationActionView != shown) RefreshTranslationActions();
+        OnTranslationStateForReveal(state);
     }
 
     /// <summary>Tells the user why nothing changed (for example an image pin that is already in the target language).</summary>
@@ -134,6 +135,7 @@ internal sealed partial class PinWindow
         // Don't replace text under an active selection. The command remains available.
         if (!IsTextSelectionMode && !IsRecognizingSelection && !_showingMarkdownSource) SetTranslationDisplay(true);
         else RefreshTranslationActions();
+        OnTranslationAppliedForReveal();
         ShowFeedback(UiText.Get(needsReview ? "Pin_TranslationReview"
                 : toKorean ? "Pin_TranslatedKorean" : "Pin_TranslatedEnglish"),
             needsReview ? FeedbackKind.Warning : FeedbackKind.Confirmation);
@@ -143,8 +145,10 @@ internal sealed partial class PinWindow
     {
         if (_isClosed || _translationOriginal is null || _translationResult is null) return;
         if (IsTextSelectionMode || IsRecognizingSelection) LeaveTextSelection(restoreFocus: false);
+        var revealBefore = RevealSnapshot();
         _showingMarkdownSource = false;
         EndDrag();
+        FinishZoomMotion();
         bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
         if (!translated) _showingTranslationDocument = false;
         PinContent next = translated
@@ -177,6 +181,7 @@ internal sealed partial class PinWindow
         _chrome.Background = translated && _content.Kind != PinContentKind.Image ? Brushes.White : null;
         UpdateImageRasterLayout();
         RefreshTranslationActions();
+        OnTranslationDisplayChangedForReveal(revealBefore, translated);
         ViewStateChanged?.Invoke();
     }
 
@@ -224,24 +229,26 @@ internal sealed partial class PinWindow
             if (_showingMarkdownSource) SetMarkdownSourceDisplay(false);
             TranslationRequested?.Invoke(false);
         }
+        else if (IsTranslationRunning) TranslationCancelRequested?.Invoke();
     }
 
-    private string TranslationActionLabel => UiText.Get(_showingTranslation ? "Pin_TranslationOriginal" : "Pin_Translate");
+    private string TranslationActionLabel => UiText.Get(IsTranslationRunning ? "Pin_TranslationCancel"
+        : _showingTranslation ? "Pin_TranslationOriginal" : "Pin_Translate");
 
     private string TranslationActionHelp => TranslationState switch
     {
         PinTranslationState.Disabled => _translationDisabledHelp ?? UiText.Get("Pin_Translate"),
         PinTranslationState.ModelNeeded => UiText.Get("Pin_TranslationInstall"),
         PinTranslationState.Failed => UiText.Get("Pin_TranslationRetry"),
-        PinTranslationState.Downloading => UiText.Get("Pin_TranslationDownloading"),
-        PinTranslationState.Checking or PinTranslationState.Translating => UiText.Get("Pin_Translating"),
+        PinTranslationState.Checking or PinTranslationState.Downloading or PinTranslationState.Translating =>
+            UiText.Get("Pin_TranslationCancel"),
         _ when _showingTranslation && _translationNeedsReview => UiText.Get("Pin_TranslationReviewHelp"),
         _ when _showingTranslation => UiText.Get("Pin_TranslationOriginalHelp"),
         _ => UiText.Get("Pin_TranslateHelp"),
     };
 
     private bool TranslationActionEnabled => TranslationState is PinTranslationState.Available or PinTranslationState.Translated
-        or PinTranslationState.ModelNeeded or PinTranslationState.Failed;
+        or PinTranslationState.ModelNeeded or PinTranslationState.Failed || IsTranslationRunning;
 
     private string TranslationButtonHelp => TranslationState == PinTranslationState.ModelNeeded
         ? UiText.Format("Pin_TranslationModelNeeded", Math.Ceiling(_translationDownloadBytes / 1_000_000d),

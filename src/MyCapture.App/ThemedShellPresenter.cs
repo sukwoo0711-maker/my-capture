@@ -56,6 +56,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>The monitor notifications appear on: the one with the pointer. Tests replace it.</summary>
     internal Func<MonitorInfo> NotificationMonitor { get; init; } = MonitorEnumerator.GetFromCursor;
 
+    /// <summary>Told once per notification whose placement missed its bounds; the application writes it to the log.</summary>
+    internal Action<Exception>? NotificationPlacementMissed { get; init; }
+
     /// <summary>How long a dismissed card takes to leave; null is the shared fast exit. Tests lengthen it.</summary>
     internal Duration? ExitDuration { get; init; }
 
@@ -587,18 +590,34 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         return new Rect(Math.Max(left - shadowMargin, x), Math.Max(top - shadowMargin, y), width, height);
     }
 
-    /// <summary>Puts the window on the pointer's monitor once laid out, and again if a DPI change resizes it.</summary>
+    /// <summary>
+    /// Puts the window on the pointer's monitor once laid out, and again if a DPI change resizes it.
+    /// The placement reads the bounds back and throws when Windows put the window somewhere else, as
+    /// it does while a display's scale is changing. Thrown from Loaded or SizeChanged, that would reach
+    /// the application's error window over a notification that is on screen. The notification stays
+    /// where Windows put it, and its first miss is reported.
+    /// </summary>
     private void PlaceOnPointerMonitor(Window window)
     {
         MonitorInfo? monitor = null;
+        bool missed = false;
         void Place()
         {
             monitor ??= NotificationMonitor();
             Rect bounds = NotificationBounds(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight,
                 window.AllowsTransparency ? ShadowMargin : 0);
             double scale = monitor.ScaleFactor;
-            PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
-                new RectD(bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));
+            try
+            {
+                PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
+                    new RectD(bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));
+            }
+            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                if (missed) return;
+                missed = true;
+                NotificationPlacementMissed?.Invoke(error);
+            }
         }
         window.Loaded += (_, _) => Place();
         window.SizeChanged += (_, _) => { if (window.IsLoaded && window.IsVisible) Place(); };

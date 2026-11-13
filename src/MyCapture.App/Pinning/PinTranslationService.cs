@@ -12,6 +12,9 @@ namespace MyCapture.App.Pinning;
 internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview, Lazy<PinContent>? DocumentView = null)
 {
     internal PinContent? Document => DocumentView?.Value;
+
+    /// <summary>A picture translation's placed blocks as separate layers, for the pin's change into it; null for other pins.</summary>
+    internal IReadOnlyList<PinOverlayBlockLayer>? BlockLayers { get; init; }
 }
 
 /// <summary>Whether a pin can be translated into the target language, and in which direction.</summary>
@@ -117,30 +120,35 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
     {
         // A piece is translated sentence by sentence, so one sentence that fails the value checks (a date
         // the model rewrote, a dropped number) stays in the source language while its neighbours translate.
-        // Markdown lines keep their inline syntax together and are translated whole.
+        // A short English paragraph that fits one model segment is tried whole first, and only split when
+        // the whole translation fails a check. Markdown lines keep their inline syntax together and are
+        // translated whole.
         PlanPiece[] pieces = [.. plan.Pieces.Where(static piece => piece.Translate)];
         var units = new List<string>();
-        var originalUnits = new List<string>();
-        var unitCounts = new int[pieces.Length];
+        var sentenceUnits = new List<(string Source, string Original)>[pieces.Length];
         var unmappedOriginal = new bool[pieces.Length];
+        var wholeFirst = new bool[pieces.Length];
         for (int index = 0; index < pieces.Length; index++)
         {
             string[] sentences = pieces[index].Kind == PlanKind.MarkdownLine ? [pieces[index].Source]
                 : [.. TranslationSegmenter.Sentences(pieces[index].Source)];
             if (sentences.Length == 0) sentences = [pieces[index].Source];
-            unitCounts[index] = sentences.Length;
-            units.AddRange(sentences);
             string? originalSource = pieces[index].Raw.Length == pieces[index].Source.Length ? pieces[index].Raw
                 : pieces[index].Kind == PlanKind.Prose ? RestoreJoinedSource(pieces[index].Raw, pieces[index].Source)
                 : pieces[index].Source;
             unmappedOriginal[index] = originalSource is null;
+            sentenceUnits[index] = new(sentences.Length);
             int sourceOffset = 0;
             foreach (string sentence in sentences)
             {
                 int start = pieces[index].Source.IndexOf(sentence, sourceOffset, StringComparison.Ordinal);
-                originalUnits.Add(originalSource?.Substring(start, sentence.Length) ?? sentence);
+                sentenceUnits[index].Add((sentence, originalSource?.Substring(start, sentence.Length) ?? sentence));
                 sourceOffset = start + sentence.Length;
             }
+            // A short paragraph keeps its context: alone, "Thank you for your order." came back as nonsense.
+            wholeFirst[index] = TranslatesWhole(pieces[index], sentences.Length);
+            if (wholeFirst[index]) units.Add(pieces[index].Source);
+            else units.AddRange(sentences);
         }
 
         IReadOnlyList<TranslatedText> translated = await TranslateUnitsAsync(units, cancellationToken).ConfigureAwait(false);
@@ -148,21 +156,59 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
         if (translated.Count != units.Count || translated.All(static result => string.IsNullOrWhiteSpace(result.Text)))
             throw new InvalidOperationException("The translator returned an incomplete pin result.");
 
+        // A whole paragraph that fails a check is translated again sentence by sentence, in one more call, so a
+        // failed sentence still keeps its source text while its neighbours translate.
+        var wholeAccepted = new string?[pieces.Length];
+        var retry = new List<string>();
+        for (int index = 0, unit = 0; index < pieces.Length; index++)
+        {
+            if (!wholeFirst[index])
+            {
+                unit += sentenceUnits[index].Count;
+                continue;
+            }
+            wholeAccepted[index] = AcceptWhole(pieces[index].Source, translated[unit++], sentenceUnits[index].Count);
+            if (wholeAccepted[index] is null) retry.AddRange(sentenceUnits[index].Select(static sentence => sentence.Source));
+        }
+        IReadOnlyList<TranslatedText> retried = retry.Count == 0 ? []
+            : await _translator.TranslateAsync(retry, null, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (retried.Count != retry.Count)
+            throw new InvalidOperationException("The translator returned an incomplete pin result.");
+
         var accepted = new string?[pieces.Length];
         bool needsReview = false;
-        int unit = 0;
+        int mainUnit = 0, retryUnit = 0;
         for (int index = 0; index < pieces.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var parts = new List<string>(unitCounts[index]);
+            if (wholeAccepted[index] is { } whole)
+            {
+                accepted[index] = whole;
+                mainUnit++;
+                continue;
+            }
+            IReadOnlyList<TranslatedText> results = translated;
+            int unit = mainUnit;
+            if (wholeFirst[index])
+            {
+                (results, unit) = (retried, retryUnit);
+                mainUnit++;
+                retryUnit += sentenceUnits[index].Count;
+            }
+            else
+            {
+                mainUnit += sentenceUnits[index].Count;
+            }
+            var parts = new List<string>(sentenceUnits[index].Count);
             bool any = false;
             bool rejected = false;
-            for (int offset = 0; offset < unitCounts[index]; offset++, unit++)
+            foreach ((string sentence, string original) in sentenceUnits[index])
             {
                 // Keep the sentence context, including values and inline syntax, and check them afterwards.
                 // The model's value checker does not detect broken Markdown or a changed diagram label.
                 // An empty answer is not a translation: that sentence keeps its source text.
-                string? text = await AcceptOrRecoverAsync(units[unit], translated[unit],
+                string? text = await AcceptOrRecoverAsync(sentence, results[unit++],
                     pieces[index].Kind == PlanKind.MarkdownLine,
                     pieces[index].Raw.ReplaceLineEndings("\n").Split('\n').Select(OcrLatinTextRepair.Repair),
                     cancellationToken).ConfigureAwait(false);
@@ -170,7 +216,7 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
                 needsReview |= !safe;
                 any |= safe;
                 rejected |= !safe;
-                parts.Add(text ?? originalUnits[unit]);
+                parts.Add(text ?? original);
             }
             // An unusual transformed span without a reliable character map keeps its
             // complete original piece when any sentence fails, rather than a repaired fallback.
@@ -287,15 +333,22 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
     private static bool PreservesProtectedValues(string source, string translated)
     {
         // Keep exact source values even when the engine considers a spelling or unit change
-        // harmless. Count occurrences so duplicated/dropped values cannot pass this check.
+        // harmless. Count occurrences so duplicated/dropped values cannot pass this check. A value the
+        // translation writes another way ("nine" as "9시", "2:30 PM" as "오후 2시 30분") is counted by the
+        // same pairing as the engine's check, on both texts with the paired mentions taken out.
         IReadOnlyList<ProtectedSpan> protectedSpans = ProtectedTokens.Find(source);
-        IEnumerable<string> values = protectedSpans.Select(span => span.Text)
+        ValueEquivalence equivalence = ValueEquivalence.Match(source, translated, protectedSpans);
+        string remainingSource = equivalence.MaskSource(source);
+        string remainingTranslation = equivalence.MaskOutput(translated);
+        IEnumerable<string> values = protectedSpans
+            .Where(span => !equivalence.CoversSource(span) && !ValueEquivalence.IsPlainAbbreviation(span))
+            .Select(span => span.Text)
             .Concat(AdditionalLiteral().Matches(source)
                 .Select(match => match.Value.TrimEnd('.', ',', ';', ':', ')', ']', '}')))
             .Where(value => value.Length > 0);
         foreach (string value in values.Distinct(StringComparer.Ordinal))
         {
-            if (CountOccurrences(source, value) != CountOccurrences(translated, value)) return false;
+            if (CountOccurrences(remainingSource, value) != CountOccurrences(remainingTranslation, value)) return false;
         }
         ProtectedTokenCheck check = ProtectedTokens.Check(source, translated);
         return check.Altered.Count == 0 && check.Invented.Count == 0;

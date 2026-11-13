@@ -421,7 +421,7 @@ internal sealed partial class QuickAccessWindow : Window
         };
         Loaded += (_, _) =>
         {
-            PlaceOnMonitor(_targetMonitor ?? MonitorEnumerator.GetFromCursor());
+            PlaceFromEvent(_targetMonitor ?? MonitorEnumerator.GetFromCursor());
             _lastTick = Stopwatch.GetTimestamp();
             if (!IsKept) _timer.Start();
             UpdateActivationHotkey();
@@ -433,7 +433,7 @@ internal sealed partial class QuickAccessWindow : Window
             _lastTick = now;
             Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || IsBusy);
         };
-        SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
+        SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceFromEvent(monitor); };
         Closed += (_, _) =>
         {
             _closed = true;
@@ -783,6 +783,31 @@ internal sealed partial class QuickAccessWindow : Window
             {
                 return null;
             }
+        }
+    }
+
+    /// <summary>The first placement from the card's own events that missed its bounds; null when none did.</summary>
+    internal Exception? PlacementMiss { get; private set; }
+
+    /// <summary>Told once per card about <see cref="PlacementMiss"/>; the owner writes it to the log.</summary>
+    internal Action<Exception>? PlacementMissed { get; set; }
+
+    /// <summary>
+    /// Places the card from its Loaded and SizeChanged events. <see cref="PlaceOnMonitor"/> reads the
+    /// bounds back and throws when they are not the ones it asked for, which happens when the window's
+    /// scale is not the monitor's: a display whose scale changed while the card was up, or a monitor
+    /// description that no longer matches a display. Thrown from an event, that would reach the
+    /// application's error window over a card that is on screen and usable. The card stays where
+    /// Windows put it, and the first miss is kept and reported.
+    /// </summary>
+    private void PlaceFromEvent(MonitorInfo monitor)
+    {
+        try { PlaceOnMonitor(monitor); }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            if (PlacementMiss is not null) return;
+            PlacementMiss = error;
+            PlacementMissed?.Invoke(error);
         }
     }
 
