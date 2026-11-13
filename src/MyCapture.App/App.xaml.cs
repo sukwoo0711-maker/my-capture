@@ -397,7 +397,10 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
-            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard);
+            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard)
+        {
+            NotificationPlacementMissed = error => _log?.LogWarning(error, "A notification missed its bounds; it stays open"),
+        };
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
         // and Pin clipboard is enabled only while the clipboard announces an image or text.
