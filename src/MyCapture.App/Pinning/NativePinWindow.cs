@@ -1433,11 +1433,15 @@ internal sealed class NativePinWindow : IDisposable, INativeMotionTarget
     {
         if (State.IsClickThrough || IsExiting || IsHiding) return;
         EndGesture();
+        // The edge is the one the user saw under the pointer: a running zoom motion shows a step short of (or
+        // past) the state's size, so it is judged before the press ends the motion. The gesture then starts
+        // from the state's geometry, and a resize follows the pointer's travel from the press.
+        PinResizeEdge edge = control ? PinResizeEdge.None : EdgeAt(local);
         FinishZoomMotion();
         _gesturePointer = _lastGesturePointer = pointer; _gestureBounds = Bounds; _gestureZoom = Zoom; _gestureDpi = DpiScale;
         _gestureAnchorDip = new Point((pointer.X - _left) / DpiScale, (pointer.Y - _top) / DpiScale);
         _gestureMoved = false;
-        _resizeEdge = control ? PinResizeEdge.None : EdgeAt(local);
+        _resizeEdge = edge;
         _ = NativePinWindowInterop.SetCapture(Handle);
         _dragging = NativePinWindowInterop.GetCapture() == Handle;
         if (!_dragging) _resizeEdge = PinResizeEdge.None;
@@ -1477,9 +1481,9 @@ internal sealed class NativePinWindow : IDisposable, INativeMotionTarget
         BeginGesture(screen, default, control: true);
     }
 
-    // The edge under a point in surface pixels, as PinWindow.ResizeEdgeAt (in DIP).
+    // The edge under a point in surface pixels, as PinWindow.ResizeEdgeAt (in DIP), on the size the screen shows.
     private PinResizeEdge EdgeAt(Point surface) => State.IsClickThrough || IsExiting ? PinResizeEdge.None
-        : PinResize.HitTest(surface.X / DpiScale, surface.Y / DpiScale, State.WidthDip, State.HeightDip);
+        : PinResize.HitTest(surface.X / DpiScale, surface.Y / DpiScale, ShownWidthDip, ShownHeightDip);
 
     private void ContinueGesture(Point pointer)
     {

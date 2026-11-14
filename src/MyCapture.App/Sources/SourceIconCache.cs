@@ -17,7 +17,7 @@ namespace MyCapture.App.Sources;
 /// outlives <see cref="ReadDeadline"/> is abandoned with its thread, and that application keeps its
 /// glyph for the session. Icons are frozen before they leave the thread. Nothing per capture is
 /// stored: the disk cache holds one small PNG per application, and the icons it outgrows go to the
-/// Recycle Bin.
+/// Recycle Bin from a thread of their own.
 /// </summary>
 internal sealed class SourceIconCache : IDisposable
 {
@@ -48,6 +48,7 @@ internal sealed class SourceIconCache : IDisposable
     private readonly Queue<Work> _urgent = new();
     private readonly Queue<Work> _background = new();
     private Thread? _worker;
+    private Thread? _pruner;
     private Work? _current;
     private long _currentStarted;
     private bool _disposed;
@@ -235,15 +236,36 @@ internal sealed class SourceIconCache : IDisposable
     /// <summary>
     /// Runs once the icon is on its way, outside the read that <see cref="ReadDeadline"/> times: a move
     /// to the Recycle Bin is a Shell operation, and a slow one must not cost the application its icon.
+    /// It runs on its own STA thread so a move that does not return holds up no other application's
+    /// read. One pass at a time: while one is out, a new icon leaves pruning due for the next read.
     /// </summary>
     private void PruneAfterStore()
     {
         if (!_pruneDue || _diskRoot is null) return;
-        _pruneDue = false;
-        try { Prune(_diskRoot, DiskFileLimit, DiskByteLimit, _recycle); }
+        lock (_gate)
+        {
+            if (_disposed || _pruner is not null) return;
+            _pruneDue = false;
+            var pruner = new Thread(PruneRun) { IsBackground = true, Name = "MyCapture source icon pruning", Priority = ThreadPriority.BelowNormal };
+            pruner.SetApartmentState(ApartmentState.STA);
+            _pruner = pruner;
+            pruner.Start();
+        }
+    }
+
+    private void PruneRun()
+    {
+        try { Prune(_diskRoot!, DiskFileLimit, DiskByteLimit, _recycle); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Upkeep only: what is still over a limit is tried again after the next new icon.
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_pruner, Thread.CurrentThread)) _pruner = null;
+            }
         }
     }
 

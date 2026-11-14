@@ -257,6 +257,88 @@ public sealed class SourceIconCacheTests
     });
 
     [Fact]
+    public void AMoveToTheRecycleBinThatDoesNotReturnHoldsUpNoOtherApplication() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-srcicons");
+        using var entered = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        try
+        {
+            // One more icon than the cache keeps, all of them older than the ones about to be stored.
+            DateTime old = DateTime.UtcNow.AddDays(-1);
+            for (int index = 0; index <= SourceIconCache.DiskFileLimit; index++)
+            {
+                string file = Path.Combine(root, $"{index:x32}.png");
+                File.WriteAllBytes(file, [(byte)index]);
+                File.SetLastWriteTimeUtc(file, old.AddSeconds(index));
+            }
+            // The first move hangs in the Shell until released; every move is then refused.
+            int moves = 0;
+            var movers = new List<Thread>();
+            CleanupReceipt Recycle(string path)
+            {
+                lock (movers) movers.Add(Thread.CurrentThread);
+                if (Interlocked.Increment(ref moves) == 1)
+                {
+                    entered.Set();
+                    release.Wait(TimeSpan.FromSeconds(20));
+                }
+                throw new IOException("Windows cannot move this item to the Recycle Bin; it was left in place.");
+            }
+            long clock = 0;
+            var reads = new List<string>();
+            using var cache = new SourceIconCache(root, readExecutable: path =>
+            {
+                lock (reads) reads.Add(Path.GetFileName(path));
+                return Icon(Colors.SeaGreen);
+            }, readPackagedApp: _ => null, stamp: _ => Stamp, now: () => Interlocked.Read(ref clock), recycle: Recycle);
+
+            int first = 0;
+            cache.Request(App(1), _ => Interlocked.Increment(ref first));
+            // The stored icon puts the folder over the limit; its pruning reaches the hung move.
+            PumpUntil(() => Volatile.Read(ref first) == 1 && entered.IsSet);
+            // Even past the read deadline, which only abandons a read in progress.
+            Interlocked.Add(ref clock, (long)SourceIconCache.ReadDeadline.TotalMilliseconds + 1);
+
+            int second = 0;
+            cache.Request(App(2), _ => Interlocked.Increment(ref second));
+            PumpUntil(() => Volatile.Read(ref second) == 1, TimeSpan.FromSeconds(5));
+            Assert.False(release.IsSet);
+            Assert.Equal(1, Volatile.Read(ref moves));
+            Assert.Equal(new[] { "app1.exe", "app2.exe" }, reads);
+            Thread mover;
+            lock (movers) mover = Assert.Single(movers);
+            Assert.Equal(ApartmentState.STA, mover.GetApartmentState());
+
+            // Released, the pass tries the second icon over the limit, leaves both, and its thread ends.
+            release.Set();
+            Assert.True(mover.Join(TimeSpan.FromSeconds(5)));
+            Assert.Equal(2, Volatile.Read(ref moves));
+            Assert.Equal(SourceIconCache.DiskFileLimit + 3, Directory.GetFiles(root, "*.png").Length);
+
+            // The icon stored during that pass left pruning due: the next new icon tries again, at most a few.
+            int third = 0;
+            cache.Request(App(3), _ => Interlocked.Increment(ref third));
+            PumpUntil(() => Volatile.Read(ref third) == 1 && Volatile.Read(ref moves) == 2 + SourceIconCache.PruneMoveLimit);
+            Thread next;
+            lock (movers) next = movers[^1];
+            Assert.True(next.Join(TimeSpan.FromSeconds(5)));
+            Assert.Equal(2 + SourceIconCache.PruneMoveLimit, Volatile.Read(ref moves));
+            Assert.Equal(1, Volatile.Read(ref first));
+            Assert.Equal(1, Volatile.Read(ref second));
+            Assert.Equal(new[] { "app1.exe", "app2.exe", "app3.exe" }, reads);
+            Assert.Equal(SourceIconCache.DiskFileLimit + 4, Directory.GetFiles(root, "*.png").Length);
+            for (int index = 0; index <= SourceIconCache.DiskFileLimit; index++)
+                Assert.Equal(new[] { (byte)index }, File.ReadAllBytes(Path.Combine(root, $"{index:x32}.png")));
+        }
+        finally
+        {
+            release.Set();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
     public void AnIconMadeOnTheIconThreadIsUsableOnTheUiThread() => StaTestHost.Run(() =>
     {
         // The reader returns an unfrozen bitmap; the cache freezes it before it crosses threads.
@@ -348,12 +430,13 @@ public sealed class SourceIconCacheTests
         return Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]);
     }
 
-    internal static void PumpUntil(Func<bool> condition)
+    internal static void PumpUntil(Func<bool> condition, TimeSpan? limit = null)
     {
         var started = Stopwatch.StartNew();
+        TimeSpan wait = limit ?? TimeSpan.FromSeconds(15);
         while (!condition())
         {
-            if (started.Elapsed > TimeSpan.FromSeconds(15)) throw new TimeoutException();
+            if (started.Elapsed > wait) throw new TimeoutException();
             PumpOnce();
         }
     }
