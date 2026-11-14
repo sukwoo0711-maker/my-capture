@@ -12,7 +12,7 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// A WPF pin's zoom ends on the pixels WPF itself gives its final Left, Top, Width and Height, so syncing those
 /// properties moves the window no further: one placement without animations, none after a motion's last tick.
-/// The pin starts on a fractional Top so a relative rounding would land a pixel off WPF's.
+/// The pin starts on a fractional physical top so a relative rounding would land a pixel off WPF's.
 /// </summary>
 public sealed class PinZoomRestPlacementTests
 {
@@ -64,35 +64,46 @@ public sealed class PinZoomRestPlacementTests
         finally { pin.Close(); }
     });
 
-    // A 400 x 300 picture on Top 119.79: its physical top is 120 and a notch at 84 px below it puts the new Top on
-    // 111.37, which WPF rounds to 111 and a placement relative to the window's own 120 rounds to 112.
+    // A 400 x 300 picture whose top edge lies at 119.79 physical pixels (Top 119.79 at 100%, 95.832 at 125%): its
+    // physical top is 120 and a notch at 84 px below it puts the new top on 111.37 px, which WPF rounds to 111 and
+    // a placement relative to the window's own 120 rounds to 112. Pixels, not DIPs, so this holds at any scale.
     private static (PinWindow Pin, List<(int Left, int Top, int Right, int Bottom)> Moves) NewPin(Func<double>? clock)
     {
         PinContent content = PinContent.FromImage(PinNativeTestImages.Picture(400, 300));
         var pin = new PinWindow(content, new PinViewState(content.LayoutWidthDip, content.LayoutHeightDip, 1, 1, 0.1),
             120, 120, () => new PinSettings { CloseOnDoubleClick = false }) { ShowActivated = false };
-        pin.ZoomMotionClockForTest = clock;
-        pin.Show();
-        pin.UpdateLayout();
-        // A Top between pixels, as a zoom about a point leaves it.
-        pin.Top = 119.79;
-        Flush(pin);
-        Assert.Equal(119.79, pin.Top, 6);
-        Assert.Equal(120, pin.PhysicalBounds.Top);
-        var moves = new List<(int Left, int Top, int Right, int Bottom)>();
-        (int Left, int Top, int Right, int Bottom) last = pin.PhysicalBounds;
-        HwndSource.FromHwnd(pin.Handle)!.AddHook((IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled) =>
+        try
         {
-            const int WindowPosChanged = 0x0047;
-            if (msg == WindowPosChanged)
+            pin.ZoomMotionClockForTest = clock;
+            pin.Show();
+            pin.UpdateLayout();
+            // A Top between pixels, as a zoom about a point leaves it.
+            double top = 119.79 / System.Windows.Media.VisualTreeHelper.GetDpi(pin).DpiScaleY;
+            pin.Top = top;
+            Flush(pin);
+            Assert.Equal(top, pin.Top, 6);
+            Assert.Equal(120, pin.PhysicalBounds.Top);
+            var moves = new List<(int Left, int Top, int Right, int Bottom)>();
+            (int Left, int Top, int Right, int Bottom) last = pin.PhysicalBounds;
+            HwndSource.FromHwnd(pin.Handle)!.AddHook((IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled) =>
             {
-                var rect = pin.PhysicalBounds;
-                if (rect != last) moves.Add(rect);
-                last = rect;
-            }
-            return IntPtr.Zero;
-        });
-        return (pin, moves);
+                const int WindowPosChanged = 0x0047;
+                if (msg == WindowPosChanged)
+                {
+                    var rect = pin.PhysicalBounds;
+                    if (rect != last) moves.Add(rect);
+                    last = rect;
+                }
+                return IntPtr.Zero;
+            });
+            return (pin, moves);
+        }
+        catch
+        {
+            // The test's own finally never sees a pin whose set-up failed.
+            pin.Close();
+            throw;
+        }
     }
 
     // The window sits on the pixels WPF's own conversion gives its properties (round half away from zero).

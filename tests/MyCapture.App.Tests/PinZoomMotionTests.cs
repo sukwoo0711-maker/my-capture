@@ -42,10 +42,10 @@ public sealed class PinZoomMotionTests
             Assert.True(pin.IsZoomMoving);
             // The first step is on the screen in the input's own turn, short of the target.
             int width = Width(pin.PhysicalBounds);
-            Assert.InRange(width, 161, 175);
+            Assert.InRange(width, Px(pin, 160) + 1, Px(pin, 176) - 1);
             AssertAnchorStill(pin, before, anchor);
 
-            var widths = new List<int> { 160, width };
+            var widths = new List<int> { Px(pin, 160), width };
             for (now = 1010; pin.IsZoomMoving; now += 10)
             {
                 Assert.True(now <= 1000 + PinZoomMotionTiming.DurationMs, "the motion outlived its duration");
@@ -55,7 +55,7 @@ public sealed class PinZoomMotionTests
             }
 
             Assert.Equal(widths.Order(), widths);
-            Assert.Equal(176, widths[^1]);
+            Assert.Equal(Px(pin, 176), widths[^1]);
             Assert.True(widths.Distinct().Count() >= 5, string.Join(",", widths));
             Assert.Equal(pin.State.WidthDip, pin.Width, 6);
             Assert.Equal(pin.State.HeightDip, pin.Height, 6);
@@ -80,7 +80,7 @@ public sealed class PinZoomMotionTests
             pin.ResidentProbeWheelAt(120, anchor);
 
             Assert.False(pin.IsZoomMoving);
-            Assert.Equal(176, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 176), Width(pin.PhysicalBounds));
             Assert.Equal(pin.State.WidthDip, pin.Width, 6);
             AssertAnchorStill(pin, before, anchor);
             Assert.Single(zooms);
@@ -120,7 +120,7 @@ public sealed class PinZoomMotionTests
                 AssertAnchorStill(pin, before, anchor);
             }
             Assert.Equal(widths.Order(), widths);
-            Assert.Equal((int)Math.Round(160 * Math.Pow(1.1, 5)), widths[^1]);
+            Assert.Equal(Px(pin, 160 * Math.Pow(1.1, 5)), widths[^1]);
         }
         finally { pin.Close(); }
     });
@@ -144,7 +144,7 @@ public sealed class PinZoomMotionTests
             Assert.Equal(1, pin.State.Zoom, 9);
             Assert.Equal("100%", pin.FeedbackTextForTest);
             Finish(pin, ref now);
-            Assert.Equal(160, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 160), Width(pin.PhysicalBounds));
             Assert.Equal(Center(before).X, Center(pin.PhysicalBounds).X, 1.0);
 
             // From 95% one notch up stops at 100%, and the motion ends there.
@@ -153,7 +153,7 @@ public sealed class PinZoomMotionTests
             pin.ResidentProbeWheelAt(120, new Point(before.Left + 10, before.Top + 10));
             Assert.Equal(1, pin.State.Zoom, 9);
             Finish(pin, ref now);
-            Assert.Equal(160, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 160), Width(pin.PhysicalBounds));
             Assert.Equal(3, zooms.Count);
         }
         finally { pin.Close(); }
@@ -200,7 +200,7 @@ public sealed class PinZoomMotionTests
             Assert.True(pin.IsZoomMoving);
             Assert.True(pin.HandleKey(Key.Right, ModifierKeys.None));
             Assert.False(pin.IsZoomMoving);
-            Assert.Equal(176, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 176), Width(pin.PhysicalBounds));
             Assert.Equal(pin.State.WidthDip, pin.Width, 6);
         }
         finally { pin.Close(); }
@@ -218,7 +218,7 @@ public sealed class PinZoomMotionTests
             pin.FinishZoomMotion();
             Assert.False(pin.IsZoomMoving);
             Assert.False(pin.IsZoomClockRunningForTest);
-            Assert.Equal(176, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 176), Width(pin.PhysicalBounds));
         }
         finally { pin.Close(); }
     });
@@ -327,7 +327,7 @@ public sealed class PinZoomMotionTests
             Assert.False(native.IsLiveZooming);
             PinNativeSpeedTestWait.Until(() => !pin.IsHostSwitchPending);
             Assert.Equal(pin.State.WidthDip, pin.Width, 6);
-            Assert.Equal(176, Width(pin.PhysicalBounds));
+            Assert.Equal(Px(pin, 176), Width(pin.PhysicalBounds));
         }
         finally { manager.CloseAllForExit(); }
     });
@@ -548,6 +548,11 @@ public sealed class PinZoomMotionTests
     }
 
     private static int Width((int Left, int Top, int Right, int Bottom) bounds) => bounds.Right - bounds.Left;
+
+    // A WPF pin's DIP length in its window's own pixels (WPF rounds half away from zero): the number itself at
+    // 100%, 1.25 times it at 125%. The fixture's picture is 160 x 100 DIP, so 176 DIP is one notch up.
+    private static int Px(PinWindow pin, double dip) =>
+        (int)Math.Round(dip * VisualTreeHelper.GetDpi(pin).DpiScaleX, MidpointRounding.AwayFromZero);
 
     private static Point Center((int Left, int Top, int Right, int Bottom) bounds) =>
         new((bounds.Left + bounds.Right) / 2.0, (bounds.Top + bounds.Bottom) / 2.0);
