@@ -1856,16 +1856,30 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     // ---- Image insertion -----------------------------------------------------------
 
-    private async void InsertImage(PointD image)
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title = UiText.Get("Text_B2FD5E226F6B"),
-            Filter = UiText.Get("Text_DC9F5ED04461"),
-            CheckFileExists = true,
-        };
+    private async void InsertImage(PointD image) => await InsertImageCommandAsync(image);
 
-        if (dialog.ShowDialog() != true)
+    /// <summary>The image tool's click: the library picker when there is a library, else the file dialog.</summary>
+    internal async Task InsertImageCommandAsync(PointD image)
+    {
+        // With a library, the picker comes first and offers the file dialog as one of its ways out.
+        if (ReadLibraryImages() is { } library)
+        {
+            LibraryImagePick? pick = ShowLibraryImagePicker(library);
+            if (pick is null)
+            {
+                SelectTool(EditorTool.Select);
+                return;
+            }
+
+            if (!pick.Browse)
+            {
+                await InsertLibraryImagesAsync(pick.Entries, image);
+                return;
+            }
+        }
+
+        string? path = PickImageFilePath();
+        if (path is null)
         {
             SelectTool(EditorTool.Select);
             return;
@@ -1873,7 +1887,26 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         // An unexpected decoding failure still surfaces through the dispatcher's unhandled
         // exception handling, as it did when the file was decoded inside this handler.
-        await InsertImageFileAsync(dialog.FileName, image);
+        await InsertImageFileAsync(path, image);
+    }
+
+    /// <summary>
+    /// Shows the file dialog for an image and returns the chosen path, or <see langword="null"/>
+    /// when cancelled. Tests substitute the modal dialog.
+    /// </summary>
+    internal Func<string?>? PickImageFilePathOverride { get; set; }
+
+    private string? PickImageFilePath()
+    {
+        if (PickImageFilePathOverride is { } pick) return pick();
+        var dialog = new OpenFileDialog
+        {
+            Title = UiText.Get("Text_B2FD5E226F6B"),
+            Filter = UiText.Get("Text_DC9F5ED04461"),
+            CheckFileExists = true,
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
     /// <summary>

@@ -5501,6 +5501,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
   <data name="Stamp_Remove" xml:space="preserve"><value>등록 이미지 해제</value></data>
   <data name="Stamp_PickerTitle" xml:space="preserve"><value>워터마크 이미지 선택</value></data>
+  <data name="ImagePicker_Title" xml:space="preserve"><value>이미지 넣기</value></data>
+  <data name="ImagePicker_Insert" xml:space="preserve"><value>넣기</value></data>
+  <data name="ImagePicker_Browse" xml:space="preserve"><value>파일에서 찾아보기…</value></data>
+  <data name="ImagePicker_Empty" xml:space="preserve"><value>라이브러리에 이미지가 없습니다.</value></data>
+  <data name="ImagePicker_ListName" xml:space="preserve"><value>라이브러리 이미지</value></data>
   <data name="Stamp_Changed" xml:space="preserve"><value>워터마크 이미지 변경됨</value></data>
   <data name="Stamp_OpacitySet" xml:space="preserve"><value>워터마크 불투명도 {0}%</value></data>
   <data name="Stamp_Removed" xml:space="preserve"><value>등록 이미지 해제됨 · 이미 넣은 워터마크는 그대로 유지됨</value></data>
