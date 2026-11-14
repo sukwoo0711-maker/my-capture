@@ -159,8 +159,17 @@ internal sealed partial class PinWindow
             Math.Max(0, _chrome.ActualHeight > 0 ? _chrome.ActualHeight : Height));
         if (image is not null && _imageElement.Stretch == Stretch.None)
         {
-            double scale = _imageElement.LayoutTransform is ScaleTransform transform ? transform.ScaleX : 1;
-            destination = new Rect(0, 0, image.Width * scale, image.Height * scale);
+            // The image element draws the picture into its render size, which layout rounds to device pixels: a raster
+            // made for a zoom or for another display scale is rarely a whole number of them. The old view goes exactly
+            // there, or it would start the fade a fraction of a pixel larger or smaller than the view it replaces.
+            Size shown = _imageElement.RenderSize;
+            if (shown.Width > 0 && shown.Height > 0 && _imageElement.IsDescendantOf(_chrome))
+                destination = _imageElement.TransformToVisual(_chrome).TransformBounds(new Rect(shown));
+            else
+            {
+                double scale = _imageElement.LayoutTransform is ScaleTransform transform ? transform.ScaleX : 1;
+                destination = new Rect(0, 0, image.Width * scale, image.Height * scale);
+            }
         }
         bool document = _translationOriginal is not null && !_translationOriginal.CanRerender && _content.CanRerender;
         return (image, destination, document);

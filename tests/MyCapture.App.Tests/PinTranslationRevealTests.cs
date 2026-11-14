@@ -536,6 +536,8 @@ public sealed class PinTranslationRevealTests(ITestOutputHelper output) : Korean
         var pin = new PinWindow(source, new PinViewState(source.Image.Width, source.Image.Height, 1, 1, 0.1), 200, 150);
         try
         {
+            // At 100%, as the fixture's sizes are; the theory below takes other scales and zooms.
+            LayOutAtScale(pin, 1);
             var frame = (pin.Width, pin.Height, pin.State.Zoom);
             BitmapSource before = Render(pin);
             pin.BeginTranslationReveal();
@@ -593,6 +595,107 @@ public sealed class PinTranslationRevealTests(ITestOutputHelper output) : Korean
         return Task.CompletedTask;
     });
 
+    /// <summary>
+    /// The change starts exactly from the dimmed source also where the source is not a whole number of device pixels: a
+    /// pin on a monitor at a fractional scale, or a zoomed document, whose raster is made for the zoom. The image element
+    /// draws the source into its layout-rounded size, so the old view drawn over the translation has to take that size.
+    /// </summary>
+    [Theory]
+    [InlineData("text", 1.25, 1.0)]
+    [InlineData("table", 1.25, 1.0)]
+    [InlineData("markdown", 1.25, 1.0)]
+    [InlineData("text", 1.5, 1.0)]
+    [InlineData("table", 1.5, 1.0)]
+    [InlineData("markdown", 1.5, 1.0)]
+    [InlineData("text", 1.0, 1.3)]
+    [InlineData("markdown", 1.0, 1.3)]
+    [InlineData("text", 1.25, 1.3)]
+    public Task ADocumentPinStartsItsChangeFromTheDimmedSourceAtAnyScaleAndZoom(string kind, double scale, double zoom) =>
+        RunAsync(() =>
+    {
+        double clock = 0;
+        using var _ = new Motion(() => clock);
+        (PinContent source, PinContent translated) = DocumentPair(kind);
+        var pin = new PinWindow(source, new PinViewState(source.Image.Width, source.Image.Height, zoom, 1, 0.1), 200, 150);
+        try
+        {
+            LayOutAtScale(pin, scale);
+            // The pin renders its text for the monitor and the zoom, as it does when it reaches that monitor.
+            Assert.Equal(96 * PinWindow.ZoomRasterScale(scale, zoom), ((BitmapSource)pin.ImageSourceForTest!).DpiX, 3);
+            var frame = (pin.Width, pin.Height, pin.State.Zoom);
+            BitmapSource before = Render(pin);
+            pin.BeginTranslationReveal();
+            pin.SetTranslationState(PinTranslationState.Translating);
+            clock = 600;
+            BitmapSource dimmed = Advance(pin);
+            Assert.True(Difference(before, dimmed) > 0.5, "The content dims while it translates.");
+
+            clock = 700;
+            pin.ApplyTranslation(translated, false);
+            Assert.True(pin.IsShowingTranslation);
+            Assert.Equal(frame, (pin.Width, pin.Height, pin.State.Zoom));
+            BitmapSource first = Advance(pin);
+            string name = FormattableString.Invariant($"document-{kind}-{scale * 100:0}-{zoom * 100:0}");
+            Save(EvidenceDirectory(), name, "dimmed", dimmed);
+            Save(EvidenceDirectory(), name, "first", first);
+            double fromDimmed = ContentDifference(dimmed, first);
+            output.WriteLine(FormattableString.Invariant($"{name}: first frame against the dimmed source {fromDimmed:F4}"));
+            Assert.True(fromDimmed < OneLevel, $"The change starts from the dimmed source ({fromDimmed:F4}).");
+            clock = 867 + 250;
+            BitmapSource after = Advance(pin);
+            Assert.False(pin.IsTranslationRevealActive);
+            Assert.Equal(0, Difference(after, Render(pin)));
+            Assert.Equal(frame, (pin.Width, pin.Height, pin.State.Zoom));
+        }
+        finally { pin.Close(); }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>
+    /// Lays a pin out at a monitor's scale, as Windows does once the pin is shown there, whatever the scales of the PC that
+    /// runs the test: these pins are never shown, so WPF would round their layout at a scale of its own. A visual without
+    /// a window keeps the last scale WPF gave it, which need not be the pin's, so the pin first goes to another scale and
+    /// every element gets the change; the pin then renders its text for the scale as on a monitor change.
+    /// </summary>
+    internal static void LayOutAtScale(PinWindow pin, double scale)
+    {
+        VisualTreeHelper.SetRootDpi(pin, new DpiScale(scale + 1, scale + 1));
+        VisualTreeHelper.SetRootDpi(pin, new DpiScale(scale, scale));
+        InvalidateLayoutTree(pin);
+        pin.UpdateLayout();
+        AssertScale(pin, scale);
+    }
+
+    private static void AssertScale(Visual visual, double scale)
+    {
+        DpiScale dpi = VisualTreeHelper.GetDpi(visual);
+        Assert.True(dpi.DpiScaleX == scale && dpi.DpiScaleY == scale,
+            $"{visual.GetType().FullName} has DPI {dpi.DpiScaleX:R}/{dpi.DpiScaleY:R}; expected {scale:R}.");
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(visual); index++)
+            if (VisualTreeHelper.GetChild(visual, index) is Visual child) AssertScale(child, scale);
+    }
+
+    private static void InvalidateLayoutTree(DependencyObject node)
+    {
+        if (node is UIElement element)
+        {
+            element.InvalidateMeasure();
+            element.InvalidateArrange();
+        }
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(node); index++) InvalidateLayoutTree(VisualTreeHelper.GetChild(node, index));
+    }
+
+    private static (PinContent Source, PinContent Translated) DocumentPair(string kind) => kind switch
+    {
+        "table" => (PinContent.FromText(ClipboardTextRenderer.Render("Name\tStatus\r\nDocument\tReady", true),
+                "Name\tStatus\r\nDocument\tReady", true),
+            PinContent.FromText(ClipboardTextRenderer.Render("이름\t상태\r\n문서\t준비됨", true), "이름\t상태\r\n문서\t준비됨", true)),
+        "markdown" => (PinContent.FromMarkdown(ClipboardMarkdownRenderer.Render(Markdown), Markdown),
+            PinContent.FromMarkdown(ClipboardMarkdownRenderer.Render(MarkdownKorean), MarkdownKorean)),
+        _ => (PinContent.FromText(ClipboardTextRenderer.Render(Sentence, false), Sentence, false),
+            PinContent.FromText(ClipboardTextRenderer.Render(SentenceKorean, false), SentenceKorean, false)),
+    };
+
     private const string Sentence = "Save the document before closing the window.";
     private const string SentenceKorean = "창을 닫기 전에 문서를 저장합니다.";
     private const string Markdown = "# Release notes\n\nThe update improves startup time.";
@@ -602,7 +705,8 @@ public sealed class PinTranslationRevealTests(ITestOutputHelper output) : Korean
     {
         var manager = new PinManager(() => new PinSettings(), NullLogger.Instance)
         {
-            ShowPinForTest = static (_, _) => { },
+            // Shown on the 96-DPI monitor below: laid out at its scale whatever the scales of the PC that runs the test.
+            ShowPinForTest = static (pin, _) => LayOutAtScale(pin, 1),
             ActivatePinForTest = static _ => { },
             ReadPlacementMonitorForTest = static () => new MonitorInfo("fake",
                 new RectD(0, 0, 3840, 2160), new RectD(0, 0, 3840, 2100), 96, true),
@@ -658,7 +762,9 @@ public sealed class PinTranslationRevealTests(ITestOutputHelper output) : Korean
         root.Measure(new Size(pin.Width, pin.Height));
         root.Arrange(new Rect(0, 0, pin.Width, pin.Height));
         root.UpdateLayout();
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(pin.Width), (int)Math.Ceiling(pin.Height), 96, 96, PixelFormats.Pbgra32);
+        DpiScale dpi = VisualTreeHelper.GetDpi(pin);
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(pin.Width * dpi.DpiScaleX), (int)Math.Ceiling(pin.Height * dpi.DpiScaleY),
+            96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
         bitmap.Render(root);
         bitmap.Freeze();
         return bitmap;
@@ -691,7 +797,9 @@ public sealed class PinTranslationRevealTests(ITestOutputHelper output) : Korean
 
     private static double ContentDifference(BitmapSource a, BitmapSource b)
     {
-        const int inset = 3;
+        // Three DIPs at the scale the pin was drawn at. Above 100% that also keeps out what lies outside the rounded corners
+        // (a translated document's white backing), which is no part of the content and which the change does not draw.
+        int inset = (int)Math.Ceiling((3 * a.DpiX / 96) - 1e-9);
         var area = new Int32Rect(inset, inset, a.PixelWidth - (2 * inset), a.PixelHeight - (2 * inset));
         return Difference(new CroppedBitmap(a, area), new CroppedBitmap(b, area));
     }
