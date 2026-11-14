@@ -54,6 +54,15 @@ internal enum EditorCursorKind
 
     /// <summary>Crosshair with the image tool icon.</summary>
     Image,
+
+    /// <summary>An I-beam in the text colour; the system I-beam under a high-contrast theme.</summary>
+    TextInk,
+
+    /// <summary>
+    /// A ring as large as the eraser's reach, with the eraser icon beside it like the pen beside its
+    /// footprint; the hot spot is the ring's centre.
+    /// </summary>
+    Eraser,
 }
 
 /// <summary>What lies under the pointer, as far as the cursor choice cares.</summary>
@@ -104,7 +113,8 @@ internal static class EditorCursorPolicy
                 _ when target.OverAnnotation => EditorCursorKind.Move,
                 _ => EditorCursorKind.Arrow,
             },
-            EditorTool.Text => EditorCursorKind.TextBeam,
+            EditorTool.Text => EditorCursorKind.TextInk,
+            EditorTool.Eraser => EditorCursorKind.Eraser,
             EditorTool.Pen => EditorCursorKind.Pen,
             EditorTool.Highlighter => EditorCursorKind.Highlighter,
             EditorTool.StepNumber => EditorCursorKind.StepNumber,
@@ -118,4 +128,11 @@ internal static class EditorCursorPolicy
 
     /// <summary>True for the kinds drawn by <see cref="EditorCursors"/> rather than taken from Windows.</summary>
     internal static bool IsCustom(EditorCursorKind kind) => kind >= EditorCursorKind.Pen;
+
+    /// <summary>
+    /// True for the cursors that show the colour the tool draws with: the pen, the highlighter,
+    /// the shape crosshair, the step badge and the text I-beam.
+    /// </summary>
+    internal static bool ShowsInk(EditorCursorKind kind) => kind is EditorCursorKind.Pen or EditorCursorKind.Highlighter
+        or EditorCursorKind.Crosshair or EditorCursorKind.StepNumber or EditorCursorKind.TextInk;
 }

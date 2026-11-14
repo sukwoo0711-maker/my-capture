@@ -6,6 +6,9 @@ namespace MyCapture.App.Editing;
 internal enum PointerAction
 {
     None, Create, Move, Resize, Marquee, ToggleSelection, PenDraw, AddStepNumber, Text, Image,
+
+    /// <summary>The eraser removes <see cref="PointerIntent.Target"/>, or nothing when it is null.</summary>
+    Erase,
 }
 
 /// <summary>The same decision drives hover feedback and the next pointer press.</summary>

@@ -18,7 +18,8 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
     {
         foreach (double width in new[] { 680d, 1200d })
         foreach ((int imageWidth, int imageHeight) in new[] { (960, 540), (540, 960) })
-        foreach (EditorTool tool in Enum.GetValues<EditorTool>().Where(tool => tool is not (EditorTool.Select or EditorTool.Crop)))
+        // The eraser draws nothing; EditorEraserTests checks the view stays put while it erases.
+        foreach (EditorTool tool in Enum.GetValues<EditorTool>().Where(tool => tool is not (EditorTool.Select or EditorTool.Crop or EditorTool.Eraser)))
             yield return [width, imageWidth, imageHeight, tool.ToString()];
     }
 

@@ -25,6 +25,8 @@ internal static class ShortcutCatalog
         foreach (var (command, key) in new[] { ("Select", Key.V), ("Crop", Key.X), ("Rectangle", Key.R), ("Ellipse", Key.E),
             ("Arrow", Key.A), ("Pen", Key.P), ("Highlighter", Key.H), ("Text", Key.T), ("StepNumber", Key.N), ("Image", Key.I), ("Stamp", Key.S), ("Mosaic", Key.M), ("Blur", Key.B) })
             Add(ShortcutScope.Annotation, command, key, key.ToString());
+        // E is the ellipse; as in GIMP and Inkscape, where E is also an ellipse tool, Shift+E is the eraser.
+        Add(ShortcutScope.Annotation, "Eraser", Key.E, "Shift+E", ModifierKeys.Shift);
         Add(ShortcutScope.Annotation, "Done", Key.Enter, "Ctrl+Enter", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "EditText", Key.Enter, "Enter");
         Add(ShortcutScope.Annotation, "EditText", Key.F2, "F2");
@@ -159,7 +161,7 @@ internal static class ShortcutCatalog
                 Row("Text_8D1A750C9351", "Select"), Row("Tools_Crop", "Crop"),
                 Row("Text_DC0760235344", "Rectangle"), Row("Tools.Ellipse", "Ellipse"),
                 Row("Text_2785CE58DF74", "Arrow"), Row("Text_37DB9D0B1C8E", "Pen"),
-                Row("Tools.Highlighter", "Highlighter"), Row("Text_258AD4B095A1", "Text"),
+                Row("Tools.Highlighter", "Highlighter"), Row("Tools.Eraser", "Eraser"), Row("Text_258AD4B095A1", "Text"),
                 Row("Tools.StepNumber", "StepNumber"), Row("Text_302BAE127938", "Image"), Row("Stamp_Place", "Stamp"),
                 Row("EditorObscure_Pixelate", "Mosaic"), Row("EditorBlur_Name", "Blur"),
                 Row("EditorUx_RotateLeftHint", "RotateLeft"), Row("EditorUx_RotateRightHint", "RotateRight"),

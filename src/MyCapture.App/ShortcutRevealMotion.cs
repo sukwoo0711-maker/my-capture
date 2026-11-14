@@ -79,7 +79,8 @@ internal static class ShortcutRevealMotion
         }
         if (corner)
         {
-            hint.RenderTransformOrigin = new Point(1, 1);
+            // Grows from its own corner; a centred chord grows from the middle of its bottom edge.
+            hint.RenderTransformOrigin = new Point(hint.HorizontalAlignment == HorizontalAlignment.Center ? 0.5 : 1, 1);
             face.CaptionScale = Scale(hint);
         }
         face.Update(animate: false);
