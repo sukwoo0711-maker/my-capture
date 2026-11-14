@@ -516,6 +516,9 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     /// <summary>Newest practice revision already presented on this installation.</summary>
     public int PracticeRevisionOffered { get; set => field = Math.Max(0, value); }
 
+    /// <summary>The library's details pane was folded away by the user. Open by default.</summary>
+    public bool LibraryDetailsCollapsed { get; set; }
+
     /// <summary>Shared presentation count for editor and dismissed-card library-location tips.</summary>
     public int SavedLocationTipCount
     {

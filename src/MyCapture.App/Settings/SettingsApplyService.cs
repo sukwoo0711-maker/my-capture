@@ -142,6 +142,8 @@ public sealed class SettingsApplyService
         next.General.PinSizeTipShown = previous.General.PinSizeTipShown;
         next.General.PracticeRevisionOffered = previous.General.PracticeRevisionOffered;
         next.General.SavedLocationTipCount = previous.General.SavedLocationTipCount;
+        // The library's fold button owns this choice; an older draft must not undo it.
+        next.General.LibraryDetailsCollapsed = previous.General.LibraryDetailsCollapsed;
         next.Ocr.AccuracySuggestionDismissed |= previous.Ocr.AccuracySuggestionDismissed;
         next.Pin.ClickThroughHintShownCount = previous.Pin.ClickThroughHintShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);

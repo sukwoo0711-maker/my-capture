@@ -173,6 +173,7 @@ public static class AppSettingsClone
         FirstPinTipShown = s.FirstPinTipShown,
         PinSizeTipShown = s.PinSizeTipShown,
         PracticeRevisionOffered = s.PracticeRevisionOffered,
+        LibraryDetailsCollapsed = s.LibraryDetailsCollapsed,
         SavedLocationTipCount = s.SavedLocationTipCount,
         ShowShortcutHints = s.ShowShortcutHints,
         AlwaysShowShortcutHints = s.AlwaysShowShortcutHints,

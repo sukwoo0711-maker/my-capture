@@ -10,7 +10,7 @@
         Style="{DynamicResource Window.Standard}"
         Title="{loc:Text Text_37AD4F28D422}"
         Width="1280" Height="760"
-        MinWidth="980" MinHeight="560"
+        MinWidth="1032" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Surface.Base}"
         Foreground="{DynamicResource Text.Primary}">
@@ -2228,9 +2228,10 @@
                             <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         </Button>
                     </Grid>
-                    <TextBlock Grid.Row="1" Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                    <!-- The pane stays when nothing single is selected: it says so instead of disappearing. -->
+                    <StackPanel x:Name="GalleryDetailsEmpty" Grid.Row="1" AutomationProperties.AutomationId="LibraryDetailsEmpty">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}">
@@ -2238,8 +2239,12 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                        </StackPanel.Style>
+                        <TextBlock x:Name="GalleryDetailsEmptyTitle" TextWrapping="Wrap" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Text.Secondary}" />
+                        <TextBlock x:Name="GalleryDetailsEmptyHint" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource Text.Muted}" />
+                    </StackPanel>
                     <Border x:Name="GalleryDetailsHost" Grid.Row="1" />
                 </Grid>
             </Border>

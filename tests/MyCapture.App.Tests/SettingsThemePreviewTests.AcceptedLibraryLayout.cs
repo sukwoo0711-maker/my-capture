@@ -42,6 +42,9 @@ public sealed partial class SettingsThemePreviewTests
                         window.Show();
                         model.Refresh();
                         model.ClearSelection();
+                        // Open by default; this scenario's geometry (three columns at 1100 DIP) is the folded one.
+                        Assert.True(window.IsDetailsPaneOpen);
+                        window.SetDetailsPaneOpen(false);
                         SettleGalleryLayout(window);
                         var rows = (ListBox)window.FindName("RowsList");
                         PumpLibraryUntil(window, () => FolderCardButtons(rows).Length == 2, "compact folders");

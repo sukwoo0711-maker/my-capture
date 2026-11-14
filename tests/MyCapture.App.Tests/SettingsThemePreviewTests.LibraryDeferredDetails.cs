@@ -34,7 +34,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(Assert.IsType<Button>(window.FindName("HideDetailsButton")).IsVisible);
                 var panel = Assert.IsType<Border>(window.FindName("GalleryDetailsPanel"));
                 Assert.Contains(Descendants(panel).OfType<TextBlock>(),
-                    text => text.IsVisible && text.Text == UiText.Get("Workspace.SelectHint"));
+                    text => text.IsVisible && MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == UiText.Get("Workspace.SelectHint"));
             }
             finally { fixture.Window.CloseForExit(); application.Shutdown(); }
         });

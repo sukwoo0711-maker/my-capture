@@ -309,7 +309,8 @@ public sealed partial class SettingsThemePreviewTests
                         var client = (FrameworkElement)window.Content;
                         double originalClientWidth = client.Width;
                         string[] names = ["EditSelectedButton", "PreviewSelectedButton", "FloatSelectedButton", "CopySelectedButton", "CreatePdfSelectedButton", "KeepSelectedButton"];
-                        foreach (double width in new[] { 980d, 1100d, 1280d, 1500d })
+                        // The first width is the window's minimum, below which the window cannot be sized.
+                        foreach (double width in new[] { window.MinWidth, 1100d, 1280d, 1500d })
                         foreach (bool details in new[] { true, false })
                         {
                             window.Width = width;
