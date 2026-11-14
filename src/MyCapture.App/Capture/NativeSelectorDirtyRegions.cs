@@ -8,13 +8,37 @@ internal static class NativeSelectorDirtyRegions
     internal static IReadOnlyList<Int32Rect> Changed(Int32Rect previous, Int32Rect current,
         int width, int height)
     {
-        if (previous == current) return [];
         var result = new List<Int32Rect>(16);
+        Changed(previous, current, width, height, result);
+        return result.ToArray();
+    }
+
+    /// <summary>
+    /// Fills <paramref name="result"/> (cleared first) with the clipped, distinct damage. Called for every
+    /// pointer sample of a drag, so it reuses the caller's list and allocates nothing.
+    /// </summary>
+    internal static void Changed(Int32Rect previous, Int32Rect current, int width, int height, List<Int32Rect> result)
+    {
+        result.Clear();
+        if (previous == current) return;
         Difference(previous, current, result);
         Difference(current, previous, result);
         Border(previous, result);
         Border(current, result);
-        return result.Select(r => Clip(r, width, height)).Where(r => r.Width > 0 && r.Height > 0).Distinct().ToArray();
+        int kept = 0;
+        for (int index = 0; index < result.Count; index++)
+        {
+            Int32Rect clipped = Clip(result[index], width, height);
+            if (clipped.Width == 0 || clipped.Height == 0 || Contains(result, kept, clipped)) continue;
+            result[kept++] = clipped;
+        }
+        result.RemoveRange(kept, result.Count - kept);
+    }
+
+    private static bool Contains(List<Int32Rect> list, int count, Int32Rect rectangle)
+    {
+        for (int index = 0; index < count; index++) if (list[index] == rectangle) return true;
+        return false;
     }
 
     internal static Int32Rect Clip(Int32Rect rectangle, int width, int height)
@@ -31,11 +55,15 @@ internal static class NativeSelectorDirtyRegions
         int left = Math.Max(a.X, b.X), top = Math.Max(a.Y, b.Y);
         int right = Math.Min(a.X + a.Width, b.X + b.Width), bottom = Math.Min(a.Y + a.Height, b.Y + b.Height);
         if (b.Width == 0 || b.Height == 0 || right <= left || bottom <= top) { result.Add(a); return; }
-        Add(a.X, a.Y, a.Width, top - a.Y);
-        Add(a.X, bottom, a.Width, a.Y + a.Height - bottom);
-        Add(a.X, top, left - a.X, bottom - top);
-        Add(right, top, a.X + a.Width - right, bottom - top);
-        void Add(int x, int y, int w, int h) { if (w > 0 && h > 0) result.Add(new Int32Rect(x, y, w, h)); }
+        Add(result, a.X, a.Y, a.Width, top - a.Y);
+        Add(result, a.X, bottom, a.Width, a.Y + a.Height - bottom);
+        Add(result, a.X, top, left - a.X, bottom - top);
+        Add(result, right, top, a.X + a.Width - right, bottom - top);
+    }
+
+    private static void Add(List<Int32Rect> result, int x, int y, int w, int h)
+    {
+        if (w > 0 && h > 0) result.Add(new Int32Rect(x, y, w, h));
     }
 
     private static void Border(Int32Rect r, List<Int32Rect> result)
