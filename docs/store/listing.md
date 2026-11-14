@@ -108,6 +108,14 @@ MyCapture는 윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
+### 이 버전의 새로운 기능 (5.4.1)
+
+입력 한도는 1,500자입니다. Store의 5.4.0에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
+
+- 핀을 확대·축소하는 움직임 도중 테두리를 끌면 크기 조절 대신 이동하던 문제를 고쳤습니다.
+- 출처 아이콘 캐시를 정리하는 동안 다른 앱의 출처 아이콘이 늦게 뜨던 문제를 고쳤습니다.
+- QR 코드와 바코드 판독이 쓰는 메모리를 줄였습니다.
+
 ### 이 버전의 새로운 기능 (5.4.0)
 
 입력 한도는 1,500자입니다. Store의 5.3.1에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
@@ -250,6 +258,14 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
+
+### What's new in this version (5.4.1)
+
+Limit: 1,500 characters. Covers changes since the Store version, 5.4.0. Enter the lines below in the Store.
+
+- Fixed dragging a pin's edge during the zoom motion moving the pin instead of resizing it.
+- Fixed source app icons appearing late while the source icon cache was being cleaned up.
+- Reduced the memory used when reading QR codes and barcodes.
 
 ### What's new in this version (5.4.0)
 
