@@ -373,8 +373,10 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         }
         UpdateShownHover();
         Int32Rect region = RevealedRegion;
-        foreach (Int32Rect dirty in _dib.SetReveal(region))
+        IReadOnlyList<Int32Rect> damage = _dib.SetReveal(region);
+        for (int index = 0; index < damage.Count; index++)
         {
+            Int32Rect dirty = damage[index];
             var rectangle = new NativeSelectorInterop.Rect(dirty.X, dirty.Y, dirty.Width, dirty.Height);
             _ = NativeSelectorInterop.InvalidateRect(Handle, ref rectangle, false);
         }

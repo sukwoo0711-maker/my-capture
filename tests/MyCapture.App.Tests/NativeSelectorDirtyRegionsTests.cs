@@ -53,6 +53,26 @@ public sealed class NativeSelectorDirtyRegionsTests
     }
 
     [Fact]
+    public void DragSamplesReuseTheCallersListWithoutAllocating()
+    {
+        // Every pointer sample of a drag computes this damage; it must not feed the GC.
+        var damage = new List<Int32Rect>(16) { new(1, 1, 1, 1) };
+        var before = new Int32Rect(100, 80, 300, 200);
+        NativeSelectorDirtyRegions.Changed(before, new Int32Rect(100, 80, 314, 206), 4208, 1440, damage);
+        Assert.Equal(NativeSelectorDirtyRegions.Changed(before, new Int32Rect(100, 80, 314, 206), 4208, 1440), damage);
+        NativeSelectorDirtyRegions.Changed(before, before, 4208, 1440, damage);
+        Assert.Empty(damage);
+        for (int warm = 0; warm < 3; warm++)
+            NativeSelectorDirtyRegions.Changed(before, new Int32Rect(90 + warm, 70, 330, 220), 4208, 1440, damage);
+        long allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (int step = 1; step <= 16; step++)
+            NativeSelectorDirtyRegions.Changed(new Int32Rect(100, 80, 300 + step * 14, 200 + step * 6),
+                new Int32Rect(100, 80, 314 + step * 14, 206 + step * 6), 4208, 1440, damage);
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - allocated);
+        Assert.Equal(NativeSelectorDirtyRegions.Changed(new Int32Rect(100, 80, 524, 296), new Int32Rect(100, 80, 538, 302), 4208, 1440), damage);
+    }
+
+    [Fact]
     public void ClipHandlesNegativeOriginsAndLargeRightEdges()
     {
         Assert.Equal(new Int32Rect(0, 0, 5, 6), NativeSelectorDirtyRegions.Clip(new(-5, -4, 10, 10), 20, 20));
