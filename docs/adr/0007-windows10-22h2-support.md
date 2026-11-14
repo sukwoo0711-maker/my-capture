@@ -42,6 +42,10 @@ Windows 10에서는 WPF의 픽셀별 알파 레이어드 창(`AllowsTransparency
 - WGC `CreateFreeThreaded`는 17763, `CreateForMonitor` interop은 18362, 커서 속성은 19041부터입니다.
   `MinUpdateInterval`, `IncludeSecondaryWindows`, `DirtyRegionMode`, WindowId/DisplayId 생성 API는 사용하지 않습니다.
 - `WDA_EXCLUDEFROMCAPTURE`는 19041부터입니다. 고해상도 waitable timer는 17134부터이며 기존 sleep 폴백을 유지합니다.
+- HDR 화면의 정지 캡처 보정([ADR 0009](0009-hdr-still-capture.md))은 `DisplayConfigGetDeviceInfo`의 고급 색 정보와
+  SDR 흰색 수준(16299부터), `IDXGIOutput6::GetDesc1`(17134부터), `IDXGIOutput5::DuplicateOutput1`, `IDXGIDevice3::Trim`을
+  사용합니다. 활성 색 모드 조회(`GET_ADVANCED_COLOR_INFO_2`)는 26100부터이며, 없으면 고급 색 사용 여부와 DXGI 출력의
+  색 공간으로 판정합니다. 어느 단계든 실패하면 그 캡처는 기존 GDI 사본을 씁니다.
 - `StartupTask`, `AppInstance` 활성화, `ApplicationData`, Store 업데이트·평가, Windows OCR·이미지·언어 API는
   19041 이하에서 제공됩니다. 패키지 ID·기능 가용성·실패 처리는 기존 경로를 유지합니다.
 - 녹화 출력은 Media Foundation H.264, BGRA/NV12 SDR입니다. HEVC·AV1·HDR 인코더를 필수로 요청하지 않습니다.

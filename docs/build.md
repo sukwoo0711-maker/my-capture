@@ -75,9 +75,12 @@ Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-settings', $out
 Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-ocr', $out
 Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-recording', $out
 Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-video-editor', $out
+Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-hdr-capture', $out
 ```
 
 녹화 self-test는 설정과 관계없이 자동 방식(Windows Graphics Capture 우선)으로 녹화하며, 환경 변수 `MYCAPTURE_RECORDING_BACKEND`를 `gdi` 또는 `wgc`로 지정하면 그 방식으로 실행합니다. 셸 self-test는 실제 전역 단축키를 등록하므로 다른 MyCapture 인스턴스와 단축키 도구를 먼저 종료하는 편이 좋습니다. OCR 결과는 설치된 Windows 언어 팩에 영향을 받을 수 있습니다.
+
+HDR 캡처 self-test는 창을 띄우지 않고 설정·클립보드·포인터를 건드리지 않습니다. 모니터마다 감지한 색 상태, 읽은 형식, 단계별 시간, GDI 캡처 PNG와 보정한 캡처 PNG를 지정한 폴더에 남기고 `hdr-capture-report.txt`와 `hdr-capture.json`으로 요약합니다. HDR을 켜지 않은 모니터는 scRGB 읽기를 강제해 보정 결과가 GDI 화면과 같은지 비교합니다. 정지 캡처의 HDR 보정은 설정이 없으며, 진단용 환경 변수 `MYCAPTURE_HDR_CAPTURE`를 `off`로 지정하면 GDI 사본만 쓰고 `force`로 지정하면 모든 모니터를 scRGB로 읽습니다. HDR을 켠 PC에서 확인할 항목은 [ADR 0009](adr/0009-hdr-still-capture.md)에 있습니다.
 
 ## Windows 10 32비트 호환판
 

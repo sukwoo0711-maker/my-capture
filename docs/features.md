@@ -9,6 +9,7 @@ MyCapture는 캡처, 이미지 편집, 핀으로 띄우기, 텍스트 인식, �
 ## 주요 기능
 
 - 모니터 경계를 하나의 가상 데스크톱처럼 넘나드는 자유 영역 캡처·녹화와 창, 전체 화면, 지연 및 스크롤 캡처
+- HDR을 켠 모니터의 정지 캡처는 그 모니터를 scRGB로 다시 읽어 SDR 색으로 변환(HDR을 끈 화면과 같은 값, SDR 흰색보다 밝은 부분은 색조를 유지한 채 SDR 흰색으로 낮춤). HDR을 켜지 않은 모니터와 녹화는 기존 방식 그대로이며, 설계와 확인 방법은 [ADR 0009](adr/0009-hdr-still-capture.md)에 있음
 - 영역을 고르는 중 포인터 아래 창을 강조하고 드래그 없이 클릭해 그 창을 선택(빈 바탕 화면은 포인터가 있는 모니터 전체). 창 위에서 휠을 앞으로 굴리거나 `PgDn`을 누르면 포인터 아래 가장 작은 요소(단추·목록 항목·패널)를 고르고, 휠을 뒤로 굴리거나 `PgUp`을 누르면 한 단계씩 넓힘. `C`로 포인터 아래 색을 HEX·RGB·HSL 형식으로 복사, `R`로 16:9·4:3·1:1·9:16 비율이나 1280 × 720·1920 × 1080·1080 × 1080 고정 크기 선택, `F1`로 지금 쓸 수 있는 단축키 안내를 화면 구석에 켜고 끔
 - **자유형 / Freeform**: 선택 화면의 창 모드 다음 **자유형** 또는 `F`로 켜고 끕니다. 포인터로 영역을 그린 뒤 놓으면 윤곽의 시작점과 끝점을 연결해 캡처하며, 윤곽 밖은 투명한 PNG로 저장합니다. 드래그 중 `Esc`나 오른쪽 버튼은 그린 윤곽만 취소합니다. `Shift` 정밀 이동과 확대경을 사용할 수 있으며 `F3`는 그린 영역을 핀으로 띄웁니다. 비율·고정 크기는 적용되지 않고 다음 캡처는 기본 모드로 시작합니다. 텍스트 복사와 녹화 영역에서는 자유형을 사용할 수 없습니다. JPEG와 PDF는 투명 부분을 흰 배경에 합성합니다.
 - **Freeform**: choose the mode after Window or press `F`, draw with the pointer, then release to capture a transparent PNG. During a stroke, `Esc` or the right button discards only the stroke. `Shift`, the magnifier and `F3` pinning remain available. Ratio and fixed-size presets do not apply; each capture starts in the default mode.
