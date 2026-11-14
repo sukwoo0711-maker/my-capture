@@ -1820,7 +1820,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         }
         else
         {
-            PhysicalWindowPositioner.PlaceTopmost(_handle, target);
+            // This placement also sizes the window. A key move at a fractional scale asks for a fractional
+            // origin (1 DIP is 1.25 px at 125%), and rounding that rectangle outward would add a pixel to the
+            // width or height on every press. The origin goes to the nearest pixel, as the lightweight host's
+            // does, so a step left and a step right are the same length; the size stays.
+            PhysicalWindowPositioner.PlaceTopmost(_handle,
+                new RectD(Math.Round(target.Left), Math.Round(target.Top), width, height));
         }
     }
 
