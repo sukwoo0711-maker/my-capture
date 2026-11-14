@@ -400,6 +400,8 @@ public partial class App : Application
             () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard)
         {
             NotificationPlacementMissed = error => _log?.LogWarning(error, "A notification missed its bounds; it stays open"),
+            // The capture card and notifications share the corner above the notification area.
+            CornerOccupant = () => _quickAccess?.OpenSurfaceBounds,
         };
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
@@ -1400,8 +1402,6 @@ public partial class App : Application
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
-            var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-                e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
             var monitor = e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
             // Clipboard-only and card modes release the edit session once persistence ends.
             // Hold the receipt until the deferred presentation owns its own lease.
@@ -1414,7 +1414,7 @@ public partial class App : Application
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
                     if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess)
-                        ShowQuickAccess(receipt, selected, region, monitor, copied, practice: practice);
+                        ShowQuickAccess(receipt, selected, monitor, copied, practice: practice);
                     else
                     {
                         if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
@@ -1527,7 +1527,7 @@ public partial class App : Application
 
     /// <param name="practice">A capture the practice window asked for: its card never carries the rating invitation.</param>
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
+        MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1544,13 +1544,15 @@ public partial class App : Application
         {
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
             card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
-                actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
+                actions.Export, targetMonitor: monitor, copyText: actions.CopyText,
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             card.PlacementMissed = error => _log?.LogWarning(error, "The capture card missed its bounds; the card stays open");
             ReceiptTimeline.Mark?.Invoke("card-constructed");
+            // A notification already in the corner moves above the card instead of under it.
+            card.Placed += () => _shellPresenter?.RefitNotification();
             card.Closed += (_, _) =>
             {
                 _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded);

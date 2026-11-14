@@ -419,53 +419,34 @@ public sealed partial class CaptureFlowPolishTests
         }), typeof(CaptureFlowPolishTests), hungAfter: TimeSpan.FromMinutes(8));
 
     [Fact]
-    public void QuickAccessShadowBandPreservesVisibleCardPlacement()
+    public void QuickAccessShadowBandKeepsTheVisibleCardInTheNotificationCorner()
     {
-        double maximum = 0;
+        // The capture card waits where notifications wait (ThemedShellPresenter.NotificationBounds):
+        // its visible card, inside the window's clear band, is EdgeGap inside the work area's
+        // bottom-right corner, whatever the band, the scale or the monitor's place on the desktop.
         int compared = 0;
         foreach (double scale in new[] { 1.0, 1.25, 1.5, 2.0 })
             foreach (Point origin in new[] { new Point(0, 0), new Point(-1920, 0), new Point(-1920, -1040) })
             {
                 var workDip = new RectD(origin.X, origin.Y, 1920, 1040);
                 RectD work = ScaleRect(workDip, scale);
-                var regions = new List<RectD?>
+                foreach ((double band, double width, double height) in new[]
+                    { (QuickAccessWindow.ShadowBand, 352d, 200d), (0d, 328d, 176d) })
                 {
-                    null, work,
-                    // A capture on the adjacent monitor exercises the final work-area clamp.
-                    ScaleRect(new RectD(origin.X - 500, origin.Y - 300, 320, 180), scale),
-                    ScaleRect(new RectD(origin.X + 1850, origin.Y + 1000, 640, 360), scale),
-                };
-                foreach (double x in new[] { 0d, 1, 40, 320, 960, 1599, 1879, 1919 })
-                    foreach (double y in new[] { 0d, 1, 40, 200, 520, 839, 999, 1039 })
-                        foreach (Size size in new[] { new Size(1, 1), new Size(160, 90), new Size(640, 360) })
-                            regions.Add(ScaleRect(new RectD(origin.X + x, origin.Y + y,
-                                Math.Min(size.Width, 1920 - x), Math.Min(size.Height, 1040 - y)), scale));
-                foreach (RectD? region in regions)
-                {
-                    string what = $"card placement, {Percent(scale)}%, work {work}, region {region?.ToString() ?? "tray default"}";
-                    Rect old = QuickAccessWindow.Position(work, scale, 344, 192, region, extraBand: 0);
-                    Rect current = QuickAccessWindow.Position(work, scale, 352, 200, region);
-                    Rect legacy = PreviousCardPosition(work, scale, 344, 192, region, out Point unclamped);
-                    Assert.True(old == legacy, $"{what}: extraBand=0 changed the prior layered algorithm: {old} versus {legacy}.");
-                    double dx = current.Left + 12 - old.Left - 8, dy = current.Top + 12 - old.Top - 8;
-                    maximum = Math.Max(maximum, Math.Max(Math.Abs(dx), Math.Abs(dy)));
+                    string what = $"card placement, {Percent(scale)}%, work {work}, band {band}";
+                    Rect window = QuickAccessWindow.Position(work, scale, width, height, band);
+                    Rect notification = ThemedShellPresenter.NotificationBounds(work, scale, width, height, band);
+                    Assert.True(window == notification, $"{what}: the card window {window} is not the notification's {notification}.");
+                    CloseDip(window.Right - band, workDip.Right - ThemedShellPresenter.EdgeGap, what + ": visible card right");
+                    CloseDip(window.Bottom - band, workDip.Bottom - ThemedShellPresenter.EdgeGap, what + ": visible card bottom");
+                    Assert.True(window.Left >= workDip.Left && window.Top >= workDip.Top
+                        && window.Right <= workDip.Right + 1e-9 && window.Bottom <= workDip.Bottom + 1e-9,
+                        $"{what}: the window {window} leaves the work area {workDip}.");
                     compared++;
-                    Assert.True(Math.Abs(dx) <= 4 + 1e-9 && Math.Abs(dy) <= 4 + 1e-9,
-                        $"{what}: visible card moved by ({dx:R}, {dy:R}) DIP, beyond the 4-DIP clamp allowance.");
-                    bool noClamp = unclamped.X - 4 >= workDip.Left && unclamped.Y - 4 >= workDip.Top
-                        && unclamped.X - 4 + 352 <= workDip.Right && unclamped.Y - 4 + 200 <= workDip.Bottom;
-                    if (noClamp || region is null)
-                    {
-                        CloseDip(dx, 0, what + ": unclamped visible card x");
-                        CloseDip(dy, 0, what + ": unclamped visible card y");
-                    }
-                    Rect opaque = QuickAccessWindow.Position(work, scale, 328, 200, region, extraBand: 0);
-                    Rect oldOpaque = PreviousCardPosition(work, scale, 328, 200, region, out _);
-                    Assert.True(opaque == oldOpaque, $"{what}: opaque placement changed from {oldOpaque} to {opaque}.");
                 }
             }
-        ShadowMeasurement("card-placement-maximum.txt", FormattableString.Invariant($"Compared {compared} region/monitor/scale cases; maximum visible-card move={maximum:F4} DIP per axis; unclamped and tray-default move=0 DIP."));
-        Assert.True(maximum == 4, $"card placement sweep, 100/125/150/200%: boundary cases exercised {maximum:R} DIP, expected the exact 4-DIP clamp.");
+        ShadowMeasurement("card-placement-corner.txt", FormattableString.Invariant(
+            $"Compared {compared} monitor/scale/band cases; the visible card sat {ThemedShellPresenter.EdgeGap} DIP inside the work area's bottom-right corner in each."));
     }
 
     [Fact]
@@ -737,24 +718,6 @@ public sealed partial class CaptureFlowPolishTests
                 reach = Math.Max(reach, Math.Max(dx, dy));
             }
         return (regionAlpha, regionPixels, shadow, farthest, reach);
-    }
-
-    // Frozen pre-band algorithm: this checks the explicit extraBand:0 compatibility path too.
-    private static Rect PreviousCardPosition(RectD work, double scale, double width, double height, RectD? capturedRegion, out Point unclamped)
-    {
-        double left = work.Left / scale, top = work.Top / scale, right = work.Right / scale, bottom = work.Bottom / scale;
-        width = Math.Min(width, right - left);
-        height = Math.Min(height, bottom - top);
-        double x = right - width - 12, y = bottom - height - 12;
-        if (capturedRegion is { } region && (region.Width < work.Width || region.Height < work.Height))
-        {
-            x = region.Right / scale + 8;
-            y = region.Bottom / scale + 8;
-            if (x + width > right - 4) x = region.Right / scale - width;
-            if (y + height > bottom - 4) y = region.Bottom / scale - height - 8;
-        }
-        unclamped = new Point(x, y);
-        return new Rect(Math.Clamp(x, left, Math.Max(left, right - width)), Math.Clamp(y, top, Math.Max(top, bottom - height)), width, height);
     }
 
     private static void ShadowMeasurement(string name, string text)
