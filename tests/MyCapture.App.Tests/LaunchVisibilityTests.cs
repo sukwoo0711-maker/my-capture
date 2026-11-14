@@ -339,7 +339,19 @@ public sealed class LaunchVisibilityTests(ITestOutputHelper output)
         public void Run(WaitHandle finished, TimeSpan? duration)
         {
             Duration = duration;
-            finished.WaitOne(duration ?? Timeout.InfiniteTimeSpan);
+            if (duration is not { } time)
+            {
+                finished.WaitOne();
+                return;
+            }
+            // A wait timeout follows the system tick and can end slightly before a Stopwatch reports
+            // the duration (as LaunchStatusPresentation.FinishedBeforeDelay notes); the tests time the
+            // notice on a Stopwatch, so the remainder is waited out on one.
+            var watch = Stopwatch.StartNew();
+            for (TimeSpan left = time; left > TimeSpan.Zero; left = time - watch.Elapsed)
+            {
+                if (finished.WaitOne(left)) return;
+            }
         }
         public void Dispose() => Disposed = true;
     }
