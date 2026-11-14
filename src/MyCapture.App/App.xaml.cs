@@ -2150,6 +2150,18 @@ public partial class App : Application
         window.CaptureRegionRequested = () => HandleCaptureRequested();
         window.ReadHotkeys = () => _settings!.Hotkeys;
         window.RecordRegionRequested = HandleRecordRegion;
+        window.ConfigureDetailsPanePersistence(_settings!.General.LibraryDetailsCollapsed, collapsed =>
+        {
+            bool previous = _settings!.General.LibraryDetailsCollapsed;
+            if (previous == collapsed) return;
+            _settings.General.LibraryDetailsCollapsed = collapsed;
+            try { _services.GetRequiredService<SettingsStore>().Save(_settings); }
+            catch (Exception error)
+            {
+                _settings.General.LibraryDetailsCollapsed = previous;
+                _log?.LogWarning(error, "Library details pane state was not saved");
+            }
+        });
 
         _galleryWindow = window;
         return window;

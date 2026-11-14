@@ -132,6 +132,10 @@ public sealed partial class SettingsThemePreviewTests
         try
         {
             window.Show();
+            // This scenario measures the command bar and card geometry with the details pane folded (its
+            // assertions predate the pane being open by default); the open pane is covered by
+            // LibraryDetailsPane_* and the LibraryColumns tests.
+            window.SetDetailsPaneOpen(false);
             if (scale > 0)
             {
                 VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));

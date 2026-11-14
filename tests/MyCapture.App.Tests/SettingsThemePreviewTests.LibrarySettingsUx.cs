@@ -362,7 +362,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal("아직 캡처가 없습니다", library.ViewModel.EmptyStateTitle);
             Assert.Equal("Ctrl+Shift+C로 캡처하면 여기에 표시됩니다.", library.ViewModel.EmptyStateText);
             Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible && KoreanWordWrap.Strip(text.Text) == library.ViewModel.EmptyStateText);
-            Assert.False(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
+            // The details pane stays beside an empty library and says nothing is selected.
+            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
             Assert.False(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
 
             // The shortcut is the one set now; without one the hint names none.
@@ -376,16 +377,19 @@ public sealed partial class SettingsThemePreviewTests
             using (UiText.UseLanguage("en-US"))
                 Assert.Equal("No captures yet", library.ViewModel.EmptyStateTitle);
 
-            // The first capture reveals the details rail without taking space from the grid.
+            // The details pane is already there while the library is empty (it says nothing is selected), so
+            // the first capture takes no space from the grid.
+            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
+            Assert.False(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
             var record = new CaptureRecord { Width = 160, Height = 100, CreatedAt = DateTimeOffset.Now, UpdatedAt = DateTimeOffset.Now };
             library.Queue.Add(record);
             Directory.CreateDirectory(library.Queue.GetDirectory(record));
             File.WriteAllBytes(library.Queue.GetFilePath(record, CaptureFileNames.Original), [1]);
             window.RefreshFromQueue();
             SettleLibrary(window);
-            Assert.False(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
-            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
-            Assert.False(window.IsDetailsPaneOpen);
+            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
+            Assert.False(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
+            Assert.True(window.IsDetailsPaneOpen);
         }
         finally
         {
