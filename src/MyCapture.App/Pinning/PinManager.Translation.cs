@@ -270,7 +270,7 @@ internal sealed partial class PinManager
         catch (Exception ex)
         {
             // Source text and model output never enter the diagnostic log.
-            _log.LogWarning("Pin translation failed ({ErrorType})", ex.GetType().Name);
+            _log.LogWarning(ex, "Pin translation failed ({ErrorType})", ex.GetType().Name);
             if (Current()) pin.SetTranslationFailed(TranslationFailureMessage(ex, translator.ModelDownloadBytes));
         }
         finally
