@@ -120,6 +120,8 @@ public sealed class SettingsApplyService
         ArgumentNullException.ThrowIfNull(next);
 
         AppSettings previous = _current();
+        // Playback may change while a settings draft is open; its choice belongs to the players.
+        next.Recording.PlaybackMuted = previous.Recording.PlaybackMuted;
         // An older draft or failed registration must not erase the one-time answer.
         bool coreShortcutsAsked = previous.Hotkeys.CoreShortcutsAsked || next.Hotkeys.CoreShortcutsAsked;
         next.Hotkeys.CoreShortcutsAsked = coreShortcutsAsked;

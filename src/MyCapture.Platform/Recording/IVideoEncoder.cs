@@ -74,6 +74,11 @@ public sealed record VideoEncoderOptions(
     int BitrateBitsPerSecond)
 {
     /// <summary>
+    /// Adds an AAC stream when requested at session start. Null preserves the video-only path.
+    /// </summary>
+    public AudioEncoderOptions? Audio { get; init; }
+
+    /// <summary>
     /// Layout every <see cref="IVideoEncoder.WriteFrame"/> call supplies. BGRA32 (the default)
     /// lets Media Foundation convert to Y'CbCr; NV12 skips that conversion, for frames that are
     /// already Y'CbCr such as decoded H.264.

@@ -62,6 +62,7 @@ internal sealed class MediaDetailsWindow : Window
         AddFact("MediaInfo.Resolution", details.Resolution);
         if (details.Source.DurationMs is double duration) AddFact("MediaInfo.Duration", MediaDetailsFormatter.Duration(duration));
         AddFact("MediaInfo.Format", details.Format);
+        if (details.Format == "MP4") AddFact("MediaInfo.Audio", AudioText(details));
         AddFact("MediaInfo.Created", DateText(details.CreatedAt));
         AddFact("MediaInfo.Modified", DateText(details.ModifiedAt));
         AddFact("MediaInfo.Location", details.FilePath);
@@ -103,6 +104,30 @@ internal sealed class MediaDetailsWindow : Window
 
     internal static string SizeText(decimal bytes) => UiText.Format("MediaInfo.SizeValue",
         MediaDetailsFormatter.FileSize(bytes), MediaDetailsFormatter.ExactBytes(bytes));
+
+    internal static string AudioText(MediaDetails details)
+    {
+        if (details.Audio is null) return UiText.Get("MediaInfo.Unavailable");
+        // The fact already sits under the "소리"/"Audio" label, so the value does not repeat that word.
+        if (details.Audio.Format is not { } audio) return UiText.Get("MediaInfo.AudioNone");
+        var parts = new List<string>();
+        string? codec = audio.Subtype.ToString("D").ToUpperInvariant() switch
+        {
+            "00001610-0000-0010-8000-00AA00389B71" => "AAC",
+            "00000055-0000-0010-8000-00AA00389B71" => "MP3",
+            "00000001-0000-0010-8000-00AA00389B71" or "00000003-0000-0010-8000-00AA00389B71" => "PCM",
+            _ => null,
+        };
+        if (codec is not null) parts.Add(codec);
+        if (audio.SampleRate > 0) parts.Add((audio.SampleRate / 1000d).ToString("0.###", CultureInfo.CurrentCulture) + " kHz");
+        if (audio.Channels > 0) parts.Add(audio.Channels switch
+        {
+            1 => UiText.Get("MediaInfo.AudioMono"),
+            2 => UiText.Get("MediaInfo.AudioStereo"),
+            _ => UiText.Format("MediaInfo.AudioChannels", audio.Channels),
+        });
+        return parts.Count > 0 ? string.Join(" ", parts) : UiText.Get("MediaInfo.AudioPresent");
+    }
 
     private static string SizeText(long? bytes, bool unsaved) => bytes is long value ? SizeText(value)
         : UiText.Get(unsaved ? "MediaInfo.Unsaved" : "MediaInfo.Unavailable");

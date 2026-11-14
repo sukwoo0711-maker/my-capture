@@ -75,6 +75,10 @@ public sealed class CaptureRecord
     /// <summary>Number of video frames written; zero for still images.</summary>
     public long FrameCount { get; set; }
 
+    /// <summary>Expected recorded AAC stream; absent on older sidecars, which probe the source.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ExpectedAudio { get; set; }
+
     /// <summary>
     /// DPI scale of the monitor the capture came from, for example 1.5 at 150%.
     /// </summary>
@@ -324,6 +328,7 @@ public sealed class CaptureRecord
         && SameNumber(DurationMs, copy.DurationMs)
         && FrameRate == copy.FrameRate
         && FrameCount == copy.FrameCount
+        && ExpectedAudio == copy.ExpectedAudio
         && SameNumber(DpiScale, copy.DpiScale)
         && SourceMonitor == copy.SourceMonitor
         && IsPinned == copy.IsPinned

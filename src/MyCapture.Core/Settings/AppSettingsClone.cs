@@ -107,6 +107,9 @@ public static class AppSettingsClone
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()
     {
         Watermark = (s.Watermark ?? new()) with { },
+        RecordSystemAudio = s.RecordSystemAudio,
+        RecordMicrophone = s.RecordMicrophone,
+        PlaybackMuted = s.PlaybackMuted,
         FrameRate = s.FrameRate,
         UseStartDelay = s.UseStartDelay,
         StartDelaySeconds = s.StartDelaySeconds,

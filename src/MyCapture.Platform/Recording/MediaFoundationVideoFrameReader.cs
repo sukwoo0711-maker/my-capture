@@ -159,6 +159,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         try
         {
             Initialize(fullPath, options ?? MediaFoundationVideoFrameReaderOptions.Default);
+            if (MediaFoundationAudioReader.ReadSourceInfo(_reader!) is not null)
+                DurationMs = ReadVideoTrackDurationMs(fullPath);
         }
         catch
         {
@@ -189,8 +191,9 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     internal ForwardSeekPolicy ForwardSeekPolicy { get; set; } = new();
 
     /// <summary>
-    /// Reads only the container presentation duration (<c>MF_PD_DURATION</c>) without configuring
-    /// a decoder. This is the timeline every export decodes against. WPF's MediaElement and
+    /// Reads the container presentation duration (<c>MF_PD_DURATION</c>) without configuring
+    /// a decoder. Picture timelines use <see cref="DurationMs"/> or <see cref="ReadSourceInfo"/>
+    /// so AAC padding cannot extend filmstrips, details or exports. WPF's MediaElement and
     /// MediaPlayer take <c>NaturalDuration</c> from Windows Media Player's
     /// <c>IWMPMedia::get_duration</c>, which truncates the same MP4s to whole seconds.
     /// </summary>
@@ -224,7 +227,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     }
 
     /// <summary>
-    /// Reads the container duration and the nominal Y'CbCr range of the first video stream. The
+    /// Reads the video track duration and the nominal Y'CbCr range of the first video stream. The
     /// range comes from the container's declaration, or else from the decoder's output type (the
     /// H.264 sequence header's full-range flag), which needs the decoder but no decoded sample.
     /// A stream that declares nothing is studio range, the H.264 default and what recordings use.
@@ -246,7 +249,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         try
         {
             Check(MFCreateSourceReaderFromURL(fullPath, null, out reader), nameof(MFCreateSourceReaderFromURL));
-            double durationMs = ReadDurationMs(reader);
+            AudioSourceInfo? audio = MediaFoundationAudioReader.ReadSourceInfo(reader);
+            double durationMs = audio is null ? ReadDurationMs(reader) : ReadVideoTrackDurationMs(fullPath);
             Check(reader.SetStreamSelection(AllStreams, false), "IMFSourceReader.SetStreamSelection(all)");
             Check(reader.SetStreamSelection(FirstVideoStream, true), "IMFSourceReader.SetStreamSelection(video)");
             uint? declared = ReadNominalRange(reader, native: true);
@@ -255,7 +259,10 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
                 declared = ReadNominalRange(reader, native: false);
             }
 
-            return new VideoSourceInfo(durationMs, declared != NominalRangeFull);
+            return new VideoSourceInfo(durationMs, declared != NominalRangeFull)
+            {
+                Audio = audio,
+            };
         }
         finally
         {
@@ -595,6 +602,37 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         }
     }
 
+    private static double ReadVideoTrackDurationMs(string path)
+    {
+        if (MediaFoundationVideoTrackDuration.TryRead(path, out double duration)) return duration;
+        // Non-MP4 or fragmented source: walk compressed video samples only. No audio decoder
+        // or output device is created, and the caller's selected video decoder is untouched.
+        IMFSourceReader? native = null;
+        try
+        {
+            Check(MFCreateSourceReaderFromURL(path, null, out native), nameof(MFCreateSourceReaderFromURL));
+            Check(native.SetStreamSelection(AllStreams, false), "SetStreamSelection(duration all)");
+            Check(native.SetStreamSelection(FirstVideoStream, true), "SetStreamSelection(duration video)");
+            long end = 0;
+            while (true)
+            {
+                IMFSample? sample = null;
+                try
+                {
+                    Check(native.ReadSample(FirstVideoStream, 0, out _, out uint flags,
+                        out long timestamp, out sample), "ReadSample(video duration)");
+                    if ((flags & 1) != 0) throw new InvalidDataException("Video duration probe failed.");
+                    if (sample is not null && sample.GetSampleDuration(out long ticks) >= 0 && ticks > 0)
+                        end = Math.Max(end, checked(timestamp + ticks));
+                    if ((flags & EndOfStreamFlag) != 0) break;
+                }
+                finally { if (sample is not null) Marshal.ReleaseComObject(sample); }
+            }
+            return end / 10_000d;
+        }
+        finally { if (native is not null) Marshal.ReleaseComObject(native); }
+    }
+
     private void Seek(double sourceTimeMs)
     {
         Check(_reader!.Flush(FirstVideoStream), "IMFSourceReader.Flush");
@@ -870,7 +908,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
 
     // The count/pointer union member supplies native alignment: 16 bytes on x86, 24 on x64.
     [StructLayout(LayoutKind.Explicit)]
-    private struct PropVariant
+    internal struct PropVariant
     {
         [FieldOffset(0)] public ushort VariantType;
         [FieldOffset(2)] private ushort _reserved1;
@@ -888,7 +926,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct CountedPointer
+    internal struct CountedPointer
     {
         public uint Count;
         public IntPtr Pointer;
@@ -936,7 +974,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
     [ComImport]
     [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IMFSourceReader
+    internal interface IMFSourceReader
     {
         [PreserveSig] int GetStreamSelection(uint streamIndex, [MarshalAs(UnmanagedType.Bool)] out bool selected);
         [PreserveSig] int SetStreamSelection(uint streamIndex, [MarshalAs(UnmanagedType.Bool)] bool selected);

@@ -28,7 +28,7 @@ public sealed class SettingsStructureTests
     private static readonly (SettingsSection Section, string Fields)[] Expected =
     [
         (SettingsSection.Capture, "AfterCapture PlayCaptureSound NotifyOnQuickSave IncludeCursor ShowMagnifier ShowSelectionGrid AutoDetectWindows CaptureGuideColorMode CaptureGuideColorHex AlwaysShowKeyPanel ColorFormat AbortOnFocusLoss DelaySeconds RegionHistoryLimit"),
-        (SettingsSection.Recording, "RecordingFrameRate UseRecordingStartDelay RecordingStartDelaySeconds RecordingIncludeCursor RecordingCursorHighlight UseRecordingDraggedSize UseRecordingFixedSize RecordingPresetWidth RecordingPresetHeight RecordingWatermarkEnabled RecordingWatermark RecordingCaptureMode"),
+        (SettingsSection.Recording, "RecordingFrameRate UseRecordingStartDelay RecordingStartDelaySeconds RecordSystemAudio RecordMicrophone RecordingIncludeCursor RecordingCursorHighlight UseRecordingDraggedSize UseRecordingFixedSize RecordingPresetWidth RecordingPresetHeight RecordingWatermarkEnabled RecordingWatermark RecordingCaptureMode"),
         (SettingsSection.Editing, "StrokeThickness FontFamily FontSize MosaicBlockSize HighlighterOpacityPercent BlurRadius"),
         (SettingsSection.Pins, "RestoreOpenPinsOnLaunch CloseOnDoubleClick SnapWhileDragging InitialOpacity ZoomStep ClosedWindowRestoreLimit LightweightImagePins"),
         (SettingsSection.Text, "OcrQuality PreferredLanguages CacheResults"),
@@ -41,7 +41,7 @@ public sealed class SettingsStructureTests
     [Fact]
     public void EveryOriginalBindingAndManualControlSurvives()
     {
-        const string original = "AbortOnFocusLoss AfterCapture AlwaysShowKeyPanel AlwaysShowShortcutHints AutoCheckUpdates AutoDetectWindows BlurRadius CacheResults CaptureFullScreenHotkey CaptureGuideColorHex CaptureGuideColorMode CaptureHotkey CaptureTextHotkey CaptureWindowHotkey CapturesDirectoryOverride CloseOnDoubleClick ClosedWindowRestoreLimit ColorFormat DelaySeconds DelayedCaptureHotkey FileNamePattern FolderFilePrefix FontSize ForceCoreShortcuts GitHubIssueUrl Header HideAllPinsHotkey HighlighterOpacityPercent IncludeCursor InitialOpacity IsCustomCaptureGuideColor IsExpanded Language LaunchAtLogin LightweightImagePins MaxGiB MaxItems MosaicBlockSize NotifyOnQuickSave OcrQuality OpenLibraryHotkey PasteToScreenHotkey PauseRecordingHotkey PlayCaptureSound PreferredLanguages QuickSaveDirectoryOverride RecordRegionHotkey RecordingCaptureMode RecordingCursorHighlight RecordingFrameRate RecordingIncludeCursor RecordingPresetHeight RecordingPresetWidth RecordingStartDelaySeconds RecordingWatermarkEnabled RegionHistoryLimit RepeatLastRegionHotkey RestoreClosedPinHotkey RestoreOpenPinsOnLaunch ScrollingCaptureHotkey ShowMagnifier ShowSelectionGrid ShowSourceWindowTitle SnapWhileDragging StrokeThickness Text Theme ThumbnailLongEdge ToggleClickThroughHotkey UploadGitHubImageHotkey UseCurrentFolderForNewCaptures UseRecordingDraggedSize UseRecordingFixedSize UseRecordingStartDelay ZoomStep";
+        const string original = "AbortOnFocusLoss AfterCapture AlwaysShowKeyPanel AlwaysShowShortcutHints AutoCheckUpdates AutoDetectWindows BlurRadius CacheResults CaptureFullScreenHotkey CaptureGuideColorHex CaptureGuideColorMode CaptureHotkey CaptureTextHotkey CaptureWindowHotkey CapturesDirectoryOverride CloseOnDoubleClick ClosedWindowRestoreLimit ColorFormat DelaySeconds DelayedCaptureHotkey FileNamePattern FolderFilePrefix FontSize ForceCoreShortcuts GitHubIssueUrl Header HideAllPinsHotkey HighlighterOpacityPercent IncludeCursor InitialOpacity IsCustomCaptureGuideColor IsExpanded Language LaunchAtLogin LightweightImagePins MaxGiB MaxItems MosaicBlockSize NotifyOnQuickSave OcrQuality OpenLibraryHotkey PasteToScreenHotkey PauseRecordingHotkey PlayCaptureSound PreferredLanguages QuickSaveDirectoryOverride RecordMicrophone RecordRegionHotkey RecordSystemAudio RecordingCaptureMode RecordingCursorHighlight RecordingFrameRate RecordingIncludeCursor RecordingPresetHeight RecordingPresetWidth RecordingStartDelaySeconds RecordingWatermarkEnabled RegionHistoryLimit RepeatLastRegionHotkey RestoreClosedPinHotkey RestoreOpenPinsOnLaunch ScrollingCaptureHotkey ShowMagnifier ShowSelectionGrid ShowSourceWindowTitle SnapWhileDragging StrokeThickness Text Theme ThumbnailLongEdge ToggleClickThroughHotkey UploadGitHubImageHotkey UseCurrentFolderForNewCaptures UseRecordingDraggedSize UseRecordingFixedSize UseRecordingStartDelay ZoomStep";
         using Stream stream = typeof(SettingsStructureTests).Assembly.GetManifestResourceStream("SettingsFixture.Window.xaml")!;
         using var reader = new StreamReader(stream);
         string markup = reader.ReadToEnd();
@@ -51,7 +51,7 @@ public sealed class SettingsStructureTests
         XElement root = XDocument.Parse(markup).Root!;
         foreach (string name in new[] { "FontFamilyBox", "RetentionChoiceBox", "GitHubTokenBox", "RecordingWatermarkSettingsButton" })
             Assert.Single(root.Descendants(), element => (string?)element.Attribute(x + "Name") == name);
-        Assert.Equal(75, SettingsSectionCatalog.Fields.Count);
+        Assert.Equal(77, SettingsSectionCatalog.Fields.Count);
         Assert.Equal(SettingsSectionCatalog.Fields.Count, SettingsSectionCatalog.Fields.Select(field => field.DraftProperty).Distinct().Count());
     }
 

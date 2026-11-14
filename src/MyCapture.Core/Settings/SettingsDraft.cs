@@ -66,6 +66,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _recordingStartDelaySeconds = string.Empty;
     private bool _recordingIncludeCursor;
     private bool _recordingCursorHighlight;
+    private bool _recordSystemAudio;
+    private bool _recordMicrophone;
     private bool _useRecordingFixedSize;
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
@@ -247,6 +249,18 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _recordingIncludeCursor;
         set => Set(ref _recordingIncludeCursor, value);
+    }
+
+    public bool RecordSystemAudio
+    {
+        get => _recordSystemAudio;
+        set => Set(ref _recordSystemAudio, value);
+    }
+
+    public bool RecordMicrophone
+    {
+        get => _recordMicrophone;
+        set => Set(ref _recordMicrophone, value);
     }
 
     /// <summary>Draws an emphasis ring around the pointer on recorded frames.</summary>
@@ -736,6 +750,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingStartDelaySeconds = Int(s.Recording.StartDelaySeconds);
         _recordingIncludeCursor = s.Recording.IncludeCursor;
         _recordingCursorHighlight = s.Recording.CursorHighlight;
+        _recordSystemAudio = s.Recording.RecordSystemAudio;
+        _recordMicrophone = s.Recording.RecordMicrophone;
         // The recorder applies a preset only when both sides are positive; no preset, the 0 older
         // versions saved, or a single side all record the dragged size. The boxes then offer a
         // common size, ready for when the fixed size is chosen.
@@ -845,6 +861,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedSavedLocationTipCount = s.General.SavedLocationTipCount;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
+        _preservedPlaybackMuted = s.Recording.PlaybackMuted;
 
         RaiseAllChanged();
         ValidateAll();
@@ -883,6 +900,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
         B(_recordingCursorHighlight), B(_useRecordingFixedSize), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
+        B(_recordSystemAudio), B(_recordMicrophone),
         Int(_preservedRecordingBitrateBitsPerSecond), Dbl(_preservedRecordingCoarseStepSeconds),
         System.Text.Json.JsonSerializer.Serialize(_recordingWatermark),
         _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
@@ -972,8 +990,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 StartDelaySeconds = ParseInt(_recordingStartDelaySeconds),
                 IncludeCursor = _recordingIncludeCursor,
                 CursorHighlight = _recordingCursorHighlight,
+                RecordSystemAudio = _recordSystemAudio,
+                RecordMicrophone = _recordMicrophone,
                 BitrateBitsPerSecond = _preservedRecordingBitrateBitsPerSecond,
                 CoarseStepSeconds = _preservedRecordingCoarseStepSeconds,
+                PlaybackMuted = _preservedPlaybackMuted,
                 // The dragged size is saved as no preset, which the recorder already reads as free.
                 PresetWidth = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetWidth) : null,
                 PresetHeight = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetHeight) : null,
@@ -1579,6 +1600,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
+    private bool _preservedPlaybackMuted;
 
     /// <summary>The state <see cref="LoadFrom"/> last loaded; see <see cref="HasUnappliedChanges"/>.</summary>
     private string[] _baseline = [];

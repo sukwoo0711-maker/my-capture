@@ -106,6 +106,29 @@ internal sealed class VideoExportDialog : Window
     private int _settingsRevision;
     private int _sampleRequest;
     private double _sampleMotion;
+    private int? _audioBitrate;
+
+    private int AudioBitrate
+    {
+        get
+        {
+            if (_audioBitrate is int known) return known;
+            if (_recording.ExpectedAudio == true) return (_audioBitrate = AudioEncoderOptions.BitrateBitsPerSecond).Value;
+            try
+            {
+                return (_audioBitrate = File.Exists(_recording.OutputPath)
+                    && MediaFoundationAudioReader.ReadSourceInfo(_recording.OutputPath) is not null
+                        ? AudioEncoderOptions.BitrateBitsPerSecond : 0).Value;
+            }
+            catch (Exception error)
+            {
+                _logs.CreateLogger("VideoExport").LogWarning(error, "Could not read the source audio size budget");
+                // A metadata failure cannot promise the smaller silent-file estimate. Saving
+                // performs the mandatory probe again and reports the preservation failure.
+                return (_audioBitrate = AudioEncoderOptions.BitrateBitsPerSecond).Value;
+            }
+        }
+    }
 
     internal VideoExportDialog(RecordingResult recording, VideoEditDocument document, ILoggerFactory logs, bool gif)
     {
@@ -885,7 +908,7 @@ internal sealed class VideoExportDialog : Window
         if (!IsGif)
         {
             DisplayedFrameCount = 0;
-            long bytes = EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, span, TargetReductionPercent);
+            long bytes = EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, span, TargetReductionPercent, AudioBitrate);
             KoreanWordWrap.Show(_estimate, UiText.Format("MediaExport_Mp4Summary", FormatSize(bytes), FormatClock(span), _recording.Width, _recording.Height));
             foreach (TextBlock reserve in _estimateReserves) KoreanWordWrap.Show(reserve, string.Empty);
             _adviceRow.Visibility = Visibility.Collapsed;
@@ -1109,10 +1132,19 @@ internal sealed class VideoExportDialog : Window
     /// The MP4 size the summary line promises before anything is encoded: the standard bitrate
     /// for the source size over the kept range, less the chosen reduction.
     /// </summary>
-    internal static long EstimateMp4Bytes(int width, int height, int fps, double spanMs, int reduction)
+    internal static long EstimateMp4Bytes(int width, int height, int fps, double spanMs, int reduction, int audioBitrate = 0)
     {
         int standard = VideoEncoderOptions.DeriveBitrate(width, height, fps);
         double seconds = Math.Max(0, spanMs) / 1000;
+        if (audioBitrate > 0 && seconds > 0)
+        {
+            long baseline = Math.Max(1, (long)Math.Ceiling((standard + audioBitrate) / 8d * seconds / 0.97));
+            int video = reduction <= 0 ? standard
+                : VideoExportCalculation.ReducedBitrate(baseline, spanMs, reduction, standard, audioBitrate);
+            // Include the same mux allowance used when choosing the bitrate. The minimum video
+            // bitrate plus fixed AAC bitrate can exceed the requested target; show that floor.
+            return (long)Math.Ceiling((video + audioBitrate) / 8d * seconds / 0.97);
+        }
         return (long)Math.Round(standard / 8d * seconds * (100 - Math.Clamp(reduction, 0, 90)) / 100);
     }
 
@@ -1125,8 +1157,8 @@ internal sealed class VideoExportDialog : Window
         int standard = VideoEncoderOptions.DeriveBitrate(_recording.Width, _recording.Height, _recording.Fps);
         if (reduction <= 0) return standard;
         // The target-reduction model against the estimated standard size: no baseline encode.
-        long baseline = Math.Max(1, EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, SpanMs, 0));
-        return VideoExportCalculation.ReducedBitrate(baseline, SpanMs, reduction, standard);
+        long baseline = Math.Max(1, EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, SpanMs, 0, AudioBitrate));
+        return VideoExportCalculation.ReducedBitrate(baseline, SpanMs, reduction, standard, AudioBitrate);
     }
 
     private string? ChooseDestination(string extension)
@@ -1218,6 +1250,9 @@ internal sealed class VideoExportDialog : Window
                 token.ThrowIfCancellationRequested();
                 var file = new FileInfo(temp);
                 if (!file.Exists || file.Length <= 0) throw new IOException("The video encoder produced no output.");
+                if (!gif)
+                    RecordingAudioExpectation.FromSource(source).Validate(temp,
+                        Math.Ceiling(SpanMs * Math.Max(1, _recording.Fps) / 1000) * 1000 / Math.Max(1, _recording.Fps), token);
                 // Hold the source against replacement through an alias while the result takes
                 // its final name; the lexical check above cannot see junctions or hard links.
                 using var sourceProtection = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -1239,7 +1274,9 @@ internal sealed class VideoExportDialog : Window
         catch (Exception error)
         {
             _logs.CreateLogger("VideoExport").LogWarning(error, "Video export failed");
-            if (!_closed) ShowStatus(UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)), failed: true);
+            if (!_closed) ShowStatus(error is RecordingAudioPreservationException
+                ? UiText.Get("RecordingAudio_SaveFailed")
+                : UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)), failed: true);
         }
         finally
         {

@@ -121,6 +121,25 @@ public partial class App : Application
         if (TryStartPinPreview(e.Args)) return;
 #endif
 
+        // Validate this explicit diagnostic before any resident-probe or real-profile setup.
+        // It owns its output root and never participates in the resident mutex/hotkey lifecycle.
+        if (FindSwitch(e.Args, RecordingAudioSelfTestOptions.CommandLineSwitch) >= 0)
+        {
+            try
+            {
+                RecordingAudioSelfTestOptions request = RecordingAudioSelfTestOptions.Parse(e.Args);
+                RecordingAudioSelfTest.ValidateOutputRoot(request.OutputDirectory);
+                RunSelfTest(request.OutputDirectory, RecordingAudioSelfTest.ReportName,
+                    directory => RecordingAudioSelfTest.Run(request with { OutputDirectory = directory }));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine(ex.Message);
+                Shutdown(2);
+            }
+            return;
+        }
+
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
         // hotkey conflicts if the normal instance already owns them.
@@ -513,6 +532,14 @@ public partial class App : Application
             _services.GetRequiredService<SettingsStore>().SaveInBackground(
                 _settings.DeepClone(), "Could not persist recording watermark preferences");
         };
+        _recorder.PersistAudioPreferences = (systemAudio, microphone) =>
+        {
+            _settings!.Recording.RecordSystemAudio = systemAudio;
+            _settings.Recording.RecordMicrophone = microphone;
+            _settingsWindow?.RefreshRecordingAudioPreferences();
+            _services.GetRequiredService<SettingsStore>().SaveInBackground(
+                _settings.DeepClone(), "Could not persist recording audio preferences");
+        };
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
         _recorder.CaptureSelectionRequested = HandleCaptureRequested;
@@ -562,6 +589,7 @@ public partial class App : Application
                 bool previousShortcutHints = _settings.General.AlwaysShowShortcutHints;
                 _settings = updated;
                 _recorder?.RefreshWatermarkSettings(updated.Recording.Watermark);
+                _recorder?.RefreshAudioPreferences(updated.Recording.RecordSystemAudio, updated.Recording.RecordMicrophone);
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
                 _pins?.ApplySettings();

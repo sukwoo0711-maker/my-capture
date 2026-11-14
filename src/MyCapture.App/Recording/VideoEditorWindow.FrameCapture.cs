@@ -133,6 +133,8 @@ internal sealed partial class VideoEditorWindow
                 + _saveCurrentFrameButton.Margin.Left + _saveCurrentFrameButton.Margin.Right;
             double required = _playButton!.DesiredSize.Width + _positionChip.Margin.Left
                 + TextWidth(_positionLabel) + saveWidth + _detailToggle.DesiredSize.Width;
+            if (_muteButton.Visibility == Visibility.Visible)
+                required += _muteButton.DesiredSize.Width + _muteButton.Margin.Left + _muteButton.Margin.Right;
             bool compact = required > transport.ActualWidth + 0.5;
             // The shared helper also switches to the icon-only padding used by every command face.
             CommandButtonPresentation.CompactLabel(_saveCurrentFrameButton, compact);

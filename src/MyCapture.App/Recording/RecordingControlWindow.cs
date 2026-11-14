@@ -41,7 +41,7 @@ namespace MyCapture.App.Recording;
 /// are never inside the recorded region anyway (they live in the strip, outside it).
 /// </para>
 /// </remarks>
-internal sealed class RecordingControlWindow : Window
+internal sealed partial class RecordingControlWindow : Window
 {
     // Six DIPs stay visible on dense/high-DPI displays and provide a forgiving visual target
     // while the transparent interior remains draggable before recording starts.
@@ -65,9 +65,10 @@ internal sealed class RecordingControlWindow : Window
     private const double MinStripWidth = 560.0;
     private double CurrentStripWidth => CompactSession
         ? (_paused || _timerText.Text.Length > 5 ? 236 : 216) + Math.Max(0, _pauseButton.Width - 36)
-        : MinStripWidth;
+            + _audioButton.DesiredSize.Width
+        : Math.Max(MinStripWidth, _audioMessageWidth);
     private bool CompactSession => (_previewRecording || IsRecording) && _readyAnnounced
-        && !_stopping && !_completionPending && !_finished;
+        && !_stopping && !_completionPending && !_finished && _audioMessage is null;
 
     // Wait for the in-flight frame to finish before marking the in-region clock as paused.
     private static readonly TimeSpan PauseParkTimeout = TimeSpan.FromSeconds(2);
@@ -107,6 +108,7 @@ internal sealed class RecordingControlWindow : Window
     private readonly Button _cancelButton;
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
+    private readonly TextBlock _audioStatusText = new();
     private readonly SymbolIcon _recordingIndicator = new()
     {
         Size = 16,
@@ -222,6 +224,11 @@ internal sealed class RecordingControlWindow : Window
 
     /// <summary>True while the recording is paused (the capture loop has stopped grabbing).</summary>
     internal bool IsPaused => _paused;
+
+    internal RecordingAudioDiagnostics? AudioDiagnostics => _recorder?.AudioDiagnostics;
+
+    internal bool SetAudioSources(bool systemEnabled, bool microphoneEnabled) =>
+        ApplyAudioPreferences(systemEnabled, microphoneEnabled);
 
     /// <summary>True while a pause or resume is still being applied.</summary>
     internal bool IsPauseTransitionPending => _pauseTransition;
@@ -483,6 +490,7 @@ internal sealed class RecordingControlWindow : Window
         bool beforeRecording = !IsRecording && !_previewRecording && !_stopping && !_completionPending && !_finished;
         _cancelButton.Visibility = beforeRecording ? Visibility.Visible : Visibility.Collapsed;
         _moreButton.IsEnabled = !_stopping && !_completionPending && !_finished;
+        _audioButton.IsEnabled = !_stopping && !_completionPending && !_finished;
     }
 
     private bool _completionPending;
@@ -598,7 +606,7 @@ internal sealed class RecordingControlWindow : Window
         out Button cancel)
     {
         var panel = new Grid { Margin = new Thickness(10, 8, 10, 8) };
-        for (int column = 0; column < 7; column++)
+        for (int column = 0; column < 8; column++)
             panel.ColumnDefinitions.Add(new ColumnDefinition
             {
                 Width = column == 2 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto,
@@ -612,7 +620,7 @@ internal sealed class RecordingControlWindow : Window
             Style = TryStyle("Button.Primary"),
         };
         primary.Click += (_, _) => OnPrimaryClicked();
-        Grid.SetColumn(primary, 4);
+        Grid.SetColumn(primary, 5);
 
         // Shown only while recording. A regular themed button keeps the theme's focus visual,
         // high-contrast colours and Space/Enter activation after Tab.
@@ -625,7 +633,7 @@ internal sealed class RecordingControlWindow : Window
             Visibility = Visibility.Collapsed,
         };
         pause.Click += (_, _) => _ = TogglePause();
-        Grid.SetColumn(pause, 3);
+        Grid.SetColumn(pause, 4);
 
         // Results only: empty before recording, then the recording state. The cell gets whatever
         // width the buttons leave, so it shows the state alone; how to resume or finish is in its
@@ -639,6 +647,17 @@ internal sealed class RecordingControlWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         Grid.SetColumn(status, 2);
+
+        _audioStatusText.Text = UiText.Get("Recording_NoAudio");
+        _audioStatusText.VerticalAlignment = VerticalAlignment.Center;
+        _audioStatusText.Margin = new Thickness(0);
+        _audioStatusText.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+        _audioStatusText.FontSize = TypeScale.Caption;
+        _audioStatusText.TextWrapping = TextWrapping.NoWrap;
+        AutomationProperties.SetName(_audioStatusText, _audioStatusText.Text);
+        ConfigureAudioButton();
+        Grid.SetColumn(_audioButton, 3);
+        panel.Children.Add(_audioButton);
 
         timer = new TextBlock
         {
@@ -682,7 +701,7 @@ internal sealed class RecordingControlWindow : Window
         more.Click += (_, _) => OpenMoreMenu();
         AutomationProperties.SetName(more, UiText.Get("Onboard_RecordMore"));
         AutomationProperties.SetHelpText(more, UiText.Get("Onboard_RecordMoreHelp"));
-        Grid.SetColumn(more, 5);
+        Grid.SetColumn(more, 6);
         panel.Children.Add(more);
 
         // Before recording only; while recording, stop is the way out.
@@ -707,9 +726,9 @@ internal sealed class RecordingControlWindow : Window
         cancel.ToolTip = $"{UiText.Get("Text_E1C96EF1EA0F")}  Esc";
         AutomationProperties.SetHelpText(cancel, (string)cancel.ToolTip);
         AutomationProperties.SetAcceleratorKey(cancel, "Esc");
-        Grid.SetColumn(cancel, 6);
+        Grid.SetColumn(cancel, 7);
         panel.Children.Add(cancel);
-        Grid.SetColumnSpan(_completionProgress, 7);
+        Grid.SetColumnSpan(_completionProgress, 8);
         AutomationProperties.SetName(_completionProgress, UiText.Get("Text_C1767C4F1218"));
         panel.Children.Add(_completionProgress);
 
@@ -1019,6 +1038,7 @@ internal sealed class RecordingControlWindow : Window
             _recorder = _recorderFactory();
             string output = _outputPathFactory();
             _recorder.Start(_screenRegion, output, _settings);
+            BeginAudioSession();
         }
         catch (Exception ex)
         {
@@ -1057,6 +1077,7 @@ internal sealed class RecordingControlWindow : Window
         };
         _elapsedTimer.Tick += (_, _) => UpdateTimer();
         _elapsedTimer.Start();
+        RefreshAudioState();
     }
 
     private void UpdateTimer()
@@ -1084,6 +1105,7 @@ internal sealed class RecordingControlWindow : Window
         _timerText.Text = clock;
         UpdateTimerAutomation();
         if (widthChanged) ApplyPhysicalLayout(positionHwnd: IsLoaded);
+        RefreshAudioState();
     }
 
     /// <summary>
@@ -1401,7 +1423,7 @@ internal sealed class RecordingControlWindow : Window
 
                 break;
             case Key.Enter or Key.Space when !IsRecording && _countdownTimer is null:
-                if (_moreButton.IsKeyboardFocusWithin || _cancelButton.IsKeyboardFocusWithin)
+                if (_moreButton.IsKeyboardFocusWithin || _cancelButton.IsKeyboardFocusWithin || _audioButton.IsKeyboardFocusWithin)
                 {
                     break;
                 }
@@ -1478,6 +1500,10 @@ internal sealed class RecordingControlWindow : Window
     /// </summary>
     private void AnnounceStatus(string? help = null)
     {
+        if (_audioMessage is not null && !_stopping && !_completionPending && !_finished)
+            _statusText.Text = _audioMessage;
+        else if (_stopping || _completionPending || _finished)
+        { _audioMessage = null; _audioMessageWidth = 0; }
         AutomationProperties.SetName(_statusText, _statusText.Text);
         AutomationProperties.SetHelpText(_statusText, help ?? string.Empty);
         _statusText.ToolTip = help;
@@ -1585,6 +1611,7 @@ internal sealed class RecordingControlWindow : Window
         _elapsedTimer?.Stop();
         _savedHold?.Stop();
         _savedHold = null;
+        if (_audioMenu is not null) _audioMenu.IsOpen = false;
         // A direct close while Saved is leaving (app exit) ends the exit; its close is then moot.
         FluidMotion.CompleteExit(this);
 

@@ -26,6 +26,9 @@ public sealed record RecordingResult(
 {
     public RecordingPerformance? Performance { get; init; }
 
+    public bool? ExpectedAudio { get; init; }
+    public RecordingAudioDiagnostics? AudioDiagnostics { get; init; }
+
     /// <summary>Wall-clock time spent paused. Never part of <see cref="DurationMs"/> or the clip.</summary>
     public double PausedMs { get; init; }
 
@@ -97,6 +100,32 @@ public sealed class RegionRecorder : IDisposable
     private readonly Func<VideoEncoderOptions, IVideoEncoder> _encoderFactory;
     private readonly ILogger _log;
     private readonly TimeProvider _time;
+    private readonly RecordingAudioSourceFactory? _audioSourceFactory;
+    private RecordingAudioSession? _audio;
+    private RecordingEncoderQueue? _audioQueue;
+    private AudioEncoderState _audioEncoderState;
+    private bool _systemAudioEnabled, _microphoneEnabled;
+    private long _lastVideoTimestamp100ns = -1, _videoQueueDrops;
+    private double _stopMs, _finalizeMs;
+
+    public RecordingAudioDiagnostics AudioDiagnostics
+    {
+        get
+        {
+            long lastVideo = Interlocked.Read(ref _lastVideoTimestamp100ns);
+            return (_audio?.Snapshot()
+                ?? RecordingAudioSession.InactiveSnapshot(_audioEncoderState, _systemAudioEnabled, _microphoneEnabled)) with
+            {
+                FirstVideoTimestamp100ns = lastVideo < 0 ? -1 : 0,
+                LastVideoTimestamp100ns = lastVideo,
+                VideoQueueDrops = Interlocked.Read(ref _videoQueueDrops),
+                PeakQueueBytes = _audioQueue?.PeakBufferedBytes ?? 0,
+                PeakQueueAudioFrames = _audioQueue?.PeakBufferedAudioFrames ?? 0,
+                MaximumQueuedLead100ns = _audioQueue?.MaximumQueuedLead100ns ?? 0,
+                StopMs = _stopMs, FinalizeMs = _finalizeMs,
+            };
+        }
+    }
 
     // Guards the pause timeline and the parked flag; the capture thread and the UI thread
     // read the time base inside this lock so the timeline only ever moves forwards.
@@ -149,12 +178,26 @@ public sealed class RegionRecorder : IDisposable
         RegionFrameGrabber grabber,
         Func<VideoEncoderOptions, IVideoEncoder> encoderFactory,
         ILogger log,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        RecordingAudioSourceFactory? audioSourceFactory = null)
     {
         _grabber = grabber ?? throw new ArgumentNullException(nameof(grabber));
         _encoderFactory = encoderFactory ?? throw new ArgumentNullException(nameof(encoderFactory));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _time = timeProvider ?? TimeProvider.System;
+        _audioSourceFactory = audioSourceFactory;
+    }
+
+    /// <summary>Changes an already audio-enabled session; never adds a stream to a silent start.</summary>
+    public bool SetAudioSources(bool systemEnabled, bool microphoneEnabled)
+    {
+        lock (_pauseGate)
+        {
+            if (_stopRequested || _audio is null) return false;
+            _systemAudioEnabled = systemEnabled; _microphoneEnabled = microphoneEnabled;
+            _audio.SetSources(systemEnabled, microphoneEnabled);
+            return true;
+        }
     }
 
     public bool IsRecording => _thread is { IsAlive: true };
@@ -174,10 +217,12 @@ public sealed class RegionRecorder : IDisposable
     {
         lock (_pauseGate)
         {
-            if (!IsRecording || _stopRequested || !_pauses.TryPause(RawElapsedMs(_time.GetTimestamp())))
+            long boundary = _time.GetTimestamp();
+            if (!IsRecording || _stopRequested || !_pauses.TryPause(RawElapsedMs(boundary)))
             {
                 return false;
             }
+            _audio?.Pause(boundary);
         }
 
         _log.LogInformation("Recording paused");
@@ -190,10 +235,12 @@ public sealed class RegionRecorder : IDisposable
     {
         lock (_pauseGate)
         {
-            if (!_pauses.TryResume(RawElapsedMs(_time.GetTimestamp())))
+            long boundary = _time.GetTimestamp();
+            if (!_pauses.TryResume(RawElapsedMs(boundary)))
             {
                 return false;
             }
+            _audio?.Resume(boundary);
 
             _captureParked = false;
             Monitor.PulseAll(_pauseGate);
@@ -246,6 +293,11 @@ public sealed class RegionRecorder : IDisposable
         _stopRequested = false;
         _result = null;
         _failure = null;
+        _audio = null; _audioQueue = null;
+        _audioEncoderState = AudioEncoderState.Disabled;
+        _systemAudioEnabled = settings.RecordSystemAudio; _microphoneEnabled = settings.RecordMicrophone;
+        Interlocked.Exchange(ref _lastVideoTimestamp100ns, -1);
+        Interlocked.Exchange(ref _videoQueueDrops, 0); _stopMs = 0; _finalizeMs = 0;
         lock (_pauseGate)
         {
             _pauses = new RecordingPauseTimeline();
@@ -263,7 +315,10 @@ public sealed class RegionRecorder : IDisposable
             _grabber.Width,
             _grabber.Height,
             settings.TargetFps,
-            bitrate);
+            bitrate)
+        {
+            Audio = settings.RecordSystemAudio || settings.RecordMicrophone ? new AudioEncoderOptions() : null,
+        };
 
         // The encoder is created INSIDE the capture thread (see CaptureLoop), not here. The
         // Media Foundation Sink Writer is an apartment-bound COM object: if it is created on
@@ -303,9 +358,12 @@ public sealed class RegionRecorder : IDisposable
             throw new InvalidOperationException("No recording is in progress.");
         }
 
+        long stopStarted = Stopwatch.GetTimestamp();
         RequestStopAndWake();
         _thread.Join();
         _thread = null;
+        _stopMs = Stopwatch.GetElapsedTime(stopStarted).TotalMilliseconds;
+        if (_result is not null) _result = _result with { AudioDiagnostics = AudioDiagnostics };
 
         if (_failure is not null)
         {
@@ -331,6 +389,8 @@ public sealed class RegionRecorder : IDisposable
             // Create the encoder here, on this MTA capture thread, so the MF Sink Writer's
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
+            _audioEncoderState = options.Audio is null ? AudioEncoderState.Disabled
+                : _encoder is IAudioVideoEncoder av ? av.AudioState : AudioEncoderState.Unavailable;
             double initializationMs = 0;
 
             // Always execute one capture iteration after encoder initialisation. H.264 MFT
@@ -371,20 +431,41 @@ public sealed class RegionRecorder : IDisposable
                         // this required first frame; Stop during startup still finalizes it.
                         lock (_pauseGate)
                         {
-                            Interlocked.Exchange(ref _recordingStarted, _time.GetTimestamp());
+                            long epoch = _time.GetTimestamp();
+                            Interlocked.Exchange(ref _recordingStarted, epoch);
+                            if (_audioEncoderState == AudioEncoderState.Available)
+                            {
+                                _audio = new RecordingAudioSession(epoch, _time.TimestampFrequency,
+                                    _systemAudioEnabled, _microphoneEnabled, _audioSourceFactory, _time,
+                                    initiallyPaused: _pauses.IsPaused || _stopRequested);
+                                _audioQueue = new RecordingEncoderQueue((IAudioVideoEncoder)_encoder, videoCapacity: 3);
+                                if (_stopRequested) _audio.RequestStop(epoch);
+                            }
                         }
                         initializationMs = Stopwatch.GetElapsedTime(initializationStarted).TotalMilliseconds;
                     }
                     phaseStarted = Stopwatch.GetTimestamp();
-                    _encoder!.WriteFrame(new EncoderFrame(
+                    var frame = new EncoderFrame(
                         pixels,
                         _grabber.Width,
                         _grabber.Height,
                         _grabber.Stride,
-                        timestampMs));
+                        timestampMs);
+                    if (_audioQueue is null) _encoder!.WriteFrame(frame);
+                    else if (!_audioQueue.TryEnqueueVideo(frame)) Interlocked.Increment(ref _videoQueueDrops);
+                    else Interlocked.Exchange(ref _lastVideoTimestamp100ns, (long)(timestampMs * 10_000));
+                    if (_audioQueue is null) Interlocked.Exchange(ref _lastVideoTimestamp100ns, (long)(timestampMs * 10_000));
                     double encodeMs = Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                     encodeTotal += encodeMs;
                     encodeMax = Math.Max(encodeMax, encodeMs);
+                }
+
+                if (_audio is not null)
+                {
+                    long ready100ns = Math.Max(0, (long)(ActiveElapsedMs() * 10_000)
+                        - RecordingAudioSession.CaptureLookbehindMilliseconds * 10_000L);
+                    ready100ns = Math.Min(ready100ns, Math.Max(0, _lastVideoTimestamp100ns) + 10_000_000L / options.Fps);
+                    DrainAudioThrough(RecordingAudioFormat.SampleAt100ns(ready100ns));
                 }
 
                 if (_stopRequested)
@@ -395,7 +476,7 @@ public sealed class RegionRecorder : IDisposable
                 double wait = clock.MillisecondsUntilNextFrame(ActiveElapsedMs());
                 if (wait > 0)
                 {
-                    delay.Wait(Math.Min(wait, MaxFrameWaitMs));
+                    delay.Wait(Math.Min(wait, _audio is null ? MaxFrameWaitMs : 10));
                 }
             }
 
@@ -412,17 +493,28 @@ public sealed class RegionRecorder : IDisposable
                 pausedMs = _pauses.PausedMs(rawEnd);
                 pauseCount = _pauses.PauseCount;
                 Interlocked.Exchange(ref _recordingEnded, endedAt);
+                _audio?.RequestStop(endedAt);
+            }
+
+            if (_audio is not null)
+            {
+                _audio.JoinSources();
+                // The final fixed-duration video sample owns the file's end. The capture
+                // timeline trims native PCM at Stop; any remaining video tail is silence.
+                long videoEnd = Math.Max(0, _lastVideoTimestamp100ns) + 10_000_000L / options.Fps;
+                DrainAudioThrough(RecordingAudioFormat.SampleAt100ns(videoEnd));
             }
 
             long finalizeStarted = Stopwatch.GetTimestamp();
-            _encoder!.Complete();
+            if (_audioQueue is null) _encoder!.Complete(); else _audioQueue.Complete();
             double finalizationMs = Stopwatch.GetElapsedTime(finalizeStarted).TotalMilliseconds;
+            _finalizeMs = finalizationMs;
 
             _result = new RecordingResult(
                 options.OutputPath,
                 recordedMs,
                 options.Fps,
-                clock.EmittedFrames,
+                clock.EmittedFrames - _videoQueueDrops,
                 _grabber.Width,
                 _grabber.Height)
             {
@@ -432,6 +524,8 @@ public sealed class RegionRecorder : IDisposable
                 },
                 PausedMs = pausedMs,
                 PauseCount = pauseCount,
+                ExpectedAudio = _audioEncoderState == AudioEncoderState.Available,
+                AudioDiagnostics = AudioDiagnostics,
             };
 
             _log.LogInformation(
@@ -455,13 +549,18 @@ public sealed class RegionRecorder : IDisposable
         }
         finally
         {
+            if (_audio is not null)
+            {
+                _audio.RequestStop(_time.GetTimestamp());
+                if (_failure is not null) _audio.JoinSources();
+            }
             // Dispose the encoder on THIS capture thread (same apartment it was created and
             // used in). Disposing MF COM objects from another thread would repeat the
             // cross-apartment fault. After this the reference is cleared so Dispose()/Stop()
             // on the caller thread never touch apartment-bound COM.
             try
             {
-                _encoder?.Dispose();
+                if (_audioQueue is null) _encoder?.Dispose(); else _audioQueue.Dispose();
             }
             catch (Exception ex)
             {
@@ -532,7 +631,20 @@ public sealed class RegionRecorder : IDisposable
         _stopRequested = true;
         lock (_pauseGate)
         {
+            _audio?.RequestStop(_time.GetTimestamp());
             Monitor.PulseAll(_pauseGate);
+        }
+    }
+
+    private void DrainAudioThrough(long endSample)
+    {
+        if (_audio is null || _audioQueue is null) return;
+        while (_audio.OutputFrames < endSample)
+        {
+            RecordingAudioBlock block = _audio.RenderNext(endSample);
+            if (!_audioQueue.TryEnqueueAudio(block)) throw new InvalidOperationException("Audio encoder queue capacity was exceeded.");
+            _audioQueue.DrainThrough(RecordingAudioFormat.SampleTime100ns(block.EndSample));
+            _audio.Commit(block);
         }
     }
 

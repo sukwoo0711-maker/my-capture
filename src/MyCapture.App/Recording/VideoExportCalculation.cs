@@ -1,4 +1,5 @@
 using System.IO;
+using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Recording;
 
@@ -8,6 +9,8 @@ internal sealed class VideoExportCalculation : IDisposable
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("MyCapture-video-export-");
     private readonly string _extension;
     private string _selectedName = "standard";
+    private double _durationMs;
+    private RecordingAudioExpectation? _expectedAudio;
     internal long BaselineBytes { get; private set; }
     internal long ResultBytes { get; private set; }
     internal int TargetReduction { get; private set; }
@@ -25,35 +28,52 @@ internal sealed class VideoExportCalculation : IDisposable
         return (long)(baselineBytes * ((100 - reduction) / 100m));
     }
 
-    internal static int ReducedBitrate(long baselineBytes, double durationMs, int reduction, int standardBitrate)
+    internal static int ReducedBitrate(long baselineBytes, double durationMs, int reduction, int standardBitrate,
+        int audioBitrate = 0)
     {
         if (!double.IsFinite(durationMs) || durationMs <= 0) throw new ArgumentOutOfRangeException(nameof(durationMs));
         if (standardBitrate is < 64_000 or > 24_000_000) throw new ArgumentOutOfRangeException(nameof(standardBitrate));
+        if (audioBitrate is not (0 or 128_000)) throw new ArgumentOutOfRangeException(nameof(audioBitrate));
         long target = TargetBytes(baselineBytes, reduction);
         // Reserve a little room for the container. This is a bitrate choice, never a size promise.
-        double desired = target * 8d * 1000 / durationMs * 0.97;
+        double desired = target * 8d * 1000 / durationMs * 0.97 - audioBitrate;
         return (int)Math.Clamp(desired, 64_000, standardBitrate);
     }
 
     internal static VideoExportCalculation Calculate(
         int reduction, double durationMs, int standardBitrate,
         Action<string, int, bool, CancellationToken> render,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int audioBitrate = 0)
     {
         _ = TargetBytes(1, reduction);
         if (!double.IsFinite(durationMs) || durationMs <= 0) throw new ArgumentOutOfRangeException(nameof(durationMs));
         if (standardBitrate is < 64_000 or > 24_000_000) throw new ArgumentOutOfRangeException(nameof(standardBitrate));
-        var result = new VideoExportCalculation(false) { TargetReduction = reduction };
+        if (audioBitrate is not (0 or 128_000)) throw new ArgumentOutOfRangeException(nameof(audioBitrate));
+        var result = new VideoExportCalculation(false) { TargetReduction = reduction, _durationMs = durationMs };
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             render(result.OwnedPath("standard"), standardBitrate, true, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             result.BaselineBytes = result.ResultBytes = result.Length("standard");
+            if (audioBitrate == 0)
+            {
+                using var header = File.OpenRead(result.OwnedPath("standard"));
+                if (VideoLibraryService.HasIsoBaseMediaFileSignature(header)
+                    && MediaFoundationAudioReader.ReadSourceInfo(result.OwnedPath("standard")) is not null)
+                    audioBitrate = AudioEncoderOptions.BitrateBitsPerSecond;
+            }
+            if (audioBitrate > 0)
+            {
+                result._expectedAudio = new(true, 48_000, 2);
+                result._expectedAudio.Validate(result.OwnedPath("standard"), durationMs, cancellationToken);
+            }
             if (reduction > 0)
             {
-                int bitrate = ReducedBitrate(result.BaselineBytes, durationMs, reduction, standardBitrate);
+                int bitrate = ReducedBitrate(result.BaselineBytes, durationMs, reduction, standardBitrate, audioBitrate);
                 render(result.OwnedPath("reduced"), bitrate, false, cancellationToken);
+                result._expectedAudio?.Validate(result.OwnedPath("reduced"), durationMs, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 long reducedBytes = result.Length("reduced");
                 if (reducedBytes < result.ResultBytes)
@@ -120,6 +140,16 @@ internal sealed class VideoExportCalculation : IDisposable
         // alternate path through a directory junction or hard link cannot replace it.
         // A lexical comparison alone cannot protect the source from those aliases.
         using var sourceProtection = new FileStream(originalSource, FileMode.Open, FileAccess.Read, FileShare.Read);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_extension == ".mp4")
+        {
+            // The staged render is not evidence that the immutable source was silent. In
+            // particular, callers using the default budget must not publish a lost AAC track.
+            RecordingAudioExpectation sourceAudio = RecordingAudioExpectation.FromSource(originalSource);
+            RecordingAudioExpectation expectedAudio = _expectedAudio is { Present: true }
+                ? _expectedAudio : sourceAudio;
+            expectedAudio.Validate(ResultPath, _durationMs, cancellationToken);
+        }
         // A unique sibling is staged beside the exact SaveFileDialog choice. Never delete
         // or truncate that destination on cancellation/failure, and never load a video byte[].
         string temporary = Path.Combine(parent, ".MyCapture-export-" + Guid.NewGuid().ToString("N") + ".tmp");

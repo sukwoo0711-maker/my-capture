@@ -99,6 +99,7 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Help.Annotation", [.. CatalogRows(ShortcutScope.Annotation), ("EditorFlow_PinHint", Display(keys.PasteToScreen)), .. CatalogRows(ShortcutScope.Crop)]),
                 ("Workspace.Library", CatalogRows(ShortcutScope.Library)),
                 ("Help.Video", [("Help.Play", ShortcutCatalog.Hints(ShortcutScope.Video, "Play")), ("Help.Frame", FrameStepKeys),
+                    ("PlaybackAudio_Toggle", ShortcutCatalog.Hints(ShortcutScope.Video, "Mute")),
                     ("Video.TrimIn", ShortcutCatalog.Hints(ShortcutScope.Video, "In")), ("Video.TrimOut", ShortcutCatalog.Hints(ShortcutScope.Video, "Out")),
                     ("Help.Gif", ShortcutCatalog.Hints(ShortcutScope.Video, "Gif")),
                     ("VideoFrame_Save", ShortcutCatalog.Hints(ShortcutScope.Video, "SaveFrame")),

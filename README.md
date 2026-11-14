@@ -48,8 +48,9 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 | 영역 캡처 | `Ctrl+Shift+C` | 캡처는 클립보드에 복사되므로 이어서 `F3`을 누르면 핀이 됩니다. 캡처 직후 뜨는 작은 카드에서는 클릭하거나 `Alt+Q`를 누른 뒤 `E` 편집, `S` 저장, `T` 텍스트 복사 |
 | 핀 모두 숨기기/보이기 | `Shift+F3` | 4.5.0부터 새 설치 기본값. 트레이 메뉴의 '핀 모두 숨기기'로도 실행 |
 | 닫은 핀 다시 열기 | `Ctrl+Shift+F3` | 최근에 닫은 핀부터 다시 열기. 기존 설정의 지정 키는 유지 |
-| 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료 |
+| 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료. 설정 → 녹화 또는 녹화 컨트롤의 소리 메뉴에서 시스템 소리·마이크 선택(기본값은 모두 꺼짐) |
 | 라이브러리 열기 | `Ctrl+Shift+Z` | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
+| 동영상 음소거 / 음소거 해제 | `M` | 플레이어·영상 편집기에서 소리가 있는 영상에 사용. 선택은 두 창이 공유하고 다음 실행에도 유지 |
 | 클립보드 이미지를 GitHub 첨부 URL로 | 설정에서 지정(예: `F9`) | 설정한 이슈 Write 칸에 붙여 넣고 user-attachments URL을 복사 |
 | 편집기 개인정보 가리기 | `Ctrl+Shift+R` | 편집기 안에서. 이 PC에서 인식한 개인정보 후보를 편집 가능한 가림막으로 추가 |
 | 편집기 도장 찍기 | `S` | 편집기 안에서. 한 번 등록한 로고나 블로그 이름을 등록한 위치에 일반 이미지로 추가. 처음에는 이미지 파일을 고르고, 오른쪽 클릭 메뉴에서 이미지 변경, 불투명도, 지우기 |
@@ -130,7 +131,8 @@ A click-through pin does not take clicks, so press `Shift+F3` twice or choose Tu
 | Region capture | `Ctrl+Shift+C` (the capture goes to the clipboard, so `F3` pins it; on the small card that appears, click it or press `Alt+Q`, then `E` edit, `S` save, `T` copy text) |
 | Hide or show all pins | `Shift+F3` (new installs from 4.5.0); also in the tray menu |
 | Reopen closed pin | `Ctrl+Shift+F3`; existing settings keep their assigned key |
-| Start or stop region recording | `Ctrl+Shift+X` |
+| Start or stop region recording | `Ctrl+Shift+X`; choose system audio and microphone in Settings → Recording or the recording control's audio menu (both off by default) |
+| Mute or unmute a video | `M` in the player or video editor when the video has audio; both windows share the choice and remember it across sessions |
 | Open the library | `Ctrl+Shift+Z` |
 | Turn the clipboard image into a GitHub attachment URL | Assign in Settings (for example `F9`) |
 | Redact personal data (in the editor) | `Ctrl+Shift+R` |

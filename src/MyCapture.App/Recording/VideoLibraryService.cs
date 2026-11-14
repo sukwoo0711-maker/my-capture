@@ -206,7 +206,11 @@ internal sealed class VideoLibraryService
             record.DurationMs = Math.Max(1, result.DurationMs);
             record.FrameRate = Math.Max(1, result.Fps);
             record.FrameCount = Math.Max(1, result.EmittedFrames);
+            record.ExpectedAudio = result.ExpectedAudio;
             record.UpdatedAt = DateTimeOffset.Now;
+            if (record.ExpectedAudio is not null)
+                AtomicFile.WriteAllText(Path.Combine(directory, CaptureFileNames.VideoPending),
+                    JsonSerializer.Serialize(record, JsonOptions));
 
             // A path and plausible metadata do not prove that the encoder completed a playable
             // MP4. Decode the first and final presentation samples before creating the durable
@@ -379,11 +383,14 @@ internal sealed class VideoLibraryService
                 editDocument.SourceDurationMs);
             cancellationToken.ThrowIfCancellationRequested();
 
+            RecordingAudioExpectation expectedAudio = record.ExpectedAudio == true
+                ? new(true, 48_000, 2) : RecordingAudioExpectation.FromSource(SourcePath(record));
             _ = await ValidateCompletedRenderAsync(
                 stagePath,
                 record,
                 normalized.OutputDurationMs,
-                cancellationToken);
+                cancellationToken,
+                expectedAudio: expectedAudio);
             BitmapSource thumbnail = await CreateThumbnailAsync(
                 stagePath,
                 record.Width,
@@ -404,7 +411,8 @@ internal sealed class VideoLibraryService
                 Math.Max(1, normalized.OutputDurationMs),
                 normalized.HasEdits,
                 MeasureProspectiveMediaBytes(directory, stagePath, thumbnailStage, editsStage),
-                DateTimeOffset.Now);
+                DateTimeOffset.Now,
+                expectedAudio.Present);
             var journal = new VideoFinalizeJournal
             {
                 RecordId = record.Id,
@@ -417,6 +425,7 @@ internal sealed class VideoLibraryService
                 HadEdits = File.Exists(Path.Combine(directory, CaptureFileNames.VideoEdits)),
                 Previous = previous,
                 Next = next,
+                ExpectedAudio = expectedAudio,
             };
             AtomicFile.WriteAllText(
                 Path.Combine(directory, FinalizeJournal),
@@ -563,7 +572,10 @@ internal sealed class VideoLibraryService
         Math.Max(1, record.FrameRate),
         Math.Max(1, record.FrameCount),
         record.Width,
-        record.Height);
+        record.Height)
+        {
+            ExpectedAudio = record.ExpectedAudio,
+        };
 
     private async Task<BitmapSource> CreateThumbnailAsync(
         string sourcePath,
@@ -628,6 +640,12 @@ internal sealed class VideoLibraryService
         // A size or timeline that differs from the encoder's report does not prove damage either:
         // startup recovery publishes a decodable file with its decoded values, so it is kept.
         ValidateDecodedTimeline(info, record, record.DurationMs, allowShorterThanExpected: true);
+        RecordingAudioExpectation? expectedAudio = record.ExpectedAudio is bool present
+            ? new(present, present ? 48_000 : 0, present ? 2 : 0)
+            : CaptureCompletionProbeForTest is null ? RecordingAudioExpectation.FromSource(stagePath) : null;
+        if (expectedAudio is { Present: true })
+            await Task.Run(() => expectedAudio.Validate(stagePath, info.DurationMs, cancellationToken), cancellationToken);
+        record.ExpectedAudio ??= expectedAudio?.Present;
         return info;
     }
 
@@ -641,7 +659,8 @@ internal sealed class VideoLibraryService
         CaptureRecord record,
         double expectedDurationMs,
         CancellationToken cancellationToken,
-        bool allowShorterThanExpected = false)
+        bool allowShorterThanExpected = false,
+        RecordingAudioExpectation? expectedAudio = null)
     {
         if (FindConclusiveFileDefect(stagePath) is { } defect)
         {
@@ -666,6 +685,8 @@ internal sealed class VideoLibraryService
         }
 
         ValidateDecodedTimeline(info, record, expectedDurationMs, allowShorterThanExpected);
+        if (expectedAudio is { Present: true })
+            await Task.Run(() => expectedAudio.Validate(stagePath, info.DurationMs, cancellationToken), cancellationToken);
         return info;
     }
 
@@ -834,6 +855,11 @@ internal sealed class VideoLibraryService
                         .GetAwaiter()
                         .GetResult()
                     : _abandonedCaptureProbeForTest(writing);
+                RecordingAudioExpectation? expectedAudio = recovered.ExpectedAudio is bool present
+                    ? new(present, present ? 48_000 : 0, present ? 2 : 0)
+                    : _abandonedCaptureProbeForTest is null ? RecordingAudioExpectation.FromSource(writing) : null;
+                expectedAudio?.Validate(writing, mediaInfo.DurationMs);
+                recovered.ExpectedAudio ??= expectedAudio?.Present;
                 int framesPerSecond = recovered.FrameRate is >= 1 and <= 120
                     ? recovered.FrameRate
                     : 30;
@@ -967,7 +993,10 @@ internal sealed class VideoLibraryService
                         recovered,
                         recovered.DurationMs,
                         CancellationToken.None,
-                        allowShorterThanExpected: true)
+                        allowShorterThanExpected: true,
+                        expectedAudio: recovered.ExpectedAudio is bool present
+                            ? new(present, present ? 48_000 : 0, present ? 2 : 0)
+                            : RecordingAudioExpectation.FromSource(publicationCandidate))
                     .GetAwaiter()
                     .GetResult();
                 recovered.DurationMs = playable.DurationMs;
@@ -1088,6 +1117,7 @@ internal sealed class VideoLibraryService
         target.DurationMs = recovered.DurationMs;
         target.FrameRate = recovered.FrameRate;
         target.FrameCount = recovered.FrameCount;
+        target.ExpectedAudio = recovered.ExpectedAudio;
         target.DpiScale = recovered.DpiScale;
         target.SourceMonitor = recovered.SourceMonitor;
         target.SourceWindowTitle = recovered.SourceWindowTitle;
@@ -1242,6 +1272,13 @@ internal sealed class VideoLibraryService
             BlockRecord(record);
             return false;
         }
+
+        // Old journals have no expectation. The immutable source remains authoritative, so an
+        // interrupted edit cannot make missing audio acceptable by omitting its new metadata.
+        RecordingAudioExpectation expectedAudio = journal.ExpectedAudio
+            ?? (record.ExpectedAudio == true ? new(true, 48_000, 2)
+                : RecordingAudioExpectation.FromSource(SourcePath(record)));
+        expectedAudio.Validate(rendered, next.DurationMs);
 
         ApplySnapshotToQueue(record, next);
         _queue.SaveRecordMetaOrThrow(record);
@@ -1768,10 +1805,13 @@ internal sealed class VideoLibraryService
 
         public VideoRecordSnapshot? Next { get; set; } = new();
 
+        public RecordingAudioExpectation? ExpectedAudio { get; set; }
+
         public bool IsStructurallyValid() =>
             RecordId != Guid.Empty
             && Previous is not null
             && Next is not null
+            && (ExpectedAudio is null || ExpectedAudio.IsValid)
             && ExpectedContentRevision is >= 0 and < long.MaxValue
             && Previous.IsValid(ExpectedContentRevision)
             && Next.IsValid(ExpectedContentRevision + 1)
@@ -1799,6 +1839,8 @@ internal sealed class VideoLibraryService
 
         public long ContentRevision { get; set; }
 
+        public bool? ExpectedAudio { get; set; }
+
         public DateTimeOffset UpdatedAt { get; set; }
 
         public string? OcrText { get; set; }
@@ -1813,6 +1855,7 @@ internal sealed class VideoLibraryService
             HasAnnotations = record.HasAnnotations,
             TotalBytes = record.TotalBytes,
             ContentRevision = record.ContentRevision,
+            ExpectedAudio = record.ExpectedAudio,
             UpdatedAt = record.UpdatedAt,
             OcrText = record.OcrText,
             OcrLanguage = record.OcrLanguage,
@@ -1824,12 +1867,14 @@ internal sealed class VideoLibraryService
             double durationMs,
             bool hasAnnotations,
             long totalBytes,
-            DateTimeOffset updatedAt) => new()
+            DateTimeOffset updatedAt,
+            bool expectedAudio) => new()
             {
                 DurationMs = durationMs,
                 HasAnnotations = hasAnnotations,
                 TotalBytes = totalBytes,
                 ContentRevision = checked(record.ContentRevision + 1),
+                ExpectedAudio = expectedAudio,
                 UpdatedAt = updatedAt,
                 OcrText = null,
                 OcrLanguage = null,
@@ -1851,6 +1896,7 @@ internal sealed class VideoLibraryService
             record.HasAnnotations = HasAnnotations;
             record.TotalBytes = TotalBytes;
             record.ContentRevision = ContentRevision;
+            record.ExpectedAudio = ExpectedAudio ?? record.ExpectedAudio;
             record.UpdatedAt = UpdatedAt;
             record.OcrText = OcrText;
             record.OcrLanguage = OcrLanguage;

@@ -61,8 +61,8 @@ public sealed class RecordingControlViewportTests
                 foreach (Button cancel in Buttons(strip).OfType<Button>().Where(button => !ReferenceEquals(button, primary)))
                     cancel.Style = (Style)window.FindResource("Button.Ghost");
                 window.UpdateLayout();
-                // Before recording: start, the options menu and cancel.
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 3);
+                // Before recording: audio sources, start, the options menu and cancel.
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 4);
                 SaveEvidence(window, strip, monitor, fullScreen, "ready");
 
                 // Exercise the real start command and capture worker. The injected encoder
@@ -74,8 +74,8 @@ public sealed class RecordingControlViewportTests
                 primary.Style = (Style)window.FindResource("Button.Danger");
                 window.UpdateLayout();
                 // The pause button joins the palette once recording starts and cancel leaves it:
-                // stop, pause and the options menu.
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 3);
+                // audio sources, stop, pause and the options menu.
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 4);
                 Assert.True(primary.IsEnabled);
                 SaveEvidence(window, strip, monitor, fullScreen, "recording");
 
@@ -86,7 +86,7 @@ public sealed class RecordingControlViewportTests
                 Assert.Null(failure);
                 Assert.True(finished);
                 window.UpdateLayout();
-                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 3, requireEnabled: false);
+                AssertControlsInsideWorkArea(strip, monitor.WorkArea, expectedButtons: 4, requireEnabled: false);
                 SaveEvidence(window, strip, monitor, fullScreen, "completed");
             }
             finally
@@ -106,7 +106,7 @@ public sealed class RecordingControlViewportTests
         Assert.True(strip.IsVisible);
         // The pause button stays collapsed until recording starts; every other button is shown.
         ButtonBase[] buttons = Buttons(strip).Where(button => button.Visibility != Visibility.Collapsed).ToArray();
-        Assert.Equal(expectedButtons, buttons.Length); // start/stop, [pause/resume], options, [cancel before recording]
+        Assert.Equal(expectedButtons, buttons.Length); // audio, start/stop, [pause/resume], options, [cancel before recording]
         foreach (ButtonBase button in buttons)
         {
             Assert.True(button.IsVisible && button.IsTabStop && button.Focusable);

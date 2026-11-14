@@ -76,7 +76,17 @@ internal static class TrimReencoder
         int bitrate = bitrateBitsPerSecond ?? VideoEncoderOptions.DeriveBitrate(width, height, fps);
         if (bitrate is < 64_000 or > 24_000_000)
             throw new ArgumentOutOfRangeException(nameof(bitrateBitsPerSecond));
-        var options = new VideoEncoderOptions(outputPath, width, height, fps, bitrate);
+        RecordingAudioExpectation expectedAudio;
+        try
+        {
+            expectedAudio = recording.ExpectedAudio == true ? new(true, 48_000, 2)
+                : RecordingAudioExpectation.FromSource(sourcePath);
+        }
+        catch (Exception error) { throw new RecordingAudioPreservationException(error); }
+        var options = new VideoEncoderOptions(outputPath, width, height, fps, bitrate)
+        {
+            Audio = expectedAudio.Present ? new AudioEncoderOptions() : null,
+        };
         var request = new VideoFrameRenderRequest(
             sourcePath,
             inMs,
@@ -90,6 +100,9 @@ internal static class TrimReencoder
             frameEditLayers ?? [],
             removedRanges);
         Mp4RenderOptions attempt = renderOptions ?? Mp4RenderOptions.Default;
+        IReadOnlyList<RecordingAudioKeptRange>? audioRanges = expectedAudio.Present
+            ? RecordingAudioCutMap.Create(VideoCutTimeline.Create(inMs, outMs, removedRanges).KeptRanges)
+            : null;
         while (true)
         {
             IVideoEncoder? encoder = null;
@@ -97,12 +110,28 @@ internal static class TrimReencoder
             {
                 Mp4RenderStatistics statistics = VideoFrameRenderPipeline.RenderToEncoder(
                     request,
-                    format => encoder = encoderFactory(options with { InputFormat = format }),
+                    format =>
+                    {
+                        IVideoEncoder opened = encoderFactory(options with { InputFormat = format });
+                        if (audioRanges is null) return encoder = opened;
+                        try
+                        {
+                            return encoder = new RecordingAudioEditEncoder(
+                                opened, sourcePath, audioRanges, fps, cancellationToken);
+                        }
+                        catch { opened.Dispose(); throw; }
+                    },
                     attempt,
                     log,
                     progress,
                     cancellationToken);
                 (encoder ?? throw new InvalidOperationException("No video encoder was opened.")).Complete();
+                if (expectedAudio.Present)
+                {
+                    encoder.Dispose();
+                    encoder = null;
+                    expectedAudio.Validate(outputPath, statistics.Frames * 1000d / fps, cancellationToken);
+                }
                 log.LogInformation(
                     "Video re-rendered {Frames} frame(s) [{In:0}..{Out:0})ms from {Source}, {Composed} composed -> {Path}",
                     statistics.Frames,
@@ -113,12 +142,18 @@ internal static class TrimReencoder
                     LogText.SingleLine(outputPath));
                 return statistics;
             }
-            catch (Mp4HardwareDecodeException failure) when (!cancellationToken.IsCancellationRequested)
+            catch (Mp4HardwareDecodeException failure) when (attempt.PreferHardwareDecode
+                && !cancellationToken.IsCancellationRequested)
             {
                 log.LogWarning(
                     failure.InnerException,
                     "Hardware video decode failed during MP4 export; retrying with the software decoder.");
                 attempt = attempt with { PreferHardwareDecode = false };
+            }
+            catch (Exception failure) when (expectedAudio.Present
+                && failure is not OperationCanceledException and not RecordingAudioPreservationException)
+            {
+                throw new RecordingAudioPreservationException(failure);
             }
             finally
             {

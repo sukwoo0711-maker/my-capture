@@ -28,7 +28,7 @@ namespace MyCapture.Platform.Recording;
 /// top-down in Media Foundation, so NV12 rows are copied in order.
 /// </para>
 /// </remarks>
-public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
+public sealed partial class MediaFoundationVideoEncoder : IAudioVideoEncoder
 {
     private static readonly Guid MFMediaType_Video = new("73646976-0000-0010-8000-00AA00389B71");
     private static readonly Guid MFVideoFormat_H264 = new("34363248-0000-0010-8000-00AA00389B71");
@@ -72,10 +72,13 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
     {
     }
 
-    internal MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log, uint? diagnosticQualityVsSpeed)
+    internal MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log, uint? diagnosticQualityVsSpeed,
+        Action<AudioEncoderSetupStage>? audioSetupForTest = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _audioSetupForTest = audioSetupForTest;
+        _audioOwnerThread = options.Audio is null ? 0 : Environment.CurrentManagedThreadId;
         if (diagnosticQualityVsSpeed is > 100)
             throw new ArgumentOutOfRangeException(nameof(diagnosticQualityVsSpeed));
         if (diagnosticQualityVsSpeed.HasValue && (options.ConstantQuality.HasValue || options.QualityVsSpeed.HasValue))
@@ -95,7 +98,22 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 
         try
         {
-            Initialize();
+            try
+            {
+                Initialize(options.Audio is not null);
+            }
+            catch (AudioSetupException ex)
+            {
+                // No sample has been accepted. Release the incomplete sink before reopening
+                // the same output URL; the MF file sink replaces its incomplete container.
+                Marshal.ReleaseComObject(_writer!);
+                _writer = null;
+                _audioStreamIndex = -1;
+                AudioState = AudioEncoderState.Unavailable;
+                AudioUnavailableReason = ex.InnerException!.Message;
+                _log.LogWarning(ex.InnerException, "Audio setup failed; starting a video-only recording");
+                Initialize(withAudio: false);
+            }
         }
         catch
         {
@@ -291,7 +309,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
     }
 #pragma warning restore CS0649
 
-    private void Initialize()
+    private void Initialize(bool withAudio)
     {
         int fps = Math.Max(1, _options.Fps);
         _sampleDurationTicks = 10_000_000L / fps;
@@ -371,7 +389,22 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
             Marshal.ReleaseComObject(inType);
         }
 
-        Check(_writer!.BeginWriting(), nameof(IMFSinkWriter.BeginWriting));
+        if (withAudio)
+        {
+            try
+            {
+                _audioSetupForTest?.Invoke(AudioEncoderSetupStage.AudioStream);
+                InitializeAudio();
+                _audioSetupForTest?.Invoke(AudioEncoderSetupStage.BeginWriting);
+                Check(_writer!.BeginWriting(), nameof(IMFSinkWriter.BeginWriting));
+                AudioState = AudioEncoderState.Available;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                throw new AudioSetupException(ex);
+            }
+        }
+        else Check(_writer!.BeginWriting(), nameof(IMFSinkWriter.BeginWriting));
     }
 
     /// <summary>
@@ -416,6 +449,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 
     public void WriteFrame(in EncoderFrame frame)
     {
+        if (_options.Audio is not null) RequireAudioOwnerThread();
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_writer is null || _finalized)
         {
@@ -509,6 +543,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 
     public void Complete()
     {
+        if (_options.Audio is not null) RequireAudioOwnerThread();
         if (_finalized || _writer is null)
         {
             return;
@@ -560,6 +595,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
 
     public void Dispose()
     {
+        if (_options.Audio is not null) RequireAudioOwnerThread();
         if (_disposed)
         {
             return;

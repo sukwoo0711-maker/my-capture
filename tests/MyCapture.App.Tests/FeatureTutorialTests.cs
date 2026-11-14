@@ -134,7 +134,7 @@ public sealed class FeatureTutorialTests
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
             SaveHelpEvidence(help, tabs, language);
-            Assert.Equal(109, rows.Length);
+            Assert.Equal(110, rows.Length);
             foreach (var (label, shortcut) in new[]
             {
                 ("Shortcuts.Parent", "Alt+↑"),
@@ -143,6 +143,7 @@ public sealed class FeatureTutorialTests
                 ("VideoFrame_Save", "Shift+S"),
                 ("MediaExport_SaveEdits", "Ctrl+S"),
                 ("MediaExport_ExportFormats", "Ctrl+Shift+S"),
+                ("PlaybackAudio_Toggle", "M"),
             })
             {
                 UniformGrid added = Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get(label));

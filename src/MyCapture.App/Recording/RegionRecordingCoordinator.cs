@@ -120,6 +120,10 @@ internal sealed class RegionRecordingCoordinator
     internal VideoFrameCaptureService? FrameCaptureService { get; set; }
     internal Action<Guid>? ShowFrameInLibrary { get; set; }
     internal Action<RecordingWatermarkSettings>? PersistWatermarkSettings { get; set; }
+    internal Action<bool, bool>? PersistAudioPreferences { get; set; }
+
+    internal void RefreshAudioPreferences(bool systemEnabled, bool microphoneEnabled) =>
+        _controls?.RefreshAudioPreferences(systemEnabled, microphoneEnabled);
 
     /// <summary>Called with true once a finished recording is in the library, false when the recording or its save failed.</summary>
     internal Action<bool>? RecordingSaved { get; set; }
@@ -127,6 +131,9 @@ internal sealed class RegionRecordingCoordinator
     // Installed only by the explicit isolated resident long-run diagnostic before Toggle.
     // The grabber snapshots the delegate for the lifetime of that recording.
     internal Action<byte[], int, int, int>? SyntheticRecordingFrame { get; set; }
+
+    // Internal diagnostic/test seam; the ordinary UI exposes neither preferences nor devices.
+    internal RecordingAudioSourceFactory? RecordingAudioSourceFactory { get; set; }
 
     internal bool IsWatermarkLocked => _controls is { CanEditWatermark: false };
 
@@ -612,7 +619,7 @@ internal sealed class RegionRecordingCoordinator
                     options => new MediaFoundationVideoEncoder(
                         options,
                         _loggerFactory.CreateLogger<MediaFoundationVideoEncoder>()),
-                    _loggerFactory.CreateLogger<RegionRecorder>());
+                    _loggerFactory.CreateLogger<RegionRecorder>(), audioSourceFactory: RecordingAudioSourceFactory);
             }
 
             controls = new RecordingControlWindow(
@@ -624,6 +631,7 @@ internal sealed class RegionRecordingCoordinator
                 _loggerFactory.CreateLogger<RecordingControlWindow>());
             controls.WatermarkImageFolder = Path.Combine(_paths.DataRoot, StampStore.FolderName);
             controls.WatermarkSettingsChanged += OnWatermarkSettingsChanged;
+            controls.AudioPreferencesChanged += OnAudioPreferencesChanged;
             _controls = controls;
             controls.RecordingFinished += OnRecordingFinished;
             controls.Cancelled += OnControlsCancelled;
@@ -639,6 +647,7 @@ internal sealed class RegionRecordingCoordinator
             {
                 controls.RecordingFinished -= OnRecordingFinished;
                 controls.WatermarkSettingsChanged -= OnWatermarkSettingsChanged;
+                controls.AudioPreferencesChanged -= OnAudioPreferencesChanged;
                 controls.Cancelled -= OnControlsCancelled;
                 controls.Failed -= OnControlsFailed;
                 controls.Stopping -= OnControlsStopping;
@@ -666,6 +675,9 @@ internal sealed class RegionRecordingCoordinator
 
     private void OnWatermarkSettingsChanged(RecordingWatermarkSettings settings) =>
         PersistWatermarkSettings?.Invoke(settings);
+
+    private void OnAudioPreferencesChanged(bool systemEnabled, bool microphoneEnabled) =>
+        PersistAudioPreferences?.Invoke(systemEnabled, microphoneEnabled);
 
     private void OnControlsCancelled(object? sender, EventArgs e)
     {
@@ -699,6 +711,7 @@ internal sealed class RegionRecordingCoordinator
         {
             controls.RecordingFinished -= OnRecordingFinished;
             controls.WatermarkSettingsChanged -= OnWatermarkSettingsChanged;
+            controls.AudioPreferencesChanged -= OnAudioPreferencesChanged;
             controls.Cancelled -= OnControlsCancelled;
             controls.Failed -= OnControlsFailed;
             controls.Stopping -= OnControlsStopping;

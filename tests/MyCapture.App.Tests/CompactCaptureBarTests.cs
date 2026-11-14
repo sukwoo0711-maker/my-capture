@@ -51,6 +51,8 @@ public sealed class CompactCaptureBarTests
             TextBlock status = Field<TextBlock>(window, "_statusText");
             TextBlock clock = Field<TextBlock>(window, "_timerText");
             SymbolIcon indicator = Field<SymbolIcon>(window, "_recordingIndicator");
+            TextBlock audio = Field<TextBlock>(window, "_audioStatusText");
+            double audioWidth = window.AudioButtonForTest.DesiredSize.Width;
             Arrange(strip);
             var pauseCaption = new TextBlock
             {
@@ -62,8 +64,8 @@ public sealed class CompactCaptureBarTests
             Assert.Equal(pauseWidth, window.PauseButtonForTest.Width);
             Assert.Equal(RoundedWidth(window.PauseButtonForTest, pauseWidth), window.PauseButtonForTest.ActualWidth);
             // The compact pill keeps its clock room plus three 36-DIP targets; only the
-            // assigned pause chord needs additional horizontal room, reserved before Alt.
-            AssertStripWidth(window, strip, 216 + pauseWidth - 36);
+            // assigned pause chord and measured audio label need additional horizontal room.
+            AssertStripWidth(window, strip, 216 + pauseWidth - 36 + audioWidth);
             Assert.Equal(Visibility.Collapsed, status.Visibility);
             Assert.Equal(FontNumeralAlignment.Tabular, Typography.GetNumeralAlignment(clock));
             Assert.Equal("01:23", clock.Text);
@@ -97,9 +99,10 @@ public sealed class CompactCaptureBarTests
             Assert.Contains("01:23", clockPeer.GetName());
             Assert.Contains(status.Text, clockPeer.GetName());
 
+            audioWidth = window.AudioButtonForTest.DesiredSize.Width;
             window.PreviewRecordingForTest(true, TimeSpan.FromSeconds(83));
             Arrange(strip);
-            AssertStripWidth(window, strip, 236 + pauseWidth - 36);
+            AssertStripWidth(window, strip, 236 + pauseWidth - 36 + audioWidth);
             Assert.Equal(pausedLabel, status.Text);
             Assert.Equal(Visibility.Visible, status.Visibility);
             Assert.Equal(Grid.GetColumn(clock), Grid.GetColumn(status));
@@ -414,12 +417,13 @@ public sealed class CompactCaptureBarTests
             WindowDetectOverlayTests.PumpUntil(() => recorder.IsReady && Field<bool>(window, "_readyAnnounced")
                 && !window.IsPauseTransitionPending);
 
+            double audioWidth = window.AudioButtonForTest.DesiredSize.Width;
             Arrange(strip);
             Assert.Equal(1, Volatile.Read(ref captures));
             Assert.Equal(1, sink.Frames);
             Assert.Null(grabber.ActiveBackend); // Neither GDI nor WGC is opened for this lifecycle test.
             Assert.True(window.IsPaused && recorder.IsPaused);
-            AssertStripWidth(window, strip, 236 + Math.Max(0, window.PauseButtonForTest.Width - 36));
+            AssertStripWidth(window, strip, 236 + Math.Max(0, window.PauseButtonForTest.Width - 36) + audioWidth);
             Assert.Equal(Visibility.Visible, indicator.Visibility);
             Assert.Same(pausedGlyph, indicator.Data);
             Assert.False(indicator.HasAnimatedProperties);
