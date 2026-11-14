@@ -5039,6 +5039,9 @@ Turn off: {0}</value></data>
   <data name="ContactSheet.Preview" xml:space="preserve">
     <value>Page 1 preview</value>
   </data>
+  <data name="ContactSheet.PreviewPage" xml:space="preserve">
+    <value>Page {0} preview</value>
+  </data>
   <data name="ContactSheet.PageCount" xml:space="preserve">
     <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages}</value>
   </data>

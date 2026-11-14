@@ -5039,6 +5039,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="ContactSheet.Preview" xml:space="preserve">
     <value>1페이지 미리보기</value>
   </data>
+  <data name="ContactSheet.PreviewPage" xml:space="preserve">
+    <value>{0}페이지 미리보기</value>
+  </data>
   <data name="ContactSheet.PageCount" xml:space="preserve">
     <value>이미지 {0}개 · {1}페이지</value>
   </data>
