@@ -5501,6 +5501,11 @@ Install the model?</value></data>
   <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
   <data name="Stamp_Remove" xml:space="preserve"><value>Remove registered image</value></data>
   <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose watermark image</value></data>
+  <data name="ImagePicker_Title" xml:space="preserve"><value>Insert image</value></data>
+  <data name="ImagePicker_Insert" xml:space="preserve"><value>Insert</value></data>
+  <data name="ImagePicker_Browse" xml:space="preserve"><value>Browse files…</value></data>
+  <data name="ImagePicker_Empty" xml:space="preserve"><value>The library has no images.</value></data>
+  <data name="ImagePicker_ListName" xml:space="preserve"><value>Library images</value></data>
   <data name="Stamp_Changed" xml:space="preserve"><value>Watermark image changed</value></data>
   <data name="Stamp_OpacitySet" xml:space="preserve"><value>Watermark opacity {0}%</value></data>
   <data name="Stamp_Removed" xml:space="preserve"><value>Registered image removed · Placed watermarks stay</value></data>

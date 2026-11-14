@@ -430,6 +430,7 @@ public partial class App : Application
         AnnotationEditorPreferences.ReadPinHotkey = () => _settings!.Hotkeys.PasteToScreen;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         AnnotationEditorPreferences.StampFolder = () => Path.Combine(_services!.GetRequiredService<AppPaths>().DataRoot, StampStore.FolderName);
+        AnnotationEditorPreferences.LibraryImages = edited => _queue is { } queue ? LibraryImageSource.Create(queue, edited) : [];
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
         _tray.CaptureWindowRequested += (_, _) => HandleCaptureWindow();
         _tray.CaptureFullScreenRequested += (_, _) => HandleCaptureFullScreen();
@@ -2831,6 +2832,7 @@ public partial class App : Application
         AnnotationEditorPreferences.ReadPinHotkey = null;
         AnnotationEditorPreferences.Write = null;
         AnnotationEditorPreferences.StampFolder = null;
+        AnnotationEditorPreferences.LibraryImages = null;
         TextRecognitionRoute.Show = null;
         TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();
