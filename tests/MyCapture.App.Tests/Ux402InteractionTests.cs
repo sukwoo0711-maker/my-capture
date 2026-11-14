@@ -198,23 +198,6 @@ public sealed class Ux402InteractionTests
         finally { window.Close(); }
     });
 
-    [Theory]
-    [InlineData(1.0)] [InlineData(1.5)] [InlineData(2.0)]
-    public void CardStaysNearRegionAndInsideNegativeCoordinateMonitor(double scale)
-    {
-        var work = new RectD(-1920, 0, 1920, 1080);
-        var capture = new RectD(-1800, 100, 400, 200);
-        Rect position = QuickAccessWindow.Position(work, scale, 280, 110, capture);
-        // The visible card, inside the window's shadow band, sits 16 DIP right of and below the region.
-        Assert.Equal(capture.Right / scale + 16, position.Left + QuickAccessWindow.ShadowBand);
-        Assert.Equal(capture.Bottom / scale + 16, position.Top + QuickAccessWindow.ShadowBand);
-        foreach (RectD region in new[] { work, new RectD(-200, 990, 200, 90), new RectD(-1920, 0, 50, 50) })
-        {
-            Rect bounds = QuickAccessWindow.Position(work, scale, 280, 110, region);
-            Assert.True(bounds.Left >= work.Left / scale && bounds.Top >= work.Top / scale && bounds.Right <= work.Right / scale && bounds.Bottom <= work.Bottom / scale);
-        }
-    }
-
     private static AnnotationEditorControl Editor()
     {
         var image = Image(); var region = new RectD(0, 0, 640, 360);
