@@ -815,7 +815,7 @@ internal static class GifSharePolicy
                 continue;
             }
 
-            if (target.Bytes is long bytes && estimate.HighBytes > bytes)
+            if (target.Bytes is long bytes && estimate.HighBytes > GifShareFit.UpperLimit(bytes))
             {
                 reason = GifLimitReason.Size;
                 continue;
@@ -893,7 +893,7 @@ internal static class GifSharePolicy
         if (target.Bytes is long bytes)
         {
             double highPerMs = estimate.HighBytes / Math.Max(1, fullSourceMs);
-            maximum = Math.Min(maximum, bytes / Math.Max(1e-9, highPerMs));
+            maximum = Math.Min(maximum, GifShareFit.UpperLimit(bytes) / Math.Max(1e-9, highPerMs));
         }
 
         return Math.Max(0, Math.Floor(maximum / 1000) * 1000);

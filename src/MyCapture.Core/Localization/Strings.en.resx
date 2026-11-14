@@ -3160,7 +3160,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="MediaExport_EditedSuffix" xml:space="preserve"><value>_edited</value></data>
   <data name="MediaExport_Hint" xml:space="preserve"><value>The original video stays unchanged.</value></data>
-  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · within the {0} limit</value></data>
+  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · under the {0} limit</value></data>
   <data name="MediaExport_AdviceCurrentNoLimitShort" xml:space="preserve"><value>Recommended · no size limit</value></data>
   <data name="MediaExport_AdviceSwitchShort" xml:space="preserve"><value>Recommended: {0} · about {1}</value></data>
   <data name="MediaExport_AdviceMp4Short" xml:space="preserve"><value>Over the {0} GIF limit · MP4 recommended</value></data>
@@ -3841,8 +3841,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="GifPreview_Recommended" xml:space="preserve"><value>best fit</value></data>
   <data name="GifPreview_Estimate" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s · calculation about {3:N0} s</value></data>
   <data name="GifPreview_Exact" xml:space="preserve"><value>Size {0} (measured) · {1:N0} frames · playback {2:N1} s</value></data>
-  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays within {1}.</value></data>
-  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit within {1}, at an estimated {2}.</value></data>
+  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays under {1}.</value></data>
+  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit under {1}, at an estimated {2}.</value></data>
   <data name="GifPreview_AdviceCurrentOver" xml:space="preserve"><value>The current setting may exceed {1} (estimated {0}).</value></data>
   <data name="GifPreview_AdviceMp4" xml:space="preserve"><value>Even the smallest GIF setting is expected to exceed {1} ({0}). Export MP4, or trim the range to about {2:N0} s or less.</value></data>
   <data name="GifPreview_AdviceSpeed" xml:space="preserve"><value>Playback takes {0:N1} s. At {1:0.#}× speed it takes {2:N1} s. Speed barely changes the file size.</value></data>
@@ -5665,6 +5665,8 @@ Install the model?</value></data>
   <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
+  <data name="GifExport_SavedAdjusted" xml:space="preserve"><value>Saved · {0} · {1} · Lowered to {3} px wide at {4} fps to stay under the {2} share limit.</value></data>
+  <data name="GifExport_ShareLimitUnmet" xml:space="preserve"><value>Even the smallest GIF setting cannot stay under the {0} share limit (result {1}). Export MP4, or trim the range.</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="Pin_TranslationDocumentView" xml:space="preserve">
     <value>Show translation as text</value>

@@ -28,7 +28,7 @@ public sealed class VideoExportDialogTests
     [Theory]
     [InlineData(12_345_678, "ko-KR", "12.3MB")]
     [InlineData(1_000_000, "ko-KR", "1.0MB")]
-    [InlineData(999_500, "ko-KR", "1,000KB")]
+    [InlineData(999_500, "ko-KR", "999KB")]
     [InlineData(10, "ko-KR", "1KB")]
     [InlineData(12_345_678, "en-US", "12.3 MB")]
     [InlineData(4_200, "en-US", "4 KB")]
@@ -88,7 +88,7 @@ public sealed class VideoExportDialogTests
             Assert.True(dialog.CanExport);
             Assert.False(dialog.IsProgressVisible);
             Assert.Equal(UiText.Get("MediaExport_Hint"), dialog.StatusText);
-            Assert.Equal("예상 크기 약 2.1MB · 0:06.000 · 1280 × 720", dialog.EstimateText);
+            Assert.Equal("예상 크기 약 2.0MB · 0:06.000 · 1280 × 720", dialog.EstimateText);
 
             dialog.SizePresetIndex = 2;
             Assert.Equal(70, dialog.TargetReductionPercent);

@@ -1075,10 +1075,13 @@ internal sealed class VideoExportDialog : Window
         ? FormatSize(estimate.ExpectedBytes)
         : UiText.Format("GifPreview_SizeRange", FormatSize(estimate.LowBytes), FormatSize(estimate.HighBytes));
 
-    /// <summary>Decimal units, matching how share sites state their upload limits; MB with one decimal.</summary>
+    /// <summary>
+    /// Decimal units, matching how share sites state their upload limits; MB with one decimal.
+    /// A size is cut, never rounded up, so a file under a limit never reads as the limit itself.
+    /// </summary>
     internal static string FormatSize(long bytes) => bytes >= 1_000_000
-        ? UiText.Format("MediaExport_SizeMb", bytes / 1_000_000d)
-        : UiText.Format("MediaExport_SizeKb", Math.Max(1, bytes / 1_000d));
+        ? UiText.Format("MediaExport_SizeMb", Math.Floor(bytes / 100_000d) / 10)
+        : UiText.Format("MediaExport_SizeKb", Math.Max(1, Math.Floor(bytes / 1_000d)));
 
     /// <summary>
     /// The most bytes a GIF of <paramref name="frames"/> full images of this size can take. LZW
@@ -1161,6 +1164,8 @@ internal sealed class VideoExportDialog : Window
         double speed = SelectedSpeed;
         int revision = _settingsRevision;
         VideoExportCalculation? staged = gif ? _result : null;
+        long? shareLimit = gif ? SelectedShareTarget.Bytes : null;
+        GifExportQuality? adjusted = null;
         using var cancellation = new CancellationTokenSource();
         _cancellation = cancellation;
         SetWorking(true);
@@ -1218,6 +1223,28 @@ internal sealed class VideoExportDialog : Window
                 token.ThrowIfCancellationRequested();
                 var file = new FileInfo(temp);
                 if (!file.Exists || file.Length <= 0) throw new IOException("The video encoder produced no output.");
+                if (shareLimit is long limit)
+                {
+                    // The recommendation only estimates; the file itself is held under the limit.
+                    GifExportQuality exported = quality;
+                    long Encode(GifExportQuality candidate)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        File.Delete(temp);
+                        _gifSession.Export(temp, candidate, speed, progress, token);
+                        exported = candidate;
+                        return new FileInfo(temp).Length;
+                    }
+
+                    GifShareFitResult fit = GifShareFit.Fit(quality, file.Length, limit, Encode);
+                    if (!fit.Fits)
+                        throw UserFacingError.Mark(new IOException(UiText.Format("GifExport_ShareLimitUnmet", FormatSize(limit), FormatSize(fit.Bytes))));
+                    // The last probe was not the best fit; the frame cache makes this one cheap.
+                    if (!ReferenceEquals(exported, fit.Quality)) Encode(fit.Quality);
+                    if (!ReferenceEquals(fit.Quality, quality)) adjusted = fit.Quality;
+                    file.Refresh();
+                }
+
                 // Hold the source against replacement through an alias while the result takes
                 // its final name; the lexical check above cannot see junctions or hard links.
                 using var sourceProtection = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -1228,7 +1255,10 @@ internal sealed class VideoExportDialog : Window
             if (_closed) return;
             _savedPath = full;
             ShowStatus(gif
-                ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
+                ? adjusted is null
+                    ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
+                    : UiText.Format("GifExport_SavedAdjusted", Path.GetFileName(full), FormatSize(savedBytes),
+                        FormatSize(shareLimit ?? 0), AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, adjusted.LongEdge).Width, adjusted.FramesPerSecond)
                 : UiText.Format("MediaExport_Saved", Path.GetFileName(full)));
             _openFolder.Visibility = Visibility.Visible;
         }
