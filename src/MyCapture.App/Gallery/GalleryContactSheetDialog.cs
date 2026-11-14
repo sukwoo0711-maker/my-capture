@@ -15,7 +15,7 @@ using MyCapture.Core.Queue;
 
 namespace MyCapture.App.Gallery;
 
-internal sealed class GalleryContactSheetDialog : Window
+internal sealed partial class GalleryContactSheetDialog : Window
 {
     private const int ThumbnailSize = 96;
     private static readonly GalleryThumbnailLoader ThumbnailLoader = new();
@@ -26,7 +26,17 @@ internal sealed class GalleryContactSheetDialog : Window
     private readonly ComboBox _layout = new();
     private readonly ComboBox _caption = new();
     private readonly CheckBox _source = new() { Margin = new Thickness(0, 12, 0, 12) };
-    private readonly Image _preview = new() { Stretch = Stretch.Uniform, Margin = new Thickness(16) };
+    private readonly Image _preview = new()
+    {
+        Stretch = Stretch.Uniform, Margin = new Thickness(16),
+        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+    };
+    // The chosen image's cell on the shown page; drawn over the picture so a choice on the same page needs no new render.
+    private readonly Canvas _highlightLayer = new() { IsHitTestVisible = false };
+    private readonly Border _highlight;
+    private readonly TextBlock _previewLabel = new() { Margin = new Thickness(16, 0, 0, 0) };
+    private ContactSheetLayout? _shownLayout;
+    private int _shownPage = -1;
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MinHeight = 40 };
     private readonly ProgressBar _progress = new() { Height = 5, Minimum = 0, Visibility = Visibility.Collapsed };
     private readonly Button _save;
@@ -43,9 +53,6 @@ internal sealed class GalleryContactSheetDialog : Window
     private bool _syncingSort;
     private readonly LibraryActivityTracker? _activities;
     private int _generation;
-    private GalleryContactSheetOrderRow? _dragRow;
-    private Point _dragStart;
-    private bool _dragging;
 
     internal GalleryContactSheetDialog(IReadOnlyList<GalleryContactSheetItem> items, int skippedVideos, Func<bool> isCurrent,
         LibraryActivityTracker? activities = null)
@@ -99,10 +106,20 @@ internal sealed class GalleryContactSheetDialog : Window
             body.Children.Add(OrderPanel);
         }
         var previewPanel = new DockPanel();
-        var previewLabel = new TextBlock { Text = UiText.Get("ContactSheet.Preview"), Margin = new Thickness(16, 0, 0, 0) };
-        DockPanel.SetDock(previewLabel, Dock.Top);
-        previewPanel.Children.Add(previewLabel);
-        previewPanel.Children.Add(_preview);
+        _previewLabel.Text = UiText.Get("ContactSheet.Preview");
+        DockPanel.SetDock(_previewLabel, Dock.Top);
+        previewPanel.Children.Add(_previewLabel);
+        // Two rings, as Windows draws focus: one of them stands out on the white page in either theme.
+        var innerRing = new Border { BorderThickness = new Thickness(HighlightRing) };
+        innerRing.SetResourceReference(Border.BorderBrushProperty, "Surface.Base");
+        _highlight = new Border { BorderThickness = new Thickness(HighlightRing), Child = innerRing, Visibility = Visibility.Collapsed };
+        _highlight.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
+        _highlightLayer.Children.Add(_highlight);
+        var previewHost = new Grid();
+        previewHost.Children.Add(_preview);
+        previewHost.Children.Add(_highlightLayer);
+        previewPanel.Children.Add(previewHost);
+        _preview.SizeChanged += (_, _) => PlaceHighlight();
         Grid.SetColumn(previewPanel, ordering ? 2 : 1);
         body.Children.Add(previewPanel);
         root.Children.Add(body);
@@ -118,6 +135,11 @@ internal sealed class GalleryContactSheetDialog : Window
         Loaded += (_, _) => { RequestPreview(); _pageSize.Focus(); };
         _save.Click += async (_, _) => await SaveAsync();
         _cancel.Click += (_, _) => _exportCancellation?.Cancel();
+        // Esc while a row is dragged puts it back; it does not reach the Cancel button.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape && IsDraggingRow) { EndRowDrag(commit: false); e.Handled = true; }
+        };
         Closing += (_, e) =>
         {
             if (_exportCancellation is not null) { _exportCancellation.Cancel(); e.Cancel = true; }
@@ -125,6 +147,8 @@ internal sealed class GalleryContactSheetDialog : Window
         Closed += (_, _) =>
         {
             _closed = true; _generation++; _previewCancellation?.Cancel(); _preview.Source = null;
+            _shownLayout = null;
+            DropDragState();
             _thumbnailCancellation.Cancel();
         };
     }
@@ -133,10 +157,25 @@ internal sealed class GalleryContactSheetDialog : Window
 
     internal ImageSource? PreviewImage => _preview.Source;
 
+    /// <summary>The page (from 0) the preview shows, or -1 before the first preview.</summary>
+    internal int PreviewPage => _shownPage;
+
+    /// <summary>The chosen image's cell on the shown page, or -1 when it is not on it (left out, or no choice).</summary>
+    internal int HighlightedCell { get; private set; } = -1;
+
+    /// <summary>The ring around <see cref="HighlightedCell"/>.</summary>
+    internal FrameworkElement PreviewHighlight => _highlight;
+
+    // Each of the two rings, in DIP.
+    private const double HighlightRing = 2;
+
     /// <summary>The order column; absent when there is a single image.</summary>
     internal FrameworkElement? OrderPanel { get; }
 
     internal ListBox OrderList { get; } = new();
+
+    /// <summary>Images a page: 1 x 1, 1 x 2, 2 x 2, 2 x 3, 3 x 4.</summary>
+    internal ComboBox LayoutChoice => _layout;
 
     internal ComboBox SortChoice { get; } = new();
 
@@ -200,12 +239,12 @@ internal sealed class GalleryContactSheetDialog : Window
         itemStyle.Setters.Add(new Setter(AutomationProperties.NameProperty, new System.Windows.Data.Binding(nameof(GalleryContactSheetOrderRow.AutomationName))));
         OrderList.ItemContainerStyle = itemStyle;
         OrderList.SelectedIndex = 0;
-        OrderList.SelectionChanged += (_, _) => UpdateMoveButtons();
+        OrderList.SelectionChanged += (_, _) => { UpdateMoveButtons(); FollowSelection(); };
         OrderList.PreviewKeyDown += OnOrderKeyDown;
         OrderList.PreviewMouseLeftButtonDown += OnOrderMouseDown;
         OrderList.PreviewMouseMove += OnOrderMouseMove;
-        OrderList.PreviewMouseLeftButtonUp += (_, _) => EndDrag();
-        OrderList.LostMouseCapture += (_, _) => EndDrag();
+        OrderList.PreviewMouseLeftButtonUp += OnOrderMouseUp;
+        OrderList.LostMouseCapture += OnOrderLostCapture;
         var frame = new Border { Child = OrderList, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Padding = new Thickness(2) };
         frame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         panel.Children.Add(frame);
@@ -337,52 +376,7 @@ internal sealed class GalleryContactSheetDialog : Window
         return false;
     }
 
-    private void OnOrderMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        _dragRow = null;
-        if (_exportCancellation is not null || e.OriginalSource is not DependencyObject source) return;
-        // The include box keeps its own click; only the rest of the row picks the row up.
-        for (DependencyObject? node = source; node is not null && node != OrderList; node = VisualTreeHelper.GetParent(node))
-        {
-            if (node is ToggleButton) return;
-            if (node is ListBoxItem { DataContext: GalleryContactSheetOrderRow row })
-            {
-                _dragRow = row;
-                _dragStart = e.GetPosition(OrderList);
-                return;
-            }
-        }
-    }
-
-    private void OnOrderMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_dragRow is null || e.LeftButton != MouseButtonState.Pressed) return;
-        Point point = e.GetPosition(OrderList);
-        if (!_dragging)
-        {
-            if (Math.Abs(point.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-            _dragging = true;
-            OrderList.CaptureMouse();
-        }
-        // Near either edge the list scrolls so a long order can be crossed in one drag.
-        if (FindScrollViewer(OrderList) is { } scroller)
-        {
-            if (point.Y < 16) scroller.LineUp();
-            else if (point.Y > OrderList.ActualHeight - 16) scroller.LineDown();
-        }
-        DragRowTo(_dragRow, point);
-        e.Handled = true;
-    }
-
-    private void EndDrag()
-    {
-        bool dragging = _dragging;
-        _dragging = false;
-        _dragRow = null;
-        if (dragging && OrderList.IsMouseCaptured) OrderList.ReleaseMouseCapture();
-    }
-
-    /// <summary>Moves a dragged row to the row under <paramref name="point"/> (list coordinates).</summary>
+    /// <summary>Moves a row at once to the row under <paramref name="point"/> (list coordinates).</summary>
     internal bool DragRowTo(GalleryContactSheetOrderRow row, Point point)
     {
         int target = DropIndex(point);
@@ -507,19 +501,80 @@ internal sealed class GalleryContactSheetDialog : Window
         MoveDownButton.IsEnabled = idle && position >= 0 && position < _rows.Count - 1;
     }
 
-    private void RequestPreview()
+    /// <param name="full">
+    /// The pages themselves changed (options, order, inclusion), so the picture is cleared and Save waits for the
+    /// new count. A different choice in the order list only turns the page and keeps both.
+    /// </param>
+    private void RequestPreview(bool full = true)
     {
         if (!IsLoaded || _closed || _exportCancellation is not null) return;
+        // A page turn while the pages are still being worked out becomes that full preview.
+        full |= !_save.IsEnabled;
         _previewCancellation?.Cancel();
-        _pendingPreview = Task.WhenAll(_pendingPreview, UpdatePreviewAsync(++_generation, Options, OrderedItems()));
+        _pendingPreview = Task.WhenAll(_pendingPreview, UpdatePreviewAsync(++_generation, Options, OrderedItems(), full));
     }
 
-    private async Task UpdatePreviewAsync(int generation, ContactSheetOptions options, IReadOnlyList<GalleryContactSheetItem> items)
+    /// <summary>The page and cell of the chosen row in the PDF; the cell is -1 for a row left out.</summary>
+    private (int Page, int Cell) ChosenPlace(ContactSheetLayout layout, int included)
+    {
+        if (included == 0 || OrderList.SelectedItem is not GalleryContactSheetOrderRow chosen) return (0, -1);
+        int before = 0;
+        foreach (GalleryContactSheetOrderRow row in _rows)
+        {
+            if (ReferenceEquals(row, chosen)) break;
+            if (row.IsIncluded) before++;
+        }
+        // A row left out shows the page of the image before it, without a ring.
+        if (!chosen.IsIncluded) return (Math.Max(0, before - 1) / layout.CellsPerPage, -1);
+        return (before / layout.CellsPerPage, before % layout.CellsPerPage);
+    }
+
+    /// <summary>Rings the chosen image when its page is shown, or turns the preview to its page.</summary>
+    private void FollowSelection()
+    {
+        // A preview on its way picks up the choice when it draws; a drag previews only when it drops.
+        if (!IsLoaded || _closed || IsDraggingRow || _previewCancellation is not null || _shownLayout is null) return;
+        (int page, int cell) = ChosenPlace(_shownLayout, _order.IncludedCount);
+        if (page == _shownPage)
+        {
+            HighlightedCell = cell;
+            PlaceHighlight();
+        }
+        else RequestPreview(full: false);
+    }
+
+    private void PlaceHighlight()
+    {
+        if (HighlightedCell < 0 || _shownLayout is null || _preview.Source is null || _preview.ActualWidth <= 0)
+        {
+            _highlight.Visibility = Visibility.Collapsed;
+            return;
+        }
+        double scale = _preview.ActualWidth / _shownLayout.PageWidth;
+        Point origin = _preview.TranslatePoint(new Point(), _highlightLayer);
+        ContactSheetRect cell = _shownLayout.Cell(HighlightedCell);
+        // The outer ring sits in the gutter, the inner one on the cell's white margin.
+        double outset = HighlightRing;
+        Canvas.SetLeft(_highlight, origin.X + cell.X * scale - outset);
+        Canvas.SetTop(_highlight, origin.Y + cell.Y * scale - outset);
+        _highlight.Width = cell.Width * scale + 2 * outset;
+        _highlight.Height = cell.Height * scale + 2 * outset;
+        _highlight.Visibility = Visibility.Visible;
+    }
+
+    private async Task UpdatePreviewAsync(int generation, ContactSheetOptions options, IReadOnlyList<GalleryContactSheetItem> items,
+        bool full)
     {
         using var cancellation = new CancellationTokenSource();
         _previewCancellation = cancellation;
-        _save.IsEnabled = false;
-        _preview.Source = null;
+        if (full)
+        {
+            _save.IsEnabled = false;
+            _preview.Source = null;
+            _shownLayout = null;
+            _shownPage = HighlightedCell = -1;
+            PlaceHighlight();
+        }
         try
         {
             if (items.Count == 0 && _items.Count > 0)
@@ -527,18 +582,33 @@ internal sealed class GalleryContactSheetDialog : Window
                 KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.NoneIncluded"));
                 return;
             }
-            int pages = new ContactSheetLayout(options).PageCount(items.Count);
-            KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Preparing"));
-            await Task.Delay(150, cancellation.Token);
+            var layout = new ContactSheetLayout(options);
+            int pages = layout.PageCount(items.Count);
+            if (full) KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Preparing"));
+            // A burst of choices (arrow keys held down) draws only the page it ends on.
+            await Task.Delay(full ? 150 : 50, cancellation.Token);
+            (int page, _) = ChosenPlace(layout, items.Count);
+            page = Math.Min(page, pages - 1);
             var preview = await GalleryContactSheetRenderer.RunAsync(
-                () => GalleryContactSheetRenderer.Preview(items, options, _culture, cancellation.Token), cancellation.Token);
+                () => GalleryContactSheetRenderer.Preview(items, options, _culture, cancellation.Token, page), cancellation.Token);
             if (_closed || generation != _generation) return;
             _preview.Source = preview;
-            int excluded = _items.Count - items.Count;
-            KoreanWordWrap.Show(_status, excluded > 0
-                ? UiText.Format("ContactSheet.PageCountExcluded", items.Count, pages, excluded)
-                : UiText.Format("ContactSheet.PageCount", items.Count, pages));
-            _save.IsEnabled = true;
+            _shownLayout = layout;
+            _shownPage = page;
+            string pageName = UiText.Format("ContactSheet.PreviewPage", page + 1);
+            _previewLabel.Text = pageName;
+            AutomationProperties.SetName(_preview, pageName);
+            if (full)
+            {
+                int excluded = _items.Count - items.Count;
+                KoreanWordWrap.Show(_status, excluded > 0
+                    ? UiText.Format("ContactSheet.PageCountExcluded", items.Count, pages, excluded)
+                    : UiText.Format("ContactSheet.PageCount", items.Count, pages));
+                _save.IsEnabled = true;
+            }
+            // The choice may have moved while the page was drawn.
+            if (ReferenceEquals(_previewCancellation, cancellation)) _previewCancellation = null;
+            FollowSelection();
         }
         catch (OperationCanceledException) { }
         catch (ArgumentOutOfRangeException)

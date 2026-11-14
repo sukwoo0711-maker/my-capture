@@ -722,7 +722,11 @@ public static class FluidMotion
     private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate) =>
         Animate(target, property, to, animate, NormalDuration);
 
-    private static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate,
+    /// <summary>
+    /// Sets <paramref name="property"/> to <paramref name="to"/> and, when motion is on, slides there from the
+    /// current (possibly still animating) value over <paramref name="duration"/> with the standard easing.
+    /// </summary>
+    internal static void Animate(IAnimatable target, DependencyProperty property, double to, bool animate,
         Duration duration)
     {
         var owner = (DependencyObject)target;
