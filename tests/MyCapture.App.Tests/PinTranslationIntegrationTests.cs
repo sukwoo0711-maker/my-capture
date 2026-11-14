@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Settings;
@@ -19,9 +20,9 @@ public sealed partial class PinTranslationIntegrationTests : KoreanCaptionTest
     private const string English = "Save the document before closing the window.";
     private const string Korean = "창을 닫기 전에 문서를 저장합니다.";
 
-    private static PinManager Manager(ITextTranslator translator)
+    private static PinManager Manager(ITextTranslator translator, ILogger? log = null)
     {
-        var manager = new PinManager(() => new PinSettings(), NullLogger.Instance)
+        var manager = new PinManager(() => new PinSettings(), log ?? NullLogger.Instance)
         {
             ShowPinForTest = static (_, _) => { },
             ActivatePinForTest = static _ => { },
@@ -474,6 +475,7 @@ public sealed partial class PinTranslationIntegrationTests : KoreanCaptionTest
     {
         internal bool Installed = true;
         internal bool Fail;
+        internal Exception? Failure;
         internal string Result = Korean;
         internal List<IReadOnlyList<string>> Sources = [];
         internal int Downloads;
@@ -506,6 +508,7 @@ public sealed partial class PinTranslationIntegrationTests : KoreanCaptionTest
             Sources.Add(sources);
             Started.TrySetResult(true);
             if (Delayed is { } wait) await wait.Task;
+            if (Failure is { } failure) throw failure;
             if (Fail) throw new InvalidOperationException("Synthetic inference failure.");
             return sources.Select(source => new TranslatedText(source, Result, [], [])).ToArray();
         }

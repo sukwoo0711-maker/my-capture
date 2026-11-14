@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -55,6 +56,84 @@ public sealed class OcrLatinGlyphRepairTests
         const string text = "Of these, maxWidth and getURL run on iOS, eBay, McDonald OK USB3 x0 Windows OS 50 and all will tell";
         Assert.Equal(text, Repair(text, text, font, size));
     });
+
+    [Theory]
+    [InlineData("Segoe UI", 16)]
+    [InlineData("Segoe UI", 24)]
+    [InlineData("Arial", 24)]
+    [InlineData("Consolas", 16)]
+    [InlineData("Consolas", 24)]
+    public void InteriorCrossbarAndXHeightRoundGlyphRepairTheNumericReading(string font, int size) => StaTestHost.Run(() =>
+    {
+        const string drawn = "We have to read the page";
+        Assert.Equal(drawn, Repair(drawn, "We have 10 read the page", font, size));
+    });
+
+    [Fact]
+    public void CrossbarRepairDeclinesTouchingGlyphsAndMissingReferences() => StaTestHost.Run(() =>
+    {
+        const string read = "We have 10 read the page";
+        (BitmapSource bitmap, OcrResult reading) = Scene("We have to read the page", read, "Arial", 16);
+        OcrGrayImage image = Assert.IsType<OcrGrayImage>(OcrGrayImage.From(bitmap));
+        OcrLine line = reading.Lines[0];
+        OcrLatinGlyphRepair.Glyph[]?[] glyphs = [.. line.Words.Select(word => OcrLatinGlyphRepair.Segment(image, word, line.Bounds))];
+        Assert.Equal("10", line.Words[2].Text);
+        Assert.Single(Assert.IsType<OcrLatinGlyphRepair.Glyph[]>(glyphs[2]));
+        MethodInfo reference = typeof(OcrLatinGlyphRepair).GetMethod("Reference", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException("OcrLatinGlyphRepair.Reference");
+        Assert.Null(reference.Invoke(null, [line, glyphs]));
+        OcrResult repaired = OcrLatinGlyphRepair.Repair(reading, bitmap);
+        Assert.Same(reading, repaired);
+        Assert.Equal(read, repaired.Text);
+    });
+
+    [Theory]
+    [MemberData(nameof(Fonts))]
+    [InlineData("Segoe UI", 24)]
+    [InlineData("Arial", 24)]
+    [InlineData("Consolas", 24)]
+    public void DrawnDigitsAndNumericIdentifiersKeepTheirReading(string font, int size) => StaTestHost.Run(() =>
+    {
+        const string text = "We read 10 0x10 v10 10% 100 101 more";
+        Assert.Equal(text, Repair(text, text, font, size));
+        // Independent counterexamples: the round glyph is tall, or the stem has a digit's flag rather than a crossbar.
+        Assert.Equal("We have 10 more", Repair("We have t0 more", "We have 10 more", font, size));
+        Assert.Equal("We have 10 more", Repair("We have 1o more", "We have 10 more", font, size));
+    });
+
+    [Theory]
+    [InlineData("Segoe UI", 16)]
+    [InlineData("Arial", 24)]
+    public void CrossbarRepairRequiresLineReferencesAndAnUnadornedNumericAtom(string font, int size) => StaTestHost.Run(() =>
+    {
+        Assert.Equal("10", Repair("to", "10", font, size));
+        Assert.Equal("MMMM 10", Repair("MMMM to", "MMMM 10", font, size));
+        Assert.Equal("We have 10% more", Repair("We have to% more", "We have 10% more", font, size));
+        Assert.Equal("We have v10 more", Repair("We have vto more", "We have v10 more", font, size));
+        Assert.Equal("We have 0x10 more", Repair("We have 0xto more", "We have 0x10 more", font, size));
+        // Too few pixel rows to distinguish a flag from a crossbar must keep the original reading.
+        Assert.Equal("We have 10 more", Repair("We have to more", "We have 10 more", font, 6));
+    });
+
+    [Fact]
+    public void CrossbarRequiresAnUndottedAscenderAndAnAdjacentRoundGlyphAtXHeight()
+    {
+        OcrLatinGlyphRepair.Glyph crossbar = new(9, false, true), round = new(7, false), tall = new(10, false);
+        Assert.Equal("to", OcrLatinGlyphRepair.RepairWord("10", [crossbar, round], 7, 10));
+        // The crossbar stem must rise strictly above the x-height margin, including its exact boundary.
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(7.99, false, true), round], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(8, false, true), round], 7, 10));
+        Assert.Equal("to", OcrLatinGlyphRepair.RepairWord("10", [new(8.01, false, true), round], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(9, false), round], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [crossbar, tall], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [crossbar, new(3, false)], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(9, true, true), round], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(7, false, true), round], 7, 10));
+        Assert.Equal("10", OcrLatinGlyphRepair.RepairWord("10", [new(15, false, true), round], 7, 10));
+        Assert.Equal("10%", OcrLatinGlyphRepair.RepairWord("10%", [crossbar, round, tall], 7, 10));
+        Assert.Equal("v10", OcrLatinGlyphRepair.RepairWord("v10", [round, crossbar, round], 7, 10));
+        Assert.Equal("0x10", OcrLatinGlyphRepair.RepairWord("0x10", [tall, round, crossbar, round], 7, 10));
+    }
 
     [Fact]
     public void RepairWordFollowsTheGlyphHeights()
