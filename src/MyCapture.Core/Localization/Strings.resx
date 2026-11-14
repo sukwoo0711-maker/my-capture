@@ -3431,6 +3431,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorObscure_Shortcuts" xml:space="preserve"><value>모자이크 {0} · 흐림 {1}</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>타원</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>형광펜</value></data>
+  <data name="Tools.Eraser" xml:space="preserve"><value>지우개</value></data>
+  <data name="Tools.EraserHelp" xml:space="preserve"><value>닿은 주석을 통째로 지웁니다. 캡처 원본은 지우지 않습니다.</value></data>
+  <data name="Tools.EraserErase" xml:space="preserve"><value>지우개로 삭제</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>색을 #RRGGBB 또는 #AARRGGBB 형식으로 입력하십시오.</value></data>
   <data name="Tools.StepNumber" xml:space="preserve"><value>단계 번호</value></data>
   <data name="Dialog.Access" xml:space="preserve"><value>선택한 파일이나 폴더에 접근할 수 없습니다. 접근 권한을 확인하거나 다른 위치를 선택하십시오.</value></data>

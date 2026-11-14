@@ -264,7 +264,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _recentFontFamilies.AddRange(defaults.RecentFontFamilies ?? []);
         _controller.ApplyBlurRadius(defaults.BlurRadius);
         _mosaicBlockSize = defaults.MosaicBlockSize;
-        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
+        if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool is EditorTool.Crop or EditorTool.Eraser ? EditorTool.Select : lastTool;
         _imageStore.PruneToReachable(document, undo);
         _blurCache = new AnnotationBlurCache(Dispatcher);
         var renderer = new AnnotationRenderer(_imageStore, _blurCache);
@@ -1167,12 +1167,16 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         EditorTool toolBeforeCommit = _controller.Tool;
         int itemsBefore = _controller.Document.Items.Count;
+        bool erasing = _controller.IsErasing;
 
         PointD image = _surface.ToImagePoint(dip);
         _controller.PointerUp(image, shift);
         ReleasePointer();
         SyncToolButtons();
         RefreshPointerFeedback();
+
+        // The eraser reports what deleting a selection reports; a click on bare capture says nothing.
+        if (erasing && _controller.LastEraseCount > 0) SetStatus(UiText.Get("Text_5D27F0D47A0B"));
 
         // A gesture that produced a new object is worth announcing; a bare click that did not
         // is not. Pencil strokes intentionally stay unselected to avoid an interrupting
@@ -1235,6 +1239,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         _canvasCursorKind = kind;
         double dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
         int pixelSize = EditorCursors.PixelSize(_cursorBaseSize, dpiScale);
+        // The ink is read on every call, so a colour change shows on the pointer at once: every
+        // change of colour raises VisualInvalidated, which comes back here through RefreshPointerFeedback.
         Cursor cursor = EditorCursors.Get(
             kind,
             pixelSize,
@@ -1242,9 +1248,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             _controller.StrokeColor,
             SystemParameters.HighContrast || ThemeService.Current == MyCapture.Core.Themes.AppTheme.HighContrast,
             _cursorStyle,
-            EditorCursors.IsBrush(kind) ? BrushCursorOffset(pixelSize, dpiScale) : 0);
+            EditorCursors.IsBrush(kind) ? BrushCursorOffset(pixelSize, dpiScale) : 0,
+            kind == EditorCursorKind.Eraser ? EraserCursorRadius(dpiScale) : double.NaN);
         if (!ReferenceEquals(_viewport.Cursor, cursor)) _viewport.Cursor = cursor;
     }
+
+    /// <summary>The eraser's reach in screen pixels on a monitor at <paramref name="dpiScale"/>.</summary>
+    internal static double EraserCursorRadius(double dpiScale) =>
+        AnnotationEditorController.EraserRadiusDip * (double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1);
 
     /// <summary>
     /// The pencil offset of the pen or highlighter pointer for the footprint as it is now, at a
@@ -2456,7 +2467,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             (EditorTool.Arrow, UiText.Get("Text_2785CE58DF74"), UiText.Get("Text_D53ABD064C5E"), "Icon.Arrow", FallbackArrow));
         ToolGroup(groups,
             (EditorTool.Pen, UiText.Get("Text_37DB9D0B1C8E"), UiText.Get("Text_684786FB2840"), "Icon.Pen", FallbackPen),
-            (EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12")));
+            (EditorTool.Highlighter, UiText.Get("Tools.Highlighter"), UiText.Get("Tools.Highlighter"), "Icon.Highlighter", () => Geometry.Parse("M4,14 L13,3 L17,7 L8,18 Z M2,18 H12")),
+            (EditorTool.Eraser, UiText.Get("Tools.Eraser"), UiText.Get("Tools.Eraser"), "Icon.Eraser", () => Geometry.Parse(EditorCursors.EraserFallback)));
+        AutomationProperties.SetHelpText(_toolButtons[EditorTool.Eraser], UiText.Get("Tools.EraserHelp"));
         ToolGroup(groups,
             (EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText),
             (EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("EditorUx_StepNumberToolTip"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13")));
@@ -3420,7 +3433,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             _cropRatio.SelectedIndex = 0;
         }
         RefreshCrop();
-        if (tool is not (EditorTool.Select or EditorTool.Crop)) _preferredTool = tool;
+        // A new capture has nothing to erase, so the eraser is not the tool the next editor opens with.
+        if (tool is not (EditorTool.Select or EditorTool.Crop or EditorTool.Eraser)) _preferredTool = tool;
         RememberPreferences();
         SyncToolButtons();
         RefreshPointerFeedback();
@@ -3831,6 +3845,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         EditorTool.Crop => UiText.Get("Tools_Crop"),
         EditorTool.Ellipse => UiText.Get("Tools.Ellipse"),
         EditorTool.Highlighter => UiText.Get("Tools.Highlighter"),
+        EditorTool.Eraser => UiText.Get("Tools.Eraser"),
         EditorTool.StepNumber => UiText.Get("Tools.StepNumber"),
         EditorTool.Select => UiText.Get("Text_33406FC582BE"),
         EditorTool.Rectangle => UiText.Get("Text_4A48782E904C"),

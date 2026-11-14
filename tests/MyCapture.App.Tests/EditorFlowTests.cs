@@ -461,7 +461,7 @@ public sealed class EditorFlowTests
             {
                 new[] { EditorTool.Select },
                 new[] { EditorTool.Rectangle, EditorTool.Ellipse, EditorTool.Arrow },
-                new[] { EditorTool.Pen, EditorTool.Highlighter },
+                new[] { EditorTool.Pen, EditorTool.Highlighter, EditorTool.Eraser },
                 new[] { EditorTool.Text, EditorTool.StepNumber },
                 new[] { EditorTool.Mosaic },
                 new[] { EditorTool.Image },
