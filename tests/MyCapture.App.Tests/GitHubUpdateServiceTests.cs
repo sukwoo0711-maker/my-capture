@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class GitHubUpdateServiceTests
 {
-    // Leave room for the numeric version twice, session GUID and .downloading suffix.
+    // Leave room for the numeric version twice, session GUID and the in-flight download name.
     private const string StagingPrefix = "u-";
 
     [Fact]
@@ -31,7 +31,10 @@ public sealed class GitHubUpdateServiceTests
             new UpdateVersion(int.MaxValue, int.MaxValue, int.MaxValue) })
         {
             string session = Path.Combine(root, UpdatePaths.SessionName(version));
-            foreach (string name in new[] { UpdatePaths.InstallerName(version) + ".downloading",
+            // Every architecture's installer name, so an x64 run catches a win-arm64 overflow.
+            foreach (string name in new[] { UpdatePaths.DownloadingInstallerName,
+                UpdatePaths.InstallerName(version, "x86"), UpdatePaths.InstallerName(version, "x64"),
+                UpdatePaths.InstallerName(version, "arm64"),
                 "update-session.json", "install-result.json.tmp", "update-helper.ps1", "SHA256SUMS.txt" })
             {
                 string path = Path.Combine(session, name);
@@ -39,6 +42,22 @@ public sealed class GitHubUpdateServiceTests
             }
             Assert.True(session.Length < 248, $"Directory creation needs MAX_PATH headroom: {session}");
         }
+    }
+
+    [Fact]
+    public void InFlightDownloadIsStagedUnderTheFixedShortName()
+    {
+        // The budget above holds only while the service stages the download under the fixed name.
+        // An in-flight name built from the installer name reaches MAX_PATH for win-arm64.
+        string? root = null;
+        for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null && root is null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "MyCapture.slnx"))) root = directory.FullName;
+        Assert.True(root is not null, "The source checkout is required to read the staging code.");
+        string service = File.ReadAllText(Path.Combine(root!, "src", "MyCapture.App", "Updates", "GitHubUpdateService.cs"));
+        Assert.Contains("UpdatePaths.Child(fullSessionDir, UpdatePaths.DownloadingInstallerName)", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("\".downloading\"", service, StringComparison.Ordinal);
+        Assert.True(UpdatePaths.DownloadingInstallerName.Length <= "SHA256SUMS-win-arm64.txt".Length,
+            "The in-flight name must not be the longest file of a session.");
     }
 
     [Theory]

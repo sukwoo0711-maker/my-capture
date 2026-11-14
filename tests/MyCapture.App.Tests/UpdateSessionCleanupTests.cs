@@ -85,7 +85,7 @@ public sealed class UpdateSessionCleanupTests
         try
         {
             string session = CreateSession(root);
-            string installer = Path.Combine(session, "MyCapture-1.8.0-win-x64-setup.exe");
+            string installer = Path.Combine(session, UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0)));
             File.WriteAllText(Path.Combine(session, "update.log"), "keep");
             using (var locked = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
@@ -159,7 +159,8 @@ public sealed class UpdateSessionCleanupTests
     {
         string session = Path.Combine(root, UpdatePaths.SessionName(new UpdateVersion(1, 8, 0)));
         Directory.CreateDirectory(session);
-        File.WriteAllBytes(Path.Combine(session, "MyCapture-1.8.0-win-x64-setup.exe"), [1, 2, 3]);
+        // The cleanup recognizes the installer of the running architecture only.
+        File.WriteAllBytes(Path.Combine(session, UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0))), [1, 2, 3]);
         return session;
     }
 }

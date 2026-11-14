@@ -13,6 +13,7 @@ MyCapture의 권장 배포 경로는 [Microsoft Store](https://apps.microsoft.co
 ### 아키텍처 선택
 
 - 64비트 Windows에서는 x64판을 사용합니다. Windows 11 ARM64 PC는 x64 에뮬레이션으로 실행합니다.
+- ARM64 네이티브판(`win-arm64`)은 소스에서 빌드할 수 있으며, GitHub 릴리스에는 아직 올리지 않았습니다. 빌드 방법은 [소스에서 빌드](build.md#windows-arm64-네이티브판)에 있습니다.
 - Windows 10 버전 22H2의 32비트 PC에는 x86 호환판을 설치합니다. x86판은 Windows 기본 OCR을 사용하며, AI OCR과 로컬 번역 및 해당 모델 내려받기는 x64판에서 제공합니다.
 - GitHub 릴리스에서 `win-x64` 또는 `win-x86`이 붙은 설치 파일·포터블 ZIP을 고릅니다. Microsoft Store 패키지는 x64입니다.
 

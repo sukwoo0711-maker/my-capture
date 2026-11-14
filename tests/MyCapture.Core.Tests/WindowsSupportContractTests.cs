@@ -118,6 +118,11 @@ public sealed class WindowsSupportContractTests
         Assert.Contains($"MinimumWindowsRelease = '{WindowsSupportPolicy.MinimumReleaseName}'", package, StringComparison.Ordinal);
         Assert.Matches($@"MinimumArm64EmulationBuild\s*=\s*{WindowsSupportPolicy.MinimumArm64EmulationBuild}\b", package);
         Assert.Contains("Arm64Support = \"Windows 11 ARM64 via $Architecture emulation\"", package, StringComparison.Ordinal);
+        // The native arm64 package runs on ARM64 PCs only, and its x64 setup needs the same emulation.
+        Assert.Contains(
+            $"$releaseManifest.Compatibility.MinimumWindowsBuild = {WindowsSupportPolicy.MinimumArm64EmulationBuild}",
+            package, StringComparison.Ordinal);
+        Assert.Contains("setup under x64 emulation", package, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,6 +133,7 @@ public sealed class WindowsSupportContractTests
         Assert.Contains("manifest.MinimumWindowsBuild", install, StringComparison.Ordinal);
         Assert.Contains("build < Math.Max(19045, minimum)", install, StringComparison.Ordinal);
         Assert.Contains($"native == 0xAA64 && build < {WindowsSupportPolicy.MinimumArm64EmulationBuild}", install, StringComparison.Ordinal);
+        Assert.Contains("architecture == \"arm64\" && native != 0xAA64", install, StringComparison.Ordinal);
         Assert.Contains("IsWow64Process2", install, StringComparison.Ordinal);
     }
 

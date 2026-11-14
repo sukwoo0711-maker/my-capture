@@ -7,6 +7,11 @@
 #:property UseSharedCompilation=false
 #:property TreatWarningsAsErrors=true
 #:property PublishAot=false
+// A file-based app imports Directory.Build.props before these properties apply, so the repository's
+// x64 PlatformTarget default reached this tool: on the ARM64 runner its x64 apphost could not load
+// the arm64 hostfxr (0x800700C1). Build it architecture-neutral and run it through the muxer.
+#:property PlatformTarget=AnyCPU
+#:property UseAppHost=false
 
 // Read CLI metadata directly. Loading both assemblies into an AppDomain would reject
 // their identical assembly identity even when their module identities are different.

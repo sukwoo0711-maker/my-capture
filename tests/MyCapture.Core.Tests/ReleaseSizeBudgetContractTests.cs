@@ -16,6 +16,7 @@ public sealed class ReleaseSizeBudgetContractTests
     [Theory]
     [InlineData("win-x64")]
     [InlineData("win-x86")]
+    [InlineData("win-arm64")]
     public void ReleaseBudget_HasPositiveInstalledPortableAndProjectionLimits(string runtime)
     {
         var document = XDocument.Load(Path.Combine(Root(), "build/ReleaseSizeBudgets.props"));
@@ -24,7 +25,7 @@ public sealed class ReleaseSizeBudgetContractTests
         long installed = long.Parse(Assert.Single(group.Elements("MyCaptureInstalledSizeBudgetBytes")).Value);
         long portable = long.Parse(Assert.Single(group.Elements("MyCapturePortableSizeBudgetBytes")).Value);
         long projection = long.Parse(Assert.Single(group.Elements("MyCaptureProjectionSizeBudgetBytes")).Value);
-        Assert.InRange(projection, 1, 40_000_000); // Both full SDK projections exceed 50 MB.
+        Assert.InRange(projection, 1, 40_000_000); // Every full SDK projection exceeds 50 MB.
         Assert.InRange(portable, 1, installed);
         Assert.True(projection < installed);
     }
@@ -88,7 +89,8 @@ public sealed class ReleaseSizeBudgetContractTests
                 new XElement("CheckMyCapturePublishSize", new XAttribute("PublishRoot", fixture),
                     new XAttribute("Runtime", "win-x64"), new XAttribute("InstalledLimit", "1000000"),
                     new XAttribute("ProjectionLimit", "1000000"))))).Save(harness);
-        foreach (string name in new[] { "mscordaccore.dll", "mscordaccore_amd64_amd64_10.0.1226.42308.dll", "mscordbi.dll", "Microsoft.DiaSymReader.Native.amd64.dll" })
+        foreach (string name in new[] { "mscordaccore.dll", "mscordaccore_amd64_amd64_10.0.1226.42308.dll", "mscordbi.dll", "Microsoft.DiaSymReader.Native.amd64.dll",
+            "mscordaccore_arm64_arm64_10.0.1226.42308.dll", "Microsoft.DiaSymReader.Native.arm64.dll" })
         {
             File.WriteAllBytes(Path.Combine(fixture, name), new byte[1]);
             var failure = await Run(harness, "-t:Check");

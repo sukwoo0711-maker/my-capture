@@ -2,14 +2,15 @@
 param(
     [string]$Version = '5.4.0',
     [switch]$StoreOnly,
-    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64'
+    [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64'
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $runtime = "win-$Architecture"
-$metadataSuffix = if ($Architecture -eq 'x86') { '-win-x86' } else { '' }
-if ($StoreOnly -and $Architecture -eq 'x86') { throw 'Store packaging currently requires x64.' }
+# x64 keeps the unsuffixed metadata names and the version folder it has always used.
+$metadataSuffix = if ($Architecture -eq 'x64') { '' } else { "-$runtime" }
+if ($StoreOnly -and $Architecture -ne 'x64') { throw 'Store packaging currently requires x64.' }
 
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
@@ -24,6 +25,7 @@ $baseVersion = '{0}.{1}.{2}' -f $versionMatch.Groups['major'].Value, $versionMat
 $binaryVersion = "$baseVersion.0"
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
 . (Join-Path $PSScriptRoot 'release-size-budget.ps1')
+. (Join-Path $PSScriptRoot 'publish-architecture.ps1')
 
 [xml]$sourceProps = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props') -Raw -Encoding UTF8
 $productVersionNodes = @($sourceProps.SelectNodes('/Project/PropertyGroup/Version'))
@@ -46,7 +48,7 @@ if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::Ordina
     throw "Refusing to clean an unsafe artifact path: $artifactRoot"
 }
 
-if ($Architecture -eq 'x86') { $artifactRoot = Join-Path $artifactRoot 'win-x86' }
+if ($Architecture -ne 'x64') { $artifactRoot = Join-Path $artifactRoot $runtime }
 
 if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
     $bootstrapDotnetDir = Join-Path $env:LOCALAPPDATA 'MyCapture\dotnet-sdk'
@@ -290,6 +292,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
 
     Assert-SelfContainedPublish $publish
+    # A cross-built package cannot be started on the build PC, so its architecture is read from the files.
+    Assert-PublishArchitecture -PublishRoot $publish -Architecture $Architecture
 
     $exe = Join-Path $publish 'MyCapture.exe'
     $dll = Join-Path $publish 'MyCapture.dll'
@@ -371,6 +375,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Setup restore failed: $LASTEXITCODE" }
     & dotnet build $setupProject -c Release --no-restore "-p:Platform=$Architecture" "-p:OutputPath=$setupOutput" -p:AppendTargetFrameworkToOutputPath=false -m:1 -nr:false -p:UseSharedCompilation=false -p:Deterministic=true
     if ($LASTEXITCODE -ne 0) { throw "Setup build failed: $LASTEXITCODE" }
+    # Setup is a .NET Framework 4.8 program: x86 in the x86 package and x64 in the others. The arm64
+    # package relies on the x64 emulation of Windows 11 for it, as the x64 package does on ARM64 PCs.
+    $setupMachine = if ($Architecture -eq 'x86') { 0x014C } else { 0x8664 }
+    $setupKind = Get-PublishImageKind -Path (Join-Path $setupOutput 'MyCaptureSetup.exe')
+    if ($null -eq $setupKind -or -not $setupKind.Managed -or $setupKind.Machine -ne $setupMachine) {
+        throw ('MyCaptureSetup.exe was not built for machine 0x{0:X4}.' -f $setupMachine)
+    }
     $bootstrapNames = @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')
     $bootstrapInventory = @()
     foreach ($name in $bootstrapNames) {
@@ -464,6 +475,13 @@ FILE4=SETUP-HELP.txt
     if ($iexpress.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $setup -PathType Leaf)) {
         throw "IExpress packaging failed: $($iexpress.ExitCode)"
     }
+    # The extractor in the package is the one of the iexpress.exe that ran, so it follows the
+    # packaging PC. ARM64 Windows 11 runs an x64 extractor; no x64 or x86 PC runs an ARM64 one.
+    $extractorMachines = if ($Architecture -eq 'x86') { @(0x014C) } elseif ($Architecture -eq 'x64') { @(0x8664) } else { @(0x8664, 0xAA64) }
+    $extractorKind = Get-PublishImageKind -Path $setup
+    if ($null -eq $extractorKind -or $extractorMachines -notcontains $extractorKind.Machine) {
+        throw "The IExpress extractor of $(Split-Path -Leaf $setup) does not suit win-$Architecture. Package this architecture on an x64 PC."
+    }
 
     $deliverables = @($setup, $portable) | ForEach-Object {
         $item = Get-Item -LiteralPath $_
@@ -519,6 +537,12 @@ FILE4=SETUP-HELP.txt
         Deliverables = $deliverables
         PublishInventory = $inventory
     }
+    if ($Architecture -eq 'arm64') {
+        # The native build runs on ARM64 PCs only. Its x64 setup keeps their emulation floor.
+        $releaseManifest.Compatibility.MinimumWindowsBuild = 22000
+        $releaseManifest.Compatibility.MinimumWindowsRelease = 'Windows 11'
+        $releaseManifest.Compatibility.Arm64Support = 'Windows 11 ARM64, native application; setup under x64 emulation'
+    }
     $releaseManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releaseManifestOutput -Encoding UTF8
 
     $releaseRoundTrip = Get-Content -LiteralPath $releaseManifestOutput -Raw -Encoding UTF8 |
@@ -534,6 +558,21 @@ FILE4=SETUP-HELP.txt
     $sumLines = @($checksumRecords | ForEach-Object { "$($_.Sha256)  $($_.Path)" })
     $sumLines | Set-Content -LiteralPath $shaSumsOutput -Encoding ASCII
 
+    $hostRequirement = if ($Architecture -eq 'arm64') {
+        @"
+- Supported baseline: Windows 11 (build 22000) or later on an ARM64 PC. This native ARM64 build
+  does not run on x64 or x86 PCs, and the installer refuses to run on them.
+- Setup is an x64 program and runs under the x64 emulation included in Windows 11 on ARM.
+"@
+    }
+    else {
+        @"
+- Supported baseline: Windows 10 version 22H2 (build 19045) or later, $Architecture. Earlier Windows
+  releases are not supported and the installer refuses to run on them.
+- ARM64 requires Windows 11 (build 22000) or later for $Architecture emulation.
+"@
+    }
+
     @"
 MyCapture $Version - OFFLINE RELEASE ($runtime)
 ================================================
@@ -548,9 +587,7 @@ CONTENTS
 OFFLINE / RUNTIME
 - No Internet connection is required.
 - The application includes CoreCLR and WPF; no separate .NET 10 runtime is required.
-- Supported baseline: Windows 10 version 22H2 (build 19045) or later, $Architecture. Earlier Windows
-  releases are not supported and the installer refuses to run on them.
-- ARM64 requires Windows 11 (build 22000) or later for $Architecture emulation.
+$hostRequirement
 - Setup and uninstall use .NET Framework 4.8, included in Windows 10 22H2 and Windows 11.
   IExpress directly launches MyCaptureSetup.exe; setup, update-install and uninstall
   do not run PowerShell or cmd.exe. No administrator rights are required.
