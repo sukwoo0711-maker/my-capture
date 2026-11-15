@@ -266,7 +266,7 @@ public sealed class PinTranslationWaitingTests : KoreanCaptionTest
         { "disk", "번역 모델을 저장할 수 없습니다. 저장 공간과 권한을 확인하십시오." },
         { "corrupt", "내려받은 파일이 손상되었습니다. 다시 시도하십시오." },
         { "verification", "내려받은 파일이 손상되었습니다. 다시 시도하십시오." },
-        { "inference", "번역하지 못했습니다. 원문이 유지됩니다." },
+        { "inference", "번역 도중 오류가 발생했습니다. 원문이 유지됩니다." },
     };
 
     [Theory]

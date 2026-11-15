@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Pinning;
@@ -56,9 +57,10 @@ internal sealed partial class PinManager
 
     /// <summary>
     /// Why a translation stopped, in a sentence that says what to do. Model download failures use the OCR window's
-    /// wording where it fits a pin; anything else keeps the general sentence.
+    /// wording where it fits a pin; any other failure names the step it stopped in, and only a failure whose step
+    /// is unknown keeps the general sentence.
     /// </summary>
-    internal static string TranslationFailureMessage(Exception error, long downloadBytes) => error switch
+    internal static string TranslationFailureMessage(Exception error, long downloadBytes, PinTranslationStage? stage = null) => error switch
     {
         TranslationModelException { Error: TranslationModelError.Network } => UiText.Get("Pin_TranslationErrorNetwork"),
         TranslationModelException { Error: TranslationModelError.Stalled } => UiText.Get("Translate_ErrorStalled"),
@@ -66,8 +68,55 @@ internal sealed partial class PinManager
             UiText.Format("Translate_ErrorDiskFull", Math.Ceiling(downloadBytes / 1_000_000d)),
         TranslationModelException { Error: TranslationModelError.Disk } => UiText.Get("Translate_ErrorDisk"),
         TranslationModelException { Error: TranslationModelError.Corrupt } => UiText.Get("Translate_ErrorCorrupt"),
-        _ => UiText.Get("Pin_TranslationFailed"),
+        _ => stage switch
+        {
+            PinTranslationStage.Reading => UiText.Get("Pin_TranslationFailedReading"),
+            PinTranslationStage.CheckingModel => UiText.Get("Pin_TranslationFailedModelCheck"),
+            PinTranslationStage.Installing => UiText.Get("Pin_TranslationFailedInstall"),
+            PinTranslationStage.LoadingModel => UiText.Get("Pin_TranslationFailedLoad"),
+            PinTranslationStage.Translating => UiText.Get("Pin_TranslationFailedInference"),
+            PinTranslationStage.Showing => UiText.Get("Pin_TranslationFailedShowing"),
+            _ => UiText.Get("Pin_TranslationFailed"),
+        },
     };
+
+    /// <summary>
+    /// A failure while translating happened while the model was opening when the product's translator still has no
+    /// engine: its load runs inside the first translation call and keeps nothing when it fails.
+    /// </summary>
+    internal static PinTranslationStage FailedStage(PinTranslationStage stage, ITextTranslator translator) =>
+        stage == PinTranslationStage.Translating && translator is TextTranslationService { IsEngineLoaded: false }
+            ? PinTranslationStage.LoadingModel : stage;
+
+    /// <summary>
+    /// One line per step, so the file log (which keeps only a hash of the constant message, the exception type, its
+    /// HRESULT and the method that threw) says where a translation stopped. No argument carries text: source text and
+    /// model output never enter the diagnostic log.
+    /// </summary>
+    private void LogTranslationFailure(PinTranslationStage stage, Exception error)
+    {
+        switch (stage)
+        {
+            case PinTranslationStage.Reading:
+                _log.LogWarning(error, "Pin translation failed while reading the picture");
+                break;
+            case PinTranslationStage.CheckingModel:
+                _log.LogWarning(error, "Pin translation failed while checking the model");
+                break;
+            case PinTranslationStage.Installing:
+                _log.LogWarning(error, "Pin translation failed while installing the model");
+                break;
+            case PinTranslationStage.LoadingModel:
+                _log.LogWarning(error, "Pin translation failed while loading the model");
+                break;
+            case PinTranslationStage.Translating:
+                _log.LogWarning(error, "Pin translation failed while translating");
+                break;
+            default:
+                _log.LogWarning(error, "Pin translation failed while showing the result");
+                break;
+        }
+    }
 
     /// <summary>The check after a completed download did not find the whole model.</summary>
     private static TranslationModelException ModelVerificationFailed() =>
@@ -106,5 +155,45 @@ internal sealed class PinDownloadProgress(PinWindow pin, CancellationToken cance
             _queued = false;
         }
         if (!cancellation.IsCancellationRequested) pin.ShowTranslationDownloadProgress(value.ReceivedBytes, value.TotalBytes);
+    }
+}
+
+/// <summary>The steps of a pin translation, in the order they run; a failure is reported with the one it stopped in.</summary>
+internal enum PinTranslationStage
+{
+    /// <summary>Reading a picture's text.</summary>
+    Reading,
+
+    /// <summary>Checking that the model is on this PC.</summary>
+    CheckingModel,
+
+    /// <summary>Downloading and verifying the model.</summary>
+    Installing,
+
+    /// <summary>Opening the model; reported for a failure in the first translation call before the model opened.</summary>
+    LoadingModel,
+
+    /// <summary>Translating the text.</summary>
+    Translating,
+
+    /// <summary>Building and showing the result in the pin.</summary>
+    Showing,
+}
+
+/// <summary>The step one translation is in; the reading worker and the UI thread both advance it.</summary>
+internal sealed class PinTranslationStep(PinTranslationStage stage)
+{
+    private int _stage = (int)stage;
+
+    /// <summary>
+    /// The model passed its check but did not open last time: this run offers the installation again and, once the
+    /// user agrees, deletes the files before it downloads them.
+    /// </summary>
+    internal bool Reinstall { get; init; }
+
+    internal PinTranslationStage Stage
+    {
+        get => (PinTranslationStage)Volatile.Read(ref _stage);
+        set => Volatile.Write(ref _stage, (int)value);
     }
 }

@@ -15,6 +15,12 @@ internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview
 
     /// <summary>A picture translation's placed blocks as separate layers, for the pin's change into it; null for other pins.</summary>
     internal IReadOnlyList<PinOverlayBlockLayer>? BlockLayers { get; init; }
+
+    /// <summary>
+    /// No translated piece passed the checks, so the content is the source itself. The pin keeps its original and says
+    /// why instead of showing it as a translation.
+    /// </summary>
+    internal bool KeptOriginal { get; init; }
 }
 
 /// <summary>Whether a pin can be translated into the target language, and in which direction.</summary>
@@ -234,7 +240,10 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
 
         cancellationToken.ThrowIfCancellationRequested();
         PinContent rendered = await RenderAsync(content, plan, accepted, output, cancellationToken).ConfigureAwait(false);
-        return new PinTranslationResult(rendered with { PendingProvenance = content.PendingProvenance }, needsReview);
+        return new PinTranslationResult(rendered with { PendingProvenance = content.PendingProvenance }, needsReview)
+        {
+            KeptOriginal = accepted.All(static piece => piece is null),
+        };
     }
 
     private static bool IsStructurePreserved(PinTranslationPlan plan, string output)
