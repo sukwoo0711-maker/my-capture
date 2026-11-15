@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using MyCapture.App.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.ExceptionServices;
@@ -40,11 +41,12 @@ public sealed class TranslationFailureDiagnosticTests(ITestOutputHelper output) 
         string profile = Environment.GetEnvironmentVariable("MYCAPTURE_TRANSLATION_DIAGNOSIS_PROFILE") is { Length: > 0 } named
             ? named : "profile";
         bool package = string.Equals(Environment.GetEnvironmentVariable("MYCAPTURE_TRANSLATION_DIAGNOSIS_PACKAGE"), "1", StringComparison.Ordinal);
-        string root = Path.Combine(Out, profile);
-        Directory.CreateDirectory(root);
+        if (!Path.IsPathFullyQualified(Out)) throw new IOException("Diagnosis requires an absolute output directory.");
+        string outRoot = DiagnosticOutputPaths.Create(Out);
+        string root = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(outRoot, profile));
         // The Store build keeps models in the package's LocalCache and its library in LocalState.
         AppPaths paths = package
-            ? AppPaths.CreateForPackage(Path.Combine(root, "LocalState"), Path.Combine(root, "LocalCache"), Path.Combine(root, "Pictures"))
+            ? AppPaths.CreateForPackage(DiagnosticOutputPaths.Child(root, "LocalState"), DiagnosticOutputPaths.Child(root, "LocalCache"), DiagnosticOutputPaths.Child(root, "Pictures"))
             : AppPaths.CreateForRoot(root);
         var sink = new LogSink();
         var lines = new List<string>
@@ -86,7 +88,7 @@ public sealed class TranslationFailureDiagnosticTests(ITestOutputHelper output) 
         }
         finally { manager.CloseAll(); }
         lines.Add($"installed after: {await store.IsInstalledAsync(CancellationToken.None)}");
-        File.WriteAllLines(Path.Combine(Out, $"pins-{profile}.tsv"), lines, Encoding.UTF8);
+        File.WriteAllLines(DiagnosticOutputPaths.Child(outRoot, $"pins-{profile}.tsv"), lines, Encoding.UTF8);
     });
 
     private static IEnumerable<(string, Func<Task<PinWindow>>)> Pins(PinManager manager)

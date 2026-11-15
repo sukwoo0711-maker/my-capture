@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using MyCapture.App.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -46,10 +47,11 @@ public sealed class EditorPointerRenderCostTests(ITestOutputHelper output) : Kor
         output.WriteLine(csv.ToString());
         string? phase = Environment.GetEnvironmentVariable("MYCAPTURE_EDTOOLS_PHASE");
         string? folder = Environment.GetEnvironmentVariable("MYCAPTURE_EDTOOLS_OUT");
-        if (phase is "before" or "after" && !string.IsNullOrEmpty(folder))
+        if (phase is "before" or "after" && !string.IsNullOrWhiteSpace(folder))
         {
-            Directory.CreateDirectory(Path.Combine(folder, phase));
-            File.WriteAllText(Path.Combine(folder, phase, "render-cost.csv"), csv.ToString());
+            if (!Path.IsPathFullyQualified(folder)) throw new IOException("Evidence requires an absolute output directory.");
+            string target = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(folder), phase));
+            File.WriteAllText(DiagnosticOutputPaths.Child(target, "render-cost.csv"), csv.ToString());
         }
 
         foreach (Row row in rows.Where(row => row.Gesture == "hover"))
