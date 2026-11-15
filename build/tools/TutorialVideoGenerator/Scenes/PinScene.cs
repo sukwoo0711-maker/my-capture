@@ -583,7 +583,7 @@ internal sealed class PinScene : TutorialScene
     private PointD BarButtonCenter(LivePin pin, Button button) =>
         Center(ButtonBounds(pin, button) ?? throw new InvalidOperationException("The hover bar is not shown."));
 
-    private static Button[] BarButtons(PinHoverBar bar) => [bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton];
+    private static IEnumerable<Button> BarButtons(PinHoverBar bar) => bar.CommandOrder.Where(button => button.Visibility == Visibility.Visible);
 
     /// <summary>A hover-bar button's stage bounds while the bar is shown.</summary>
     private Rect? ButtonBounds(LivePin pin, Button button)

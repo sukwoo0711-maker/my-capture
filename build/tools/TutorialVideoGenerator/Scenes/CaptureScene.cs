@@ -9,6 +9,7 @@ using MyCapture.App;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
@@ -97,19 +98,30 @@ internal sealed class CaptureScene : TutorialScene
                 CaptureResult(story);
                 break;
             case "capture-delay":
+                // The command opens the selector with its delay armed (the bar's delay button shows the
+                // seconds); the countdown runs after the region is chosen and the region is then taken
+                // again from the screen (CaptureOverlayCoordinator).
                 TrayRoute(story, "Text_38FF9B0AA541");
-                story.Hold("countdown-3", 1.0).Hold("countdown-2", 1.0).Hold("countdown-1", 1.0).Hold("overlay", 0.6);
+                // Short: the tray route, the drag and a three-second countdown already fill the clip.
+                story.Hold("overlay", 0.6);
                 Drag(story, new PointD(NoteClient.X + 14, NoteClient.Y + 6), new PointD(Terminal.Right + 14, Terminal.Bottom + 12), frames: 26);
                 story.Hold("selected", 0.3);
+                for (int second = ArmedDelaySeconds; second >= 1; second--) story.Hold($"countdown-{second}", 1.0);
                 CaptureResult(story);
                 break;
             case "capture-scroll":
-                story.Hold("desktop", 0.8).Move("point", new PointD(NoteClient.X + 300, NoteClient.Y + 200)).Hold("pointed", 0.8);
-                story.Hold("shortcut", 0.6).Motion("scrolling", 50, story.End, story.End).Hold("scrolled", 0.4);
+                // The command opens the selector in the scrolling mode; a click on the window names it
+                // and the app scrolls and stitches that window.
+                TrayRoute(story, "Text_4DBA30197C0A");
+                story.Hold("overlay", 0.8).Move("point", new PointD(NoteClient.X + 300, NoteClient.Y + 200), 16).Hold("pointed", 0.7).Click("pick");
+                story.Motion("scrolling", 46, story.End, story.End).Hold("scrolled", 0.4);
                 CaptureResult(story);
                 break;
             case "color-copy":
-                story.Hold("overlay", 1.2).Move("approach", new PointD(Swatch.X + 14, Swatch.Y + 16)).Hold("pixel", 1.4).Hold("copy-key", 0.2).Hold("copied", 1.6);
+                // C switches the selector to the colour mode; a click there copies the colour under
+                // the pointer and ends the selector.
+                story.Hold("overlay", 1.0).Hold("color-key", 0.3).Hold("color-mode", 0.7);
+                story.Move("approach", new PointD(Swatch.X + 14, Swatch.Y + 16)).Hold("pixel", 1.4).Click("copy-click").Hold("copied", 1.5);
                 story.Hold("closed", 0.5).Move("paste-move", new PointD(TaskInput.X + 20, TaskInput.Y + 20)).Click("paste-click").Hold("paste-key", 0.5).Hold("pasted", 0.3);
                 break;
             case "text-copy":
@@ -138,6 +150,9 @@ internal sealed class CaptureScene : TutorialScene
 
     private static void CaptureResult(TutorialStoryboard story) =>
         story.Hold("card", 1.2).Hold("activate-card", 0.7).Hold("edit-key", 0.4).Hold("editor", 0.4);
+
+    /// <summary>The delay a new installation's delayed-capture command arms in the selector.</summary>
+    private static int ArmedDelaySeconds => NewInstallDefaults.Create().Capture.DelaySeconds;
 
     private static bool IsCaptureResult(string segment) =>
         segment is "card" or "activate-card" or "edit-key" or "editor" or "result";
@@ -177,8 +192,10 @@ internal sealed class CaptureScene : TutorialScene
                 break;
             case "capture-region":
             case "capture-delay":
-                if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command" or "countdown-3" or "countdown-2" or "countdown-1")
+                if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command")
                     DrawDesktopPhase(dc, frame);
+                // The countdown follows the chosen region, which it keeps clear of.
+                else if (segment.StartsWith("countdown-", StringComparison.Ordinal)) DrawCountdown(dc, segment);
                 else if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, CaptureRegion());
                 else
                 {
@@ -192,7 +209,15 @@ internal sealed class CaptureScene : TutorialScene
                 else DrawDesktopPhase(dc, frame);
                 break;
             case "capture-scroll":
-                if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, null);
+                if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command")
+                    DrawDesktopPhase(dc, frame);
+                else if (segment is "overlay" or "point" or "pointed" or "pick")
+                {
+                    DriveOverlay(frame);
+                    DrawOverlay(dc);
+                    pointer = OverlayPointer(); // the scrolling mode sets the north-south cursor
+                }
+                else if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, null);
                 else DrawScrolling(dc, frame);
                 break;
             case "color-copy":
@@ -220,7 +245,7 @@ internal sealed class CaptureScene : TutorialScene
 
         (string caption, string key) = Caption(frame);
         if (frame.Pressed && showPointer) Stage.DrawClick(dc, frame.Cursor, frame.Progress);
-        if (showPointer && segment is not ("shortcut" or "scrolling" or "copy-key" or "text-key" or "paste-key")) Stage.DrawPointer(dc, frame.Cursor, pointer);
+        if (showPointer && segment is not ("shortcut" or "color-key" or "text-key" or "paste-key")) Stage.DrawPointer(dc, frame.Cursor, pointer);
         Stage.DrawCaption(dc, caption, key);
     }
 
@@ -304,12 +329,22 @@ internal sealed class CaptureScene : TutorialScene
             dc.DrawImage(root, rootBounds);
             if (segment is "submenu" or "to-command" or "command" || segment == "to-more" && frame.IsLast) dc.DrawImage(sub, subBounds);
         }
-        else if (segment.StartsWith("countdown-", StringComparison.Ordinal))
-        {
-            BitmapSource card = Countdown(int.Parse(segment[^1..], System.Globalization.CultureInfo.InvariantCulture));
-            double w = card.PixelWidth / Stage.Scale, h = card.PixelHeight / Stage.Scale;
-            dc.DrawImage(card, new Rect((SceneWidth - w) / 2, (SceneHeight - h) / 2, w, h));
-        }
+    }
+
+    /// <summary>
+    /// The countdown of a delayed capture, which now runs after the region is chosen: the product's
+    /// CountdownWindow content where <see cref="MonitorWindowPlacement.ClearOf"/> puts it in the work
+    /// area, clear of the region it is about to take again.
+    /// </summary>
+    private void DrawCountdown(DrawingContext dc, string segment)
+    {
+        dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
+        BitmapSource card = Countdown(int.Parse(segment[^1..], System.Globalization.CultureInfo.InvariantCulture));
+        double w = card.PixelWidth / Stage.Scale, h = card.PixelHeight / Stage.Scale;
+        Rect region = CaptureRegion();
+        RectD placed = MonitorWindowPlacement.ClearOf(new RectD(0, 0, SceneWidth, SceneHeight - TaskbarHeight), 1,
+            new Size(w, h), new RectD(region.X, region.Y, region.Width, region.Height));
+        dc.DrawImage(card, new Rect(placed.Left, placed.Top, w, h));
     }
 
     // ---- Tray menu -----------------------------------------------------------------------------
@@ -384,6 +419,12 @@ internal sealed class CaptureScene : TutorialScene
             bounds.Y + margin.Top + item.Y + item.Height / 2);
     }
 
+    /// <summary>
+    /// The countdown card, at the size the product places it by. Its panel keeps a transparent
+    /// <see cref="CountdownWindow.ShadowBand"/> margin for its shadow, and that margin belongs to the
+    /// picture; ActualWidth and ActualHeight leave it out, so a snapshot taken at those cut the
+    /// panel's right and bottom edges away.
+    /// </summary>
     private BitmapSource Countdown(int seconds)
     {
         var window = new CountdownWindow(seconds);
@@ -391,9 +432,10 @@ internal sealed class CaptureScene : TutorialScene
         window.Content = null;
         window.Close();
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        content.Arrange(new Rect(content.DesiredSize));
+        Size size = content.DesiredSize;
+        content.Arrange(new Rect(size));
         content.UpdateLayout();
-        return OffscreenWindow.SnapshotElement(content, content.ActualWidth, content.ActualHeight, backdrop: null, opaque: false);
+        return OffscreenWindow.SnapshotElement(content, size.Width, size.Height, backdrop: null, opaque: false);
     }
 
     // ---- Capture selector ----------------------------------------------------------------------
@@ -423,15 +465,24 @@ internal sealed class CaptureScene : TutorialScene
             new WindowCandidate(new IntPtr(1), Physical(new Rect(NoteClient.X, NoteClient.Y - Stage.TitleBarHeight, NoteClient.Width, NoteClient.Height + Stage.TitleBarHeight)), L("릴리스 메모 - 메모장", "Release notes - Notepad")),
         ];
         view.SelectionConfirmed += (_, e) => _confirmed = e;
+        view.ActionRequested += (_, request) =>
+        {
+            if (request.Action == CaptureSelectorAction.ScrollingCapture) _scrollRequested = true;
+        };
         var host = new Window { Content = view, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize };
         _overlayHost = new OffscreenWindow(host, SceneWidth, SceneHeight);
         _overlay = view;
+        // As CaptureOverlayCoordinator does for these commands: the delayed capture arms its delay in
+        // the selector, and the scrolling capture opens the selector in the scrolling mode.
+        if (_feature == "capture-delay") view.ArmedDelaySeconds = ArmedDelaySeconds;
+        if (_feature == "capture-scroll") view.SelectMode(CaptureSelectorMode.Scroll);
         view.InitializePointer();
         view.FlushFeedbackForTest();
         return view;
     }
 
     private RegionSelectionEventArgs? _confirmed;
+    private bool _scrollRequested;
 
     private static RectD Physical(Rect r) => new(r.X * Stage.Scale, r.Y * Stage.Scale, r.Width * Stage.Scale, r.Height * Stage.Scale);
 
@@ -443,10 +494,9 @@ internal sealed class CaptureScene : TutorialScene
             case "text-key" when frame.IsLast:
                 view.TextCaptureMode = true;
                 break;
-            case "copy-key" when frame.IsLast:
-                view.UpdatePointer(false, false);
-                _ = view.CopyColorAtPointerAsync();
-                Stage.Pump(30);
+            case "color-key" when frame.IsLast:
+                // C switches the mode; the colour is copied by the click that follows.
+                view.SelectMode(CaptureSelectorMode.Color);
                 break;
             case "drag":
                 if (frame.IsFirst)
@@ -465,7 +515,8 @@ internal sealed class CaptureScene : TutorialScene
                     Stage.Pump(30);
                 }
                 break;
-            case "click" when frame.IsLast:
+            // A click: in the colour mode it copies the pixel, in the scrolling mode it names the window.
+            case "click" or "copy-click" or "pick" when frame.IsLast:
                 view.SimulatePointerDown();
                 view.SimulatePointerUp();
                 Stage.Pump(30);
@@ -478,9 +529,14 @@ internal sealed class CaptureScene : TutorialScene
         view.FlushFeedbackForTest();
     }
 
-    /// <summary>The selector sets the crosshair cursor; over its mode bar the pointer is an arrow.</summary>
+    /// <summary>
+    /// The selector sets the crosshair cursor, and the north-south one in the scrolling mode; over its
+    /// mode bar the pointer is an arrow.
+    /// </summary>
     private Stage.PointerKind OverlayPointer() =>
-        _overlay?.PointerOverModeBarForTest == true ? Stage.PointerKind.Arrow : Stage.PointerKind.Cross;
+        _overlay?.PointerOverModeBarForTest == true ? Stage.PointerKind.Arrow
+        : _overlay?.Mode == CaptureSelectorMode.Scroll ? Stage.PointerKind.SizeNs
+        : Stage.PointerKind.Cross;
 
     private void DrawOverlay(DrawingContext dc)
     {
@@ -584,6 +640,8 @@ internal sealed class CaptureScene : TutorialScene
 
     private void DrawScrolling(DrawingContext dc, TutorialFramePlan frame)
     {
+        if (frame.Segment == "scrolling" && frame.IsFirst && !_scrollRequested)
+            throw new InvalidOperationException("The selector did not request a scrolling capture for the clicked window.");
         double scroll = frame.Segment switch
         {
             "scrolling" => 360 * Stage.Ease(frame.Progress),
@@ -796,22 +854,33 @@ internal sealed class CaptureScene : TutorialScene
                 "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
                 "tray" or "to-more" or "submenu" or "to-command" or "command" =>
                     (L($"{more} › {Ui("Text_38FF9B0AA541")} 선택", $"{more} › {Ui("Text_38FF9B0AA541")}"), ""),
-                "countdown-3" or "countdown-2" or "countdown-1" => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
-                "overlay" or "approach" or "drag" or "selected" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
+                "overlay" or "approach" or "drag" or "selected" =>
+                    (L($"{UiText.Format("CaptureBar_DelayArmed", ArmedDelaySeconds)} 지연이 걸린 선택 화면에서 캡처할 영역을 드래그",
+                        $"Drag the area in the selector, with the {UiText.Format("CaptureBar_DelayArmed", ArmedDelaySeconds)} delay set"), ""),
+                _ when s.StartsWith("countdown-", StringComparison.Ordinal) =>
+                    (L("대기 시간 동안 캡처할 화면 준비 · 같은 영역을 다시 캡처",
+                        "Prepare the screen during the countdown · the same area is captured again"), ""),
                 _ => (Ui("QuickAccess.Title"), ""),
             },
             "capture-scroll" => s switch
             {
-                "desktop" or "point" or "pointed" => (L("스크롤할 창 위에 포인터를 놓기", "Point at the window to scroll"), ""),
-                "shortcut" or "scrolling" or "scrolled" => (L($"지정한 {Ui("Text_4DBA30197C0A")} 단축키 실행 · 자동 스크롤 대기",
-                    $"Use your {Ui("Text_4DBA30197C0A")} shortcut and wait for the scroll"), ""),
+                "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
+                "tray" or "to-more" or "submenu" or "to-command" or "command" =>
+                    (L($"{more} › {Ui("Text_4DBA30197C0A")} 선택", $"{more} › {Ui("Text_4DBA30197C0A")}"), ""),
+                "overlay" => (L($"선택 화면이 {Ui("Text_4DBA30197C0A")} 모드로 열림",
+                    $"The selector opens in {Ui("Text_4DBA30197C0A").ToLowerInvariant()} mode"), ""),
+                "point" or "pointed" or "pick" => (L("스크롤할 창을 클릭", "Click the window to scroll"), ""),
+                "scrolling" or "scrolled" => (L("자동 스크롤 대기", "Wait for the automatic scroll"), ""),
                 _ => (L("이어 붙인 캡처 확인 · 같은 명령으로 취소", "Review the stitched capture · the same command cancels"), ""),
             },
             "color-copy" => s switch
             {
-                "overlay" or "approach" => (L($"{region}에서 복사할 색상 위에 포인터 놓기", "In the selector, point at the color"), ""),
-                "pixel" => (L("돋보기에서 색상 값 확인", "Check the value in the magnifier"), ""),
-                "copy-key" or "copied" => (L($"{FeatureKeys}로 색상 값 복사", $"Press {FeatureKeys} to copy the value"), FeatureKeys),
+                "overlay" => (L("캡처 선택 화면", "The capture selector"), ""),
+                "color-key" or "color-mode" => (L($"{FeatureKeys} 키: {Ui("CaptureKeyPanel.Color")}",
+                    $"Press {FeatureKeys} to {Ui("CaptureKeyPanel.Color").ToLowerInvariant()}"), FeatureKeys),
+                "approach" => (L("복사할 색상 위에 포인터 놓기", "Point at the color to copy"), ""),
+                "pixel" => (L("돋보기에서 색 이름과 색상 값 확인", "Check the name and the value in the magnifier"), ""),
+                "copy-click" or "copied" => (Ui("CaptureGuide2_ClickColor"), ""),
                 "closed" or "paste-move" or "paste-click" => (L("붙여 넣을 곳으로 이동", "Go to where you want it"), ""),
                 _ => (L("Ctrl+V로 붙여 넣기 · 형식은 색상 형식 설정을 따름", "Paste with Ctrl+V · the format follows your setting"), "Ctrl+V"),
             },

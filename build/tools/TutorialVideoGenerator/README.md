@@ -82,7 +82,7 @@ dotnet run --project build/tools/TutorialVideoGenerator --no-build -- --features
 
 출력 폴더에는 `{기능}.{언어}.mp4`, 첫 프레임 정지 화면 `{기능}.{언어}.jpg`, 주요 장면을 디코딩한 `{기능}.{언어}.sheet.png`, 전체 결과를 담은 `receipt.json`(제품 DLL SHA256, 설정, 클립과 정지 화면별 크기·SHA256, 프레임·길이, 사용한 제품 UI 설명)이 생깁니다.
 
-각 클립의 `{기능}.{언어}.receipt.json`도 저장합니다. 언어별 `contact-sheet.ko.png`와 `contact-sheet.en.png`는 클립마다 첫·중간·마지막 디코딩 프레임을 한 줄에 모읍니다. `VerifyAssets.mjs`는 연습 영상만 들어 있는 출력 폴더를 대상으로 컨테이너의 영상 트랙·코덱·프로필·크기·프레임 간격·길이와 JPG 크기, 영수증 해시, 선택적으로 설치 복사본을 검사하여 `verification.json`을 남깁니다.
+각 클립의 `{기능}.{언어}.receipt.json`도 저장합니다. 언어별 `contact-sheet.ko.png`와 `contact-sheet.en.png`는 클립마다 첫·중간·마지막 디코딩 프레임을 한 줄에 모읍니다. `VerifyAssets.mjs`는 출력 폴더를 대상으로 컨테이너의 영상 트랙·코덱·프로필·크기·프레임 간격·길이(7–15초. 연습 영상의 7–9초는 렌더할 때 `Program.Render`가 검사합니다)와 JPG 크기, 영수증 해시, 선택적으로 설치 복사본을 검사하여 `verification.json`을 남깁니다. 검토 시트를 함께 보므로 `review`를 먼저 실행합니다.
 
 `AssembleReview.mjs`는 비어 있는 출력 폴더에만 결과를 모으며, 제품 DLL과 렌더 설정이 같은 실행의 성공한 개별 영수증을 SHA256으로 대조합니다. 원래 실행과 실패는 `SourceRuns`에 남습니다. 모음 시트 생성과 예상 ID 목록을 지정한 검증은 수집 뒤 별도로 실행합니다. 검증기의 설치 폴더 자리에 `-`를 쓰면 설치 전 결과만 검사합니다.
 
