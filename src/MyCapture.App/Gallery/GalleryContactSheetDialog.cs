@@ -8,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Themes;
 using MyCapture.Core.Export;
@@ -52,11 +53,13 @@ internal sealed partial class GalleryContactSheetDialog : Window
     private bool _closed;
     private bool _syncingSort;
     private readonly LibraryActivityTracker? _activities;
+    private readonly ILogger? _log;
     private int _generation;
 
     internal GalleryContactSheetDialog(IReadOnlyList<GalleryContactSheetItem> items, int skippedVideos, Func<bool> isCurrent,
-        LibraryActivityTracker? activities = null)
+        LibraryActivityTracker? activities = null, ILogger? log = null)
     {
+        _log = log;
         _items = items;
         _activities = activities;
         _isCurrent = isCurrent;
@@ -617,6 +620,7 @@ internal sealed partial class GalleryContactSheetDialog : Window
         }
         catch (Exception ex) when (IsExportError(ex))
         {
+            _log?.LogWarning(ex, "Could not draw the PDF page preview");
             if (!_closed && generation == _generation) KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.PreviewFailed"));
         }
         finally
@@ -687,7 +691,11 @@ internal sealed partial class GalleryContactSheetDialog : Window
             KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Saved"));
         }
         catch (OperationCanceledException) { KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Cancelled")); }
-        catch (Exception ex) when (IsExportError(ex)) { KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Failed")); }
+        catch (Exception ex) when (IsExportError(ex))
+        {
+            _log?.LogWarning(ex, "Could not save the contact sheet PDF");
+            KoreanWordWrap.Show(_status, ThemedDialog.WithCause(UiText.Get("ContactSheet.Failed"), ex, picker.FileName));
+        }
         finally
         {
             acceptingProgress = false;
@@ -695,7 +703,10 @@ internal sealed partial class GalleryContactSheetDialog : Window
             {
                 try { await Task.Run(() => global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage)); }
                 catch (Exception ex) when (IsExportError(ex))
-                { KoreanWordWrap.Show(_status, UiText.Format("ContactSheet.StageRetained", stage)); }
+                {
+                    _log?.LogWarning(ex, "Could not remove the temporary contact sheet file");
+                    KoreanWordWrap.Show(_status, UiText.Format("ContactSheet.StageRetained", stage));
+                }
             }
             _exportCancellation = null;
             _settings.IsEnabled = _save.IsEnabled = true;

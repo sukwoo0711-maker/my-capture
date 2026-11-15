@@ -205,7 +205,7 @@ internal sealed class VideoExportDialog : Window
         AutomationProperties.SetName(_samplePosition, UiText.Get("GifPreview_SamplePosition"));
         _samplePositionRow.Visibility = SpanMs > GifPreviewSampling.MaximumSourceMs ? Visibility.Visible : Visibility.Collapsed;
         _gif.Children.Add(_samplePositionRow);
-        _samplePanel = new GifPreviewPanel(RenderOriginalAsync, _document.SourceDurationMs);
+        _samplePanel = new GifPreviewPanel(RenderOriginalAsync, _document.SourceDurationMs, _logs.CreateLogger("VideoExport"));
         _gif.Children.Add(_samplePanel);
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -786,7 +786,7 @@ internal sealed class VideoExportDialog : Window
         {
             _logs.CreateLogger("VideoExport").LogWarning(error, "GIF preview sample failed");
             if (IsCurrentSample(revision, request, cancellation) && _sample is null)
-                _samplePanel.ShowFailure(error.Message);
+                _samplePanel.ShowFailure(ThemedDialog.RecoveryMessage(error));
         }
         finally
         {
@@ -865,7 +865,7 @@ internal sealed class VideoExportDialog : Window
             // says so, as the GIF sample's does, instead of staying empty.
             _logs.CreateLogger("VideoExport").LogWarning(error, "Export preview frame failed");
             if (!_closed && !_closeRequested && !cancellation.IsCancellationRequested && _preview.Source is null)
-                KoreanWordWrap.Show(_previewMessage, UiText.Format("GifPreview_Failed", error.Message));
+                KoreanWordWrap.Show(_previewMessage, UiText.Format("GifPreview_Failed", ThemedDialog.RecoveryMessage(error)));
         }
         finally
         {

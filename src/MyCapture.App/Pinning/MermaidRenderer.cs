@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
+using MyCapture.Core.Localization;
 using Microsoft.Web.WebView2.Wpf;
 using MyCapture.App.Diagnostics;
 using MyCapture.Platform.Display;
@@ -51,7 +52,7 @@ internal sealed class MermaidRenderer : IMermaidRenderer, IDisposable
     {
         ArgumentNullException.ThrowIfNull(source);
         if (source.Length is 0 or > 50000)
-            return Task.FromResult(new MermaidRenderResult(null, "Mermaid 문법과 길이를 확인하십시오."));
+            return Task.FromResult(new MermaidRenderResult(null, UiText.Get("Pin_MermaidSyntaxLength")));
         return _dispatcher.CheckAccess() ? RenderOnDispatcherAsync(source, scale, cancellationToken)
             : _dispatcher.InvokeAsync(() => RenderOnDispatcherAsync(source, scale, cancellationToken)).Task.Unwrap();
     }
@@ -72,10 +73,10 @@ internal sealed class MermaidRenderer : IMermaidRenderer, IDisposable
             _pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
             await core.ExecuteScriptAsync(BuildRenderScript(source, id)).WaitAsync(timeout.Token);
             DiagramSize? size = await _pending.Task.WaitAsync(timeout.Token);
-            if (size is null) return new(null, "Mermaid 문법을 확인하십시오.");
+            if (size is null) return new(null, UiText.Get("Pin_MermaidSyntax"));
             scale = NormalizeScale(scale);
             if (size.Width * size.Height * scale * scale > 16_000_000)
-                return new(null, "Mermaid 그림이 너무 큽니다.");
+                return new(null, UiText.Get("Pin_MermaidTooLarge"));
             string parameters = JsonSerializer.Serialize(new
             {
                 format = "png", captureBeyondViewport = true, fromSurface = true,
@@ -95,7 +96,7 @@ internal sealed class MermaidRenderer : IMermaidRenderer, IDisposable
         catch (Exception error) when (error is WebView2RuntimeNotFoundException or DllNotFoundException or BadImageFormatException)
         {
             ReleaseBrowser();
-            return new(null, "WebView2 런타임이 없어 그림을 표시할 수 없습니다.");
+            return new(null, UiText.Get("Pin_MermaidNoWebView"));
         }
         catch (Exception error) when (error is COMException or InvalidOperationException or IOException
             or UnauthorizedAccessException or OperationCanceledException or JsonException or FormatException or NotSupportedException)
@@ -103,7 +104,7 @@ internal sealed class MermaidRenderer : IMermaidRenderer, IDisposable
             // Never put a diagram, page URL, or JavaScript error into the log.
             _logger?.LogWarning("Mermaid rendering failed ({ErrorType})", error.GetType().Name);
             ReleaseBrowser();
-            return new(null, "Mermaid 그림을 표시할 수 없습니다.");
+            return new(null, UiText.Get("Pin_MermaidUnavailable"));
         }
         finally
         {

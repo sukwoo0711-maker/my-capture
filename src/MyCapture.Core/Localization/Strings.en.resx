@@ -5349,6 +5349,14 @@ Turn off: {0}</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>View source</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>View rendered</value></data>
+  <data name="Pin_MarkdownContinued" xml:space="preserve"><value>The rest of the content is available with F2.</value></data>
+  <data name="Pin_MarkdownDrawing" xml:space="preserve"><value>Drawing</value></data>
+  <data name="Pin_MarkdownDiagramFallback" xml:space="preserve"><value>The diagram could not be shown, so its source is displayed.</value></data>
+  <data name="Pin_MermaidSyntaxLength" xml:space="preserve"><value>Check the Mermaid syntax and length.</value></data>
+  <data name="Pin_MermaidSyntax" xml:space="preserve"><value>Check the Mermaid syntax.</value></data>
+  <data name="Pin_MermaidTooLarge" xml:space="preserve"><value>The Mermaid diagram is too large.</value></data>
+  <data name="Pin_MermaidNoWebView" xml:space="preserve"><value>The diagram cannot be shown because the WebView2 runtime is missing.</value></data>
+  <data name="Pin_MermaidUnavailable" xml:space="preserve"><value>The Mermaid diagram cannot be shown.</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>Install</value></data>
   <data name="Pin_TranslationConsent" xml:space="preserve"><value>The {1} translation model is a {0} MB download.
 Your text stays on this PC.

@@ -1,5 +1,6 @@
 using MyCapture.App.Themes;
 using System.IO;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using Microsoft.Win32;
 using MyCapture.Core.Queue;
@@ -81,7 +82,10 @@ internal sealed partial class GalleryWindow
             if (result.Imported > 0) _ = IndexImportedImagesAsync();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Import.Failed")); }
+        {
+            _log.LogWarning(ex, "Could not import files into the library");
+            KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("Library.Import.Failed"), ex));
+        }
         finally
         {
             _importCancellation = null;
@@ -97,7 +101,10 @@ internal sealed partial class GalleryWindow
     private async Task IndexImportedImagesAsync()
     {
         try { await _ocrIndexing.IndexMissingAsync(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _log.LogWarning(ex, "OCR indexing after import failed");
+        }
         RefreshOcrCoverageBanner();
         _viewModel.Refresh();
     }
