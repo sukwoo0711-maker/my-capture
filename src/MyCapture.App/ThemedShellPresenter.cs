@@ -122,7 +122,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             UiText.Get("Tools_ColorPicker"), new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
         PlaceOnPointerMonitor(window);
-        Present(window, CardKind.ColorCopy, FeedbackKind.Confirmation, feedback.Message);
+        Present(window, CardKind.ColorCopy, FeedbackKind.Confirmation, feedback.Announcement);
     }
 
     internal static FrameworkElement CreateColorCopyContent(ColorCopyFeedback feedback)
@@ -147,6 +147,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         content.Children.Add(outline);
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(Heading(feedback.Message));
+        text.Children.Add(Body(feedback.NameText));
         if (feedback.Value != feedback.HexValue) text.Children.Add(Body(feedback.HexValue));
         content.Children.Add(text);
         return content;

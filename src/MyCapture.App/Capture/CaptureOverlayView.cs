@@ -148,7 +148,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private WindowCandidate? _selectedWindow;
     private bool _dragBeyondClick;
     private bool _textCaptureMode;
-    private bool _colorPickMode;
+    private bool _colorPickMode, _scrollMode;
+    private int _armedDelaySeconds;
+    private PointD? _scrollPress;
+    private IntPtr _scrollBoundsHandle;
+    private RectD? _scrollBounds;
+    private int _namedColor = -1;
+    private string _colorName = string.Empty;
     private bool _detectWindows;
     private bool _regionOnlySelected;
     private bool _windowSelected;
@@ -347,6 +353,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 bar.ActionRequested += OnBarActionRequested;
                 bar.RatioRequested += OnRatioRequested;
                 bar.FixedSizeRequested += OnFixedSizeRequested;
+                bar.DelayRequested += OnDelayRequested;
                 _modeBar = bar;
                 AddGuideChild(bar);
             }
@@ -360,6 +367,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 bar.ActionRequested -= OnBarActionRequested;
                 bar.RatioRequested -= OnRatioRequested;
                 bar.FixedSizeRequested -= OnFixedSizeRequested;
+                bar.DelayRequested -= OnDelayRequested;
                 RemoveGuideChild(bar);
                 _modeBar = null;
                 _modeBarBounds = null;
@@ -390,7 +398,22 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>What the next click or drag produces; the bar fills in the matching button.</summary>
     internal CaptureSelectorMode Mode =>
-        _freeformMode ? CaptureSelectorMode.Freeform : _colorPickMode ? CaptureSelectorMode.Color : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
+        _freeformMode ? CaptureSelectorMode.Freeform : _scrollMode ? CaptureSelectorMode.Scroll : _colorPickMode ? CaptureSelectorMode.Color
+        : _textCaptureMode ? CaptureSelectorMode.Text : CaptureSelectorMode.Capture;
+
+    /// <summary>The delay chosen in the bar (0 for none), kept across mode changes.</summary>
+    internal int ArmedDelaySeconds
+    {
+        get => _armedDelaySeconds;
+        set { _armedDelaySeconds = Math.Max(0, value); ConfigureGuides(); }
+    }
+
+    /// <summary>The delay a confirmed selection waits for: the armed one, in the modes it applies to.</summary>
+    internal int DelaySeconds => OffersOtherActions && !RecordingSelection && CaptureModeBar.DelayApplies(Mode) ? _armedDelaySeconds : 0;
+
+    private bool ScrollAvailable => OffersOtherActions && !RecordingSelection;
+
+    internal bool ScrollAvailableForKeys => ScrollAvailable;
 
     /// <summary>Top-level windows in z-order (frontmost first), in virtual-desktop pixels.</summary>
     internal IReadOnlyList<WindowCandidate> WindowCandidates
@@ -530,7 +553,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             if (_textCaptureMode == value) return;
             if (value && _freeformMode) LeaveFreeform();
             _textCaptureMode = value;
-            if (value) _colorPickMode = false;
+            if (value) _colorPickMode = _scrollMode = false;
             OnModeChanged();
         }
     }
@@ -545,23 +568,36 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         if (mode == CaptureSelectorMode.Freeform)
         {
             if (!FreeformAvailable) return;
+            _scrollMode = false;
+            _scrollPress = null;
             EnterFreeform();
             return;
         }
         if (_freeformMode) LeaveFreeform();
+        bool leftScroll = _scrollMode && mode != CaptureSelectorMode.Scroll
+            && (mode != CaptureSelectorMode.Text || TextCaptureAvailable) && (mode != CaptureSelectorMode.Color || CopyColorText is not null);
+        if (leftScroll) { _scrollMode = false; _scrollPress = null; }
         switch (mode)
         {
+            case CaptureSelectorMode.Scroll when ScrollAvailable:
+                if (_scrollMode) break;
+                _scrollMode = true;
+                _colorPickMode = _textCaptureMode = false;
+                _selection = null;
+                _selectedWindow = null;
+                OnModeChanged();
+                break;
             case CaptureSelectorMode.Text when TextCaptureAvailable:
                 TextCaptureMode = true;
                 break;
             case CaptureSelectorMode.Color when CopyColorText is not null:
-                if (_colorPickMode) break;
+                if (_colorPickMode) { if (leftScroll) OnModeChanged(); break; }
                 _colorPickMode = true;
                 _textCaptureMode = false;
                 OnModeChanged();
                 break;
             case CaptureSelectorMode.Capture:
-                bool changed = _colorPickMode || _textCaptureMode;
+                bool changed = _colorPickMode || _textCaptureMode || leftScroll;
                 _colorPickMode = false;
                 _textCaptureMode = false;
                 if (changed) OnModeChanged();
@@ -573,6 +609,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     private void OnModeChanged()
     {
+        Cursor = _scrollMode ? Cursors.ScrollNS : Cursors.Cross;
         // The colour mode never highlights a window; leaving it shows the one under the pointer again.
         if (_pointerInitialized) RefreshHover(_cursorPixel.Offset(_screenBounds.Left, _screenBounds.Top));
         _modeBar?.ShowMode(Mode, _windowSelected);
@@ -627,6 +664,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             bar.ActionRequested -= OnBarActionRequested;
             bar.RatioRequested -= OnRatioRequested;
             bar.FixedSizeRequested -= OnFixedSizeRequested;
+            bar.DelayRequested -= OnDelayRequested;
         }
         ReleaseKeyPanel();
         foreach (FrameworkElement child in new FrameworkElement?[] { _modeBar, _startGuide }.OfType<FrameworkElement>())
@@ -723,6 +761,28 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         WindowCandidate? window = null;
         RectD? region = null;
         bool wholeMonitor = false;
+        if (_scrollMode)
+        {
+            // The scrolled viewport of the window under the pointer: its client area, never the desktop.
+            if (!_ended && !_pointerOverBar
+                && WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle) is { } scrolled
+                && !WindowCandidateService.IsDesktopShell(scrolled, _windowCandidates))
+            {
+                if (_scrollBoundsHandle != scrolled.Handle)
+                {
+                    _scrollBoundsHandle = scrolled.Handle;
+                    _scrollBounds = WindowTitleService.TryReadClientBounds(scrolled.Handle, out RectD client) && !client.IsEmpty
+                        ? client : scrolled.ScreenBounds;
+                }
+                region = _scrollBounds is { } bounds ? WindowDetectHitTest.ToBitmapRegion(bounds, _screenBounds) : null;
+                window = region is null ? null : scrolled;
+            }
+            bool scrollChanged = _hoverRegion != region || !ReferenceEquals(_hoverWindow, window) || _hoverWholeMonitor;
+            _hoverWindow = window;
+            _hoverRegion = region;
+            _hoverWholeMonitor = false;
+            return scrollChanged;
+        }
         if (UsesWindowDetection && !_ended && !_colorPickMode && !_pointerOverBar
             && _interaction == InteractionMode.None && !_selection.HasValue)
         {
@@ -998,6 +1058,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             freeformUnavailableReason: EffectiveFreeformUnavailableReason);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(_selectionRatio);
+        _modeBar?.ShowDelay(_armedDelaySeconds);
         _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
         _keyPanelUpdate?.Invoke();
         _staticDirty = true;
@@ -1040,6 +1101,29 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         EndSelection();
         EndPointerInteraction();
         ActionRequested?.Invoke(this, request);
+    }
+
+    private void OnDelayRequested(int seconds)
+    {
+        DismissStartGuide();
+        SelectDelay(seconds);
+        ReturnFocusAfterPointer();
+    }
+
+    /// <summary>Arms a delay (0 disarms it) for the next confirmed selection.</summary>
+    internal void SelectDelay(int seconds)
+    {
+        if (_ended || !OffersOtherActions || RecordingSelection) return;
+        ArmedDelaySeconds = seconds;
+        QueueFeedback();
+    }
+
+    /// <summary>Scrolls the window under <paramref name="bitmapPoint"/>: the selector ends and the owner runs it.</summary>
+    private void RequestScroll(PointD bitmapPoint)
+    {
+        if (_hoverWindow is null || _hoverRegion is null) return;
+        OnBarActionRequested(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture,
+            new PointD(_screenBounds.Left + bitmapPoint.X, _screenBounds.Top + bitmapPoint.Y)));
     }
 
     private void OnFullScreenRequested()
@@ -2262,6 +2346,14 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return true;
         }
 
+        if (_scrollMode)
+        {
+            // A click picks the window; a drag selects nothing.
+            _scrollPress = ClampEdgePoint(rawPoint);
+            RefreshHover(rawPoint.Offset(_screenBounds.Left, _screenBounds.Top));
+            return true;
+        }
+
         if (_freeformMode)
         {
             BeginFreeform(rawPoint);
@@ -2293,6 +2385,13 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     /// <summary>A left release at the current pointer; true when handled.</summary>
     private bool PointerReleased(bool releaseCapture)
     {
+        if (_scrollPress is { } press && !_ended)
+        {
+            _scrollPress = null;
+            PointD released = ClampEdgePoint(UpdatePointer());
+            if (_scrollMode && WindowDetectHitTest.IsClick(press, released, ClickThresholdX, ClickThresholdY)) RequestScroll(press);
+            return true;
+        }
         if (_interaction != InteractionMode.Create || _ended)
         {
             return false;
@@ -2394,6 +2493,15 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             case Key.RightShift:
                 UpdatePointer();
                 return;
+            case Key.Enter when _colorPickMode:
+                UpdatePointer();
+                _ = CopyColorAtPointerAsync();
+                e.Handled = true;
+                return;
+            case Key.Enter when _scrollMode:
+                RequestScroll(ClampEdgePoint(UpdatePointer()));
+                e.Handled = true;
+                return;
             case Key.Enter:
                 ConfirmHoveredOrSelected();
                 e.Handled = true;
@@ -2416,8 +2524,15 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
                 return;
             // Plain C/T only: Shift may be held for precision, Ctrl/Alt chords stay untouched.
             case Key.C when CopyColorText is not null && IsPlainOrShift(modifiers):
-                UpdatePointer();
-                _ = CopyColorAtPointerAsync();
+                SelectMode(_colorPickMode ? CaptureSelectorMode.Capture : CaptureSelectorMode.Color);
+                e.Handled = true;
+                return;
+            case Key.S when ScrollAvailable && IsPlainOrShift(modifiers):
+                SelectMode(_scrollMode ? CaptureSelectorMode.Capture : CaptureSelectorMode.Scroll);
+                e.Handled = true;
+                return;
+            case Key.D when ScrollAvailable && CaptureModeBar.DelayApplies(Mode) && IsPlainOrShift(modifiers):
+                SelectDelay(NativeCaptureOverlay.NextDelay(_armedDelaySeconds));
                 e.Handled = true;
                 return;
             case Key.T when TextCaptureAvailable && IsPlainOrShift(modifiers):
@@ -2739,6 +2854,18 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _magnifierCropY = y;
         int sampleOffset = ((centerY - y) * width + centerX - x) * 4;
         _sampleLabel = $"#{_samplePixels[sampleOffset + 2]:X2}{_samplePixels[sampleOffset + 1]:X2}{_samplePixels[sampleOffset]:X2}";
+        if (_colorPickMode)
+        {
+            // The colour mode names the colour; named again only when the colour changes.
+            int packed = (_samplePixels[sampleOffset + 2] << 16) | (_samplePixels[sampleOffset + 1] << 8) | _samplePixels[sampleOffset];
+            if (packed != _namedColor)
+            {
+                _namedColor = packed;
+                _colorName = ColorNames.PrimaryName(ColorNames.Nearest((byte)(packed >> 16), (byte)(packed >> 8), (byte)packed),
+                    UiText.Culture.TwoLetterISOLanguageName == "ko");
+            }
+            _sampleLabel += "  " + _colorName;
+        }
         MagnifierUpdateCount++;
     }
 

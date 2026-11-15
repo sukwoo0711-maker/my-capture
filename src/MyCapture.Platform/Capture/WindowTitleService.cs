@@ -85,6 +85,9 @@ public sealed class WindowTitleService
         return !bounds.IsEmpty;
     }
 
+    /// <summary>The client area of <paramref name="hwnd"/> in virtual-desktop pixels.</summary>
+    public static bool TryReadClientBounds(IntPtr hwnd, out RectD bounds) => TryGetClientBounds(hwnd, out bounds);
+
     private static bool TryGetClientBounds(IntPtr hwnd, out RectD bounds)
     {
         if (!NativeMethods.GetClientRect(hwnd, out NativeMethods.RECT client))

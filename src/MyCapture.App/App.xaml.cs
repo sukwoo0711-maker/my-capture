@@ -59,7 +59,6 @@ public partial class App : Application
     private MyCapture.App.Recording.RegionRecordingCoordinator? _recorder;
     private LastRegionStore? _lastRegions;
     private AdvancedCaptureService? _advancedCapture;
-    private CountdownWindow? _activeCountdown;
     private CancellationTokenSource? _scrollCancellation;
     private CaptureQueue? _queue;
     private DispatcherTimer? _historyMaintenance;
@@ -482,10 +481,23 @@ public partial class App : Application
             switch (request.Action)
             {
                 case CaptureSelectorAction.Record: HandleRecordRegion(); break;
-                case CaptureSelectorAction.DelayedCapture: HandleDelayedCapture(request.DelaySeconds); break;
+                case CaptureSelectorAction.ScrollingCapture when request.ScreenPoint is { } point: _ = RunScrollingCaptureAsync(point); break;
                 case CaptureSelectorAction.ScrollingCapture: HandleScrollingCapture(); break;
                 case CaptureSelectorAction.RepeatLastRegion: HandleRepeatLastRegion(); break;
             }
+        };
+        _overlay.DelayCancelled += () =>
+        {
+            RestoreTrayAfterCapture();
+            _tray?.ShowBalloon(UiText.Get("Text_07E499DBBB2A"), UiText.Get("Text_70534261ED6C"), TrayBalloonKind.Information, playSound: false);
+            CompleteWelcomeCaptureAnnouncement();
+        };
+        _overlay.DelayExclusionFailed += () =>
+        {
+            // As the old countdown-first flow: the countdown would be in the recording, so nothing runs.
+            RestoreTrayAfterCapture();
+            _tray?.ShowBalloon(UiText.Get("Text_40F24016E78F"), UiText.Get("Text_773C24F0A693"), TrayBalloonKind.Error);
+            CompleteWelcomeCaptureAnnouncement();
         };
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
@@ -919,7 +931,14 @@ public partial class App : Application
             _log?.LogWarning("Timed out waiting for preference saves on exit");
     }
 
-    private async void HandleCaptureRequested()
+    private void HandleCaptureRequested() => StartSelector(CaptureSelectorMode.Capture, 0);
+
+    /// <summary>
+    /// Opens the selector in <paramref name="mode"/> with <paramref name="delaySeconds"/> armed: region
+    /// capture, delayed capture (the delay counts after the selection) and scrolling capture (a click
+    /// picks the window) all start here.
+    /// </summary>
+    private async void StartSelector(CaptureSelectorMode mode, int delaySeconds)
     {
         SelectorTimeline.Mark?.Invoke("handler");
         DismissQuickAccessForCapture();
@@ -951,7 +970,8 @@ public partial class App : Application
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
-                _settings.Capture.ShowSelectionGrid, preserveEditor: true, practiceTarget: practiceTarget);
+                _settings.Capture.ShowSelectionGrid, preserveEditor: true, practiceTarget: practiceTarget,
+                mode: mode, delaySeconds: delaySeconds);
         }
         catch (Exception ex)
         {
@@ -1013,95 +1033,25 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Delayed capture: shows a transient countdown window, then — after tearing that window
-    /// down so it can never appear in the frozen frame — starts a normal region capture.
+    /// Delayed capture: the selector opens with the setting's delay armed. The countdown runs after
+    /// the region is chosen and the region is then taken again from the screen.
     /// </summary>
-    /// <remarks>
-    /// The countdown lives in its own top-level window with a <c>CancellationTokenSource</c>
-    /// bound to Esc. Capture is scheduled on a later dispatcher turn via
-    /// <see cref="Dispatcher.BeginInvoke"/> so the countdown window is fully closed and
-    /// removed from the desktop before <see cref="ScreenCaptureEngine.CaptureMonitor"/> runs,
-    /// preserving the capture-before-wait invariant.
-    /// </remarks>
-    /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
-    private async void HandleDelayedCapture(int? delaySeconds = null)
+    private void HandleDelayedCapture()
     {
-        if (_settings is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.DelayedCapture))
-        {
-            return;
-        }
-
-        int seconds = Math.Max(0, delaySeconds ?? _settings.Capture.DelaySeconds);
-        if (seconds == 0)
-        {
-            // Zero delay is an immediate region capture.
-            HandleCaptureRequested();
-            return;
-        }
-
-        if (_activeCountdown is not null)
-        {
-            _activeCountdown.Activate();
-            return;
-        }
-
-        var countdown = new CountdownWindow(seconds);
-        _activeCountdown = countdown;
-        _tray?.SetState(TrayIconState.Capturing);
-
-        void Cleanup()
-        {
-            countdown.Elapsed -= OnElapsed;
-            countdown.Cancelled -= OnCancelled;
-            _activeCountdown = null;
-        }
-
-        void OnElapsed(object? sender, EventArgs e)
-        {
-            Cleanup();
-            // Close the window FIRST, then start the capture on the turn after it has closed, so
-            // the countdown, including its short exit, is gone from the screen before the freeze.
-            countdown.Closed += (_, _) => _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
-            countdown.Close();
-        }
-
-        void OnCancelled(object? sender, EventArgs e)
-        {
-            Cleanup();
-            countdown.Close();
-            RestoreTrayAfterCapture();
-            _tray?.ShowBalloon(
-                UiText.Get("Text_07E499DBBB2A"),
-                UiText.Get("Text_70534261ED6C"),
-                TrayBalloonKind.Information,
-                playSound: false);
-            CompleteWelcomeCaptureAnnouncement();
-        }
-
-        countdown.Elapsed += OnElapsed;
-        countdown.Cancelled += OnCancelled;
-        countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); CompleteWelcomeCaptureAnnouncement(); } };
-        if (_recorder?.RequiresCaptureExclusion == true && !CaptureWindowExclusion.TryApply(countdown))
-        {
-            countdown.Close();
-            _tray?.ShowBalloon(UiText.Get("Text_40F24016E78F"), UiText.Get("Text_773C24F0A693"), TrayBalloonKind.Error);
-            return;
-        }
-        countdown.Show();
-        countdown.Activate();
+        if (_settings is null) return;
+        // The delay is armed in the selector and counts after the region is chosen; zero is a plain region capture.
+        StartSelector(CaptureSelectorMode.Capture, Math.Max(0, _settings.Capture.DelaySeconds));
     }
 
     /// <summary>
-    /// Scrolling capture: uses the window under the cursor as the scroll region, drives the
-    /// capture → scroll → stitch loop in Core, and opens the editor over the stitched image.
+    /// Scrolling capture: opens the selector in scroll mode, or cancels the loop that is running.
     /// </summary>
     /// <remarks>
-    /// The scroll region is the client rectangle of the window under the cursor, which avoids
-    /// the window chrome while matching what the user is pointing at. The heavy lifting
-    /// (overlap detection, fixed-header handling, termination) is pure Core code; this handler
-    /// only supplies the region and reports the typed outcome.
+    /// The selector highlights the client area of the window under the pointer; its click names
+    /// the window, and <see cref="RunScrollingCaptureAsync"/> drives the capture → scroll → stitch
+    /// loop in Core on it.
     /// </remarks>
-    private async void HandleScrollingCapture()
+    private void HandleScrollingCapture()
     {
         if (_advancedCapture is null)
         {
@@ -1128,14 +1078,20 @@ public partial class App : Application
             return;
         }
 
-        if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.ScrollingCapture))
+        // The selector opens in scroll mode; its click names the window (RunScrollingCaptureAsync).
+        StartSelector(CaptureSelectorMode.Scroll, 0);
+    }
+
+    /// <summary>Runs the scroll → capture → stitch loop on the window at <paramref name="point"/>, picked in the selector.</summary>
+    private async Task RunScrollingCaptureAsync(Core.Primitives.PointD point)
+    {
+        if (_advancedCapture is null || _scrollCancellation is not null)
         {
             return;
         }
 
-        Core.Primitives.PointD cursor = CursorLocator.GetPosition();
         WindowUnderCursor? window =
-            _services?.GetRequiredService<WindowTitleService>().ResolveAt(cursor);
+            _services?.GetRequiredService<WindowTitleService>().ResolveAt(point);
 
         if (window is null || window.ScrollBounds.IsEmpty)
         {
@@ -1255,7 +1211,7 @@ public partial class App : Application
     {
         await _initialEditRecoveryTask;
         await _initialLibraryRecoveryTask;
-        if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
+        if (_overlay?.IsSelecting == true || _overlay?.IsCountingDown == true || _scrollCancellation is not null
             || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
         await _capturePersistenceTask;
         // Late page/application details normally land within the readers' deadlines; never hold exit longer.

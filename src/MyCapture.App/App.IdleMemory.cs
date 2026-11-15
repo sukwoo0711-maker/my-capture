@@ -41,7 +41,7 @@ public partial class App
     private bool CanReclaimIdleMemory() =>
         !_shutdownRequested && !_preparingExit && !_storeInstallationPending
         && _overlay?.IsActive != true && _recorder?.IsActive != true
-        && !_preparingAdvancedCapture && _activeCountdown is null && _scrollCancellation is null
+        && !_preparingAdvancedCapture && _overlay?.IsCountingDown != true && _scrollCancellation is null
         && !_pasteToScreenInFlight && !_gitHubUploadInFlight && !_ocrMemoryBusy && !_indexingRunning
         && _textCaptureCancellation is null
         && _capturePersistenceTask.IsCompleted && _sourceBackfillTask.IsCompleted

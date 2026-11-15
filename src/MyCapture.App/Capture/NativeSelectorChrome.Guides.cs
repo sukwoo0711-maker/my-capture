@@ -138,12 +138,14 @@ internal sealed partial class NativeSelectorChrome
         public bool ShouldShow => chrome._owner is { ShowKeyPanel: true, ShowStartGuide: false, RecordingSelection: false, IsClosed: false }
             && !CaptureOverlayView.SuppressKeyPanelForProbe;
         public bool CanPresent => chrome._owner is { FirstFramePresentedForTest: true, Frame: not null };
-        public CaptureKeyPanelContext Context => new(Owner.ShowKeyPanel, Owner.Mode != CaptureSelectorMode.Color,
-            Owner.UsesWindowDetection && Owner.Mode != CaptureSelectorMode.Color,
+        public CaptureKeyPanelContext Context => new(Owner.ShowKeyPanel, Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Scroll),
+            Owner.UsesWindowDetection && Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Scroll),
             Owner.FreeformStrokeActive || (Owner.SelectionRectangle.Width >= 2 && Owner.SelectionRectangle.Height >= 2),
             Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Owner.PresetSize is null, Owner.CopyColorText is not null,
             Owner.TextCaptureAvailable, Owner.TextCaptureMode, Owner.PinSelectionAvailable, Owner.PasteToScreenHotkey,
-            Owner.FreeformAvailable, Owner.Mode == CaptureSelectorMode.Freeform);
+            Owner.FreeformAvailable, Owner.Mode == CaptureSelectorMode.Freeform, Owner.ScrollAvailable,
+            Owner.Mode == CaptureSelectorMode.Scroll, Owner.ScrollAvailable && CaptureModeBar.DelayApplies(Owner.Mode),
+            Owner.Mode == CaptureSelectorMode.Color);
         public FontFamily UiFont => ThemeFonts.Ui;
         public FontFamily MonoFont { get; } = new("Consolas");
         public IReadOnlyDictionary<string, Brush> Palette => CaptureGuidePalette.Resolve();

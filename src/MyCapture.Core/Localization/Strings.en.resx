@@ -2959,6 +2959,7 @@ This cannot be undone.</value>
   <data name="SettingsRange_ClosedPins" xml:space="preserve"><value>0–100</value></data>
   <data name="SettingsRange_ZoomStep" xml:space="preserve"><value>0.02–0.5</value></data>
   <data name="Settings_ZoomStepNote" xml:space="preserve"><value>How much one mouse wheel step changes the zoom.</value></data>
+  <data name="Settings_DelayNote" xml:space="preserve"><value>Delayed capture opens the selector with this delay chosen. After you choose the area, the same area is captured again when the time has passed.</value></data>
   <data name="Settings_RegionHistoryNote" xml:space="preserve"><value>Previous regions kept for repeat capture.</value></data>
   <data name="Settings_ClosedPinsNote" xml:space="preserve"><value>Closed pins remembered so they can be reopened; 0 turns it off. Cleared when the app exits; never saved to disk.</value></data>
   <data name="Settings_RecordingSizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 px.</value></data>
@@ -3813,11 +3814,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. After the Text copied notification appears, press Ctrl+V where you want to paste.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
-  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format and end the capture.</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>In the selector's color copy mode (C key), a click copies the color at the pointer tip in this format and ends the capture.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color and end capture while selecting</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Color copy mode while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
@@ -3981,8 +3982,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureKeyPanel.Resize" xml:space="preserve"><value>Resize 1 pixel · Ctrl for 10 pixels</value></data>
   <data name="CaptureKeyPanel.All" xml:space="preserve"><value>Select the entire screen</value></data>
   <data name="CaptureKeyPanel.Ratio" xml:space="preserve"><value>Change aspect ratio</value></data>
-  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Copy color</value></data>
+  <data name="CaptureKeyPanel.Delay" xml:space="preserve"><value>Change delay</value></data>
+  <data name="CaptureKeyPanel.ScrollDelay" xml:space="preserve"><value>Scrolling capture · Change delay</value></data>
+  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Switch to color copy</value></data>
+  <data name="CaptureKeyPanel.ColorCopy" xml:space="preserve"><value>Copy color</value></data>
   <data name="CaptureKeyPanel.Text" xml:space="preserve"><value>Switch to text copy</value></data>
+  <data name="CaptureKeyPanel.Scroll" xml:space="preserve"><value>Switch to scrolling capture</value></data>
+  <data name="CaptureKeyPanel.ScrollWindow" xml:space="preserve"><value>Scroll-capture this window</value></data>
   <data name="CaptureKeyPanel.Image" xml:space="preserve"><value>Switch to image capture</value></data>
   <data name="CaptureKeyPanel.Pin" xml:space="preserve"><value>Pin selected region</value></data>
   <data name="CaptureKeyPanel.ConfirmCancel" xml:space="preserve"><value>Confirm · Cancel</value></data>
@@ -3993,9 +3999,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>
   <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>Click the window under the pointer to capture it. Click the desktop to capture that monitor.</value></data>
-  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Select a window for scrolling capture.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Switches to scrolling capture. Click the window to scroll to start the capture.</value></data>
   <data name="CaptureBar_Delay" xml:space="preserve"><value>Delayed capture</value></data>
-  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Choose capture after 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Captures the screen again a set time after you choose the area. Choose no delay, 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayArmed" xml:space="preserve"><value>{0}s</value></data>
+  <data name="CaptureBar_DelayNone" xml:space="preserve"><value>No delay</value></data>
   <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>Drag over the area to record. Press Esc to cancel.</value></data>
   <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>Selects this entire monitor as the recording area.</value></data>
   <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>Choose a recording area</value></data>
@@ -4006,7 +4014,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_Text" xml:space="preserve"><value>Copy text</value></data>
   <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
   <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
-  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press C to copy the color under the pointer and end the capture.</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press Enter to copy the color at the pointer tip and end the capture. Arrow keys move 1 pixel.</value></data>
   <data name="CaptureGuide2_Help" xml:space="preserve"><value>Help</value></data>
   <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>Shows how to capture again.</value></data>
   <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>Cancel</value></data>
@@ -4017,7 +4025,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Copy text from region</value></data>
   <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Copy text from window</value></data>
   <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Copy text from monitor</value></data>
-  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or C: Copy color and end capture</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or Enter: Copy color</value></data>
+  <data name="CaptureGuide2_ClickScroll" xml:space="preserve"><value>Click: Scroll-capture this window</value></data>
+  <data name="CaptureGuide2_DelaySuffix" xml:space="preserve"><value>Capture after {0} {0:plural:second|seconds}</value></data>
   <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
@@ -4787,14 +4797,14 @@ Turn off: {0}</value></data>
   <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. Place the pointer on the monitor to capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. Run Full-screen capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. Review the full-screen capture of that monitor.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Choose Scrolling capture under More captures in the tray menu.</value></data>
-  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Place the pointer over a scrollable window.</value></data>
-  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Run Scrolling capture and wait for automatic scrolling to finish.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Switch to scrolling capture with the Scroll button or the S key in the capture selector.</value></data>
+  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Start Scrolling capture; the selector opens in scrolling capture mode.</value></data>
+  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Click the window to scroll and wait for automatic scrolling to finish.</value></data>
   <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. Review the stitched capture. Run the same command during capture to cancel.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay in the capture selector's More captures menu.</value></data>
-  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture.</value></data>
-  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Prepare the screen during the countdown.</value></data>
-  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. When the selector appears, drag to select the capture area.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay with the Delay button or the D key in the capture selector.</value></data>
+  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture; the selector opens with the delay chosen.</value></data>
+  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Drag over the area or click a window.</value></data>
+  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. Prepare the screen during the countdown. When it ends, the same area is captured again.</value></data>
   <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. When a capture appears in the quick access card, press Alt+Q.</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. Click Copy in the card or press C.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. Press Ctrl+V in the destination to use the capture.</value></data>

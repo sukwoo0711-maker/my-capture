@@ -743,7 +743,8 @@
                                 IsChecked="{Binding AbortOnFocusLoss}" />
 
                                 <settings:SettingsField Margin="0,6,0,12"
-                                                        Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text SettingsRange_Seconds0To60}">
+                                                        Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text SettingsRange_Seconds0To60}"
+                                                        Note="{loc:Text Settings_DelayNote}">
                                     <TextBox Style="{StaticResource Settings.NumberBox}"
                                              AutomationProperties.Name="{loc:Text Text_8839D136ACA2}"
                                              Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />

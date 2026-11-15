@@ -134,8 +134,9 @@ public sealed class FeatureTutorialTests
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
             SaveHelpEvidence(help, tabs, language);
-            // 110 since the eraser (Shift+E) has its own row after the highlighter.
-            Assert.Equal(110, rows.Length);
+            // 112: the eraser (Shift+E) has its own row after the highlighter, and the selector tab gained
+            // the S (scrolling capture) and D (delay) rows.
+            Assert.Equal(112, rows.Length);
             foreach (var (label, shortcut) in new[]
             {
                 ("Shortcuts.Parent", "Alt+↑"),
