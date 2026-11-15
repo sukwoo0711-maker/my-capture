@@ -5393,6 +5393,13 @@ Install the model?</value></data>
   <data name="Pin_TranslationFailed" xml:space="preserve">
     <value>Translation failed. The original text is retained.</value>
   </data>
+  <data name="Pin_TranslationFailedReading" xml:space="preserve"><value>Couldn't read the text in the image. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedModelCheck" xml:space="preserve"><value>Couldn't check the translation model. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedInstall" xml:space="preserve"><value>Couldn't install the translation model. Try again.</value></data>
+  <data name="Pin_TranslationFailedLoad" xml:space="preserve"><value>Couldn't open the translation model. Select Retry translation to install it again.</value></data>
+  <data name="Pin_TranslationFailedInference" xml:space="preserve"><value>An error occurred while translating. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedShowing" xml:space="preserve"><value>Couldn't show the translation. The original text is retained.</value></data>
+  <data name="Pin_TranslationKeptOriginal" xml:space="preserve"><value>The translation didn't keep the original numbers and symbols, so the original text is retained.</value></data>
   <data name="Pin_TranslationRetry" xml:space="preserve">
     <value>Retry translation</value>
   </data>

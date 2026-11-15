@@ -36,6 +36,9 @@ internal interface ITextTranslator
 
     /// <summary>Loads an installed model ahead of a translation that is about to start; it never asks for one.</summary>
     Task WarmUpAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Releases the model and deletes its files, so the next installation downloads all of it again.</summary>
+    Task DeleteModelAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>
@@ -118,7 +121,7 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
         _store.DownloadAsync(progress, cancellationToken);
 
     /// <summary>Releases the model and deletes its files; translation then needs a new download.</summary>
-    internal async Task DeleteModelAsync(CancellationToken cancellationToken)
+    public async Task DeleteModelAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
