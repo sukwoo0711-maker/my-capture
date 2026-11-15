@@ -79,7 +79,15 @@ function video(bytes) {
     assert.equal(timescale / delta, 25, 'Every frame must be 40 ms');
     frames += count; ticks += count * delta;
   }
-  return { codec: 'H.264 High', width, height, fps: 25, frames, seconds: ticks / timescale, audioTracks: 0 };
+  // One key frame, the first. A repeated key frame of screen content costs about as much as the
+  // whole rest of a clip, and the player only ever plays from the start; without this the encoder
+  // writes one every two seconds, which measured 79% more bytes across the 90 installed clips.
+  const stss = boxes(bytes, stbl.start, stbl.end).filter(box => box.type === 'stss');
+  assert.equal(stss.length, 1, 'Expected one sync sample table');
+  const keyFrames = bytes.readUInt32BE(stss[0].start + 4);
+  assert.equal(keyFrames, 1, `Expected one key frame, found ${keyFrames}`);
+  assert.equal(bytes.readUInt32BE(stss[0].start + 8), 1, 'The key frame must be the first frame');
+  return { codec: 'H.264 High', width, height, fps: 25, frames, seconds: ticks / timescale, keyFrames, audioTracks: 0 };
 }
 function jpeg(bytes) {
   assert.equal(bytes.readUInt16BE(0), 0xffd8);
@@ -137,4 +145,4 @@ for (const id of new Set(summary.Receipts.map(row => row.Feature))) {
 }
 const result = { result: 'PASS', expectedFeatures, clips: rows.length, rows };
 writeFileSync(confinedPath(folder, 'verification.json'), JSON.stringify(result, null, 2) + '\n');
-console.log(`PASS: ${rows.length} clips; H.264 High, 960x540, 25 fps, 7-15 seconds, silent; JPEGs, receipts, hashes${checkInstalled ? ' and installed copies' : ''} verified.`);
+console.log(`PASS: ${rows.length} clips; H.264 High, 960x540, 25 fps, 7-15 seconds, one key frame, silent; JPEGs, receipts, hashes${checkInstalled ? ' and installed copies' : ''} verified.`);

@@ -11,6 +11,9 @@ namespace MyCapture.TutorialGenerator;
 /// Encodes frames to H.264 MP4 with the product's Media Foundation encoder, forced to the
 /// software MFT so output does not depend on the GPU. A held frame is written once per 40 ms.
 /// The clips are full range: the app's MediaElement player shows studio-range video washed out.
+/// A clip carries one key frame, not the encoder's one every two seconds: the tutorial player
+/// only plays from the start and loops by rewinding there, while a repeated key frame of screen
+/// content costs about as much as the whole rest of a clip.
 /// </summary>
 internal sealed class ClipWriter : IDisposable
 {
@@ -18,7 +21,7 @@ internal sealed class ClipWriter : IDisposable
     private readonly int _width, _height;
     private int _index;
 
-    internal ClipWriter(string path, int width, int height, int bitrate, int? quality, int? profile)
+    internal ClipWriter(string path, int width, int height, int bitrate, int? quality, int? profile, int? keyFrameSpacing)
     {
         _width = width;
         _height = height;
@@ -26,7 +29,7 @@ internal sealed class ClipWriter : IDisposable
             new VideoEncoderOptions(path, width, height, TutorialStoryboard.Fps, bitrate)
             {
                 AllowHardwareEncoder = false, ConstantQuality = quality, H264Profile = profile, QualityVsSpeed = quality is null ? null : 100,
-                FullRange = true,
+                FullRange = true, MaxKeyFrameSpacing = keyFrameSpacing,
             },
             NullLogger<MediaFoundationVideoEncoder>.Instance);
     }

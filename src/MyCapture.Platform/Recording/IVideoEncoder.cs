@@ -106,6 +106,15 @@ public sealed record VideoEncoderOptions(
     public int? QualityVsSpeed { get; init; }
 
     /// <summary>
+    /// The largest number of frames from one key frame to the next; null keeps the encoder's
+    /// default (a key frame about every two seconds). Recordings keep that default so a player can
+    /// seek anywhere in them. Clips that only ever play from the start, such as the feature
+    /// tutorials, ask for a wider spacing: on screen content a key frame costs many times a held
+    /// frame, and the repeats add no picture the frames after them do not already reconstruct.
+    /// </summary>
+    public int? MaxKeyFrameSpacing { get; init; }
+
+    /// <summary>
     /// Converts RGB input to full-range (0–255) Y'CbCr and declares that range in the stream,
     /// instead of the studio range (16–235) recordings use. WPF's MediaElement presents studio
     /// range as studio-range RGB (white at 235, black at 16): the recording players expand it
