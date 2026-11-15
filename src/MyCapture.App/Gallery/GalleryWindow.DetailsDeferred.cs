@@ -39,7 +39,7 @@ internal sealed partial class GalleryWindow
         bool several = _viewModel.Selection.Count > 1;
         string title = several ? _viewModel.SelectionText : UiText.Get("Workspace.NoSelection");
         string hint = UiText.Get(several ? "Workspace.SelectOneHint" : "Workspace.SelectHint");
-        if (GalleryDetailsEmptyTitle.Text != title) GalleryDetailsEmptyTitle.Text = title;
+        if (KoreanWordWrap.Strip(GalleryDetailsEmptyTitle.Text) != title) _ = KoreanWordWrap.Show(GalleryDetailsEmptyTitle, title);
         if (KoreanWordWrap.Strip(GalleryDetailsEmptyHint.Text) != hint) _ = KoreanWordWrap.Show(GalleryDetailsEmptyHint, hint);
     }
 
