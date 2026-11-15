@@ -491,6 +491,11 @@ public sealed class RecordingControlWindowExclusionTests
         IntPtr expected = CreateRectRgn(0, 0, 0, 0);
         try
         {
+            // GetWindowRgn/CombineRgn also return ERROR when a region handle below is null, which
+            // a long run can hit on the process-wide GDI limit. Separate that from a window that
+            // genuinely carries no region, so a failure here names its own cause.
+            Assert.NotEqual(IntPtr.Zero, actual);
+            Assert.NotEqual(IntPtr.Zero, expected);
             Assert.NotEqual(0, GetWindowRgn(hwnd, actual));
             // Build the expectation from the four rendered border strips (independently of
             // production's outer-minus-inner construction) and the rendered palette bounds.

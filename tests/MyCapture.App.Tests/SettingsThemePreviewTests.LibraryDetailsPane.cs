@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using MyCapture.App.Gallery;
 using MyCapture.Core.Localization;
@@ -42,7 +42,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(panel.IsVisible);
                 Assert.False(rail.IsVisible);
                 Assert.True(empty.IsVisible);
-                Assert.Equal(UiText.Get("Workspace.NoSelection"), title.Text);
+                Assert.Equal(UiText.Get("Workspace.NoSelection"), MyCapture.App.Themes.KoreanWordWrap.Strip(title.Text));
                 Assert.Equal(UiText.Get("Workspace.SelectHint"), MyCapture.App.Themes.KoreanWordWrap.Strip(hint.Text));
                 Assert.True(Assert.IsType<Button>(window.FindName("HideDetailsButton")).IsVisible);
                 Assert.Equal(UiText.Get("Workspace.Details"), Assert.IsType<TextBlock>(window.FindName("GalleryDetailsHeading")).Text);
@@ -70,15 +70,15 @@ public sealed partial class SettingsThemePreviewTests
                 vm.Select(fixture.Records[1].Id, control: true);
                 AssertStable("multiple");
                 Assert.True(empty.IsVisible);
-                Assert.Equal(vm.SelectionText, title.Text);
-                Assert.Equal(UiText.Format("LibrarySelection_Count", 2), title.Text);
+                Assert.Equal(vm.SelectionText, MyCapture.App.Themes.KoreanWordWrap.Strip(title.Text));
+                Assert.Equal(UiText.Format("LibrarySelection_Count", 2), MyCapture.App.Themes.KoreanWordWrap.Strip(title.Text));
                 Assert.Equal(UiText.Get("Workspace.SelectOneHint"), MyCapture.App.Themes.KoreanWordWrap.Strip(hint.Text));
                 Assert.False(Assert.IsType<Grid>(window.FindName("GalleryDetailsContent")).IsVisible);
                 SaveLibraryDetailsPaneEvidence(window, "after", "multi-min");
 
                 vm.ClearSelection();
                 AssertStable("cleared");
-                Assert.Equal(UiText.Get("Workspace.NoSelection"), title.Text);
+                Assert.Equal(UiText.Get("Workspace.NoSelection"), MyCapture.App.Themes.KoreanWordWrap.Strip(title.Text));
                 // Releasing the selection lets go of the preview image the pane showed.
                 Assert.Null(Assert.IsType<Image>(window.FindName("SelectedDetailThumbnail")).Source);
 
@@ -97,7 +97,7 @@ public sealed partial class SettingsThemePreviewTests
                 vm.Refresh();
                 AssertStable("empty library");
                 Assert.True(vm.QueueIsEmpty);
-                Assert.Equal(UiText.Get("Workspace.NoSelection"), title.Text);
+                Assert.Equal(UiText.Get("Workspace.NoSelection"), MyCapture.App.Themes.KoreanWordWrap.Strip(title.Text));
                 SaveLibraryDetailsPaneEvidence(window, "after", "library-empty-min");
             }
             finally { fixture.Window.CloseForExit(); application.Shutdown(); }

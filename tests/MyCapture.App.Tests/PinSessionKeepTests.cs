@@ -115,11 +115,27 @@ public sealed class PinSessionKeepTests(ITestOutputHelper output)
                     PinWindow pin = manager.RestoreSessionPin(new PinManager.ClosedPin(content,
                         content.LayoutWidthDip, content.LayoutHeightDip, 1.1 + (i * 0.1), 0.9 - (i * 0.1), null,
                         IsCollapsed: i == 2, CollapsedOpacity: i == 2 ? 0.45 : null));
-                    pin.Left = 40 + (i * 90);
-                    pin.Top = 60 + (i * 40);
+                    // Distinct positions near the top-left corner: the widest pin here is the
+                    // zoomed markdown one, and every pin has to fit a 1024x768 work area, as on
+                    // the CI runner, or the restore legitimately moves it back inside (see
+                    // DisplayChange_ReopensThePinInsideTheCurrentWorkArea) and no longer round trips.
+                    pin.Left = 16 + (i * 12);
+                    pin.Top = 16 + (i * 12);
                     if (i == 1) pin.ApplyClickThrough(enabled: true);
                 }
                 before = manager.SnapshotOpenPins();
+                foreach (PinManager.ClosedPin saved in before)
+                {
+                    RectD at = Assert.IsType<PinClosedPlacement>(saved.Placement).Bounds;
+                    output.WriteLine($"saved {saved.Content.Kind} pin: {at.Width:0} x {at.Height:0} px at {at.X:0}, {at.Y:0}");
+                    // A pin's DIP size is the same on any display scale, so this holds the fixture to
+                    // the 1024x768 desktop of the CI runner on a development display too: with the
+                    // offsets above (at most 52 DIP) the pin stays inside its work area, and the
+                    // restore has no reason to move it. The collapsed pin shows a thumbnail of at
+                    // most 160 DIP (PinViewState.WidthDip), which is smaller still.
+                    Assert.InRange(saved.ImageWidthDip * saved.Zoom, 1, 1024 - 64);
+                    Assert.InRange(saved.ImageHeightDip * saved.Zoom, 1, 728 - 64);
+                }
                 Assert.Equal(PinSessionSaveOutcome.Committed, service.SaveNow().Outcome);
             }
             manager.CloseAllForExit();
