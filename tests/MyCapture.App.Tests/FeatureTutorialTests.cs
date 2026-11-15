@@ -699,8 +699,21 @@ public sealed class FeatureTutorialTests
                 if (frame.PixelWidth != 960 || frame.PixelHeight != 540) problems.Add($"{still.Name} is {frame.PixelWidth}x{frame.PixelHeight}");
             }
         problems.AddRange(Directory.EnumerateFiles(directory, "*.gif").Select(path => $"leftover {Path.GetFileName(path)}"));
+        // The clips are the largest thing the app ships after the runtime, and the release size budget is
+        // checked only when a package is built: on 2026-11-15 a re-render pushed the x86 install over it
+        // and the branch's CI went red at packaging. This says so while the clips are being made.
+        long total = Directory.EnumerateFiles(directory).Sum(file => new FileInfo(file).Length);
+        if (total > TutorialAssetBudgetBytes)
+            problems.Add($"tutorial assets are {total} bytes, over the {TutorialAssetBudgetBytes} budget");
         return problems;
     }
+
+    /// <summary>
+    /// What <c>Assets\Tutorials</c> may weigh in all. It was 16,455,894 bytes with 45 features in two
+    /// languages, which leaves room for more clips before the release size budget is at risk. Raising
+    /// this is a deliberate decision about the installed size, not a formality.
+    /// </summary>
+    internal const long TutorialAssetBudgetBytes = 20_000_000;
 
     private static void AssertFallback(FeatureTutorialWindow window, string statusKey, IEnumerable<string> steps)
     {
