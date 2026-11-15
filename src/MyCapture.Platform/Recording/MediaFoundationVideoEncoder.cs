@@ -48,6 +48,7 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
     private static readonly Guid CODECAPI_AVEncCommonRateControlMode = new("1c0608e9-370c-4710-8a58-cb6181c42423");
     private static readonly Guid CODECAPI_AVEncCommonQuality = new("fcbf57a3-7ea5-4b0c-9644-69b40c39c391");
     private static readonly Guid CODECAPI_AVEncCommonQualityVsSpeed = new("98332df8-03cd-476b-89fa-3f9e442dec9f");
+    private static readonly Guid CODECAPI_AVEncMPVGOPSize = new("95f31b26-95a4-41aa-9303-246a7fc6eef1");
     private static readonly Guid MF_MT_VIDEO_NOMINAL_RANGE = new("c21b8ee5-b956-4071-8daf-325edf5cab11");
 
     private const uint MFVideoInterlace_Progressive = 2;
@@ -385,25 +386,37 @@ public sealed partial class MediaFoundationVideoEncoder : IVideoEncoder
             SetDiagnosticQualityVsSpeed(inType, effortOverride);
             return;
         }
-        if (_options.ConstantQuality is not { } quality)
+        if (_options.ConstantQuality is null && _options.MaxKeyFrameSpacing is null)
         {
             Check(_writer!.SetInputMediaType(_streamIndex, inType, IntPtr.Zero), nameof(IMFSinkWriter.SetInputMediaType));
             return;
         }
 
-        Check(MFCreateAttributes(out IMFAttributes parameters, 2), nameof(MFCreateAttributes));
+        Check(MFCreateAttributes(out IMFAttributes parameters, 4), nameof(MFCreateAttributes));
         IntPtr pointer = IntPtr.Zero;
         try
         {
-            Guid mode = CODECAPI_AVEncCommonRateControlMode;
-            Guid level = CODECAPI_AVEncCommonQuality;
-            Check(parameters.SetUINT32(ref mode, eAVEncCommonRateControlMode_Quality), "IMFAttributes.SetUINT32(rate control)");
-            Check(parameters.SetUINT32(ref level, (uint)Math.Clamp(quality, 1, 100)), "IMFAttributes.SetUINT32(quality)");
-            if (_options.QualityVsSpeed is { } effort)
+            if (_options.ConstantQuality is { } quality)
             {
-                Guid speed = CODECAPI_AVEncCommonQualityVsSpeed;
-                Check(parameters.SetUINT32(ref speed, (uint)Math.Clamp(effort, 0, 100)), "IMFAttributes.SetUINT32(quality vs speed)");
+                Guid mode = CODECAPI_AVEncCommonRateControlMode;
+                Guid level = CODECAPI_AVEncCommonQuality;
+                Check(parameters.SetUINT32(ref mode, eAVEncCommonRateControlMode_Quality), "IMFAttributes.SetUINT32(rate control)");
+                Check(parameters.SetUINT32(ref level, (uint)Math.Clamp(quality, 1, 100)), "IMFAttributes.SetUINT32(quality)");
+                if (_options.QualityVsSpeed is { } effort)
+                {
+                    Guid speed = CODECAPI_AVEncCommonQualityVsSpeed;
+                    Check(parameters.SetUINT32(ref speed, (uint)Math.Clamp(effort, 0, 100)), "IMFAttributes.SetUINT32(quality vs speed)");
+                }
             }
+
+            if (_options.MaxKeyFrameSpacing is { } spacing)
+            {
+                // The encoder reads its GOP length here. The same number on the output media
+                // type's MF_MT_MAX_KEYFRAME_SPACING is accepted and then ignored.
+                Guid gop = CODECAPI_AVEncMPVGOPSize;
+                Check(parameters.SetUINT32(ref gop, (uint)Math.Max(1, spacing)), "IMFAttributes.SetUINT32(GOP size)");
+            }
+
             pointer = Marshal.GetComInterfaceForObject(parameters, typeof(IMFAttributes));
             Check(_writer!.SetInputMediaType(_streamIndex, inType, pointer), nameof(IMFSinkWriter.SetInputMediaType));
         }

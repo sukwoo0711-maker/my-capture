@@ -17,8 +17,8 @@ namespace MyCapture.TutorialGenerator;
 /// H.264 MP4, plus the player's first-frame still (JPEG) for each clip. Usage:
 /// <code>
 /// dotnet run --project build/tools/TutorialVideoGenerator -c Release -- [--features id,id] [--languages ko,en]
-///     [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high] [--install] [--no-sheets]
-///     [--theme glass] [--accent red]
+///     [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high] [--keyframes 10000|default]
+///     [--install] [--no-sheets] [--theme glass] [--accent red]
 /// </code>
 /// Output defaults to artifacts/tutorials/&lt;timestamp&gt; (Git ignores artifacts/). --install copies the
 /// clips and their stills to src/MyCapture.App/Assets/Tutorials.
@@ -26,6 +26,14 @@ namespace MyCapture.TutorialGenerator;
 internal static class Program
 {
     internal const int DefaultBitrate = 300_000, DefaultQuality = 60;
+
+    /// <summary>
+    /// One key frame per clip (no clip reaches 10000 frames). The encoder's own default repeats a
+    /// key frame every two seconds, which on screen content costs about as much as the whole rest
+    /// of a clip; the tutorial player only plays from the start and loops by rewinding there, so
+    /// the repeats buy nothing. The frames after them reconstruct the same picture exactly.
+    /// </summary>
+    internal const int DefaultKeyFrameSpacing = 10_000;
 
     [STAThread]
     private static int Main(string[] args)
@@ -59,7 +67,7 @@ internal static class Program
         catch (ArgumentException error)
         {
             Console.Error.WriteLine(error.Message);
-            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets] [--theme system|glass|glass-light|high-contrast] [--accent red]");
+            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--keyframes 10000|default] [--install] [--no-sheets] [--theme system|glass|glass-light|high-contrast] [--accent red]");
             return 2;
         }
 
@@ -205,6 +213,7 @@ internal static class Program
             options.Theme, options.Accent,
             Resolution = $"{Stage.PixelWidth}x{Stage.PixelHeight}",
             options.Bitrate, options.Quality, options.Profile,
+            KeyFrameSpacingFrames = options.KeyFrameSpacing,
             Fps = TutorialStoryboard.Fps,
             Encoder = "Media Foundation H.264 (software MFT), full range, MP4",
             Poster = $"first rendered frame, JPEG quality {ClipReview.PosterQuality}",
@@ -240,7 +249,7 @@ internal static class Program
         string poster = Path.ChangeExtension(mp4, ".jpg");
         var keys = new List<(double Ms, string Label)>();
         int frame = 0;
-        using (var writer = new ClipWriter(mp4, Stage.PixelWidth, Stage.PixelHeight, options.Bitrate, options.Quality, options.Profile))
+        using (var writer = new ClipWriter(mp4, Stage.PixelWidth, Stage.PixelHeight, options.Bitrate, options.Quality, options.Profile, options.KeyFrameSpacing))
         {
             string? previous = null;
             foreach (TutorialFramePlan plan in story.Frames)
@@ -306,7 +315,7 @@ internal static class Program
     }
 
     private sealed record Options(IReadOnlyList<string> Features, IReadOnlyList<string> Languages, string Output, int Width, int Bitrate,
-        int? Quality, int? Profile, bool Install, bool Sheets, string Theme, string Accent)
+        int? Quality, int? Profile, int? KeyFrameSpacing, bool Install, bool Sheets, string Theme, string Accent)
     {
         internal static Options Parse(string[] args)
         {
@@ -314,7 +323,7 @@ internal static class Program
             IReadOnlyList<string> features = all, languages = ["ko", "en"];
             string? output = null;
             int width = 960, bitrate = DefaultBitrate;
-            int? quality = DefaultQuality, profile = 100;
+            int? quality = DefaultQuality, profile = 100, keyFrameSpacing = DefaultKeyFrameSpacing;
             bool install = false, sheets = true;
             string theme = AppThemeNames.Glass, accent = AppAccentNames.Red;
             for (int i = 0; i < args.Length; i++)
@@ -332,6 +341,7 @@ internal static class Program
                     case "--bitrate": bitrate = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                     case "--quality": string q = Next(); quality = q == "bitrate" ? null : int.Parse(q, CultureInfo.InvariantCulture); break;
                     case "--profile": profile = Next() switch { "high" => 100, "main" => 77, "baseline" => 66, "default" => null, _ => throw new ArgumentException("Profile is high, main, baseline or default.") }; break;
+                    case "--keyframes": string k = Next(); keyFrameSpacing = k == "default" ? null : int.Parse(k, CultureInfo.InvariantCulture); break;
                     case "--install": install = true; break;
                     case "--no-sheets": sheets = false; break;
                     case "--theme": theme = Next(); break;
@@ -353,16 +363,20 @@ internal static class Program
             // The product assets are the default look; another palette is for review only.
             if (install && (theme != AppThemeNames.Glass || accent != AppAccentNames.Red))
                 throw new ArgumentException("--install takes the default theme and accent only.");
+            // VerifyAssets requires the one key frame the shipped clips carry.
+            if (install && keyFrameSpacing != DefaultKeyFrameSpacing)
+                throw new ArgumentException("--install takes the default key-frame spacing only.");
 
             if (features.Count == 0 || features.Distinct().Count() != features.Count || features.Except(all).Any())
                 throw new ArgumentException("Unknown or duplicate feature id.");
             if (languages.Count == 0 || languages.Except(["ko", "en"]).Any()) throw new ArgumentException("Languages are ko and en.");
             if (width is < 640 or > 1920 || width % 16 != 0 || width * 9 % 16 != 0) throw new ArgumentException("Width must be a multiple of 16 between 640 and 1920.");
             if (bitrate is < 50_000 or > 4_000_000) throw new ArgumentException("Bitrate is in bits per second (50000–4000000).");
+            if (keyFrameSpacing is < 1 or > 10_000) throw new ArgumentException("Key-frame spacing is in frames (1–10000) or default.");
             output ??= Path.Combine(RepositoryRoot(), "artifacts", "tutorials", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
             if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
                 throw new ArgumentException($"Output folder is not empty: {output}");
-            return new Options(features, languages, output, width, bitrate, quality, profile, install, sheets, theme, accent);
+            return new Options(features, languages, output, width, bitrate, quality, profile, keyFrameSpacing, install, sheets, theme, accent);
         }
     }
 }
