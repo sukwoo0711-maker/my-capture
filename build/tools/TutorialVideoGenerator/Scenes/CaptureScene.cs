@@ -419,6 +419,12 @@ internal sealed class CaptureScene : TutorialScene
             bounds.Y + margin.Top + item.Y + item.Height / 2);
     }
 
+    /// <summary>
+    /// The countdown card, at the size the product places it by. Its panel keeps a transparent
+    /// <see cref="CountdownWindow.ShadowBand"/> margin for its shadow, and that margin belongs to the
+    /// picture; ActualWidth and ActualHeight leave it out, so a snapshot taken at those cut the
+    /// panel's right and bottom edges away.
+    /// </summary>
     private BitmapSource Countdown(int seconds)
     {
         var window = new CountdownWindow(seconds);
@@ -426,9 +432,10 @@ internal sealed class CaptureScene : TutorialScene
         window.Content = null;
         window.Close();
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        content.Arrange(new Rect(content.DesiredSize));
+        Size size = content.DesiredSize;
+        content.Arrange(new Rect(size));
         content.UpdateLayout();
-        return OffscreenWindow.SnapshotElement(content, content.ActualWidth, content.ActualHeight, backdrop: null, opaque: false);
+        return OffscreenWindow.SnapshotElement(content, size.Width, size.Height, backdrop: null, opaque: false);
     }
 
     // ---- Capture selector ----------------------------------------------------------------------

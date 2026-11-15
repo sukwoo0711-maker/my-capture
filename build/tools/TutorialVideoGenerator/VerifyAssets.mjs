@@ -106,7 +106,9 @@ for (const receipt of summary.Receipts) {
   const format = video(mp4);
   assert.equal(format.frames, receipt.Frames);
   assert.equal(format.seconds, receipt.Seconds);
-  assert(format.seconds >= 7 && format.seconds <= 9, `${stem}: expected 7–9 seconds`);
+  // The clip-length rule the generator enforces for every feature (Program.Render). The tighter
+  // 7-9 s bound of a practice clip is checked there, where the practice feature lists are.
+  assert(format.seconds >= 7 && format.seconds <= 15, `${stem}: expected 7-15 seconds`);
   assert.deepEqual(jpeg(jpg), { width: 960, height: 540 });
   assert.equal(mp4.length, receipt.Bytes); assert.equal(jpg.length, receipt.PosterBytes);
   assert.equal(hash(mp4), receipt.Sha256); assert.equal(hash(jpg), receipt.PosterSha256);
@@ -135,4 +137,4 @@ for (const id of new Set(summary.Receipts.map(row => row.Feature))) {
 }
 const result = { result: 'PASS', expectedFeatures, clips: rows.length, rows };
 writeFileSync(confinedPath(folder, 'verification.json'), JSON.stringify(result, null, 2) + '\n');
-console.log(`PASS: ${rows.length} clips; H.264 High, 960x540, 25 fps, 7–9 seconds, silent; JPEGs, receipts, hashes${checkInstalled ? ' and installed copies' : ''} verified.`);
+console.log(`PASS: ${rows.length} clips; H.264 High, 960x540, 25 fps, 7-15 seconds, silent; JPEGs, receipts, hashes${checkInstalled ? ' and installed copies' : ''} verified.`);

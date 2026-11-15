@@ -167,7 +167,11 @@ internal sealed class PracticePinScene : TutorialScene
         {
             ContextMenu menu = bar.CreateOpacityMenu();
             _opacity60 = menu.Items.OfType<MenuItem>().Single(item => item.Header as string == "60%");
-            _opacityMenu = new MenuCamera(menu, _opacity60, new Point(454, 106), 2.2, cropToTarget: false);
+            // Under the bar and aligned with it, as PinHoverBar.CreateOpacityMenu places it
+            // (PlacementTarget the bar surface, Placement Bottom, VerticalOffset 2). Enlarged only as
+            // far as the room below the bar allows, so it never covers the bar's own commands.
+            Rect barBounds = BarBounds();
+            _opacityMenu = new MenuCamera(menu, _opacity60, new Point(barBounds.X, barBounds.Bottom + 2 * _camera), 2.2, cropToTarget: false);
         }
         if (Id == "pin-restore")
         {
@@ -503,7 +507,10 @@ internal sealed class PracticePinScene : TutorialScene
             double height = cropToTarget ? Math.Min(164, menu.ActualHeight) : menu.ActualHeight;
             double top = cropToTarget ? Math.Clamp(choice.Y + choice.Height / 2 - height / 2, 0, menu.ActualHeight - height) : 0;
             _source = new Rect(0, top, menu.ActualWidth, height);
-            _scale = Math.Min(scale, (Stage.Width - origin.X - 38) / _source.Width);
+            // Enlarged as far as the room to the right of and below the origin allows.
+            _scale = Math.Min(Math.Min(scale, (Stage.Width - origin.X - 38) / _source.Width),
+                (Stage.SceneHeight - origin.Y - 12) / _source.Height);
+            if (_scale <= 0) throw new InvalidOperationException("The menu has no room at its origin.");
             _target = new Rect(origin, new Size(_source.Width * _scale, _source.Height * _scale));
             if (_target.Bottom > Stage.SceneHeight) throw new InvalidOperationException("The enlarged menu exceeds the scene.");
         }
