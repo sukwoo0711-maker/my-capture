@@ -4439,7 +4439,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Open Opacity</value>
   </data>
   <data name="Journey.B3.Body" xml:space="preserve">
-    <value>Move the pointer over the picture and select Opacity at the top. With the keyboard, focus the picture and press O.</value>
+    <value>Click the picture to select it, then press O.</value>
   </data>
   <data name="Journey.PictureName" xml:space="preserve">
     <value>Practice picture</value>
@@ -4601,10 +4601,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Change pin opacity</value>
   </data>
   <data name="Tutorial.pin-opacity.Step1" xml:space="preserve">
-    <value>Move the pointer over the picture.</value>
+    <value>Click the picture to select it.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step2" xml:space="preserve">
-    <value>Select Opacity at the top.</value>
+    <value>Press O.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step3" xml:space="preserve">
     <value>Select 60% to see behind the picture.</value>

@@ -33,7 +33,8 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         fixture.Guide.Session.Skip(); // B2 -> B3; pin identity comes from the real manager.
         PinWindow pin = fixture.Pin;
         pin.ShowHoverBar();
-        pin.HoverBarForTest!.OpacityButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        // The bar has no opacity button; the pin's O key opens the same menu.
+        pin.HoverBarForTest!.OpenOpacityMenu();
         Drain();
         ContextMenu menu = OpenMenu(pin);
         Assert.True(menu.IsOpen);
