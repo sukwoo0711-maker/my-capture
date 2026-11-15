@@ -164,7 +164,10 @@ internal sealed partial class GalleryWindow
         {
             try { await _queue.SetNewCaptureFolderAsync(scope.FolderId, true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or AggregateException)
-            { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Folder410.OperationFailed")); }
+            {
+                _log.LogWarning(ex, "Could not keep the new capture folder in step with the library view");
+                KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("Folder410.OperationFailed"), ex));
+            }
             _viewModel.Refresh();
         }
     }
@@ -186,7 +189,10 @@ internal sealed partial class GalleryWindow
     {
         try { await _viewModel.SetFolderCaptureEnabledAsync(CurrentFolderCaptureCheck.IsChecked == true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or AggregateException)
-        { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Folder410.OperationFailed")); }
+        {
+            _log.LogWarning(ex, "Could not change the folder capture target");
+            KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("Folder410.OperationFailed"), ex));
+        }
     }
 
     private async void OnFolderCardClick(object sender, RoutedEventArgs e)
@@ -461,7 +467,7 @@ internal sealed partial class GalleryWindow
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not complete folder deletion");
-            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Folder410.OperationFailed"));
+            KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("Folder410.OperationFailed"), ex));
         }
         finally
         {
@@ -641,7 +647,10 @@ internal sealed partial class GalleryWindow
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { KoreanWordWrap.Show(LibraryActionStatus, ExportFailureMessage(ex)); }
+        {
+            _log.LogWarning(ex, "Could not prepare a folder drag export");
+            KoreanWordWrap.Show(LibraryActionStatus, ExportFailureMessage(ex));
+        }
         finally { _folderDragCancellation = null; CancelFolderDragPreparation(); }
     }
 
@@ -885,7 +894,10 @@ internal sealed partial class GalleryWindow
         }
         catch (ArgumentException) { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Folder410.InvalidMove")); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AggregateException)
-        { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Folder410.OperationFailed")); }
+        {
+            _log.LogWarning(ex, "Could not move captures to the folder");
+            KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("Folder410.OperationFailed"), ex));
+        }
         finally { _foldersBusy = false; _viewModel.Refresh(); }
     }
 }

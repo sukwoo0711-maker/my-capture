@@ -159,7 +159,9 @@ public sealed class CompactCaptureBarTests
             }
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(bar.TextButton));
             Assert.Equal("C", AutomationProperties.GetAcceleratorKey(bar.ColorButton));
-            foreach (ButtonBase command in new ButtonBase[] { bar.TextButton, bar.ColorButton, bar.CancelButton })
+            Assert.Equal("S", AutomationProperties.GetAcceleratorKey(bar.ScrollButton));
+            Assert.Equal("D", AutomationProperties.GetAcceleratorKey(bar.DelayButton));
+            foreach (ButtonBase command in new ButtonBase[] { bar.TextButton, bar.ColorButton, bar.ScrollButton, bar.DelayButton, bar.CancelButton })
             {
                 string key = AutomationProperties.GetAcceleratorKey(command);
                 Assert.EndsWith($"({key})", AutomationProperties.GetHelpText(command), StringComparison.Ordinal);
@@ -276,15 +278,20 @@ public sealed class CompactCaptureBarTests
             if (compact)
             {
                 var requests = new List<CaptureSelectorRequest>();
+                var modes = new List<CaptureSelectorMode>();
+                var delays = new List<int>();
                 bar.ActionRequested += requests.Add;
+                bar.ModeRequested += modes.Add;
+                bar.DelayRequested += delays.Add;
                 ContextMenu menu = bar.CreateMoreMenu();
                 MenuItem scroll = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("Text_4DBA30197C0A"));
                 MenuItem delay = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("CaptureBar_Delay"));
                 scroll.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                ((MenuItem)delay.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                Assert.Equal(CaptureSelectorAction.ScrollingCapture, requests[0].Action);
-                Assert.Equal(CaptureSelectorAction.DelayedCapture, requests[1].Action);
-                Assert.Equal(CaptureModeBar.DelayChoices[0], requests[1].DelaySeconds);
+                ((MenuItem)delay.Items[1]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                // The compact menu switches to scroll mode and arms the delay like the direct buttons.
+                Assert.Empty(requests);
+                Assert.Equal([CaptureSelectorMode.Scroll], modes);
+                Assert.Equal([CaptureModeBar.DelayChoices[1]], delays);
 
                 // A wider constraint restores the direct buttons and the original more menu.
                 bar.ConstrainWidth(768);

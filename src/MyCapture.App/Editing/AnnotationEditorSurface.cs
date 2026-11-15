@@ -38,6 +38,15 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     // The brush preview's edge: two 1 DIP rings at 70% opacity, the dark one inside the light one.
     private static readonly Pen BrushEdgeDark = EdgePen(Color.FromArgb(0xB3, EditorCursorStyle.Ink.R, EditorCursorStyle.Ink.G, EditorCursorStyle.Ink.B));
     private static readonly Pen BrushEdgeLight = EdgePen(Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF));
+    private static readonly Pen StepPreviewShadow = FrozenPen(Brushes.Black, 3);
+    private static readonly Pen StepPreviewEdge = FrozenPen(Brushes.White, 1);
+
+    private static Pen FrozenPen(Brush brush, double thickness)
+    {
+        var pen = new Pen(brush, thickness);
+        pen.Freeze();
+        return pen;
+    }
 
     private FrozenFrame _frame;
     private RectD _cropRegion;
@@ -88,6 +97,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         _edgeShadowPen = new Pen(_handleFillBrush, 4);
         _cropEdgePen = new Pen(_selectionBrush, 2);
 
+        AddVisualChild(_previewLayer);
         _controller.VisualInvalidated += (_, _) => InvalidateVisual();
         _controller.SelectionChanged += (_, _) => InvalidateVisual();
         Loaded += OnLoaded;
@@ -106,20 +116,59 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     /// <summary>Updates the transient pointer footprint. It never enters the annotation document.</summary>
     internal void UpdatePointerPreview(PointD? imagePoint, bool visible = true)
     {
-        if (PendingCrop is not null || _controller.Tool is not (EditorTool.Pen or EditorTool.Highlighter or EditorTool.StepNumber))
+        // The eraser's reach is part of its cursor; the surface only marks the annotation it would
+        // remove, and repaints only when that annotation changes.
+        AnnotationItem? eraserTarget = PendingCrop is null && _controller.Tool == EditorTool.Eraser
+            && visible && imagePoint is { } eraserPoint && !_controller.IsErasing
+            ? _controller.EraserTargetAt(eraserPoint) : null;
+        bool changed = false;
+        if (!ReferenceEquals(eraserTarget, _eraserTarget))
         {
-            // Tool/crop transitions already invalidate the surface. Plain hover for
-            // tools without a footprint must not repaint the annotation document.
-            _pointerPreviewPoint = null;
-            return;
+            _eraserTarget = eraserTarget;
+            changed = true;
         }
-        PointD? next = visible && imagePoint is { } point
+
+        PointD? next = PendingCrop is null
+            && _controller.Tool is EditorTool.Pen or EditorTool.Highlighter or EditorTool.StepNumber
+            && visible && imagePoint is { } point
             && point.X >= 0 && point.Y >= 0 && point.X <= _cropRegion.Width && point.Y <= _cropRegion.Height
             ? imagePoint : null;
-        if (_pointerPreviewPoint == next) return;
-        _pointerPreviewPoint = next;
-        InvalidateVisual();
+        if (_pointerPreviewPoint != next)
+        {
+            _pointerPreviewPoint = next;
+            changed = true;
+        }
+
+        // Hover feedback lives in its own layer above the document: a pointer move redraws only
+        // that layer, never the capture, the annotations or their blur layers.
+        if (changed) RedrawPointerPreview();
     }
+
+    private AnnotationItem? _eraserTarget;
+
+    /// <summary>The brush footprint, step badge outline and eraser target frame, above the document.</summary>
+    private readonly DrawingVisual _previewLayer = new();
+
+    /// <summary>How many times the pointer preview layer alone was drawn, for tests.</summary>
+    internal int PreviewPasses { get; private set; }
+
+    protected override int VisualChildrenCount => 1;
+
+    protected override Visual GetVisualChild(int index) =>
+        index == 0 ? _previewLayer : throw new ArgumentOutOfRangeException(nameof(index));
+
+    private void RedrawPointerPreview()
+    {
+        PreviewPasses++;
+        using DrawingContext dc = _previewLayer.RenderOpen();
+        if (ActualWidth > 0 && ActualHeight > 0) DrawPointerPreview(dc);
+    }
+
+    /// <summary>How many times the whole surface (capture, document and adorners) was drawn, for tests.</summary>
+    internal int RenderPasses { get; private set; }
+
+    /// <summary>The annotation the eraser marks as the one a click would remove, for tests.</summary>
+    internal AnnotationItem? EraserTarget => _eraserTarget;
 
     internal Rect? BrushOutlineDip
     {
@@ -347,6 +396,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
+        RenderPasses++;
         RefreshDeviceOffset(invalidateVisual: false);
 
         if (ActualWidth <= 0 || ActualHeight <= 0)
@@ -402,7 +452,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         else DrawSelectionAdorner(dc);
         foreach (RectD region in PendingMosaicRegions) DrawMosaicDraft(dc, region);
         if (MosaicGestureRegion is { } gesture) DrawMosaicDraft(dc, gesture);
-        DrawPointerPreview(dc);
+        // The view, colour or document may have moved under the pointer: refresh its layer too.
+        RedrawPointerPreview();
     }
 
     private void DrawPointerPreview(DrawingContext dc)
@@ -434,9 +485,31 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             && _controller.StepNumberPreviewBounds(point) is { } badge)
         {
             Rect bounds = ToSurfaceRect(badge);
-            dc.DrawRectangle(null, new Pen(Brushes.Black, 3), bounds);
-            dc.DrawRectangle(null, new Pen(Brushes.White, 1), bounds);
+            dc.DrawRectangle(null, StepPreviewShadow, bounds);
+            dc.DrawRectangle(null, StepPreviewEdge, bounds);
         }
+
+        if (_eraserTarget is { } target && PendingCrop is null && _controller.Tool == EditorTool.Eraser
+            && _controller.Document.Items.Contains(target))
+        {
+            // The frame the selection tool draws around a selected annotation, without handles.
+            DrawItemFrame(dc, target);
+        }
+    }
+
+    private void DrawItemFrame(DrawingContext dc, AnnotationItem item)
+    {
+        Rect bounds = ToSurfaceRect(item.Bounds);
+        Rect frame = item is TextAnnotation { IsStepNumber: false }
+            ? ToSurfaceRect(PointerIntentGeometry.SelectionFrame(item, DipPerPixel))
+            : Rect.Inflate(bounds, 2, 2);
+        bool rotated = item is TextAnnotation { RotationDegrees: not 0 };
+        if (rotated)
+            dc.PushTransform(new RotateTransform(((TextAnnotation)item).RotationDegrees,
+                bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
+        dc.DrawRectangle(null, _edgeShadowPen, frame);
+        dc.DrawRectangle(null, _selectionOutlinePen, frame);
+        if (rotated) dc.Pop();
     }
 
     private void DrawMosaicDraft(DrawingContext dc, RectD region)

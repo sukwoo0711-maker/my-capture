@@ -1038,6 +1038,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 SnapWhileDragging = _snapWhileDragging,
                 LightweightImagePins = _lightweightImagePins,
                 RestoreOpenPinsOnLaunch = _restoreOpenPinsOnLaunch,
+                RestoreOpenPinsRevision = 1,
                 InitialOpacity = ParseDouble(_initialOpacity),
                 ZoomStep = ParseDouble(_zoomStep),
                 CtrlClickDebounceMs = ParseInt(_ctrlClickDebounceMs),

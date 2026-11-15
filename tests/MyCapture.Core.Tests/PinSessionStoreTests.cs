@@ -443,10 +443,29 @@ public sealed class PinSessionStoreTests
         Assert.Equal(1, manifest["schemaVersion"]!.GetValue<int>());
         Assert.Equal("Text", manifest["pins"]![1]!["kind"]!.GetValue<string>());
         Assert.DoesNotContain("isHidden", manifest.ToJsonString(), StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("isClickThrough", manifest.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(manifest["pins"]![1]!["isClickThrough"]!.GetValue<bool>());
         Assert.Equal(3, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
         Assert.All(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"),
             path => Assert.True(Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _)));
+    }
+
+    [Fact]
+    public void SaveThenLoad_RoundTripsClickThrough_AndAnOlderRecordWithoutItIsInteractive()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot through = Snapshot();
+        through = through with { Pin = through.Pin with { IsClickThrough = true, IsCollapsed = true, CollapsedOpacity = 0.4 } };
+        Assert.True(CreateStore(workspace).Save([through]));
+        Assert.Equal(through.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
+        Assert.True(manifest["pins"]![0]!["isClickThrough"]!.GetValue<bool>());
+        manifest["pins"]![0]!.AsObject().Remove("isClickThrough");
+        File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
+
+        PinSessionPin older = Assert.Single(CreateStore(workspace).Load()).Pin;
+        Assert.False(older.IsClickThrough);
+        Assert.Equal(through.Pin with { IsClickThrough = false }, older);
     }
 
     [Fact]

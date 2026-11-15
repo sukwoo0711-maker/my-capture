@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using MyCapture.Core.Localization;
 using MyCapture.Platform.Display;
 
 namespace MyCapture.App;
@@ -11,6 +12,15 @@ internal sealed class NativeLaunchSurface(bool secondary) : ILaunchSurface
     private IntPtr _window;
     private IntPtr _font;
     internal IntPtr Handle => _window;
+
+    /// <summary>
+    /// The notice text. It appears before the theme, settings and the resource tables exist, so the two
+    /// languages are chosen here from the culture the application resolved instead of read from the resources.
+    /// </summary>
+    internal static string MessageFor(bool secondary, System.Globalization.CultureInfo culture) =>
+        culture.TwoLetterISOLanguageName.Equals("ko", StringComparison.OrdinalIgnoreCase)
+            ? secondary ? "MyCapture가 시작하는 중입니다.\r\n잠시 뒤 라이브러리가 열립니다." : "MyCapture 시작 중"
+            : secondary ? "MyCapture is starting.\r\nThe library opens shortly." : "MyCapture is starting";
 
     public void Show()
     {
@@ -27,9 +37,7 @@ internal sealed class NativeLaunchSurface(bool secondary) : ILaunchSurface
         if (_window == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
         _ = GetClientRect(_window, out Rect client);
         int margin = (int)(20 * scale);
-        string message = secondary
-            ? "MyCapture가 시작하는 중입니다.\r\n잠시 뒤 라이브러리가 열립니다."
-            : "MyCapture 시작 중";
+        string message = MessageFor(secondary, UiText.Culture);
         IntPtr label = CreateWindowEx(0, "STATIC", message, 0x40000000 | 0x10000000 | 0x00000001,
             margin, margin, Math.Max(1, client.Right - margin * 2), Math.Max(1, client.Bottom - margin * 2),
             _window, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);

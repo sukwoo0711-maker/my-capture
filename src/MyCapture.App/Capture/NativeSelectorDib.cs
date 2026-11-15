@@ -31,6 +31,7 @@ internal sealed class NativeSelectorDib : IDisposable
     internal Int32Rect Reveal { get; private set; }
     internal bool IsDisposed { get; private set; }
     internal long PixelsUpdated { get; private set; }
+    internal long PixelsDimmedInPlace { get; private set; }
     internal int InitializeCount => _initialized ? 1 : 0;
 
     internal NativeSelectorDib(BitmapSource source, SolidColorBrush dimmer, bool deferPixels = false)
@@ -74,17 +75,120 @@ internal sealed class NativeSelectorDib : IDisposable
         _initialized = true;
     }
 
+    /// <summary>
+    /// Moves the revealed rectangle and returns the damaged regions. Runs for every pointer sample of a
+    /// drag, so the returned list is reused: it is valid until the next call.
+    /// </summary>
     internal IReadOnlyList<Int32Rect> SetReveal(Int32Rect rectangle)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
+        Int32Rect previous = Reveal;
         Int32Rect next = NativeSelectorDirtyRegions.Clip(rectangle, Width, Height);
-        IReadOnlyList<Int32Rect> dirty = NativeSelectorDirtyRegions.Changed(Reveal, next, Width, Height);
+        NativeSelectorDirtyRegions.Changed(previous, next, Width, Height, _revealDamage);
         Reveal = next;
+        if (_revealDamage.Count == 0) return _revealDamage;
         // Finish reads by the previous BitBlt before writing the DIB directly.
         _ = NativeSelectorInterop.GdiFlush();
-        foreach (Int32Rect region in dirty) { Update(region); CompositeStamps(region); }
-        return dirty;
+        for (int index = 0; index < _revealDamage.Count; index++)
+        {
+            Int32Rect region = _revealDamage[index];
+            if (CanDimInPlace(region, previous, next) && !OverlapsEarlierDamage(index)) DimInPlace(region);
+            else
+            {
+                Update(region);
+                CompositeStamps(region);
+            }
+        }
+        return _revealDamage;
     }
+
+    private readonly List<Int32Rect> _revealDamage = new(16);
+
+    /// <summary>
+    /// Pixels inside the previous reveal are the source made opaque (stamps aside), and the dimmer reads
+    /// only their colour channels, so a region that only stops being revealed can be dimmed where it is.
+    /// This skips re-reading the frozen frame for it: when a drag starts over a highlighted window, the
+    /// whole window (millions of pixels) goes dark in the first pointer sample. Freeform rewrites pixels
+    /// by its own winding, so a selector that used it always copies from the source.
+    /// </summary>
+    private bool CanDimInPlace(Int32Rect region, Int32Rect previous, Int32Rect next) =>
+        _initialized && !_freeform && _freeformWinding is null
+        && Contains(previous, region) && !Intersects(next, region);
+
+    // Border strips clipped at the desktop edge can repeat pixels of a difference part already dimmed.
+    private bool OverlapsEarlierDamage(int index)
+    {
+        for (int earlier = 0; earlier < index; earlier++)
+            if (Intersects(_revealDamage[earlier], _revealDamage[index])) return true;
+        return false;
+    }
+
+    private unsafe void DimInPlace(Int32Rect region)
+    {
+        long pixels = (long)region.Width * region.Height;
+        if (pixels >= ParallelDimPixels && Environment.ProcessorCount > 2)
+            DimRowsInParallel(region);
+        else
+            for (int y = region.Y; y < region.Y + region.Height; y++)
+                _pixels.Dim(new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width));
+        PixelsUpdated += pixels;
+        PixelsDimmedInPlace += pixels;
+        // Stamp pixels are not the source: refresh just their overlap from the frame and composite again.
+        for (int index = 0; index < _stamps.Count; index++) RestoreStampOverlap(region, _stamps[index].Bounds);
+        if (_anchorStamp is { } anchor) RestoreStampOverlap(region, anchor.Bounds);
+    }
+
+    /// <summary>
+    /// A drag that starts over a maximized window highlight dims three to five million pixels in its
+    /// first pointer sample: twenty megabytes read and written again, which one core cannot do inside a
+    /// frame however wide its vectors are, because it never reaches the memory bandwidth several cores
+    /// do. Bands of whole rows are independent, so above this many pixels they run on the pool. Every
+    /// ordinary pointer sample stays far below it (the moving border strips are a few thousand pixels),
+    /// keeping the frequent path on the calling thread with nothing allocated.
+    /// </summary>
+    private const long ParallelDimPixels = 1 << 18;
+
+    internal long PixelsDimmedInParallel { get; private set; }
+
+    private void DimRowsInParallel(Int32Rect region)
+    {
+        // More bands than cores: the loop's own partitioner hands them out as workers free up, so one
+        // core taken by something else on this machine delays the pass by a band, not by its share.
+        int bands = Math.Min(Environment.ProcessorCount * 4, Math.Max(2, region.Height / 16));
+        int rows = (region.Height + bands - 1) / bands;
+        IntPtr bits = Bits;
+        int stride = Stride, left = region.X * 4, width = region.Width, top = region.Y;
+        int bottom = region.Y + region.Height;
+        NativeSelectorPixels pixels = _pixels;
+        _ = Parallel.For(0, bands, band =>
+            DimBand(bits, stride, left, width, pixels, top + band * rows, Math.Min(bottom, top + band * rows + rows)));
+        PixelsDimmedInParallel += (long)region.Width * region.Height;
+    }
+
+    private static unsafe void DimBand(IntPtr bits, int stride, int left, int width,
+        NativeSelectorPixels pixels, int first, int last)
+    {
+        for (int y = first; y < last; y++) pixels.Dim(new Span<uint>((byte*)bits + y * stride + left, width));
+    }
+
+    private void RestoreStampOverlap(Int32Rect region, Int32Rect stamp)
+    {
+        int left = Math.Max(region.X, stamp.X), top = Math.Max(region.Y, stamp.Y);
+        int right = Math.Min(region.X + region.Width, stamp.X + stamp.Width);
+        int bottom = Math.Min(region.Y + region.Height, stamp.Y + stamp.Height);
+        if (right <= left || bottom <= top) return;
+        var overlap = new Int32Rect(left, top, right - left, bottom - top);
+        Update(overlap);
+        CompositeStamps(overlap);
+    }
+
+    private static bool Contains(Int32Rect outer, Int32Rect inner) =>
+        outer.Width > 0 && outer.Height > 0 && inner.X >= outer.X && inner.Y >= outer.Y
+        && inner.X + inner.Width <= outer.X + outer.Width && inner.Y + inner.Height <= outer.Y + outer.Height;
+
+    private static bool Intersects(Int32Rect a, Int32Rect b) =>
+        a.Width > 0 && a.Height > 0 && b.Width > 0 && b.Height > 0
+        && a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height;
 
     internal void BeginFreeform()
     {

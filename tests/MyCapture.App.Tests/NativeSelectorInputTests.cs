@@ -58,7 +58,7 @@ public sealed class NativeSelectorInputTests
     [InlineData(ColorFormat.Hex, "#604020")]
     [InlineData(ColorFormat.Rgb, "rgb(96, 64, 32)")]
     [InlineData(ColorFormat.Hsl, "hsl(30, 50%, 25%)")]
-    public void CKeyCopiesFrozenPhysicalPixelAndClosesBeforeFeedback(ColorFormat format, string expected) => StaTestHost.Run(() =>
+    public void ColorModeClickCopiesFrozenPhysicalPixelAndClosesBeforeFeedback(ColorFormat format, string expected) => StaTestHost.Run(() =>
     {
         using var overlay = Create();
         var copied = new List<string>();
@@ -69,7 +69,11 @@ public sealed class NativeSelectorInputTests
         overlay.Closed += (_, _) => closed++;
         overlay.SelectionCompleted += (_, _) => confirmed++;
         overlay.ColorCopied = result => { Assert.Equal(1, closed); feedback = result; };
+        // C only enters the colour mode; the click copies.
         Assert.True(overlay.HandleKey(Key.C, ModifierKeys.Shift));
+        Assert.Empty(copied);
+        Assert.Equal(CaptureSelectorMode.Color, overlay.Mode);
+        overlay.BeginSelection(new PointD(100, 100));
         Assert.Equal([expected], copied);
         Assert.NotNull(feedback);
         Assert.Equal(Color.FromRgb(96, 64, 32), feedback.ChipColor);
@@ -222,27 +226,24 @@ public sealed class NativeSelectorInputTests
     [InlineData(5)]
     [InlineData(10)]
     [InlineData(0)]
-    public void ModeBarHandsDelayedOrScrollingActionToOwnerBeforeClosing(int seconds) => StaTestHost.Run(() =>
+    public void ModeBarArmsDelayOrEntersScrollModeWithoutClosing(int seconds) => StaTestHost.Run(() =>
     {
         using var overlay = Create();
         overlay.OffersOtherActions = true;
-        CaptureSelectorRequest? action = null;
-        int selections = 0;
+        int requests = 0, selections = 0;
         overlay.SelectionCompleted += (_, _) => selections++;
-        overlay.ActionRequested += (_, request) => { Assert.False(overlay.IsClosed); action = request; };
-        overlay.Closed += (_, _) => Assert.NotNull(action);
+        overlay.ActionRequested += (_, _) => requests++;
         if (seconds == 0) overlay.ModeBar.ActivateButton(overlay.ModeBar.ScrollButton);
         else
         {
-            var item = overlay.ModeBar.CreateDelayMenu().Items.OfType<MenuItem>().ElementAt(seconds == 3 ? 0 : seconds == 5 ? 1 : 2);
+            var item = overlay.ModeBar.CreateDelayMenu().Items.OfType<MenuItem>().ElementAt(seconds == 3 ? 1 : seconds == 5 ? 2 : 3);
             item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         }
-        Assert.NotNull(action);
-        Assert.Equal(seconds == 0 ? CaptureSelectorAction.ScrollingCapture : CaptureSelectorAction.DelayedCapture, action.Action);
-        Assert.Equal(seconds, action.DelaySeconds);
+        Assert.Equal(0, requests);
         Assert.Equal(0, selections);
-        Assert.True(overlay.IsClosed);
-        Assert.Equal(0, overlay.LiveOwnedNativeHandles);
+        Assert.False(overlay.IsClosed);
+        Assert.Equal(seconds == 0 ? CaptureSelectorMode.Scroll : CaptureSelectorMode.Capture, overlay.Mode);
+        Assert.Equal(seconds, overlay.ArmedDelaySeconds);
     });
 
     [Theory]

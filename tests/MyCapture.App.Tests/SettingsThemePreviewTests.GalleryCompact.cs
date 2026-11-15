@@ -161,6 +161,9 @@ public sealed partial class SettingsThemePreviewTests
             window.Height = window.MinHeight;
             FluidMotion.SetWindowEntrance(window, false);
             window.Show();
+            // This scenario's card geometry is the folded one; the open pane at the minimum width is covered by
+            // LibraryDetailsPane_MinimumWidthToolbarShowsEveryTextWhole.
+            window.SetDetailsPaneOpen(false);
             SettleGalleryLayout(window);
             if (virtualizedRevealOnly)
             {

@@ -132,7 +132,7 @@ public sealed partial class SettingsThemePreviewTests
                     Resources = window.Resources, Width = 1500, Height = 900,
                     Child = content, Background = (Brush)window.FindResource("Surface.Base"),
                 };
-                foreach (double width in new[] { 1500d, 980d })
+                foreach (double width in new[] { 1500d, window.MinWidth })
                 {
                     host.Width = width;
                     LayoutLibraryVideo(host);
@@ -149,7 +149,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(button.TranslatePoint(new Point(button.ActualWidth, 0), bar).X
                         <= sort.TranslatePoint(new Point(), bar).X + 0.5);
                     Assert.InRange(bar.ActualHeight, 43.5, 44.5);
-                    if (width == 980) Assert.NotEqual(GalleryWindow.ToolbarDensity.Labelled, window.ContentToolbarDensity);
+                    if (width == window.MinWidth) Assert.NotEqual(GalleryWindow.ToolbarDensity.Labelled, window.ContentToolbarDensity);
                 }
                 Assert.False(window.IsVisible);
             }

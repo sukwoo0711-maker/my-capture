@@ -133,7 +133,7 @@ internal static class WindowDetectHitTest
         return ToBitmapRegion(window.ScreenBounds, desktopScreenBounds);
     }
 
-    private static RectD? ToBitmapRegion(RectD screenBounds, RectD desktopScreenBounds)
+    internal static RectD? ToBitmapRegion(RectD screenBounds, RectD desktopScreenBounds)
     {
         RectD desktop = desktopScreenBounds.Normalized();
         RectD bounds = screenBounds.Normalized();

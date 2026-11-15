@@ -149,25 +149,44 @@ internal sealed class PinSessionService : IDisposable
                 }
                 return (Pins: result, Corrupt: corrupt);
             }).ConfigureAwait(false);
-            await _dispatcher.InvokeAsync(() =>
+            if (decoded.Corrupt.Count > 0)
             {
-                if (!IsGenerationCurrent(generation) || !_enabled) return;
-                var consumed = decoded.Corrupt;
-                foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
+                await _dispatcher.InvokeAsync(() =>
                 {
+                    if (!IsGenerationCurrent(generation) || !_enabled) return;
+                    lock (_stateGate) _unrestored = _unrestored.Where(entry => !decoded.Corrupt.Contains(entry.Pin.Id)).ToArray();
+                }, DispatcherPriority.Background).Task.ConfigureAwait(false);
+            }
+            // One pin per dispatcher turn, bottom of the stack first: input and rendering run between the
+            // windows, so a launch with many saved pins stays responsive while they reappear in their order.
+            // A save in between carries the pins not yet reopened, so an exit mid-restore loses none.
+            var restored = new List<PinWindow>(decoded.Pins.Count);
+            foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
+            {
+                bool stop = await _dispatcher.InvokeAsync(() =>
+                {
+                    if (!IsGenerationCurrent(generation) || !_enabled) return true;
                     try
                     {
                         _identities.Add(content, new ContentIdentity(pin.Id) { EncodedLength = length });
-                        _pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
+                        restored.Add(_pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
                             pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
-                            IsCollapsed: pin.IsCollapsed, CollapsedOpacity: pin.CollapsedOpacity));
-                        consumed.Add(pin.Id);
+                            IsCollapsed: pin.IsCollapsed, CollapsedOpacity: pin.CollapsedOpacity,
+                            IsClickThrough: pin.IsClickThrough)));
+                        lock (_stateGate) _unrestored = _unrestored.Where(entry => entry.Pin.Id != pin.Id).ToArray();
                     }
                     catch (Exception ex) { _log.LogWarning("Could not reopen saved pin {PinId} ({FailureType})", pin.Id, ex.GetType().Name); }
-                }
-                lock (_stateGate) _unrestored = _unrestored.Where(entry => !consumed.Contains(entry.Pin.Id)).ToArray();
+                    return false;
+                }, DispatcherPriority.Background).Task.ConfigureAwait(false);
+                if (stop) return;
+            }
+            await _dispatcher.InvokeAsync(() =>
+            {
+                if (!IsGenerationCurrent(generation) || !_enabled) return;
+                try { _pins.RestackSessionPins(restored); }
+                catch (Exception ex) { _log.LogWarning("Could not restore the saved pin stacking order ({FailureType})", ex.GetType().Name); }
                 FinishRestore();
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Background).Task.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -256,7 +275,7 @@ internal sealed class PinSessionService : IDisposable
                     pin.Content.TextStyle, pin.Content.CodeDocument, pin.Content.Provenance.Url,
                     pin.Content.Provenance.DocumentPath, pin.Content.Provenance.AppName,
                     pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle,
-                    pin.IsCollapsed, pin.CollapsedOpacity);
+                    pin.IsCollapsed, pin.CollapsedOpacity, pin.IsClickThrough);
                 captured.Add(new CapturedPin(record, image, pin.Content, identity));
             }
         }

@@ -15,4 +15,11 @@ internal static class AnnotationEditorPreferences
     /// diagnostics and isolated controls, where the stamp command reports that it is unavailable.
     /// </summary>
     internal static Func<string?>? StampFolder { get; set; }
+
+    /// <summary>
+    /// The library's images for the insert-image picker, given the original file of the capture being
+    /// edited so it can be left out. Absent in diagnostics and isolated controls, where inserting an
+    /// image opens the file dialog directly.
+    /// </summary>
+    internal static Func<string?, IReadOnlyList<LibraryImageEntry>>? LibraryImages { get; set; }
 }

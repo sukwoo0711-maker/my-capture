@@ -59,7 +59,6 @@ public partial class App : Application
     private MyCapture.App.Recording.RegionRecordingCoordinator? _recorder;
     private LastRegionStore? _lastRegions;
     private AdvancedCaptureService? _advancedCapture;
-    private CountdownWindow? _activeCountdown;
     private CancellationTokenSource? _scrollCancellation;
     private CaptureQueue? _queue;
     private DispatcherTimer? _historyMaintenance;
@@ -400,6 +399,8 @@ public partial class App : Application
             () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard)
         {
             NotificationPlacementMissed = error => _log?.LogWarning(error, "A notification missed its bounds; it stays open"),
+            // The capture card and notifications share the corner above the notification area.
+            CornerOccupant = () => _quickAccess?.OpenSurfaceBounds,
         };
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
@@ -428,6 +429,7 @@ public partial class App : Application
         AnnotationEditorPreferences.ReadPinHotkey = () => _settings!.Hotkeys.PasteToScreen;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         AnnotationEditorPreferences.StampFolder = () => Path.Combine(_services!.GetRequiredService<AppPaths>().DataRoot, StampStore.FolderName);
+        AnnotationEditorPreferences.LibraryImages = edited => _queue is { } queue ? LibraryImageSource.Create(queue, edited) : [];
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
         _tray.CaptureWindowRequested += (_, _) => HandleCaptureWindow();
         _tray.CaptureFullScreenRequested += (_, _) => HandleCaptureFullScreen();
@@ -479,10 +481,23 @@ public partial class App : Application
             switch (request.Action)
             {
                 case CaptureSelectorAction.Record: HandleRecordRegion(); break;
-                case CaptureSelectorAction.DelayedCapture: HandleDelayedCapture(request.DelaySeconds); break;
+                case CaptureSelectorAction.ScrollingCapture when request.ScreenPoint is { } point: _ = RunScrollingCaptureAsync(point); break;
                 case CaptureSelectorAction.ScrollingCapture: HandleScrollingCapture(); break;
                 case CaptureSelectorAction.RepeatLastRegion: HandleRepeatLastRegion(); break;
             }
+        };
+        _overlay.DelayCancelled += () =>
+        {
+            RestoreTrayAfterCapture();
+            _tray?.ShowBalloon(UiText.Get("Text_07E499DBBB2A"), UiText.Get("Text_70534261ED6C"), TrayBalloonKind.Information, playSound: false);
+            CompleteWelcomeCaptureAnnouncement();
+        };
+        _overlay.DelayExclusionFailed += () =>
+        {
+            // As the old countdown-first flow: the countdown would be in the recording, so nothing runs.
+            RestoreTrayAfterCapture();
+            _tray?.ShowBalloon(UiText.Get("Text_40F24016E78F"), UiText.Get("Text_773C24F0A693"), TrayBalloonKind.Error);
+            CompleteWelcomeCaptureAnnouncement();
         };
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
@@ -916,7 +931,14 @@ public partial class App : Application
             _log?.LogWarning("Timed out waiting for preference saves on exit");
     }
 
-    private async void HandleCaptureRequested()
+    private void HandleCaptureRequested() => StartSelector(CaptureSelectorMode.Capture, 0);
+
+    /// <summary>
+    /// Opens the selector in <paramref name="mode"/> with <paramref name="delaySeconds"/> armed: region
+    /// capture, delayed capture (the delay counts after the selection) and scrolling capture (a click
+    /// picks the window) all start here.
+    /// </summary>
+    private async void StartSelector(CaptureSelectorMode mode, int delaySeconds)
     {
         SelectorTimeline.Mark?.Invoke("handler");
         DismissQuickAccessForCapture();
@@ -948,7 +970,8 @@ public partial class App : Application
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
-                _settings.Capture.ShowSelectionGrid, preserveEditor: true, practiceTarget: practiceTarget);
+                _settings.Capture.ShowSelectionGrid, preserveEditor: true, practiceTarget: practiceTarget,
+                mode: mode, delaySeconds: delaySeconds);
         }
         catch (Exception ex)
         {
@@ -1010,95 +1033,25 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Delayed capture: shows a transient countdown window, then — after tearing that window
-    /// down so it can never appear in the frozen frame — starts a normal region capture.
+    /// Delayed capture: the selector opens with the setting's delay armed. The countdown runs after
+    /// the region is chosen and the region is then taken again from the screen.
     /// </summary>
-    /// <remarks>
-    /// The countdown lives in its own top-level window with a <c>CancellationTokenSource</c>
-    /// bound to Esc. Capture is scheduled on a later dispatcher turn via
-    /// <see cref="Dispatcher.BeginInvoke"/> so the countdown window is fully closed and
-    /// removed from the desktop before <see cref="ScreenCaptureEngine.CaptureMonitor"/> runs,
-    /// preserving the capture-before-wait invariant.
-    /// </remarks>
-    /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
-    private async void HandleDelayedCapture(int? delaySeconds = null)
+    private void HandleDelayedCapture()
     {
-        if (_settings is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.DelayedCapture))
-        {
-            return;
-        }
-
-        int seconds = Math.Max(0, delaySeconds ?? _settings.Capture.DelaySeconds);
-        if (seconds == 0)
-        {
-            // Zero delay is an immediate region capture.
-            HandleCaptureRequested();
-            return;
-        }
-
-        if (_activeCountdown is not null)
-        {
-            _activeCountdown.Activate();
-            return;
-        }
-
-        var countdown = new CountdownWindow(seconds);
-        _activeCountdown = countdown;
-        _tray?.SetState(TrayIconState.Capturing);
-
-        void Cleanup()
-        {
-            countdown.Elapsed -= OnElapsed;
-            countdown.Cancelled -= OnCancelled;
-            _activeCountdown = null;
-        }
-
-        void OnElapsed(object? sender, EventArgs e)
-        {
-            Cleanup();
-            // Close the window FIRST, then start the capture on the turn after it has closed, so
-            // the countdown, including its short exit, is gone from the screen before the freeze.
-            countdown.Closed += (_, _) => _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
-            countdown.Close();
-        }
-
-        void OnCancelled(object? sender, EventArgs e)
-        {
-            Cleanup();
-            countdown.Close();
-            RestoreTrayAfterCapture();
-            _tray?.ShowBalloon(
-                UiText.Get("Text_07E499DBBB2A"),
-                UiText.Get("Text_70534261ED6C"),
-                TrayBalloonKind.Information,
-                playSound: false);
-            CompleteWelcomeCaptureAnnouncement();
-        }
-
-        countdown.Elapsed += OnElapsed;
-        countdown.Cancelled += OnCancelled;
-        countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); CompleteWelcomeCaptureAnnouncement(); } };
-        if (_recorder?.RequiresCaptureExclusion == true && !CaptureWindowExclusion.TryApply(countdown))
-        {
-            countdown.Close();
-            _tray?.ShowBalloon(UiText.Get("Text_40F24016E78F"), UiText.Get("Text_773C24F0A693"), TrayBalloonKind.Error);
-            return;
-        }
-        countdown.Show();
-        countdown.Activate();
+        if (_settings is null) return;
+        // The delay is armed in the selector and counts after the region is chosen; zero is a plain region capture.
+        StartSelector(CaptureSelectorMode.Capture, Math.Max(0, _settings.Capture.DelaySeconds));
     }
 
     /// <summary>
-    /// Scrolling capture: uses the window under the cursor as the scroll region, drives the
-    /// capture → scroll → stitch loop in Core, and opens the editor over the stitched image.
+    /// Scrolling capture: opens the selector in scroll mode, or cancels the loop that is running.
     /// </summary>
     /// <remarks>
-    /// The scroll region is the client rectangle of the window under the cursor, which avoids
-    /// the window chrome while matching what the user is pointing at. The heavy lifting
-    /// (overlap detection, fixed-header handling, termination) is pure Core code; this handler
-    /// only supplies the region and reports the typed outcome.
+    /// The selector highlights the client area of the window under the pointer; its click names
+    /// the window, and <see cref="RunScrollingCaptureAsync"/> drives the capture → scroll → stitch
+    /// loop in Core on it.
     /// </remarks>
-    private async void HandleScrollingCapture()
+    private void HandleScrollingCapture()
     {
         if (_advancedCapture is null)
         {
@@ -1125,14 +1078,20 @@ public partial class App : Application
             return;
         }
 
-        if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.ScrollingCapture))
+        // The selector opens in scroll mode; its click names the window (RunScrollingCaptureAsync).
+        StartSelector(CaptureSelectorMode.Scroll, 0);
+    }
+
+    /// <summary>Runs the scroll → capture → stitch loop on the window at <paramref name="point"/>, picked in the selector.</summary>
+    private async Task RunScrollingCaptureAsync(Core.Primitives.PointD point)
+    {
+        if (_advancedCapture is null || _scrollCancellation is not null)
         {
             return;
         }
 
-        Core.Primitives.PointD cursor = CursorLocator.GetPosition();
         WindowUnderCursor? window =
-            _services?.GetRequiredService<WindowTitleService>().ResolveAt(cursor);
+            _services?.GetRequiredService<WindowTitleService>().ResolveAt(point);
 
         if (window is null || window.ScrollBounds.IsEmpty)
         {
@@ -1252,7 +1211,7 @@ public partial class App : Application
     {
         await _initialEditRecoveryTask;
         await _initialLibraryRecoveryTask;
-        if (_overlay?.IsSelecting == true || _activeCountdown is not null || _scrollCancellation is not null
+        if (_overlay?.IsSelecting == true || _overlay?.IsCountingDown == true || _scrollCancellation is not null
             || _preparingAdvancedCapture || _pasteToScreenInFlight || _gitHubUploadInFlight) return false;
         await _capturePersistenceTask;
         // Late page/application details normally land within the readers' deadlines; never hold exit longer.
@@ -1400,8 +1359,6 @@ public partial class App : Application
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
-            var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-                e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
             var monitor = e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
             // Clipboard-only and card modes release the edit session once persistence ends.
             // Hold the receipt until the deferred presentation owns its own lease.
@@ -1414,7 +1371,7 @@ public partial class App : Application
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
                     if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess)
-                        ShowQuickAccess(receipt, selected, region, monitor, copied, practice: practice);
+                        ShowQuickAccess(receipt, selected, monitor, copied, practice: practice);
                     else
                     {
                         if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
@@ -1527,7 +1484,7 @@ public partial class App : Application
 
     /// <param name="practice">A capture the practice window asked for: its card never carries the rating invitation.</param>
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
+        MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false, bool practice = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1544,13 +1501,15 @@ public partial class App : Application
         {
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
             card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
-                actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
+                actions.Export, targetMonitor: monitor, copyText: actions.CopyText,
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             if (invitation is not null) AttachStoreRatingInvitation(card, invitation);
             card.PlacementMissed = error => _log?.LogWarning(error, "The capture card missed its bounds; the card stays open");
             ReceiptTimeline.Mark?.Invoke("card-constructed");
+            // A notification already in the corner moves above the card instead of under it.
+            card.Placed += () => _shellPresenter?.RefitNotification();
             card.Closed += (_, _) =>
             {
                 _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded);
@@ -2150,6 +2109,18 @@ public partial class App : Application
         window.CaptureRegionRequested = () => HandleCaptureRequested();
         window.ReadHotkeys = () => _settings!.Hotkeys;
         window.RecordRegionRequested = HandleRecordRegion;
+        window.ConfigureDetailsPanePersistence(_settings!.General.LibraryDetailsCollapsed, collapsed =>
+        {
+            bool previous = _settings!.General.LibraryDetailsCollapsed;
+            if (previous == collapsed) return;
+            _settings.General.LibraryDetailsCollapsed = collapsed;
+            try { _services.GetRequiredService<SettingsStore>().Save(_settings); }
+            catch (Exception error)
+            {
+                _settings.General.LibraryDetailsCollapsed = previous;
+                _log?.LogWarning(error, "Library details pane state was not saved");
+            }
+        });
 
         _galleryWindow = window;
         return window;
@@ -2829,6 +2800,7 @@ public partial class App : Application
         AnnotationEditorPreferences.ReadPinHotkey = null;
         AnnotationEditorPreferences.Write = null;
         AnnotationEditorPreferences.StampFolder = null;
+        AnnotationEditorPreferences.LibraryImages = null;
         TextRecognitionRoute.Show = null;
         TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();

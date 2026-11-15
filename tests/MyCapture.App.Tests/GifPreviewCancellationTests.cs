@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using Xunit;
@@ -107,6 +108,34 @@ public sealed class GifPreviewCancellationTests
         Assert.Same(expected, fixture.Panel.OriginalFrame);
     });
 
+    [Fact]
+    public void OriginalRenderFailureLogsTheCauseAndShowsRecoveryTextNotTheRawMessage() => RunSta(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        var log = new FailureLog();
+        using var fixture = new PreviewFixture(log);
+        fixture.Compare.IsChecked = true;
+        var raw = new InvalidOperationException("Exception of type 'System.Foo' was thrown.");
+        Assert.Single(fixture.Requests).Completion.SetException(raw);
+        Pump();
+        string[] captions = Descendants(fixture.Panel).OfType<TextBlock>().Select(text => text.Text).ToArray();
+        Assert.Contains(UiText.Format("GifPreview_Failed", UiText.Get("Dialog.Unexpected")), captions);
+        Assert.DoesNotContain(captions, text => text.Contains("Exception of type", StringComparison.Ordinal));
+        Assert.Same(raw, log.Errors.Single());
+    });
+
+    private sealed class FailureLog : ILogger
+    {
+        public List<Exception> Errors { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (exception is not null) Errors.Add(exception);
+        }
+    }
+
     private static void CompleteOld(PendingRender request, string outcome)
     {
         switch (outcome)
@@ -127,7 +156,7 @@ public sealed class GifPreviewCancellationTests
         internal GifPreviewPanel Panel { get; }
         internal ToggleButton Compare { get; }
 
-        internal PreviewFixture()
+        internal PreviewFixture(ILogger? log = null)
         {
             Panel = new GifPreviewPanel((sample, index, token) =>
             {
@@ -136,7 +165,7 @@ public sealed class GifPreviewCancellationTests
                 var completion = new TaskCompletionSource<BitmapSource>();
                 Requests.Add(new PendingRender(token, completion));
                 return completion.Task;
-            });
+            }, log: log);
             Panel.ShowSample(_sample, autoplay: true);
             Compare = Descendants(Panel).OfType<ToggleButton>().Single(button =>
                 AutomationProperties.GetName(button) == UiText.Get("GifPreview_Compare"));

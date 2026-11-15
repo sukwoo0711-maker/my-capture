@@ -18,7 +18,7 @@ public partial class App
         _editorPrewarm ??= new EditorPrewarmScheduler(
             action => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, action),
             () => _overlay?.IsActive == true || _recorder?.IsActive == true || _recorder?.HasRecordingSession == true
-                || _preparingAdvancedCapture || _activeCountdown is not null || _scrollCancellation is not null
+                || _preparingAdvancedCapture || _overlay?.IsCountingDown == true || _scrollCancellation is not null
                 || _textCaptureCancellation is not null || !_capturePersistenceTask.IsCompleted
                 || _preparingExit || _storeInstallationPending,
             () => _imageEditorOpened || _shutdownRequested || Dispatcher.HasShutdownStarted

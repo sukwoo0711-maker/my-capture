@@ -35,13 +35,16 @@ public sealed class EditorPointerSurfaceTests
         }
         Assert.Equal(before, Field<int>(renderer, "_pass"));
 
-        // Positive control: brush hover still redraws the visible footprint.
+        // Brush hover redraws the visible footprint in its own layer, still without the document.
         controller.Tool = EditorTool.Pen;
         RenderSurface();
         before = Field<int>(renderer, "_pass");
+        int previewBefore = surface.PreviewPasses;
         editor.SimulatePointerMove(editor.ViewportPointOf(new PointD(160, 90)), leftPressed: false);
         RenderSurface();
-        Assert.True(Field<int>(renderer, "_pass") > before);
+        Assert.True(surface.PreviewPasses > previewBefore);
+        Assert.NotNull(surface.BrushOutlineDip);
+        Assert.Equal(before, Field<int>(renderer, "_pass"));
 
         void RenderSurface()
         {
@@ -148,11 +151,12 @@ public sealed class EditorPointerSurfaceTests
         Assert.True(left > 0 && top > 0 && right < size - 1 && bottom < size - 1, $"{size}px: drawn {left},{top} to {right},{bottom}.");
         // The nib is the icon's left end with only its outline beside it, and the base line sits
         // just below it. The pencil rises to the upper right and the base line runs right, each
-        // about 15 design pixels, so this is the whole edit icon.
-        Assert.InRange(cursor.HotSpotX - left, 1.5 * k, 2.5 * k + 1);
-        Assert.InRange(bottom - cursor.HotSpotY, 2 * k, 3.5 * k + 1);
-        Assert.True(right - cursor.HotSpotX >= 16 * k, $"{size}px: the base line ends {right - cursor.HotSpotX}px right of the nib.");
-        Assert.True(cursor.HotSpotY - top >= 15.5 * k, $"{size}px: the pencil ends {cursor.HotSpotY - top}px above the nib.");
+        // about 10 design pixels (the icon at 0.8 of its 20-unit grid, about the size of the Windows
+        // arrow's head), so this is the whole edit icon and no larger.
+        Assert.InRange(cursor.HotSpotX - left, 1.2 * k, 2.2 * k + 1);
+        Assert.InRange(bottom - cursor.HotSpotY, 1.8 * k, 3 * k + 1);
+        Assert.InRange(right - cursor.HotSpotX, 10 * k, 13 * k + 1);
+        Assert.InRange(cursor.HotSpotY - top, 10.5 * k, 13.5 * k + 1);
         // The pencil leans right: nothing is drawn up and to the left of the nib.
         Assert.Equal(0, Alpha(cursor.HotSpotX - (int)(3 * k), cursor.HotSpotY - (int)(6 * k)));
 

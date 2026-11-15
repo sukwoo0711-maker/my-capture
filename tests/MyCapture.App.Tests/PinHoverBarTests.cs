@@ -18,12 +18,15 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// A pinned image shows copy, save, opacity and close in its corner while the pointer is over it;
+/// A pinned image shows copy, text copy, save and close in its corner while the pointer is over it;
 /// that bar never reaches a screenshot or a recording, and the right-click menu keeps its keys in
 /// the right-hand column.
 /// </summary>
 public sealed class PinHoverBarTests
 {
+    // The named width of copy · text copy · save · close (and source), measured with the app theme.
+    private const double KoBudget = 342, KoSourceBudget = 408, EnBudget = 355, EnSourceBudget = 421;
+
     [Fact]
     public void BarSitsInsideALargePinAndAboveOrBelowASmallOne()
     {
@@ -63,9 +66,12 @@ public sealed class PinHoverBarTests
             Assert.True(bar.IsCaptureExcluded);
             // Reduced motion: no fade, fully visible at once.
             Assert.Equal(1, bar.Opacity);
-            Assert.Equal(["이미지 복사", "저장", "투명도", "닫기"],
-                new[] { bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton }.Select(AutomationProperties.GetName));
+            Assert.Equal(["이미지 복사", "텍스트 복사", "저장", "닫기"],
+                new[] { bar.CopyButton, bar.TextCopyButton, bar.SaveButton, bar.CloseButton }.Select(AutomationProperties.GetName));
             Assert.Equal("Ctrl+C", AutomationProperties.GetAcceleratorKey(bar.CopyButton));
+            // The menu's own name and gesture; a mouse gesture is named in the tooltip, not as a key caption.
+            Assert.Equal("텍스트 복사 (Ctrl+더블클릭)", bar.TextCopyButton.ToolTip);
+            Assert.Empty(AutomationProperties.GetAcceleratorKey(bar.TextCopyButton));
             Assert.Equal("닫기 (Esc)", bar.CloseButton.ToolTip);
             Assert.Equal(1.0, pin.State.Opacity);
 
@@ -107,7 +113,7 @@ public sealed class PinHoverBarTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BarButtonsRunThePinsOwnCopySaveOpacityAndClose(bool supported) => StaTestHost.Run(() =>
+    public void BarButtonsRunThePinsOwnCopyTextCopySaveAndClose(bool supported) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(supported);
         using var language = UiText.UseLanguage("ko-KR");
@@ -118,7 +124,9 @@ public sealed class PinHoverBarTests
         PinWindow pin = Pin(out BitmapSource image);
         int copies = 0;
         var saves = new List<PinSaveMode>();
+        var recognized = new List<BitmapSource>();
         pin.CopyRequested += (_, request) => { copies++; Assert.Same(image, request.Image); };
+        pin.OcrRequested += (_, source) => recognized.Add(source);
         pin.SaveRequested += (_, e) => saves.Add(e.Mode);
         try
         {
@@ -134,6 +142,12 @@ public sealed class PinHoverBarTests
             Click(bar.SaveButton);
             Assert.Equal(1, copies);
             Assert.Equal([PinSaveMode.QuickSave], saves);
+            // A picture pin's text copy reads the picture's text, as Ctrl+double-click does.
+            Click(bar.TextCopyButton);
+            Assert.Same(image, Assert.Single(recognized));
+            Assert.Equal(1, copies);
+
+            // The opacity menu stays on the pin's O key; the bar no longer has an opacity button.
 
             ContextMenu opacity = bar.CreateOpacityMenu();
             Assert.Equal(supported ? typeof(ContextMenu) : typeof(OpaqueCaptureContextMenu), opacity.GetType());
@@ -145,6 +159,58 @@ public sealed class PinHoverBarTests
 
             Click(bar.CloseButton);
             Assert.True(pin.IsClosed);
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("table")]
+    [InlineData("markdown")]
+    public void TextCopyOnATextPinCopiesItsOriginalTextWithoutReadingThePicture(string kind) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        byte[] pixels = new byte[360 * 220 * 4];
+        BitmapSource picture = BitmapSource.Create(360, 220, 96, 96, PixelFormats.Bgra32, null, pixels, 360 * 4);
+        picture.Freeze();
+        const string original = "| a | b |\n| 1 | 2 |";
+        PinContent content = kind switch
+        {
+            "table" => PinContent.FromText(picture, original, isTable: true),
+            "markdown" => PinContent.FromMarkdown(picture, original),
+            _ => PinContent.FromText(picture, original, isTable: false),
+        };
+        var pin = new PinWindow(content, new PinViewState(360, 220, 1, 1, 0.1), -10000, -10000, () => new PinSettings())
+        {
+            ShowActivated = false,
+            ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000),
+        };
+        var texts = new List<string>();
+        int recognized = 0, copies = 0;
+        pin.OriginalTextCopyRequested += (_, text) => texts.Add(text);
+        pin.OcrRequested += (_, _) => recognized++;
+        pin.CopyRequested += (_, _) => copies++;
+        try
+        {
+            pin.Show();
+            Enter(pin);
+            PinHoverBar bar = pin.HoverBarForTest!;
+            Click(bar.TextCopyButton);
+            // The same route as the menu's copy-text item and Ctrl+double-click: the kept original.
+            Assert.Equal([original], texts);
+            Assert.Equal(0, recognized);
+            Assert.Equal(0, copies);
+            pin.SimulateCtrlDoubleClickForTest();
+            Assert.Equal([original, original], texts);
         }
         finally
         {
@@ -289,10 +355,10 @@ public sealed class PinHoverBarTests
     });
 
     [Theory]
-    [InlineData("ko-KR", false, 336)]
-    [InlineData("ko-KR", true, 382)]
-    [InlineData("en-US", false, 353)]
-    [InlineData("en-US", true, 399)]
+    [InlineData("ko-KR", false, KoBudget)]
+    [InlineData("ko-KR", true, KoSourceBudget)]
+    [InlineData("en-US", false, EnBudget)]
+    [InlineData("en-US", true, EnSourceBudget)]
     public void TranslationSharesTheAllNamesOrAllIconsRuleAndWidthBudget(string language, bool source, double budget) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
@@ -300,8 +366,8 @@ public sealed class PinHoverBarTests
         try
         {
             bar.SetTranslationAction(true, true, UiText.Get("Pin_Translate"), "Translate on this PC");
-            Assert.Equal(budget, bar.LabeledWidthBudget);
-            var actions = new[] { bar.TranslationButton, bar.CopyButton, bar.SaveButton, bar.OpacityButton };
+            Assert.Equal(budget, bar.BaseLabeledWidthBudget);
+            var actions = new[] { bar.CopyButton, bar.TextCopyButton, bar.SaveButton, bar.TranslationButton };
             TextBlock Caption(Button button) => Assert.Single(
                 Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<TextBlock>());
             foreach (Button button in actions)
@@ -310,10 +376,13 @@ public sealed class PinHoverBarTests
                 Assert.Single(Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<SymbolIcon>());
             }
             double labeled = bar.MeasureLabeledWidth();
+            // Offering translation adds the translation button's own named width to the budget,
+            // so it never turns this pin kind's names into icons.
+            Assert.True(bar.LabeledWidthBudget > budget, $"{bar.LabeledWidthBudget} vs {budget}");
             bar.Compact = bar.NeedsCompact(600, labeled);
             var surface = Assert.IsType<Border>(bar.Content);
             surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Assert.InRange(surface.DesiredSize.Width, 1, budget);
+            Assert.InRange(surface.DesiredSize.Width, 1, bar.LabeledWidthBudget);
             Assert.All(actions, button => Assert.Equal(bar.Compact ? Visibility.Collapsed : Visibility.Visible, Caption(button).Visibility));
             bar.Compact = true;
             bar.SetTranslationAction(true, true, UiText.Get("Pin_TranslationOriginal"), "View original");

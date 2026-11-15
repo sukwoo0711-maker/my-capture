@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
@@ -53,14 +54,17 @@ internal sealed class GifPreviewPanel : Border
     private readonly ToggleButton _actualSize = new() { Margin = new Thickness(6, 0, 0, 0) };
     private GifPreviewSample? _sample;
     private CancellationTokenSource? _originalCancellation;
+    private readonly ILogger? _log;
     private int _originalFrame = -1;
     private bool _syncingSlider;
     private bool _syncingScroll;
 
     /// <param name="renderOriginal">Renders the original of a sample frame for comparison.</param>
     /// <param name="sourceDurationMs">Length of the recording the samples come from, for the info line's reserve; 0 when unknown.</param>
-    internal GifPreviewPanel(Func<GifPreviewSample, int, CancellationToken, Task<BitmapSource>> renderOriginal, double sourceDurationMs = 0)
+    internal GifPreviewPanel(Func<GifPreviewSample, int, CancellationToken, Task<BitmapSource>> renderOriginal, double sourceDurationMs = 0,
+        ILogger? log = null)
     {
+        _log = log;
         _renderOriginal = renderOriginal;
         _player = new GifSamplePlayer(Dispatcher);
         SetResourceReference(StyleProperty, "Card.Sunken");
@@ -360,11 +364,12 @@ internal sealed class GifPreviewPanel : Border
         }
         catch (Exception error)
         {
+            _log?.LogWarning(error, "Could not render the original frame for the GIF comparison");
             if (ReferenceEquals(_originalCancellation, cancellation)
                 && ReferenceEquals(sample, _sample) && _originalFrame == index)
             {
                 _originalFrame = -1;
-                _originalCaption.Text = UiText.Format("GifPreview_Failed", error.Message);
+                _originalCaption.Text = UiText.Format("GifPreview_Failed", ThemedDialog.RecoveryMessage(error));
             }
         }
         finally

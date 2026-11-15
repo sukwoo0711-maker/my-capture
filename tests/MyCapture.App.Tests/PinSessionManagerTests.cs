@@ -64,6 +64,8 @@ public sealed class PinSessionManagerTests
             Assert.Equal(first.State.ImageHeightDip, snapshots[0].ImageHeightDip);
             Assert.Equal(1.7, snapshots[0].Zoom);
             Assert.Equal(0.4, snapshots[0].Opacity);
+            Assert.True(snapshots[0].IsClickThrough);
+            Assert.False(snapshots[1].IsClickThrough);
             Assert.Equal(first.GetCurrentPlacement(), snapshots[0].Placement);
             Assert.NotNull(snapshots[0].Placement);
             Assert.Null(first.ClosedPlacement);

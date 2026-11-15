@@ -20,13 +20,16 @@ namespace MyCapture.App.Pinning;
 
 /// <summary>
 /// The small bar a pinned image shows in its top-right corner while the pointer is over it: copy,
-/// save, opacity and close, so the commonest pin commands no longer hide in a long tooltip and the
-/// right-click menu.
+/// text copy, save, translation and source when the pin offers them, and close, so the commonest pin
+/// commands no longer hide in a long tooltip and the right-click menu.
 /// </summary>
 /// <remarks>
 /// It is a separate, never-activated tool window owned by the pin and excluded from screen capture,
 /// so it never appears in a screenshot or a recording while the pin itself stays capturable exactly
 /// as before. Without Windows animations it appears and disappears at once.
+/// Every pin kind lays it out by one rule: the commands keep one order (<see cref="CommandOrder"/>),
+/// a command a pin lacks leaves no gap, and every button shares one height, icon size and minimum
+/// width, so an icon-only bar spaces its icons evenly.
 /// </remarks>
 internal sealed class PinHoverBar : Window
 {
@@ -39,9 +42,19 @@ internal sealed class PinHoverBar : Window
     /// <summary>Excludes the bar from capture; tests substitute a recorder.</summary>
     internal static Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
 
+    /// <summary>
+    /// The one width every button keeps at least while the names show: a full Ctrl+C or Ctrl+S key
+    /// caption fits inside it, so Alt never widens a button.
+    /// </summary>
+    internal const double ButtonMinWidth = 60;
+
+    /// <summary>
+    /// The one width of every button in the icon-only bar. Its narrow side padding still keeps a full
+    /// Ctrl+C key caption inside, so Alt never widens a button and the icons sit at even steps.
+    /// </summary>
+    internal const double IconOnlyButtonWidth = 44;
+
     // 20x20 outline glyphs on the shared symbol grid.
-    private static readonly Geometry OpacityGlyph = Geometry.Parse(
-        "M10,3 A7,7 0 1 1 9.99,3 Z M10,3 L10,17 M10,6 L15.5,6 M10,9 L16.8,9 M10,12 L16.6,12 M10,15 L15,15");
     private static readonly Geometry SourceGlyph = Geometry.Parse(
         "M8,5 H4 V16 H15 V12 M10,4 H16 V10 M9,11 L16,4");
     private static readonly Geometry TranslationGlyph = Geometry.Parse(
@@ -50,6 +63,8 @@ internal sealed class PinHoverBar : Window
     private readonly List<TextBlock> _labels = [];
     private readonly Dictionary<Button, TextBlock> _buttonLabels = [];
     private readonly Border _surface;
+    private readonly StackPanel _row;
+    private double _labeledTranslationWidth;
     private ContextMenu? _opacityMenu;
     private bool _compact;
     private readonly UIElement _sourceGlyph;
@@ -74,6 +89,11 @@ internal sealed class PinHoverBar : Window
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), CopyKey);
+        // The pin menu's own "Copy text" command and its gesture: the kept original text, or the
+        // picture's text read on this PC. A mouse gesture, so it names it in the tooltip only.
+        TextCopyButton = BarButton(SymbolGeometry("Icon.Ocr"), UiText.Get("Text_03A1596F1681"), key: null);
+        TextCopyButton.ToolTip = $"{UiText.Get("Text_03A1596F1681")} ({UiText.Get("Text_C7011B8D345C")})";
+        AutomationProperties.SetHelpText(TextCopyButton, (string)TextCopyButton.ToolTip);
         TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_Translate"), key: null);
         TranslationButton.Visibility = Visibility.Collapsed;
         TranslationButton.Click += (_, _) => TranslationRequested?.Invoke();
@@ -95,21 +115,21 @@ internal sealed class PinHoverBar : Window
         sourceSymbol.Children.Add(SourceIcon);
         sourceContent.Children.Insert(0, sourceSymbol);
         SetProvenance(provenance ?? CaptureProvenance.None);
-        OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: "O");
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
         CopyButton.ToolTipOpening += (_, _) =>
         {
             if (CopyNameProvider?.Invoke() is { } copyName) SetCopyAction(copyName);
         };
+        TextCopyButton.Click += (_, _) => TextCopyRequested?.Invoke();
         SaveButton.Click += (_, _) => SaveRequested?.Invoke();
         SourceButton.Click += (_, _) => SourceRequested?.Invoke();
-        OpacityButton.Click += (_, _) => OpenOpacityMenu();
         CloseButton.Click += (_, _) => CloseRequested?.Invoke();
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (Button button in new[] { TranslationButton, CopyButton, SaveButton, SourceButton, OpacityButton, CloseButton })
-            row.Children.Add(button);
+        _row = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (Button button in CommandOrder)
+            _row.Children.Add(button);
+        var row = _row;
         _surface = new Border
         {
             Child = row,
@@ -182,12 +202,32 @@ internal sealed class PinHoverBar : Window
         return resizes;
     }
 
-    internal double LabeledWidthBudget => UiText.Culture.TwoLetterISOLanguageName == "ko"
-        ? SourceButton.Visibility == Visibility.Visible ? 382 : 336
-        : SourceButton.Visibility == Visibility.Visible ? 399 : 353;
+    /// <summary>
+    /// Left to right: the main commands (copy, text copy, save), the ones a pin may lack
+    /// (translation, source), then close. A command a pin lacks is collapsed, so the rest keep this order.
+    /// </summary>
+    internal IReadOnlyList<Button> CommandOrder => [CopyButton, TextCopyButton, SaveButton, TranslationButton, SourceButton, CloseButton];
+
+    /// <summary>
+    /// The widest bar that still shows every name: the named set copy · text copy · save with close
+    /// (and source) as measured with the app theme, plus the translation button's own named width
+    /// when the pin offers it, so offering translation never turns one pin kind's names into icons.
+    /// </summary>
+    internal double LabeledWidthBudget => BaseLabeledWidthBudget
+        + (TranslationButton.Visibility == Visibility.Visible ? _labeledTranslationWidth : 0);
+
+    /// <summary>The measured named width of copy · text copy · save · close (and source), in DIPs.</summary>
+    internal double BaseLabeledWidthBudget => UiText.Culture.TwoLetterISOLanguageName == "ko"
+        ? SourceButton.Visibility == Visibility.Visible ? 408 : 342
+        : SourceButton.Visibility == Visibility.Visible ? 421 : 355;
 
     internal bool NeedsCompact(double pinWidth, double labeledWidth) =>
         labeledWidth > LabeledWidthBudget || pinWidth < labeledWidth + EdgeGap * 4;
+
+    internal event Action? TextCopyRequested;
+
+    /// <summary>Copies the pin's text: its kept original, or the text read from its picture.</summary>
+    internal Button TextCopyButton { get; }
 
     internal event Action? SaveRequested;
 
@@ -236,14 +276,15 @@ internal sealed class PinHoverBar : Window
         _sourceGlyph.Visibility = icon is null ? Visibility.Visible : Visibility.Hidden;
     }
 
-    internal Button OpacityButton { get; }
-
     internal Button CloseButton { get; }
 
     /// <summary>The window was excluded from screen capture when its handle was created.</summary>
     internal bool IsCaptureExcluded { get; private set; }
 
-    /// <summary>Icons only: the names stay in the tooltips and automation names.</summary>
+    /// <summary>
+    /// Icons only: the names stay in the tooltips and automation names, and every button narrows to
+    /// <see cref="IconOnlyButtonWidth"/> in the same order and steps.
+    /// </summary>
     internal bool Compact
     {
         get => _compact;
@@ -251,6 +292,12 @@ internal sealed class PinHoverBar : Window
         {
             _compact = value;
             foreach (TextBlock label in _labels) label.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            foreach (Button button in CommandOrder)
+            {
+                button.MinWidth = value ? IconOnlyButtonWidth : ButtonMinWidth;
+                button.SetResourceReference(Control.PaddingProperty,
+                    value ? "CommandButton.Padding.CompactIconOnly" : "CommandButton.Padding.Compact");
+            }
         }
     }
 
@@ -270,6 +317,8 @@ internal sealed class PinHoverBar : Window
         InvalidateNameMeasures();
         _surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double width = _surface.DesiredSize.Width;
+        // DesiredSize already includes the button's margin.
+        _labeledTranslationWidth = TranslationButton.Visibility == Visibility.Visible ? TranslationButton.DesiredSize.Width : 0;
         Compact = compact;
         return width;
     }
@@ -290,11 +339,14 @@ internal sealed class PinHoverBar : Window
     /// <summary>Reads the pin's current opacity, shown as the checked entry of the opacity menu.</summary>
     internal Func<double> ReadOpacity { get; set; } = () => 1;
 
-    /// <summary>The opacity menu without opening it.</summary>
+    /// <summary>
+    /// The opacity menu (the pin's O key) without opening it. The bar has no opacity button; the menu
+    /// opens just under the bar, in the pin's top-right corner.
+    /// </summary>
     internal ContextMenu CreateOpacityMenu()
     {
         ContextMenu menu = CaptureWindowExclusion.CreateContextMenu();
-        menu.PlacementTarget = OpacityButton;
+        menu.PlacementTarget = _surface;
         menu.Placement = PlacementMode.Bottom;
         menu.VerticalOffset = 2;
         AutomationProperties.SetName(menu, UiText.Get("Onboard_PinOpacity"));
@@ -383,21 +435,14 @@ internal sealed class PinHoverBar : Window
     {
         if (_opacityMenu is { IsOpen: true }) return;
         ContextMenu menu = CreateOpacityMenu();
-        if (keyboard && Owner is { } owner)
+        if (keyboard && Owner is { } owner && _surface.IsVisible)
         {
             // Keep keyboard ownership with the pin; the floating bar never activates.
-            Point origin = owner.PointFromScreen(OpacityButton.PointToScreen(new Point(0, OpacityButton.ActualHeight)));
+            Point origin = owner.PointFromScreen(_surface.PointToScreen(new Point(0, _surface.ActualHeight)));
             menu.PlacementTarget = owner;
             menu.Placement = PlacementMode.RelativePoint;
             menu.HorizontalOffset = origin.X;
             menu.VerticalOffset = origin.Y + 2;
-        }
-        else if (keyboard)
-        {
-            // A native-hosted pin is not a WPF owner; the menu opens under its button instead.
-            menu.PlacementTarget = OpacityButton;
-            menu.Placement = PlacementMode.Bottom;
-            menu.VerticalOffset = 2;
         }
         menu.Closed += (_, _) => { if (ReferenceEquals(_opacityMenu, menu)) _opacityMenu = null; OpacityMenuClosed?.Invoke(); };
         _opacityMenu = menu;
@@ -425,9 +470,15 @@ internal sealed class PinHoverBar : Window
         };
         button.SetResourceReference(StyleProperty, "Button.GhostCompact");
         CommandButtonPresentation.Apply(button, compact: true);
-        // Keep enough width for a chord even when the pin collapses the command names.
-        button.MinWidth = key is "Ctrl+C" or "Ctrl+S" ? 60 : key is "Esc" ? 44 : 36;
-        var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        // One width for every command, wide enough for a chord even when the pin collapses the names:
+        // per-key widths made an icon-only bar space its icons unevenly.
+        button.MinWidth = ButtonMinWidth;
+        // Centred in the face: the face is as wide as its key caption, and a left-aligned icon sat up to
+        // 8 DIPs off its button's middle in the icon-only bar.
+        var content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+        };
         SymbolIcon icon = Glyph(glyph, CommandButtonPresentation.IconSize);
         icon.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         content.Children.Add(icon);

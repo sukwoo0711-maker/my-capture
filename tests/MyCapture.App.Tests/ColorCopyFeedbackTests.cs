@@ -50,9 +50,14 @@ public sealed class ColorCopyFeedbackTests
         Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(chip.BorderBrush).Color);
         Assert.Equal(Dock.Left, DockPanel.GetDock(outline));
         var labels = Assert.IsType<StackPanel>(content.Children[1]);
-        var text = Assert.IsType<TextBlock>(Assert.Single(labels.Children.Cast<UIElement>()));
+        // The copied value, then the colour's name (White is a CSS name, so it is exact).
+        TextBlock[] lines = labels.Children.Cast<UIElement>().Select(Assert.IsType<TextBlock>).ToArray();
+        Assert.Equal(2, lines.Length);
+        TextBlock text = lines[0];
         Assert.Equal(feedback.Message, text.Text.Replace("\u2060", string.Empty, StringComparison.Ordinal));
         Assert.Same(content.Resources["Text.Primary"], text.Foreground);
+        Assert.Equal(feedback.NameText, lines[1].Text.Replace("\u2060", string.Empty, StringComparison.Ordinal));
+        Assert.DoesNotContain("\u2248", feedback.NameText, StringComparison.Ordinal);
         content.Measure(new Size(320, double.PositiveInfinity));
         content.Arrange(new Rect(content.DesiredSize));
         Assert.True(content.DesiredSize.Width <= 320);

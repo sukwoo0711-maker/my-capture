@@ -130,6 +130,8 @@
     <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
     <Thickness x:Key="CommandButton.Padding.StandardIconOnly">4,4</Thickness>
     <Thickness x:Key="CommandButton.Padding.Compact">10,0</Thickness>
+    <!-- An icon-only compact command (the pin hover bar's icon bar): narrow sides that still hold a Ctrl+C caption. -->
+    <Thickness x:Key="CommandButton.Padding.CompactIconOnly">4,0</Thickness>
     <Thickness x:Key="CommandButton.IconLabelGap">6,0,0,0</Thickness>
 
     <!-- Interaction state layers. A template stacks them over its rest chrome, with the same

@@ -82,21 +82,23 @@ public sealed class EditorToolPointerTests : KoreanCaptionTest
         double k = size / 32.0;
         Assert.Equal(size, cross.Bitmap.PixelWidth);
         Assert.Equal(size, cross.Bitmap.PixelHeight);
-        Assert.Equal((int)Math.Floor(10.5 * k), cross.HotSpotX);
-        Assert.Equal((int)Math.Floor(10.5 * k), cross.HotSpotY);
+        Assert.Equal((int)Math.Floor(9.5 * k), cross.HotSpotX);
+        Assert.Equal((int)Math.Floor(9.5 * k), cross.HotSpotY);
         Assert.Equal((mosaic.HotSpotX, mosaic.HotSpotY), (cross.HotSpotX, cross.HotSpotY));
 
         byte[] pixels = Pixels(cross.Bitmap);
         Assert.True(Alpha(pixels, size, cross.HotSpotX, cross.HotSpotY) >= 160);
-        // The tool badges sit in the lower-right quarter; the plain crosshair leaves it empty.
-        int from = (int)Math.Ceiling(16 * k);
+        // The tool badges sit below and right of the crosshair; the plain crosshair leaves that corner empty.
+        int from = (int)Math.Ceiling(14 * k);
         bool BadgeArea(byte[] image) => Enumerable.Range(from, size - from)
             .SelectMany(y => Enumerable.Range(from, size - from).Select(x => Alpha(image, size, x, y))).Any(alpha => alpha > 0);
         Assert.False(BadgeArea(pixels));
         Assert.True(BadgeArea(Pixels(mosaic.Bitmap)));
-        // Dark outline and light body, like the other tool cursors.
-        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] < 40 && pixels[(i * 4) + 2] < 40);
-        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] > 220 && pixels[(i * 4) + 1] > 220);
+        // The shape crosshair shows the ink (here red) inside the edge that contrasts with it most.
+        Color edge = EditorCursorStyle.ForInk(Red).Outline;
+        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[(i * 4) + 2] > 200 && pixels[(i * 4) + 1] < 80 && pixels[i * 4] < 90);
+        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200
+            && Math.Abs(pixels[(i * 4) + 2] - edge.R) < 30 && Math.Abs(pixels[(i * 4) + 1] - edge.G) < 30 && Math.Abs(pixels[i * 4] - edge.B) < 30);
     });
 
     // ---- Pen and highlighter pointer beside the footprint ---------------------------------
@@ -219,7 +221,8 @@ public sealed class EditorToolPointerTests : KoreanCaptionTest
             Assert.True(pen.HotSpotX < size * .2 && pen.HotSpotY > size * .8);
             Assert.Equal(0, Alpha(pixels, size, pen.HotSpotX - (int)(3 * k), pen.HotSpotY - (int)(6 * k)));
             int top = Enumerable.Range(0, size).First(y => Enumerable.Range(0, size).Any(x => Alpha(pixels, size, x, y) > 0));
-            Assert.True(pen.HotSpotY - top >= 12 * k, $"{size}px: the pen ends {pen.HotSpotY - top}px above the nib.");
+            // A small pencil, about the height of the Windows arrow's head, not the whole frame.
+            Assert.InRange(pen.HotSpotY - top, (int)(8 * k), (int)Math.Ceiling(13 * k));
         }
     });
 
@@ -227,7 +230,9 @@ public sealed class EditorToolPointerTests : KoreanCaptionTest
     public void BrushCursorsAreCachedPerFootprintAndTheCacheStaysBounded() => StaTestHost.Run(() =>
     {
         Cursor first = EditorCursors.Get(EditorCursorKind.Pen, 32, 0, Red, highContrast: false, White, 3);
-        Assert.Same(first, EditorCursors.Get(EditorCursorKind.Pen, 32, 5, ColorRgba.White, highContrast: false, White, 3));
+        Assert.Same(first, EditorCursors.Get(EditorCursorKind.Pen, 32, 5, Red, highContrast: false, White, 3));
+        // The pen shows its ink, so another colour is another cursor.
+        Assert.NotSame(first, EditorCursors.Get(EditorCursorKind.Pen, 32, 0, ColorRgba.White, highContrast: false, White, 3));
         Assert.NotSame(first, EditorCursors.Get(EditorCursorKind.Pen, 32, 0, Red, highContrast: false, White, 4));
         Assert.NotSame(first, EditorCursors.Get(EditorCursorKind.Highlighter, 32, 0, Red, highContrast: false, White, 3));
 
@@ -368,7 +373,7 @@ public sealed class EditorToolPointerTests : KoreanCaptionTest
         Select(editor, EditorTool.Text);
         Point click = editor.ViewportPointOf(new PointD(200, 150));
         editor.SimulatePointerMove(click, false);
-        Assert.Equal(EditorCursorKind.TextBeam, editor.CanvasCursorKind);
+        Assert.Equal(EditorCursorKind.TextInk, editor.CanvasCursorKind);
 
         editor.SimulatePointerDown(click);
         Assert.NotNull(Field<TextBox?>(editor, "_activeTextBox"));

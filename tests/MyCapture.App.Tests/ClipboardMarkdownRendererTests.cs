@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
 using MyCapture.App.Threading;
+using MyCapture.Core.Localization;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -168,7 +169,7 @@ public sealed class ClipboardMarkdownRendererTests
         {
             FlowDocument pending = ClipboardMarkdownRenderer.CreateDocument(source);
             Assert.Equal(2, pending.Blocks.OfType<Paragraph>().Count(paragraph => paragraph.Tag is MarkdownMermaidBlock));
-            Assert.Equal(2, new TextRange(pending.ContentStart, pending.ContentEnd).Text.Split("그리는 중").Length - 1);
+            Assert.Equal(2, new TextRange(pending.ContentStart, pending.ContentEnd).Text.Split(UiText.Get("Pin_MarkdownDrawing")).Length - 1);
             var image = BitmapSource.Create(80, 40, 96, 96, PixelFormats.Bgra32, null,
                 Enumerable.Repeat((byte)100, 80 * 40 * 4).ToArray(), 80 * 4);
             image.Freeze();
@@ -185,8 +186,8 @@ public sealed class ClipboardMarkdownRendererTests
             Assert.Equal(0, Assert.IsType<MarkdownMermaidBlock>(diagram.Tag).Index);
             Assert.Equal("Between", new TextRange(blocks[2].ContentStart, blocks[2].ContentEnd).Text.TrimEnd('\r', '\n'));
             Assert.Equal("broken syntax\r\n", Assert.IsType<Paragraph>(blocks[3]).Tag);
-            Assert.Contains("원문", new TextRange(blocks[4].ContentStart, blocks[4].ContentEnd).Text);
-            Assert.DoesNotContain("그리는 중", new TextRange(completed.ContentStart, completed.ContentEnd).Text);
+            Assert.Contains(UiText.Get("Pin_MarkdownDiagramFallback"), new TextRange(blocks[4].ContentStart, blocks[4].ContentEnd).Text);
+            Assert.DoesNotContain(UiText.Get("Pin_MarkdownDrawing"), new TextRange(completed.ContentStart, completed.ContentEnd).Text);
             BitmapSource bitmap = ClipboardMarkdownRenderer.Render(source, 1.5, results);
             Assert.True(bitmap.IsFrozen);
             Assert.Equal(144, bitmap.DpiX);
@@ -347,7 +348,7 @@ public sealed class ClipboardMarkdownRendererTests
             FlowDocument reading = ClipboardMarkdownRenderer.CreateDocument(source);
             Paragraph paragraph = Assert.IsType<Paragraph>(Assert.Single(reading.Blocks.Cast<Block>()));
             Assert.Equal(source, Assert.IsType<Run>(Assert.Single(paragraph.Inlines.Cast<Inline>())).Text);
-            Assert.DoesNotContain("그리는 중", new TextRange(reading.ContentStart, reading.ContentEnd).Text);
+            Assert.DoesNotContain(UiText.Get("Pin_MarkdownDrawing"), new TextRange(reading.ContentStart, reading.ContentEnd).Text);
             return true;
         }, "Oversize Mermaid bounded source fallback");
     }

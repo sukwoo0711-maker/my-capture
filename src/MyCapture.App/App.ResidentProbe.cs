@@ -214,6 +214,9 @@ public partial class App
                 await recorder.SettleAsync("capture closed", probe.SettleSeconds);
                 await recorder.AuditAsync("capture closed");
                 break;
+            case SelectorDragScenario:
+                await ProbeSelectorDragAsync(recorder, probe);
+                break;
             case "editor-4k":
                 await ProbeEditorAsync(recorder);
                 await recorder.SettleAsync("editor-4k closed", probe.SettleSeconds);

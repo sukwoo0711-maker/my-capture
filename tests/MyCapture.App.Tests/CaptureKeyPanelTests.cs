@@ -571,6 +571,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             view.NotifyFirstFramePresented();
             Assert.Contains(Panel(view).RowTexts, r => r.StartsWith("클릭"));
             Assert.DoesNotContain(Panel(view).RowTexts, r => r.StartsWith("←") || r.StartsWith("Enter"));
+            Assert.Contains("S · D — 스크롤 캡처 · 지연 시간 바꾸기", Panel(view).RowTexts);
             view.HandleKeyDown(Overlay.KeyArgs(Key.A), ModifierKeys.Control);
             Render(view);
             Assert.Contains(Panel(view).RowTexts, r => r.StartsWith("←"));
@@ -593,7 +594,16 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
             view.CopyColorText = _ => Task.FromResult(true);
             view.SelectMode(CaptureSelectorMode.Color);
             Render(view);
-            Assert.DoesNotContain(Panel(view).RowTexts, r => r.StartsWith("드래그") || r.StartsWith("클릭"));
+            // The colour mode drags nothing and picks no window: a click (or Enter) copies, the arrows nudge the pointer.
+            Assert.DoesNotContain(Panel(view).RowTexts, r => r.StartsWith("드래그") || r == "클릭 — 창 선택");
+            Assert.Contains("클릭 · Enter — 색상 복사", Panel(view).RowTexts);
+            Assert.Single(Panel(view).RowTexts, r => r.StartsWith("← ↑ → ↓"));
+            Assert.Contains("C — 이미지 캡처로 전환", Panel(view).RowTexts);
+            view.SelectMode(CaptureSelectorMode.Scroll);
+            Render(view);
+            Assert.Contains("클릭 · Enter — 이 창 스크롤 캡처", Panel(view).RowTexts);
+            Assert.Contains("S — 이미지 캡처로 전환", Panel(view).RowTexts);
+            Assert.DoesNotContain(Panel(view).RowTexts, r => r.StartsWith("드래그") || r.StartsWith("S · D"));
         }
         finally { view.ReleaseResources(); }
     });

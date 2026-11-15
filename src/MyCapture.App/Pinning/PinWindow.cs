@@ -279,7 +279,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
         Content = _chrome;
 
-        // The hover bar shows copy, save, opacity and close; the tooltip only names the gestures.
+        // The hover bar shows copy, text copy, save and close; the tooltip only names the gestures.
         ToolTip = UiText.Get("Onboard_PinTip");
         AutomationProperties.SetName(this, UiText.Get("Text_85E926C7F694"));
         AutomationProperties.SetHelpText(
@@ -416,7 +416,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     internal void ForceHoverBarHideForTest() => OnHoverHideTick(this, EventArgs.Empty);
 
     /// <summary>
-    /// Shows copy, save, opacity and close in the pin's top-right corner (or just above a small pin).
+    /// Shows copy, text copy, save and close in the pin's top-right corner (or just above a small pin).
     /// Not while the pin is hidden, passes clicks through, is being dragged or is closing.
     /// </summary>
     internal void ShowHoverBar()
@@ -474,6 +474,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         bar.ReadOpacity = () => target()?._state.Opacity ?? 1;
         bar.CopyRequested += () => target()?.CopyImageToClipboard();
         bar.CopyNameProvider = () => target()?.CopyActionName;
+        bar.TextCopyRequested += () => target()?.CopyPinText();
         bar.TranslationRequested += () => target()?.InvokeTranslationAction();
         bar.SaveRequested += () => target()?.RequestSave(PinSaveMode.QuickSave);
         bar.SourceRequested += () => { if (target() is { } pin) pin.LastSourceOperationForTest = pin.OpenSourceAsync(); };
@@ -786,6 +787,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             enabled ? FeedbackKind.Result : FeedbackKind.Confirmation);
         // The pin is click-transparent, so the way back is a separate excluded target.
         UpdateClickThroughHandle();
+        // The open-pin session keeps click-through, so a change is a saved presentation change.
+        if (changed && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     internal event Action? ClickThroughHintShown;
@@ -1820,7 +1823,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         }
         else
         {
-            PhysicalWindowPositioner.PlaceTopmost(_handle, target);
+            // This placement also sizes the window. A key move at a fractional scale asks for a fractional
+            // origin (1 DIP is 1.25 px at 125%), and rounding that rectangle outward would add a pixel to the
+            // width or height on every press. The origin goes to the nearest pixel, as the lightweight host's
+            // does, so a step left and a step right are the same length; the size stays.
+            PhysicalWindowPositioner.PlaceTopmost(_handle,
+                new RectD(Math.Round(target.Left), Math.Round(target.Top), width, height));
         }
     }
 
@@ -1993,7 +2001,16 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     private void HandleCtrlDoubleClick()
     {
         _ctrlClickTimer.Stop();
-        if (IsTextSelectionMode) return;
+        CopyPinText();
+    }
+
+    /// <summary>
+    /// The menu's "Copy text", Ctrl+double-click and the hover bar's text copy: a text, Markdown,
+    /// code or table pin copies its kept original text; a picture pin copies the text read from it.
+    /// </summary>
+    internal void CopyPinText()
+    {
+        if (_isClosed || IsTextSelectionMode) return;
         if (_originalText is not null)
         {
             RequestOriginalTextCopy();

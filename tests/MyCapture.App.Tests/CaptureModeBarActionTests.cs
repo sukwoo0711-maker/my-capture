@@ -79,7 +79,7 @@ public sealed class CaptureModeBarActionTests(ITestOutputHelper output)
     });
 
     [Fact]
-    public void DirectDelayAndScrollingControlsAndMoreMenuRunExistingCommands() => StaTestHost.Run(() =>
+    public void DelayArmsAndScrollSwitchesModeWhileMoreMenuRunsRepeat() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         bool canRepeat = false;
@@ -96,7 +96,8 @@ public sealed class CaptureModeBarActionTests(ITestOutputHelper output)
             ContextMenu menu = bar.CreateDelayMenu();
             Assert.Same(bar.DelayButton, menu.PlacementTarget);
             MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-            Assert.Equal(["3초 후 캡처", "5초 후 캡처", "10초 후 캡처"], items.Select(item => (string)item.Header));
+            Assert.Equal(["지연 없음", "3초 후 캡처", "5초 후 캡처", "10초 후 캡처"], items.Select(item => (string)item.Header));
+            Assert.Equal([true, false, false, false], items.Select(item => item.IsChecked));
             ContextMenu more = bar.CreateMoreMenu();
             Assert.Same(bar.MoreButton, more.PlacementTarget);
             MenuItem repeat = Assert.IsType<MenuItem>(Assert.Single(more.Items));
@@ -107,24 +108,26 @@ public sealed class CaptureModeBarActionTests(ITestOutputHelper output)
             view.OffersOtherActions = true;
             Assert.True(bar.CreateMoreMenu().Items.OfType<MenuItem>().Last().IsEnabled);
 
-            items[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            Assert.Equal([new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, 5)], requests);
-            // One request per selector: the rest are ignored once it has ended.
-            bar.ScrollButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.Single(requests);
+            // A delay is armed in the selector, which stays open; the button shows it.
+            items[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Empty(requests);
+            Assert.Equal(5, view.ArmedDelaySeconds);
+            Assert.Equal(5, view.DelaySeconds);
+            Assert.Equal(true, bar.DelayButton.IsChecked);
+            Assert.Equal("지연 캡처, 5초 후 캡처", AutomationProperties.GetName(bar.DelayButton) + ", "
+                + AutomationProperties.GetItemStatus(bar.DelayButton));
+            // Scroll is a mode like the others: checked, and the delay does not apply to it.
+            ((ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(bar.ScrollButton)).Select();
+            Assert.Empty(requests);
+            Assert.Equal(CaptureSelectorMode.Scroll, view.Mode);
+            Assert.Equal(true, bar.ScrollButton.IsChecked);
+            Assert.False(bar.DelayButton.IsEnabled);
+            Assert.Equal(0, view.DelaySeconds);
+            view.SelectMode(CaptureSelectorMode.Capture);
+            Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
+            Assert.Equal(5, view.DelaySeconds);
         }
         finally { view.ReleaseResources(); }
-
-        CaptureOverlayView scroll = BarView(offers: true);
-        CaptureSelectorRequest? chosen = null;
-        scroll.ActionRequested += (_, request) => chosen = request;
-        try
-        {
-            Render(scroll);
-            scroll.ModeBarForTest!.ScrollButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.Equal(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture), chosen);
-        }
-        finally { scroll.ReleaseResources(); }
     });
 
     [Fact]

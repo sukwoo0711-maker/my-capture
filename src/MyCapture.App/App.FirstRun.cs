@@ -258,7 +258,7 @@ public partial class App
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "Could not apply the welcome's start-at-sign-in choice");
-            return new StartAtSignInOutcome(false, UiText.Format("Text_0FA1A9D03BE3", ex.Message));
+            return new StartAtSignInOutcome(false, UiText.Format("Text_0FA1A9D03BE3", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)));
         }
     }
 
@@ -298,7 +298,7 @@ public partial class App
     }
 
     private bool IsWelcomeCaptureInProgress => _preparingAdvancedCapture || _overlay?.IsSelecting == true
-        || _activeCountdown is not null || _scrollCancellation is not null || !_capturePersistenceTask.IsCompleted
+        || _overlay?.IsCountingDown == true || _scrollCancellation is not null || !_capturePersistenceTask.IsCompleted
         || _recorder?.IsActive == true;
 
     /// <summary>Also retried after hotkey registration, even when the capture chord itself is unchanged.</summary>

@@ -41,4 +41,10 @@ internal enum EditorTool
 
     /// <summary>Drag a rectangle to blur the capture content underneath it as a live layer.</summary>
     Blur,
+
+    /// <summary>
+    /// Removes whole annotations: a click removes the one under the pointer, a drag every one it
+    /// touches, as one undoable step. The capture's own pixels are never erased.
+    /// </summary>
+    Eraser,
 }

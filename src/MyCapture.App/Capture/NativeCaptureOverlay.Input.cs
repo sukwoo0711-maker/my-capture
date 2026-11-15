@@ -21,7 +21,10 @@ internal sealed partial class NativeCaptureOverlay
     private System.Drawing.Size? _presetSize;
     private bool _textCaptureMode;
     private CaptureSelectorMode _mode;
-    private bool _detectWindows, _windowSelected, _dragBeyondClick, _hoverWholeMonitor;
+    private bool _detectWindows, _windowSelected, _dragBeyondClick, _hoverWholeMonitor, _scrollPressed;
+    private int _armedDelaySeconds;
+    private IntPtr _scrollBoundsHandle;
+    private RectD? _scrollBounds;
     private WindowCandidate? _hoverWindow, _selectedWindow;
     private RectD? _hoverRegion;
 
@@ -52,6 +55,26 @@ internal sealed partial class NativeCaptureOverlay
         set { _recordingSelection = value; if (value && Mode == CaptureSelectorMode.Freeform) SelectMode(CaptureSelectorMode.Capture); RefreshModeBar(); }
     }
     internal bool OffersOtherActions { get; set; }
+
+    /// <summary>The delay chosen in the bar (0 for none), kept across mode changes.</summary>
+    internal int ArmedDelaySeconds
+    {
+        get => _armedDelaySeconds;
+        set { _armedDelaySeconds = Math.Max(0, value); RefreshModeBar(); if (!_closed) _chrome?.Update(EffectivePointer, _selection); }
+    }
+
+    /// <summary>The delay a confirmed selection waits for: the armed one, in the modes it applies to.</summary>
+    internal int DelaySeconds => OffersOtherActions && !RecordingSelection && CaptureModeBar.DelayApplies(Mode) ? _armedDelaySeconds : 0;
+
+    /// <summary>The scroll mode needs the owner's scrolling command.</summary>
+    internal bool ScrollAvailable => OffersOtherActions && !RecordingSelection;
+
+    /// <summary>Client bounds of a window in virtual-desktop pixels, or null. Tests replace it.</summary>
+    internal Func<IntPtr, RectD?> ReadScrollBounds { get; set; } =
+        handle => WindowTitleService.TryReadClientBounds(handle, out RectD bounds) ? bounds : null;
+
+    /// <summary>The magnifier follows the pointer for the setting and always in the colour mode.</summary>
+    internal bool MagnifierShown => _showMagnifier || Mode == CaptureSelectorMode.Color;
     internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
     internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
     internal bool DetectWindows
@@ -101,6 +124,7 @@ internal sealed partial class NativeCaptureOverlay
         bar.ActionRequested += RequestAction;
         bar.RatioRequested += OnBarRatio;
         bar.FixedSizeRequested += OnBarFixedSize;
+        bar.DelayRequested += OnBarDelay;
         RefreshModeBar();
     }
 
@@ -115,6 +139,7 @@ internal sealed partial class NativeCaptureOverlay
         bar.ActionRequested -= RequestAction;
         bar.RatioRequested -= OnBarRatio;
         bar.FixedSizeRequested -= OnBarFixedSize;
+        bar.DelayRequested -= OnBarDelay;
         _modeBar = null;
     }
 
@@ -142,6 +167,18 @@ internal sealed partial class NativeCaptureOverlay
 
     private void OnBarRatio(SelectionRatio ratio) { DismissStartGuide(); SelectRatio(ratio); ReturnFocusAfterPointer(); }
 
+    private void OnBarDelay(int seconds) { DismissStartGuide(); SelectDelay(seconds); ReturnFocusAfterPointer(); }
+
+    /// <summary>Arms a delay (0 disarms it) for the next confirmed selection and says so.</summary>
+    internal void SelectDelay(int seconds)
+    {
+        if (_closed || !OffersOtherActions || RecordingSelection) return;
+        ArmedDelaySeconds = seconds;
+        ShowToast(CaptureModeBar.DelayName(ArmedDelaySeconds), FeedbackKind.Echo, DelayActivity);
+    }
+
+    private const string DelayActivity = "MyCapture.Capture.Delay";
+
     private void OnBarFixedSize(FixedSelectionSize size)
     {
         DismissStartGuide();
@@ -156,6 +193,7 @@ internal sealed partial class NativeCaptureOverlay
             ratioAvailable: PresetSize is null, freeformUnavailableReason: ResolvedFreeformUnavailableReason);
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(Ratio);
+        _modeBar?.ShowDelay(_armedDelaySeconds);
         UpdateDeferredGuides();
     }
 
@@ -163,11 +201,13 @@ internal sealed partial class NativeCaptureOverlay
     {
         if (_closed || (mode == CaptureSelectorMode.Text && !TextCaptureAvailable)
             || (mode == CaptureSelectorMode.Color && CopyColorText is null)
+            || (mode == CaptureSelectorMode.Scroll && !ScrollAvailable)
             || (mode == CaptureSelectorMode.Freeform && !FreeformAvailable)) return;
         if (mode != Mode)
         {
             DiscardFreeformStroke();
-            if (mode == CaptureSelectorMode.Freeform)
+            _scrollPressed = false;
+            if (mode is CaptureSelectorMode.Freeform or CaptureSelectorMode.Scroll or CaptureSelectorMode.Color)
             {
                 _selectedWindow = null;
                 ClearHover();
@@ -181,6 +221,9 @@ internal sealed partial class NativeCaptureOverlay
         ClearHover();
         RefreshModeBar();
         RefreshHover();
+        // The pointer changes with the mode: crosshair, eyedropper or the scroll cursor.
+        UpdateVisualFeedback();
+        RefreshSystemCursor();
     }
 
     internal void SelectRatio(SelectionRatio ratio)
@@ -252,11 +295,42 @@ internal sealed partial class NativeCaptureOverlay
             case Key.T when TextCaptureAvailable && modifiers is ModifierKeys.None or ModifierKeys.Shift:
                 TextCaptureMode = !TextCaptureMode; return true;
             case Key.C when CopyColorText is not null && modifiers is ModifierKeys.None or ModifierKeys.Shift:
-                _ = CopyColorAtPointerAsync(); return true;
+                SelectMode(Mode == CaptureSelectorMode.Color ? CaptureSelectorMode.Capture : CaptureSelectorMode.Color); return true;
+            case Key.S when ScrollAvailable && modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                SelectMode(Mode == CaptureSelectorMode.Scroll ? CaptureSelectorMode.Capture : CaptureSelectorMode.Scroll); return true;
+            case Key.D when ScrollAvailable && CaptureModeBar.DelayApplies(Mode) && modifiers is ModifierKeys.None or ModifierKeys.Shift:
+                SelectDelay(NextDelay(_armedDelaySeconds)); return true;
+            case Key.Left or Key.Right or Key.Up or Key.Down when Mode == CaptureSelectorMode.Color:
+                NudgePointer(key, modifiers); return true;
             case Key.Left or Key.Right or Key.Up or Key.Down:
                 NudgeSelection(key, modifiers); return true;
             default: return false;
         }
+    }
+
+    /// <summary>The next delay choice after <paramref name="seconds"/>, wrapping to none.</summary>
+    internal static int NextDelay(int seconds)
+    {
+        IReadOnlyList<int> choices = CaptureModeBar.DelayChoices;
+        for (int index = 0; index < choices.Count; index++)
+            if (choices[index] > seconds) return choices[index];
+        return choices[0];
+    }
+
+    /// <summary>The eyedropper moves one pixel per arrow (ten with Ctrl), like a selection.</summary>
+    internal void NudgePointer(Key key, ModifierKeys modifiers)
+    {
+        if (_closed) return;
+        double step = modifiers.HasFlag(ModifierKeys.Control) ? 10 : 1;
+        PointD pointer = EffectivePointer;
+        double dx = key switch { Key.Left => -step, Key.Right => step, _ => 0 };
+        double dy = key switch { Key.Up => -step, Key.Down => step, _ => 0 };
+        var target = new PointD(Math.Clamp(pointer.X + dx, _bounds.Left, _bounds.Right - 1),
+            Math.Clamp(pointer.Y + dy, _bounds.Top, _bounds.Bottom - 1));
+        if (!PlaceCursor(target)) return;
+        _ = Pointer();
+        RefreshHover();
+        _chrome?.Update(EffectivePointer, _selection);
     }
 
     internal void NudgeSelection(Key key, ModifierKeys modifiers)
@@ -354,7 +428,23 @@ internal sealed partial class NativeCaptureOverlay
         _hoverWindow = null;
         _hoverRegion = null;
         _hoverWholeMonitor = false;
-        if (DetectWindows && _windowSelected && !RecordingSelection && Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Selection is null)
+        if (Mode == CaptureSelectorMode.Scroll)
+        {
+            // The scroll mode highlights the scrolled viewport of the window under the pointer:
+            // its client area, read once per window, never the desktop.
+            if (WindowDetectHitTest.FindTopmost(SourceWindows, pointer, Handle) is { } window
+                && !WindowCandidateService.IsDesktopShell(window, SourceWindows))
+            {
+                if (_scrollBoundsHandle != window.Handle)
+                {
+                    _scrollBoundsHandle = window.Handle;
+                    _scrollBounds = ReadScrollBounds(window.Handle) is { IsEmpty: false } client ? client : window.ScreenBounds;
+                }
+                _hoverWindow = window;
+                _hoverRegion = _scrollBounds is { } bounds ? WindowDetectHitTest.ToBitmapRegion(bounds, _bounds) : null;
+            }
+        }
+        else if (DetectWindows && _windowSelected && !RecordingSelection && Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Selection is null)
         {
             _hoverWindow = WindowDetectHitTest.FindTopmost(SourceWindows, pointer, Handle);
             if (_hoverWindow is { } window)
@@ -371,6 +461,14 @@ internal sealed partial class NativeCaptureOverlay
         CaptureGuideArea area = CaptureModeBarLayout.ChooseArea(ReadMonitors(), ReadCursor(), _bounds);
         return WindowDetectHitTest.IsClick(_anchor, point, SystemParameters.MinimumHorizontalDragDistance * area.Scale,
             SystemParameters.MinimumVerticalDragDistance * area.Scale);
+    }
+
+    /// <summary>Scrolls the window under <paramref name="bitmapPoint"/>: the selector closes and the app runs the loop.</summary>
+    private void RequestScroll(PointD bitmapPoint)
+    {
+        if (_hoverWindow is null || _hoverRegion is null) return;
+        RequestAction(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture,
+            new PointD(_bounds.Left + bitmapPoint.X, _bounds.Top + bitmapPoint.Y)));
     }
 
     private void RequestAction(CaptureSelectorRequest request)

@@ -4,10 +4,15 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Capture;
 
-/// <summary>One retained, bounded overlay for the magnifier grid and its two footer values.</summary>
+/// <summary>
+/// One retained, bounded overlay for the magnifier grid and its footer: the centre pixel's colour and
+/// coordinates, or, in the colour mode, the value in the copy format and the colour's name.
+/// </summary>
 internal sealed class NativeSelectorMagnifier : Adorner
 {
     internal const double ColorFontSize = TypeScale.Caption;
@@ -18,7 +23,7 @@ internal sealed class NativeSelectorMagnifier : Adorner
     private readonly Brush? _quarterGridBrush;
     private readonly Brush _cornerBrush;
     private readonly Pen _borderPen, _gridPen;
-    private readonly Typeface _typeface;
+    private readonly Typeface _typeface, _uiTypeface;
     private readonly DrawingGroup _drawing = new();
     private readonly LineGeometry[] _gridLines = Enumerable.Range(0, 28).Select(_ => new LineGeometry()).ToArray();
     private LayoutProfile[] _profiles = [];
@@ -29,7 +34,10 @@ internal sealed class NativeSelectorMagnifier : Adorner
     private uint _color;
     private int _drawnX = -1, _drawnY = -1;
     private uint _drawnColor = uint.MaxValue;
-    private FormattedText? _colorText, _coordinateText;
+    private FormattedText? _colorText, _coordinateText, _nameText, _englishText;
+    private bool _colorMode, _layoutPending;
+    private ColorFormat _format;
+    private readonly bool _korean = UiText.Culture.TwoLetterISOLanguageName == "ko";
 
     internal NativeSelectorMagnifier(Image image, IReadOnlyDictionary<string, Brush> palette) : base(image)
     {
@@ -44,7 +52,40 @@ internal sealed class NativeSelectorMagnifier : Adorner
         _gridPen = new Pen(_gridBrush, 0.5);
         FontFamily family = Application.Current?.TryFindResource("Font.Mono") as FontFamily ?? new FontFamily("Consolas");
         _typeface = new Typeface(family, FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+        FontFamily ui = Application.Current?.TryFindResource("Font.Ui") as FontFamily ?? new FontFamily("Segoe UI");
+        _uiTypeface = new Typeface(ui, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     }
+
+    /// <summary>
+    /// The colour mode's footer: the value in the copy format, then the colour's name (in Korean
+    /// with the CSS name below it). The next <see cref="Update"/> reports the changed size.
+    /// </summary>
+    internal bool ColorMode
+    {
+        get => _colorMode;
+        set
+        {
+            if (_colorMode == value) return;
+            _colorMode = value;
+            _layoutPending = true;
+            _colorText = _coordinateText = _nameText = _englishText = null;
+            _dirty = true;
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The copy format the colour mode shows; read when the mode is entered.</summary>
+    internal ColorFormat Format
+    {
+        get => _format;
+        set { if (_format == value) return; _format = value; _colorText = null; _dirty = true; InvalidateVisual(); }
+    }
+
+    /// <summary>The value and name the colour mode shows, as drawn; null outside the colour mode.</summary>
+    internal string? ColorReadoutForTest { get; private set; }
+
+    private double Footer => _colorMode ? _profile.ColorFooter : _profile.Footer;
 
     internal DrawingGroup DrawingForTest { get { RenderPending(); return _drawing; } }
     internal Size ImageSizeForTest => new(_profile.Image, _profile.Image);
@@ -54,11 +95,11 @@ internal sealed class NativeSelectorMagnifier : Adorner
     internal Rect CellBoundsForTest => new(_cellX * (_profile.Image / _columns), _cellY * (_profile.Image / _rows),
         _profile.Image / _columns, _profile.Image / _rows);
     internal IReadOnlyList<LineGeometry> GridLinesForTest => _gridLines;
-    internal double FooterHeightForTest => _profile.Footer;
+    internal double FooterHeightForTest => Footer;
     internal int GridFillCount { get; private set; }
     internal int LabelLayoutCountForTest { get; private set; }
     internal int RenderCountForTest { get; private set; }
-    internal Size LogicalSize => new(_profile.Image + 6, _profile.Image + _profile.Footer + 6);
+    internal Size LogicalSize => new(_profile.Image + 6, _profile.Image + Footer + 6);
 
     internal void Bind(int width, int height, IReadOnlyList<CaptureGuideArea> areas, double fallbackScale)
     {
@@ -67,7 +108,7 @@ internal sealed class NativeSelectorMagnifier : Adorner
         for (int index = 0; index < areas.Count; index++) Add(areas[index].Scale);
         _profiles = profiles.ToArray();
         _profile = default;
-        _colorText = _coordinateText = null;
+        _colorText = _coordinateText = _nameText = _englishText = null;
         _drawnX = _drawnY = -1;
         _drawnColor = uint.MaxValue;
         _dirty = true;
@@ -80,15 +121,22 @@ internal sealed class NativeSelectorMagnifier : Adorner
             bool oneLine = 8 + color.Width + 8 + coordinates.Width + 8 <= 150 / scale;
             double cellPixels = oneLine ? 10 : Math.Max(10, Math.Ceiling((16 + Math.Max(color.Width, coordinates.Width)) * scale / 15));
             double footerText = oneLine ? 5 + color.Height + 5 : 5 + color.Height + 1 + coordinates.Height + 6;
+            // The colour mode: value, name and, in Korean, the CSS name on a third line.
+            FormattedText name = new("Ag", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, _uiTypeface,
+                ColorFontSize, _textBrush, scale);
+            FormattedText english = Text("Ag", CoordinateFontSize, _mutedBrush, scale);
+            double colorFooter = 5 + color.Height + 2 + name.Height + (_korean ? 1 + english.Height : 0) + 6;
             profiles.Add(new LayoutProfile(scale, cellPixels * 15 / scale,
                 Math.Max(38, Math.Ceiling(footerText * scale)) / scale, oneLine, color.Height,
-                Math.Ceiling(3 * scale) / scale, TopCorners(cellPixels * 15 / scale)));
+                Math.Ceiling(3 * scale) / scale, TopCorners(cellPixels * 15 / scale),
+                Math.Max(38, Math.Ceiling(colorFooter * scale)) / scale, name.Height));
         }
     }
 
     internal bool Update(double scale, int x, int y, int cropX, int cropY, int columns, int rows, byte[] sample)
     {
-        bool layoutChanged = _profile.Scale != scale;
+        bool layoutChanged = _profile.Scale != scale || _layoutPending;
+        _layoutPending = false;
         if (layoutChanged)
         {
             for (int index = 0; index < _profiles.Length; index++)
@@ -97,7 +145,7 @@ internal sealed class NativeSelectorMagnifier : Adorner
             _image.Width = _image.Height = _profile.Image;
             _borderPen.Thickness = 1 / _profile.Scale;
             _gridPen.Thickness = 0.5 / _profile.Scale;
-            _colorText = _coordinateText = null;
+            _colorText = _coordinateText = _nameText = _englishText = null;
             InvalidateMeasure();
         }
         int cellX = Math.Clamp(x - cropX, 0, columns - 1), cellY = Math.Clamp(y - cropY, 0, rows - 1);
@@ -145,13 +193,14 @@ internal sealed class NativeSelectorMagnifier : Adorner
     {
         Detach();
         _drawing.Children.Clear();
-        _colorText = _coordinateText = null;
+        _colorText = _coordinateText = _nameText = _englishText = null;
+        ColorReadoutForTest = null;
         _dirty = true;
         _x = _y = 0;
         _color = 0;
     }
 
-    protected override Size MeasureOverride(Size constraint) => new(_profile.Image, _profile.Image + _profile.Footer);
+    protected override Size MeasureOverride(Size constraint) => new(_profile.Image, _profile.Image + Footer);
 
     protected override void OnRender(DrawingContext drawingContext)
     {
@@ -166,7 +215,20 @@ internal sealed class NativeSelectorMagnifier : Adorner
         RenderCountForTest++;
         if (_colorText is null || _drawnColor != _color)
         {
-            _colorText = Text($"#{_color:X6}", ColorFontSize, _textBrush, _profile.Scale);
+            byte red = (byte)(_color >> 16), green = (byte)(_color >> 8), blue = (byte)_color;
+            if (_colorMode)
+            {
+                // Named once per new colour, here and not on the mouse message; 139 small distances.
+                ColorNameMatch match = ColorNames.Nearest(red, green, blue);
+                string value = ColorSampleFormatter.Format(red, green, blue, _format);
+                string name = ColorNames.PrimaryName(match, _korean);
+                _colorText = Text(value, ColorFontSize, _textBrush, _profile.Scale);
+                _nameText = Bounded(new FormattedText(name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    _uiTypeface, ColorFontSize, _textBrush, _profile.Scale));
+                _englishText = _korean ? Bounded(Text(match.Color.Name, CoordinateFontSize, _mutedBrush, _profile.Scale)) : null;
+                ColorReadoutForTest = value + " " + ColorNames.Display(match, _korean);
+            }
+            else _colorText = Text($"#{_color:X6}", ColorFontSize, _textBrush, _profile.Scale);
             _drawnColor = _color;
             LabelLayoutCountForTest++;
         }
@@ -178,7 +240,7 @@ internal sealed class NativeSelectorMagnifier : Adorner
         }
         using DrawingContext dc = _drawing.Open();
         dc.DrawRoundedRectangle(null, _borderPen,
-            new Rect(-_profile.Inset, -_profile.Inset, _profile.Image + 6, _profile.Image + _profile.Footer + 6), 9, 9);
+            new Rect(-_profile.Inset, -_profile.Inset, _profile.Image + 6, _profile.Image + Footer + 6), 9, 9);
         // Paint the panel over the image's two top corners. A non-rectangular Image.Clip would
         // introduce a WPF intermediate surface; this bounded, frozen geometry needs none.
         dc.DrawGeometry(_cornerBrush, null, _profile.Corners);
@@ -199,6 +261,16 @@ internal sealed class NativeSelectorMagnifier : Adorner
         }
         dc.DrawRectangle(null, _borderPen, CellBoundsForTest);
         var colorAt = new Point(8, _profile.Image + 5);
+        if (_colorMode && _nameText is not null)
+        {
+            dc.DrawText(_colorText, colorAt);
+            var nameAt = new Point(8, colorAt.Y + _profile.ColorHeight + 2);
+            dc.DrawText(_nameText, nameAt);
+            if (_englishText is not null) dc.DrawText(_englishText, new Point(8, nameAt.Y + _profile.NameHeight + 1));
+            ColorBoundsForTest = new Rect(colorAt, new Size(_colorText.Width, _colorText.Height));
+            CoordinateBoundsForTest = Rect.Empty;
+            return;
+        }
         Point coordinateAt = _profile.OneLine
             ? new Point(_profile.Image - _coordinateText.Width - 8, _profile.Image + 6)
             : new Point(8, _profile.Image + 5 + _profile.ColorHeight + 1);
@@ -210,6 +282,15 @@ internal sealed class NativeSelectorMagnifier : Adorner
 
     private FormattedText Text(string value, double size, Brush brush, double scale) =>
         new(value, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, _typeface, size, brush, scale);
+
+    // A long name ends in an ellipsis inside the footer instead of running past the panel.
+    private FormattedText Bounded(FormattedText text)
+    {
+        text.MaxTextWidth = Math.Max(1, _profile.Image - 16);
+        text.MaxLineCount = 1;
+        text.Trimming = TextTrimming.CharacterEllipsis;
+        return text;
+    }
 
     private static Geometry TopCorners(double width)
     {
@@ -242,5 +323,5 @@ internal sealed class NativeSelectorMagnifier : Adorner
     }
 
     private readonly record struct LayoutProfile(double Scale, double Image, double Footer, bool OneLine,
-        double ColorHeight, double Inset, Geometry Corners);
+        double ColorHeight, double Inset, Geometry Corners, double ColorFooter, double NameHeight);
 }

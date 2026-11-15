@@ -2833,7 +2833,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>Reopen open pins at the next launch</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>Each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place and size at the next launch. Pins you close yourself do not reopen. Turning this off deletes the saved pins right away.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>Include pointer in recordings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2959,6 +2959,7 @@ This cannot be undone.</value>
   <data name="SettingsRange_ClosedPins" xml:space="preserve"><value>0–100</value></data>
   <data name="SettingsRange_ZoomStep" xml:space="preserve"><value>0.02–0.5</value></data>
   <data name="Settings_ZoomStepNote" xml:space="preserve"><value>How much one mouse wheel step changes the zoom.</value></data>
+  <data name="Settings_DelayNote" xml:space="preserve"><value>Delayed capture opens the selector with this delay chosen. After you choose the area, the same area is captured again when the time has passed.</value></data>
   <data name="Settings_RegionHistoryNote" xml:space="preserve"><value>Previous regions kept for repeat capture.</value></data>
   <data name="Settings_ClosedPinsNote" xml:space="preserve"><value>Closed pins remembered so they can be reopened; 0 turns it off. Cleared when the app exits; never saved to disk.</value></data>
   <data name="Settings_RecordingSizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 px.</value></data>
@@ -3160,7 +3161,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="MediaExport_EditedSuffix" xml:space="preserve"><value>_edited</value></data>
   <data name="MediaExport_Hint" xml:space="preserve"><value>The original video stays unchanged.</value></data>
-  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · within the {0} limit</value></data>
+  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · under the {0} limit</value></data>
   <data name="MediaExport_AdviceCurrentNoLimitShort" xml:space="preserve"><value>Recommended · no size limit</value></data>
   <data name="MediaExport_AdviceSwitchShort" xml:space="preserve"><value>Recommended: {0} · about {1}</value></data>
   <data name="MediaExport_AdviceMp4Short" xml:space="preserve"><value>Over the {0} GIF limit · MP4 recommended</value></data>
@@ -3236,7 +3237,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
   <data name="Workspace.Details" xml:space="preserve"><value>Selected capture</value></data>
-  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select one capture to see its preview and details.</value></data>
+  <data name="Workspace.NoSelection" xml:space="preserve"><value>No item selected.</value></data>
+  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select an item to see its details.</value></data>
+  <data name="Workspace.SelectOneHint" xml:space="preserve"><value>Select a single item to see its details.</value></data>
   <data name="LibraryUx_DetailsHide" xml:space="preserve"><value>Hide details</value></data>
   <data name="LibraryUx_DetailsShow" xml:space="preserve"><value>Show details</value></data>
   <data name="Workspace.RetentionHint" xml:space="preserve"><value>Images are cleaned up after their retention period. Use More to keep a capture.</value></data>
@@ -3431,6 +3434,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorObscure_Shortcuts" xml:space="preserve"><value>Pixelate {0} · Blur {1}</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
+  <data name="Tools.Eraser" xml:space="preserve"><value>Eraser</value></data>
+  <data name="Tools.EraserHelp" xml:space="preserve"><value>Removes each annotation it touches. The capture itself is not erased.</value></data>
+  <data name="Tools.EraserErase" xml:space="preserve"><value>Erase</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>
   <data name="Tools.StepNumber" xml:space="preserve"><value>Step number</value></data>
   <data name="Dialog.Access" xml:space="preserve"><value>The selected file or folder cannot be accessed. Check permissions or choose another location.</value></data>
@@ -3556,7 +3562,7 @@ Open the library or Settings from the tray menu.</value></data>
 <data name="SettingsGuide.G08.restart.Title" xml:space="preserve"><value>Restore open pins on launch</value></data>
 <data name="SettingsGuide.G08.restart.Before" xml:space="preserve"><value>Restore on launch off</value></data>
 <data name="SettingsGuide.G08.restart.After" xml:space="preserve"><value>Restore on launch on</value></data>
-<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins on exit and restore them on the next launch.</value></data>
+<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins whenever they change and restore them on the next launch. Pins you close yourself are not restored.</value></data>
 <data name="SettingsGuide.G08.reopen.Title" xml:space="preserve"><value>Closed pin restore limit</value></data>
 <data name="SettingsGuide.G08.reopen.Before" xml:space="preserve"><value>Close pin</value></data>
 <data name="SettingsGuide.G08.reopen.After" xml:space="preserve"><value>Reopen closed pin</value></data>
@@ -3808,11 +3814,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. After the Text copied notification appears, press Ctrl+V where you want to paste.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
-  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format and end the capture.</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>In the selector's color copy mode (C key), a click copies the color at the pointer tip in this format and ends the capture.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color and end capture while selecting</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Color copy mode while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
@@ -3841,8 +3847,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="GifPreview_Recommended" xml:space="preserve"><value>best fit</value></data>
   <data name="GifPreview_Estimate" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s · calculation about {3:N0} s</value></data>
   <data name="GifPreview_Exact" xml:space="preserve"><value>Size {0} (measured) · {1:N0} frames · playback {2:N1} s</value></data>
-  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays within {1}.</value></data>
-  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit within {1}, at an estimated {2}.</value></data>
+  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays under {1}.</value></data>
+  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit under {1}, at an estimated {2}.</value></data>
   <data name="GifPreview_AdviceCurrentOver" xml:space="preserve"><value>The current setting may exceed {1} (estimated {0}).</value></data>
   <data name="GifPreview_AdviceMp4" xml:space="preserve"><value>Even the smallest GIF setting is expected to exceed {1} ({0}). Export MP4, or trim the range to about {2:N0} s or less.</value></data>
   <data name="GifPreview_AdviceSpeed" xml:space="preserve"><value>Playback takes {0:N1} s. At {1:0.#}× speed it takes {2:N1} s. Speed barely changes the file size.</value></data>
@@ -3976,8 +3982,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureKeyPanel.Resize" xml:space="preserve"><value>Resize 1 pixel · Ctrl for 10 pixels</value></data>
   <data name="CaptureKeyPanel.All" xml:space="preserve"><value>Select the entire screen</value></data>
   <data name="CaptureKeyPanel.Ratio" xml:space="preserve"><value>Change aspect ratio</value></data>
-  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Copy color</value></data>
+  <data name="CaptureKeyPanel.Delay" xml:space="preserve"><value>Change delay</value></data>
+  <data name="CaptureKeyPanel.ScrollDelay" xml:space="preserve"><value>Scrolling capture · Change delay</value></data>
+  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Switch to color copy</value></data>
+  <data name="CaptureKeyPanel.ColorCopy" xml:space="preserve"><value>Copy color</value></data>
   <data name="CaptureKeyPanel.Text" xml:space="preserve"><value>Switch to text copy</value></data>
+  <data name="CaptureKeyPanel.Scroll" xml:space="preserve"><value>Switch to scrolling capture</value></data>
+  <data name="CaptureKeyPanel.ScrollWindow" xml:space="preserve"><value>Scroll-capture this window</value></data>
   <data name="CaptureKeyPanel.Image" xml:space="preserve"><value>Switch to image capture</value></data>
   <data name="CaptureKeyPanel.Pin" xml:space="preserve"><value>Pin selected region</value></data>
   <data name="CaptureKeyPanel.ConfirmCancel" xml:space="preserve"><value>Confirm · Cancel</value></data>
@@ -3988,9 +3999,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>
   <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>Click the window under the pointer to capture it. Click the desktop to capture that monitor.</value></data>
-  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Select a window for scrolling capture.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Switches to scrolling capture. Click the window to scroll to start the capture.</value></data>
   <data name="CaptureBar_Delay" xml:space="preserve"><value>Delayed capture</value></data>
-  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Choose capture after 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Captures the screen again a set time after you choose the area. Choose no delay, 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayArmed" xml:space="preserve"><value>{0}s</value></data>
+  <data name="CaptureBar_DelayNone" xml:space="preserve"><value>No delay</value></data>
   <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>Drag over the area to record. Press Esc to cancel.</value></data>
   <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>Selects this entire monitor as the recording area.</value></data>
   <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>Choose a recording area</value></data>
@@ -4001,7 +4014,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_Text" xml:space="preserve"><value>Copy text</value></data>
   <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
   <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
-  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press C to copy the color under the pointer and end the capture.</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press Enter to copy the color at the pointer tip and end the capture. Arrow keys move 1 pixel.</value></data>
   <data name="CaptureGuide2_Help" xml:space="preserve"><value>Help</value></data>
   <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>Shows how to capture again.</value></data>
   <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>Cancel</value></data>
@@ -4012,7 +4025,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Copy text from region</value></data>
   <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Copy text from window</value></data>
   <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Copy text from monitor</value></data>
-  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or C: Copy color and end capture</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or Enter: Copy color</value></data>
+  <data name="CaptureGuide2_ClickScroll" xml:space="preserve"><value>Click: Scroll-capture this window</value></data>
+  <data name="CaptureGuide2_DelaySuffix" xml:space="preserve"><value>Capture after {0} {0:plural:second|seconds}</value></data>
   <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
@@ -4439,7 +4454,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Open Opacity</value>
   </data>
   <data name="Journey.B3.Body" xml:space="preserve">
-    <value>Move the pointer over the picture and select Opacity at the top. With the keyboard, focus the picture and press O.</value>
+    <value>Click the picture to select it, then press O.</value>
   </data>
   <data name="Journey.PictureName" xml:space="preserve">
     <value>Practice picture</value>
@@ -4601,10 +4616,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Change pin opacity</value>
   </data>
   <data name="Tutorial.pin-opacity.Step1" xml:space="preserve">
-    <value>Move the pointer over the picture.</value>
+    <value>Click the picture to select it.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step2" xml:space="preserve">
-    <value>Select Opacity at the top.</value>
+    <value>Press O.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step3" xml:space="preserve">
     <value>Select 60% to see behind the picture.</value>
@@ -4782,19 +4797,19 @@ Turn off: {0}</value></data>
   <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. Place the pointer on the monitor to capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. Run Full-screen capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. Review the full-screen capture of that monitor.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Choose Scrolling capture under More captures in the tray menu.</value></data>
-  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Place the pointer over a scrollable window.</value></data>
-  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Run Scrolling capture and wait for automatic scrolling to finish.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Switch to scrolling capture with the Scroll button or the S key in the capture selector.</value></data>
+  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Start Scrolling capture; the selector opens in scrolling capture mode.</value></data>
+  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Click the window to scroll and wait for automatic scrolling to finish.</value></data>
   <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. Review the stitched capture. Run the same command during capture to cancel.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay in the capture selector's More captures menu.</value></data>
-  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture.</value></data>
-  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Prepare the screen during the countdown.</value></data>
-  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. When the selector appears, drag to select the capture area.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay with the Delay button or the D key in the capture selector.</value></data>
+  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture; the selector opens with the delay chosen.</value></data>
+  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Drag over the area or click a window.</value></data>
+  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. Prepare the screen during the countdown. When it ends, the same area is captured again.</value></data>
   <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. When a capture appears in the quick access card, press Alt+Q.</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. Click Copy in the card or press C.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. Press Ctrl+V in the destination to use the capture.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
-  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Place the pointer over the color and press C.</value></data>
+  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Press C for the eyedropper, then click the color to copy.</value></data>
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. Paste the value with Ctrl+V. Its format follows your color-format setting.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. Select Rectangle and drag over the area to mark.</value></data>
@@ -5038,6 +5053,9 @@ Turn off: {0}</value></data>
   </data>
   <data name="ContactSheet.Preview" xml:space="preserve">
     <value>Page 1 preview</value>
+  </data>
+  <data name="ContactSheet.PreviewPage" xml:space="preserve">
+    <value>Page {0} preview</value>
   </data>
   <data name="ContactSheet.PageCount" xml:space="preserve">
     <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages}</value>
@@ -5341,6 +5359,14 @@ Turn off: {0}</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>View source</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>View rendered</value></data>
+  <data name="Pin_MarkdownContinued" xml:space="preserve"><value>The rest of the content is available with F2.</value></data>
+  <data name="Pin_MarkdownDrawing" xml:space="preserve"><value>Drawing</value></data>
+  <data name="Pin_MarkdownDiagramFallback" xml:space="preserve"><value>The diagram could not be shown, so its source is displayed.</value></data>
+  <data name="Pin_MermaidSyntaxLength" xml:space="preserve"><value>Check the Mermaid syntax and length.</value></data>
+  <data name="Pin_MermaidSyntax" xml:space="preserve"><value>Check the Mermaid syntax.</value></data>
+  <data name="Pin_MermaidTooLarge" xml:space="preserve"><value>The Mermaid diagram is too large.</value></data>
+  <data name="Pin_MermaidNoWebView" xml:space="preserve"><value>The diagram cannot be shown because the WebView2 runtime is missing.</value></data>
+  <data name="Pin_MermaidUnavailable" xml:space="preserve"><value>The Mermaid diagram cannot be shown.</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>Install</value></data>
   <data name="Pin_TranslationConsent" xml:space="preserve"><value>The {1} translation model is a {0} MB download.
 Your text stays on this PC.
@@ -5367,6 +5393,13 @@ Install the model?</value></data>
   <data name="Pin_TranslationFailed" xml:space="preserve">
     <value>Translation failed. The original text is retained.</value>
   </data>
+  <data name="Pin_TranslationFailedReading" xml:space="preserve"><value>Couldn't read the text in the image. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedModelCheck" xml:space="preserve"><value>Couldn't check the translation model. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedInstall" xml:space="preserve"><value>Couldn't install the translation model. Try again.</value></data>
+  <data name="Pin_TranslationFailedLoad" xml:space="preserve"><value>Couldn't open the translation model. Select Retry translation to install it again.</value></data>
+  <data name="Pin_TranslationFailedInference" xml:space="preserve"><value>An error occurred while translating. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedShowing" xml:space="preserve"><value>Couldn't show the translation. The original text is retained.</value></data>
+  <data name="Pin_TranslationKeptOriginal" xml:space="preserve"><value>The translation didn't keep the original numbers and symbols, so the original text is retained.</value></data>
   <data name="Pin_TranslationRetry" xml:space="preserve">
     <value>Retry translation</value>
   </data>
@@ -5501,6 +5534,11 @@ Install the model?</value></data>
   <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
   <data name="Stamp_Remove" xml:space="preserve"><value>Remove registered image</value></data>
   <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose watermark image</value></data>
+  <data name="ImagePicker_Title" xml:space="preserve"><value>Insert image</value></data>
+  <data name="ImagePicker_Insert" xml:space="preserve"><value>Insert</value></data>
+  <data name="ImagePicker_Browse" xml:space="preserve"><value>Browse files…</value></data>
+  <data name="ImagePicker_Empty" xml:space="preserve"><value>The library has no images.</value></data>
+  <data name="ImagePicker_ListName" xml:space="preserve"><value>Library images</value></data>
   <data name="Stamp_Changed" xml:space="preserve"><value>Watermark image changed</value></data>
   <data name="Stamp_OpacitySet" xml:space="preserve"><value>Watermark opacity {0}%</value></data>
   <data name="Stamp_Removed" xml:space="preserve"><value>Registered image removed · Placed watermarks stay</value></data>
@@ -5660,6 +5698,8 @@ Install the model?</value></data>
   <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
+  <data name="GifExport_SavedAdjusted" xml:space="preserve"><value>Saved · {0} · {1} · Lowered to {3} px wide at {4} fps to stay under the {2} share limit.</value></data>
+  <data name="GifExport_ShareLimitUnmet" xml:space="preserve"><value>Even the smallest GIF setting cannot stay under the {0} share limit (result {1}). Export MP4, or trim the range.</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="Pin_TranslationDocumentView" xml:space="preserve">
     <value>Show translation as text</value>

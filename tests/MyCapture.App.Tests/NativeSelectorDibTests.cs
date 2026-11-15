@@ -55,6 +55,63 @@ public sealed class NativeSelectorDibTests
     });
 
     [Fact]
+    public void DragStartOverAHighlightedWindowDimsInPlaceAndMatchesAFreshDisplay() => StaTestHost.Run(() =>
+    {
+        // A drag starting over a window highlight collapses the large reveal in its first sample. That
+        // region is dimmed where it is instead of re-read from the frame; the result must be identical,
+        // including under the start chip and other stamps, and for frames whose fourth byte is not 255.
+        BitmapSource source = Source(96, 64, padding: 7);
+        var dimmer = new SolidColorBrush(Color.FromArgb(128, 30, 70, 110)) { Opacity = 0.5 };
+        NativeSelectorStamp chip = Stamp(new Int32Rect(10, 30, 9, 5), [40, 50, 60, 200]);
+        NativeSelectorStamp chrome = Stamp(new Int32Rect(70, 2, 12, 6), [90, 10, 20, 255]);
+        using var display = new NativeSelectorDib(source, dimmer);
+        display.SetStamps([chrome]);
+        Int32Rect[] samples = [new(4, 4, 88, 56), new(12, 26, 3, 2), new(12, 26, 17, 8), new(12, 26, 60, 30),
+            new(12, 20, 40, 10), new(0, 0, 96, 64), new(30, 30, 5, 5), new(0, 0, 96, 64), Int32Rect.Empty];
+        for (int index = 0; index < samples.Length; index++)
+        {
+            if (index == 1) display.SetAnchorStamp(chip);
+            long dimmedBefore = display.PixelsDimmedInPlace;
+            display.SetReveal(samples[index]);
+            if (index == 1) Assert.True(display.PixelsDimmedInPlace - dimmedBefore > 80 * 50);
+            using var expected = new NativeSelectorDib(source, dimmer);
+            expected.SetStamps([chrome]);
+            if (index >= 1) expected.SetAnchorStamp(chip);
+            expected.SetReveal(samples[index]);
+            Assert.Equal(Bits(expected), Bits(display));
+        }
+    });
+
+    [Fact]
+    public void DimmingALargeHighlightAcrossCoresMatchesTheSingleThreadedResultByteForByte() => StaTestHost.Run(() =>
+    {
+        // The first pointer sample of a drag over a maximized window dims millions of pixels, so bands
+        // of rows run on the pool above a threshold. Row bands are independent, and the result has to
+        // be the same pixels as one thread writes, under the stamps as well, whether the band count
+        // divides the height or not.
+        var dimmer = new SolidColorBrush(Color.FromArgb(128, 30, 70, 110)) { Opacity = 0.5 };
+        // Inside the band that goes to the pool, and translucent so its result depends on the pixels
+        // underneath it rather than replacing them.
+        NativeSelectorStamp chrome = Stamp(new Int32Rect(600, 400, 40, 9), [40, 50, 60, 200]);
+        foreach (int height in new[] { 601, 640 })
+        {
+            BitmapSource source = Source(1024, height, padding: 7);
+            using var display = new NativeSelectorDib(source, dimmer);
+            display.SetStamps([chrome]);
+            display.SetReveal(new Int32Rect(0, 0, 1024, height));
+            long parallelBefore = display.PixelsDimmedInParallel;
+            // Collapsing the whole frame onto a small selection dims more than the threshold at once.
+            display.SetReveal(new Int32Rect(300, 200, 40, 30));
+            Assert.True(display.PixelsDimmedInParallel - parallelBefore > (1 << 18));
+            using var expected = new NativeSelectorDib(source, dimmer);
+            expected.SetStamps([chrome]);
+            expected.SetReveal(new Int32Rect(300, 200, 40, 30));
+            Assert.Equal(0L, expected.PixelsDimmedInParallel);
+            Assert.Equal(Bits(expected), Bits(display));
+        }
+    });
+
+    [Fact]
     public void SessionAllocatesOnceAndCloseDestroysTheActualNativeHandles() => StaTestHost.Run(() =>
     {
         using var overlay = Overlay();
@@ -140,7 +197,17 @@ public sealed class NativeSelectorDibTests
         Marshal.SizeOf<NativeSelectorInterop.BitmapObject>(), out _);
     private static FrozenFrame Frame() => new(Source(64, 48), new RectD(-30000, -30000, 64, 48), null, 0);
 
-    private static BitmapSource Source(int width, int height)
+    private static NativeSelectorStamp Stamp(Int32Rect bounds, byte[] pixel) =>
+        new(bounds, Enumerable.Range(0, bounds.Width * bounds.Height).SelectMany(_ => pixel).ToArray());
+
+    private static byte[] Bits(NativeSelectorDib dib)
+    {
+        var pixels = new byte[dib.ByteLength];
+        Marshal.Copy(dib.Bits, pixels, 0, pixels.Length);
+        return pixels;
+    }
+
+    private static BitmapSource Source(int width, int height, byte padding = 255)
     {
         byte[] pixels = new byte[width * height * 4];
         for (int y = 0; y < height; y++)
@@ -150,7 +217,7 @@ public sealed class NativeSelectorDibTests
             pixels[offset] = (byte)(x * 3);
             pixels[offset + 1] = (byte)(y * 5);
             pixels[offset + 2] = (byte)(x + y);
-            pixels[offset + 3] = 255;
+            pixels[offset + 3] = padding;
         }
         BitmapSource source = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, pixels, width * 4);
         source.Freeze();
