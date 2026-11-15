@@ -125,13 +125,50 @@ internal sealed class NativeSelectorDib : IDisposable
 
     private unsafe void DimInPlace(Int32Rect region)
     {
-        for (int y = region.Y; y < region.Y + region.Height; y++)
-            _pixels.Dim(new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width));
-        PixelsUpdated += (long)region.Width * region.Height;
-        PixelsDimmedInPlace += (long)region.Width * region.Height;
+        long pixels = (long)region.Width * region.Height;
+        if (pixels >= ParallelDimPixels && Environment.ProcessorCount > 2)
+            DimRowsInParallel(region);
+        else
+            for (int y = region.Y; y < region.Y + region.Height; y++)
+                _pixels.Dim(new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width));
+        PixelsUpdated += pixels;
+        PixelsDimmedInPlace += pixels;
         // Stamp pixels are not the source: refresh just their overlap from the frame and composite again.
         for (int index = 0; index < _stamps.Count; index++) RestoreStampOverlap(region, _stamps[index].Bounds);
         if (_anchorStamp is { } anchor) RestoreStampOverlap(region, anchor.Bounds);
+    }
+
+    /// <summary>
+    /// A drag that starts over a maximized window highlight dims three to five million pixels in its
+    /// first pointer sample: twenty megabytes read and written again, which one core cannot do inside a
+    /// frame however wide its vectors are, because it never reaches the memory bandwidth several cores
+    /// do. Bands of whole rows are independent, so above this many pixels they run on the pool. Every
+    /// ordinary pointer sample stays far below it (the moving border strips are a few thousand pixels),
+    /// keeping the frequent path on the calling thread with nothing allocated.
+    /// </summary>
+    private const long ParallelDimPixels = 1 << 18;
+
+    internal long PixelsDimmedInParallel { get; private set; }
+
+    private void DimRowsInParallel(Int32Rect region)
+    {
+        // More bands than cores: the loop's own partitioner hands them out as workers free up, so one
+        // core taken by something else on this machine delays the pass by a band, not by its share.
+        int bands = Math.Min(Environment.ProcessorCount * 4, Math.Max(2, region.Height / 16));
+        int rows = (region.Height + bands - 1) / bands;
+        IntPtr bits = Bits;
+        int stride = Stride, left = region.X * 4, width = region.Width, top = region.Y;
+        int bottom = region.Y + region.Height;
+        NativeSelectorPixels pixels = _pixels;
+        _ = Parallel.For(0, bands, band =>
+            DimBand(bits, stride, left, width, pixels, top + band * rows, Math.Min(bottom, top + band * rows + rows)));
+        PixelsDimmedInParallel += (long)region.Width * region.Height;
+    }
+
+    private static unsafe void DimBand(IntPtr bits, int stride, int left, int width,
+        NativeSelectorPixels pixels, int first, int last)
+    {
+        for (int y = first; y < last; y++) pixels.Dim(new Span<uint>((byte*)bits + y * stride + left, width));
     }
 
     private void RestoreStampOverlap(Int32Rect region, Int32Rect stamp)

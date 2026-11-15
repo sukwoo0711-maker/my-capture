@@ -83,6 +83,35 @@ public sealed class NativeSelectorDibTests
     });
 
     [Fact]
+    public void DimmingALargeHighlightAcrossCoresMatchesTheSingleThreadedResultByteForByte() => StaTestHost.Run(() =>
+    {
+        // The first pointer sample of a drag over a maximized window dims millions of pixels, so bands
+        // of rows run on the pool above a threshold. Row bands are independent, and the result has to
+        // be the same pixels as one thread writes, under the stamps as well, whether the band count
+        // divides the height or not.
+        var dimmer = new SolidColorBrush(Color.FromArgb(128, 30, 70, 110)) { Opacity = 0.5 };
+        // Inside the band that goes to the pool, and translucent so its result depends on the pixels
+        // underneath it rather than replacing them.
+        NativeSelectorStamp chrome = Stamp(new Int32Rect(600, 400, 40, 9), [40, 50, 60, 200]);
+        foreach (int height in new[] { 601, 640 })
+        {
+            BitmapSource source = Source(1024, height, padding: 7);
+            using var display = new NativeSelectorDib(source, dimmer);
+            display.SetStamps([chrome]);
+            display.SetReveal(new Int32Rect(0, 0, 1024, height));
+            long parallelBefore = display.PixelsDimmedInParallel;
+            // Collapsing the whole frame onto a small selection dims more than the threshold at once.
+            display.SetReveal(new Int32Rect(300, 200, 40, 30));
+            Assert.True(display.PixelsDimmedInParallel - parallelBefore > (1 << 18));
+            using var expected = new NativeSelectorDib(source, dimmer);
+            expected.SetStamps([chrome]);
+            expected.SetReveal(new Int32Rect(300, 200, 40, 30));
+            Assert.Equal(0L, expected.PixelsDimmedInParallel);
+            Assert.Equal(Bits(expected), Bits(display));
+        }
+    });
+
+    [Fact]
     public void SessionAllocatesOnceAndCloseDestroysTheActualNativeHandles() => StaTestHost.Run(() =>
     {
         using var overlay = Overlay();
