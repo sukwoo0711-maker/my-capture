@@ -40,7 +40,8 @@ public sealed class LibraryFailureCauseTests
         Button apply = Logical(dialog).OfType<Button>().Single(button => button.IsDefault);
         apply.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         string expected = UiText.Get("Library.SavedSearch.Failed") + " " + UiText.Get("Dialog.DiskFullUnknownDrive");
-        Assert.Contains(Logical(dialog).OfType<TextBlock>(), text => KoreanWordWrap.GetText(text) == expected);
+        // Show() writes the block's own Text with word joiners in it; the attached property runs the other way.
+        Assert.Contains(Logical(dialog).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == expected);
         Assert.Same(raw, Assert.Single(log.Errors));
     });
 
