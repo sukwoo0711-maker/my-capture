@@ -32,7 +32,8 @@ public sealed record PinSessionPin(
     string? SourceAppExecutablePath = null,
     string? SourceWindowTitle = null,
     bool IsCollapsed = false,
-    double? CollapsedOpacity = null);
+    double? CollapsedOpacity = null,
+    bool IsClickThrough = false);
 
 /// <param name="PngBytes">Null reuses this content's previously saved PNG.</param>
 /// <param name="ProtectionPending">The saved image could not be decrypted and must be kept for a later retry.</param>

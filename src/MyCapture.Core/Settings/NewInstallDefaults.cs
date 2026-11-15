@@ -44,6 +44,7 @@ public static class NewInstallDefaults
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
         settings.Pin.CloseOnDoubleClick = true;
         settings.Pin.RestoreOpenPinsOnLaunch = true;
+        settings.Pin.RestoreOpenPinsRevision = 1;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
         settings.General.ShowShortcutHints = false;

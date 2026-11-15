@@ -284,8 +284,15 @@ public sealed class PinSettings
     public bool SnapWhileDragging { get; set; } = true;
 
     /// <summary>Save open pins on this PC and reopen them at the next launch.</summary>
-    /// <remarks>Legacy settings stay off; new installations enable this through <see cref="NewInstallDefaults"/>.</remarks>
+    /// <remarks>
+    /// New installations enable this through <see cref="NewInstallDefaults"/>. A settings file without
+    /// <see cref="RestoreOpenPinsRevision"/> predates restore being the default for everyone, and the
+    /// settings store turns it on once; a later choice in Settings is kept.
+    /// </remarks>
     public bool RestoreOpenPinsOnLaunch { get; set; } = false;
+
+    /// <summary>One records that <see cref="RestoreOpenPinsOnLaunch"/> holds the everyone-on default or a later choice.</summary>
+    public int RestoreOpenPinsRevision { get; set; }
 
     /// <summary>
     /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.

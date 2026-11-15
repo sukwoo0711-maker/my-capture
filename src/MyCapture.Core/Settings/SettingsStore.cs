@@ -416,6 +416,14 @@ public sealed class SettingsStore
         s.Pin.ClosedWindowRestoreLimit = ClampWithWarning(
             s.Pin.ClosedWindowRestoreLimit, 0, 100, nameof(PinSettings.ClosedWindowRestoreLimit), warnings);
 
+        if (s.Pin.RestoreOpenPinsRevision < 1)
+        {
+            // Open-pin restore became the default for existing users too. It was off for files
+            // written before that, so turn it on once; Settings writes the marker with any later choice.
+            s.Pin.RestoreOpenPinsOnLaunch = true;
+            s.Pin.RestoreOpenPinsRevision = 1;
+        }
+
         s.Pin.ZoomStep = ClampWithWarning(
             s.Pin.ZoomStep, 0.02, 0.5, nameof(PinSettings.ZoomStep), warnings);
 

@@ -786,6 +786,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             enabled ? FeedbackKind.Result : FeedbackKind.Confirmation);
         // The pin is click-transparent, so the way back is a separate excluded target.
         UpdateClickThroughHandle();
+        // The open-pin session keeps click-through, so a change is a saved presentation change.
+        if (changed && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     internal event Action? ClickThroughHintShown;

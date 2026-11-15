@@ -2833,7 +2833,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>다음 실행 때 열린 핀 다시 띄우기</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>종료할 때 열려 있던 핀의 이미지와 원문 텍스트를 이 PC의 이 Windows 사용자만 읽도록 암호화해 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리에 다시 띄웁니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>열려 있는 핀의 이미지와 원문 텍스트를 이 PC의 이 Windows 사용자만 읽도록 암호화해 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리와 크기로 다시 띄웁니다. 직접 닫은 핀은 다시 띄우지 않습니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>녹화 동영상에 마우스 커서 포함</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -3556,7 +3556,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 <data name="SettingsGuide.G08.restart.Title" xml:space="preserve"><value>시작 시 열린 핀 복원</value></data>
 <data name="SettingsGuide.G08.restart.Before" xml:space="preserve"><value>시작 시 복원 끄기</value></data>
 <data name="SettingsGuide.G08.restart.After" xml:space="preserve"><value>시작 시 복원 켜기</value></data>
-<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>앱 종료 시 열린 핀을 저장하고 다음 실행 때 복원합니다.</value></data>
+<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>열린 핀이 바뀔 때마다 저장하고 다음 실행 때 복원합니다. 직접 닫은 핀은 복원하지 않습니다.</value></data>
 <data name="SettingsGuide.G08.reopen.Title" xml:space="preserve"><value>닫은 핀 복원 개수</value></data>
 <data name="SettingsGuide.G08.reopen.Before" xml:space="preserve"><value>핀 닫기</value></data>
 <data name="SettingsGuide.G08.reopen.After" xml:space="preserve"><value>닫은 핀 다시 열기</value></data>
