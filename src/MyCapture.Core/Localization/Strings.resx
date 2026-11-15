@@ -4444,7 +4444,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>투명도 메뉴 열기</value>
   </data>
   <data name="Journey.B3.Body" xml:space="preserve">
-    <value>그림 위로 마우스를 옮겨 위쪽의 ‘투명도’를 누릅니다. 키보드로는 그림을 선택한 뒤 O 키를 누릅니다.</value>
+    <value>그림을 클릭하여 선택한 뒤 O 키를 누릅니다.</value>
   </data>
   <data name="Journey.PictureName" xml:space="preserve">
     <value>연습 그림</value>
@@ -4606,10 +4606,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>핀 투명도 바꾸기</value>
   </data>
   <data name="Tutorial.pin-opacity.Step1" xml:space="preserve">
-    <value>그림 위로 마우스를 옮깁니다.</value>
+    <value>그림을 클릭하여 선택합니다.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step2" xml:space="preserve">
-    <value>위쪽의 ‘투명도’를 누릅니다.</value>
+    <value>O 키를 누릅니다.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step3" xml:space="preserve">
     <value>60%를 선택하면 뒤가 비칩니다.</value>
