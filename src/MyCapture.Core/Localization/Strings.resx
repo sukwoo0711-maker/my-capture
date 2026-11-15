@@ -448,10 +448,6 @@
     <value>100%: 외곽선만 표시 · 0%: 선과 같은 색으로 완전히 채우기</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="Text_284A54C660EC" xml:space="preserve">
-    <value>최대 저장 용량(GB)</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
     <value>설정한 보관 기간이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -643,10 +639,6 @@
   <data name="Text_38476EDDA50B" xml:space="preserve">
     <value>지연 캡처</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_3862727D2DCB" xml:space="preserve">
-    <value>허용 범위는 {0:0.###} ~ {1:0.###} GB입니다.</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_388CC5AD1AE8" xml:space="preserve">
     <value>양방향 화살표</value>
@@ -1396,10 +1388,6 @@
   <data name="Text_756622E6954E" xml:space="preserve">
     <value>{0}: 드래그한 영역을 캡처합니다. 포인터 아래 창 강조가 켜져 있으면 클릭으로 그 창을, 빈 바탕 화면 클릭으로 그 모니터 전체를 선택합니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
-  <data name="Text_764879D98E25" xml:space="preserve">
-    <value>최대 저장 용량(GB)에 숫자를 입력하십시오.</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_773C24F0A693" xml:space="preserve">
     <value>카운트다운 창을 녹화에서 제외할 수 없습니다.</value>
@@ -2847,7 +2835,7 @@
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_F1A864DCBEC4" xml:space="preserve">
-    <value> · 보관 항목 보호를 위해 저장 한도 일시 초과</value>
+    <value> · 보관 항목 보호를 위해 최대 항목 수 일시 초과</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_F1C1BB1D5771" xml:space="preserve">
@@ -2948,7 +2936,6 @@
   <data name="SettingsRange_Seconds1To10" xml:space="preserve"><value>1–10초</value></data>
   <data name="SettingsRange_RegionHistory" xml:space="preserve"><value>1–200개</value></data>
   <data name="SettingsRange_MaxItems" xml:space="preserve"><value>10–5000개</value></data>
-  <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
   <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>긴 변 96–1024 px</value></data>
   <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
   <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 px</value></data>
@@ -2990,10 +2977,6 @@
   <data name="Text_FB68C3A34978" xml:space="preserve">
     <value>텍스트 인식을 시작할 수 없습니다.</value>
     <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
-  </data>
-  <data name="Text_FC05BD860043" xml:space="preserve">
-    <value>최대 저장 용량 기가바이트</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_FD6443988325" xml:space="preserve">
     <value>재생 중 · 텍스트 미리보기 활성</value>
@@ -3590,15 +3573,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 <data name="SettingsGuide.G11.time.Title" xml:space="preserve"><value>이미지 보관 기간</value></data>
 <data name="SettingsGuide.G11.time.Before" xml:space="preserve"><value>기간 제한 없음</value></data>
 <data name="SettingsGuide.G11.time.After" xml:space="preserve"><value>7일</value></data>
-<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>기간 제한 없음에서도 항목 수와 용량 한도는 적용됩니다. 폴더에 넣은 항목과 보관한 항목은 유지합니다.</value></data>
+<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>기간 제한 없음에서도 항목 수 한도는 적용됩니다. 폴더에 넣은 항목과 보관한 항목은 유지합니다.</value></data>
 <data name="SettingsGuide.G11.items.Title" xml:space="preserve"><value>최대 항목 수</value></data>
 <data name="SettingsGuide.G11.items.Before" xml:space="preserve"><value>9개 / 한도 10개</value></data>
 <data name="SettingsGuide.G11.items.After" xml:space="preserve"><value>한도 10개에 새 캡처 추가</value></data>
 <data name="SettingsGuide.G11.items.Description" xml:space="preserve"><value>항목 수 한도에 도달하면 보관 예외를 제외한 오래된 항목부터 정리 대상이 됩니다.</value></data>
-<data name="SettingsGuide.G11.bytes.Title" xml:space="preserve"><value>최대 보관 용량</value></data>
-<data name="SettingsGuide.G11.bytes.Before" xml:space="preserve"><value>0.8 GB / 한도 1 GB</value></data>
-<data name="SettingsGuide.G11.bytes.After" xml:space="preserve"><value>새 캡처로 1 GB 초과</value></data>
-<data name="SettingsGuide.G11.bytes.Description" xml:space="preserve"><value>용량 한도는 항목 수와 별도로 적용됩니다. 보관 예외를 제외한 오래된 항목부터 정리 대상이 됩니다.</value></data>
 <data name="SettingsGuide.G12.folder.Title" xml:space="preserve"><value>새 캡처의 라이브러리 폴더</value></data>
 <data name="SettingsGuide.G12.folder.Before" xml:space="preserve"><value>기본 폴더</value></data>
 <data name="SettingsGuide.G12.folder.After" xml:space="preserve"><value>현재 폴더 사용</value></data>
@@ -3740,7 +3719,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>이 날짜의 폴더와 폴더에 넣지 않은 캡처, 보관한 캡처가 모두 포함됩니다.</value></data>
   <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>폴더와 캡처는 Windows 휴지통으로 이동합니다. 최근 삭제 복원에서 되돌릴 수 있습니다.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>폴더 {0}개 · {1}</value></data>
-  <data name="Folder410.StorageInfo" xml:space="preserve"><value>폴더 보관 용량이 일반 캡처의 용량 한도를 넘었습니다. 폴더 항목은 자동 삭제되지 않습니다.</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>폴더 보관 용량이 큽니다. 폴더 항목은 자동 삭제되지 않습니다.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>선택한 저장 위치가 너무 깊습니다. 더 짧은 경로를 선택하십시오.</value></data>
   <data name="Folder410.ExportNameExists" xml:space="preserve"><value>같은 이름의 파일이 있습니다. 다른 이름을 선택하십시오.</value></data>
   <data name="Folder410.ExportMissing" xml:space="preserve"><value>원본 파일 또는 저장 폴더를 찾을 수 없습니다. 경로를 확인하십시오.</value></data>
@@ -4128,7 +4107,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsStructure_CaptureControls" xml:space="preserve"><value>선택 화면·지연·기록</value></data>
   <data name="SettingsStructure_RecordingCompatibility" xml:space="preserve"><value>녹화 방식</value></data>
   <data name="SettingsStructure_PinHistory" xml:space="preserve"><value>확대·닫은 핀 기록</value></data>
-  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>용량·미리보기</value></data>
+  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>항목 수·미리보기</value></data>
   <data name="SettingsStructure_ImageExport" xml:space="preserve"><value>이미지 내보내기</value></data>
   <data name="SettingsStructure_GitHub" xml:space="preserve"><value>GitHub 연결</value></data>
   <data name="SettingsStructure_Backup" xml:space="preserve"><value>백업·이전 데이터</value></data>
@@ -4222,8 +4201,6 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>버튼 단축키 표시</value></data>
   <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Alt를 누르는 동안 버튼 아래에 단축키가 표시됩니다. 버튼에 마우스를 올려서도 확인할 수 있습니다.</value></data>
   <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>누른 뒤 사용할 키 조합을 입력하십시오.</value></data>
-  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>최대 저장 용량(GB)</value></data>
-  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125 ~ 512 GB.</value></data>
   <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>미리보기 이미지 크기(픽셀)</value></data>
   <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>긴 변 기준, 96 ~ 1024픽셀.</value></data>
   <data name="SettingsUx_Retention" xml:space="preserve"><value>이미지 보관 기간(시간)</value></data>
@@ -4235,7 +4212,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Retention_Year1" xml:space="preserve"><value>1년</value></data>
   <data name="Retention_Never" xml:space="preserve"><value>삭제 안 함</value></data>
   <data name="Retention_Custom" xml:space="preserve"><value>사용자 지정 ({0}시간)</value></data>
-  <data name="Retention_SummaryNever" xml:space="preserve"><value>라이브러리 이미지를 기간에 따라 자동으로 삭제하지 않습니다. 라이브러리 최대 항목 수나 최대 저장 용량을 넘으면 오래된 항목부터 삭제합니다.</value></data>
+  <data name="Retention_SummaryNever" xml:space="preserve"><value>라이브러리 이미지를 기간에 따라 자동으로 삭제하지 않습니다. 라이브러리 최대 항목 수를 넘으면 오래된 항목부터 삭제합니다.</value></data>
   <data name="Retention_Notice" xml:space="preserve"><value>보관 기간이 지난 이미지 {0}개를 삭제했습니다</value></data>
   <data name="Retention_NoticeAction" xml:space="preserve"><value>기간 변경</value></data>
   <data name="Retention_NoticeActionName" xml:space="preserve"><value>이미지 자동 삭제 기간 변경</value></data>

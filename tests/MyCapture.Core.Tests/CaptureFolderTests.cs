@@ -389,7 +389,7 @@ public sealed class CaptureFolderTests
     }
 
     [Fact]
-    public async Task ThreeHundredArchivedCapturesOverTwoGiB_DoNotEvictRecentHistoryOrReportPinPressure()
+    public async Task ThreeHundredArchivedCapturesOverFiveGiB_DoNotEvictRecentHistoryOrReportPinPressure()
     {
         var f = new Fixture();
         var folder = await f.Queue.CreateFolderAsync("archive");
@@ -397,10 +397,14 @@ public sealed class CaptureFolderTests
         for (int index = 0; index < 300; index++)
         {
             var record = f.Record(DateTimeOffset.Now.AddDays(-30).AddSeconds(index));
-            record.TotalBytes = 8L * 1024 * 1024;
+            record.TotalBytes = 20L * 1024 * 1024;
             f.Add(record);
+            // The folder notice is information only. It starts above 5 GiB: 256 captures of 20 MiB are exactly 5 GiB.
+            if (index == 255) Assert.False(f.Queue.IsFolderStorageLarge);
+            if (index == 256) Assert.True(f.Queue.IsFolderStorageLarge);
         }
         await f.Queue.SetNewCaptureFolderAsync(null, false);
+        // The byte cap of earlier versions is still in the settings, far below these folders, and removes nothing.
         f.Queue.UpdateLimits(new QueueSettings { MaxItems = 3, MaxBytes = 2L * 1024 * 1024 * 1024 });
         var first = f.Add(DateTimeOffset.Now.AddMinutes(-2));
         var second = f.Add(DateTimeOffset.Now.AddMinutes(-1));
@@ -408,7 +412,8 @@ public sealed class CaptureFolderTests
         Assert.Equal(303, f.Queue.Count);
         Assert.Equal(3, f.Queue.HistoryCount);
         Assert.Equal(12, f.Queue.HistoryBytes);
-        Assert.Equal(300 * 8L * 1024 * 1024, f.Queue.FolderBytes);
+        Assert.Equal(300 * 20L * 1024 * 1024, f.Queue.FolderBytes);
+        Assert.True(f.Queue.FolderBytes > CaptureQueue.LargeFolderStorageBytes);
         Assert.True(f.Queue.IsFolderStorageLarge);
         Assert.False(f.Queue.IsOverCapacityDueToPins);
         Assert.All(new[] { first, second, third }, r => Assert.NotNull(f.Queue.Find(r.Id)));

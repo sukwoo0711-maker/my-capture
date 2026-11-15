@@ -177,11 +177,9 @@ internal sealed partial class SettingsWindow
         _saving = true;
         try
         {
+            // Values without a field, such as the byte cap kept for earlier versions, are saved exactly: from the
+            // current settings the candidate started from, or from the import or defaults that replace them all.
             AppSettings next = LegacyApplyCandidate(candidate.ToAppSettings());
-            // GiB is a rounded display value. An unrelated instant save must preserve the
-            // exact byte budget, including a value changed by the library while settings is open.
-            if (!replacingAll && !appliedProperties.Any(property => property.Name == nameof(SettingsDraft.MaxGiB)))
-                next.Queue.MaxBytes = _currentSettings().Queue.MaxBytes;
             var attemptedValues = appliedProperties.ToDictionary(property => property.Name, property => property.GetValue(_draft));
             // The apply service can roll back an entire settings group, including future boolean
             // members. Capture its requested projection before it mutates the candidate.

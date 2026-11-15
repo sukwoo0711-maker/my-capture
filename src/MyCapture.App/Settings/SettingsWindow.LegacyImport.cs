@@ -14,7 +14,6 @@ internal sealed partial class SettingsWindow
     private static readonly (string Queue, string Draft)[] LegacyQueueFields =
     [
         (nameof(QueueSettings.MaxItems), nameof(SettingsDraft.MaxItems)),
-        (nameof(QueueSettings.MaxBytes), nameof(SettingsDraft.MaxGiB)),
         (nameof(QueueSettings.CapturesDirectoryOverride), nameof(SettingsDraft.CapturesDirectoryOverride)),
         (nameof(QueueSettings.ThumbnailLongEdge), nameof(SettingsDraft.ThumbnailLongEdge)),
         (nameof(QueueSettings.ImageRetentionHours), nameof(SettingsDraft.ImageRetentionHours)),
@@ -89,6 +88,8 @@ internal sealed partial class SettingsWindow
                     var property = typeof(QueueSettings).GetProperty(queueProperty)!;
                     property.SetValue(candidate.Queue, property.GetValue(exactQueue));
                 }
+            // The byte cap kept for earlier versions has no field, so it always keeps its live value.
+            candidate.Queue.MaxBytes = exactQueue.MaxBytes;
             if (Unchanged(nameof(SettingsDraft.QuickSaveDirectoryOverride)))
                 candidate.Export.QuickSaveDirectoryOverride = current.Export.QuickSaveDirectoryOverride;
             // The token and the issue it uploads to stay a pair: an imported issue address never
@@ -111,7 +112,7 @@ internal sealed partial class SettingsWindow
 
     private static void PreserveLegacyTargetSettings(AppSettings candidate, AppSettings current)
     {
-        // Keep exact queue limits too: the editable GiB display rounds values for normal drafts.
+        // Keep the exact queue values too; LegacyApplyCandidate keeps each one live until the user edits it.
         candidate.Queue = current.DeepClone().Queue;
         candidate.Export.QuickSaveDirectoryOverride = current.Export.QuickSaveDirectoryOverride;
         candidate.StoreRating = current.StoreRating;

@@ -42,7 +42,8 @@ public sealed class SettingsGuideButtonIntegrationTests
             var tabs = (TabControl)window.FindName("CategoryTabs");
             Button[] buttons = SettingsStructureEvidenceTests.Logical(tabs).OfType<Button>()
                 .Where(button => button.Tag is string id && Regex.IsMatch(id, @"^G\d\d$")).ToArray();
-            Assert.Equal(23, buttons.Length);
+            // G11 sits beside the retention choice and the item limit; the storage size row and its button are gone.
+            Assert.Equal(22, buttons.Length);
             Assert.Equal(Enumerable.Range(1, 13).Select(number => $"G{number:00}"),
                 buttons.Select(button => (string)button.Tag).Distinct().Order());
 

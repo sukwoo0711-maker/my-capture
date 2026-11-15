@@ -102,7 +102,7 @@ public sealed partial class SettingsInstantSaveTests
 
             // Another editor changed a setting while this window remained open.
             saved.Annotation.StrokeThickness = 7;
-            long exactByteBudget = 2 * SettingsRanges.BytesPerGiB + 12345;
+            long exactByteBudget = 2L * 1024 * 1024 * 1024 + 12345;
             saved.Queue.MaxBytes = exactByteBudget;
             draft.NotifyOnQuickSave = !draft.NotifyOnQuickSave;
             Pump();

@@ -1291,21 +1291,6 @@
                                     Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
                                 </Grid>
 
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <settings:SettingsField Grid.Column="0" Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsRange_MaxStorage}">
-                                        <TextBox Style="{StaticResource Settings.NumberBox}"
-                                                 AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
-                                                 Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                    </settings:SettingsField>
-                                    <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G11" Content="{loc:Text SettingsStructure_Guide}"
-                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
-                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
-                                </Grid>
-
                                 <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsRange_PreviewSize}">
                                     <TextBox Style="{StaticResource Settings.NumberBox}"
                                              AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"

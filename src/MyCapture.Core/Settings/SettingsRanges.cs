@@ -15,6 +15,11 @@ namespace MyCapture.Core.Settings;
 public static class SettingsRanges
 {
     public static readonly Range<int> MaxItems = new(10, 5000);
+
+    /// <summary>
+    /// The byte cap range earlier versions accept. The settings window no longer shows the cap; the store keeps
+    /// the saved value inside this range so a rollback reads it without a correction (see <see cref="QueueSettings.MaxBytes"/>).
+    /// </summary>
     public static readonly Range<long> MaxBytes = new(128L * 1024 * 1024, 512L * 1024 * 1024 * 1024);
     public static readonly Range<int> ThumbnailLongEdge = new(96, 1024);
 
@@ -68,9 +73,6 @@ public static class SettingsRanges
     /// is stored as <see cref="MyCapture.Core.Queue.CaptureRetention.NeverHours"/>, outside this range.
     /// </summary>
     public static readonly Range<int> ImageRetentionHours = new(1, 24 * 365);
-
-    /// <summary>1 GiB expressed in bytes, the unit the storage cap is shown in.</summary>
-    public const long BytesPerGiB = 1024L * 1024 * 1024;
 }
 
 /// <summary>An inclusive numeric range with a formatted, culture-invariant description.</summary>

@@ -580,12 +580,13 @@ public sealed class CaptureLibraryFirstTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void CapacityPressure_CannotEvictCaptureBetweenPersistenceAndEditor(bool retry, bool byteLimit) => StaTestHost.Run(() =>
+    public void CapacityPressure_CannotEvictCaptureBetweenPersistenceAndEditor(bool retry, bool formerByteCap) => StaTestHost.Run(() =>
     {
-        using var fixture = new Fixture(byteLimit
+        // The former byte-cap rows keep a 1-byte cap from an earlier version: bytes alone now remove nothing.
+        using var fixture = new Fixture(formerByteCap
             ? new QueueSettings { MaxBytes = 1 }
             : new QueueSettings { MaxItems = 1 });
-        if (!byteLimit)
+        if (!formerByteCap)
         {
             CaptureRecord older = fixture.Wait(fixture.Persistence.PersistOriginalAsync(
                 fixture.Frame.Bitmap, 1, "older pinned capture", string.Empty));
@@ -618,16 +619,24 @@ public sealed class CaptureLibraryFirstTests
         Assert.Same(pending, fixture.Queue.Find(pending.Id));
         Assert.DoesNotContain(pending.Id, evicted);
 
-        // The queue deliberately retains the newest sole unpinned/oversized capture.
-        // After the editor releases its lease, a newer capture makes this one eligible
-        // for normal capacity eviction. A leaked retry lease would prevent that eviction.
+        // The queue deliberately retains the newest sole unpinned capture. After the editor
+        // releases its lease, a newer capture makes this one eligible for item-cap eviction.
+        // A leaked retry lease would prevent that eviction. Over the former byte cap, both stay.
         fixture.ReleaseEditSession();
         Assert.False(fixture.Persistence.IsBusy(pending.Id));
         CaptureRecord successor = fixture.Wait(fixture.Persistence.PersistOriginalAsync(
             fixture.Frame.Bitmap, 1, "next capture", string.Empty));
         Assert.Same(successor, fixture.Queue.Find(successor.Id));
-        Assert.Null(fixture.Queue.Find(pending.Id));
-        Assert.Contains(pending.Id, evicted);
+        if (formerByteCap)
+        {
+            Assert.Same(pending, fixture.Queue.Find(pending.Id));
+            Assert.Empty(evicted);
+        }
+        else
+        {
+            Assert.Null(fixture.Queue.Find(pending.Id));
+            Assert.Contains(pending.Id, evicted);
+        }
     });
 
     private static void PumpUntil(Func<bool> completed)
