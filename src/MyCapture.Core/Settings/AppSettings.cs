@@ -167,12 +167,14 @@ public sealed class QueueSettings
     public int MaxItems { get; set; } = 300;
 
     /// <summary>
-    /// Maximum total bytes on disk. Whichever limit is reached first triggers
-    /// eviction.
+    /// The library byte cap of earlier versions. This version never reads it: total bytes no longer
+    /// remove captures, and the settings window has no field for it.
     /// </summary>
     /// <remarks>
-    /// The legacy fallback is 2 GiB; new installations use <see cref="NewInstallDefaults"/>.
-    /// A byte cap limits disk use independently of the number of captures.
+    /// Kept in the file so a rollback finds the value it saved. Earlier versions evict down to this cap,
+    /// and a missing member would read back as the 2 GiB initializer, which is below the 5 GiB a new
+    /// installation saved (<see cref="NewInstallDefaults"/>). The store clamps it into the range those
+    /// versions accept (<see cref="SettingsRanges.MaxBytes"/>) and otherwise writes it back unchanged.
     /// </remarks>
     public long MaxBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 

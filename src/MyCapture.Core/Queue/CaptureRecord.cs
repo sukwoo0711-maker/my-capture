@@ -24,7 +24,7 @@ public enum CaptureMediaKind
 /// </para>
 /// <para>
 /// <see cref="TotalBytes"/> is stored rather than computed from the filesystem on
-/// demand. Enforcing a byte cap by stat-ing several hundred files on every capture
+/// demand. Totalling the library size by stat-ing several hundred files on every capture
 /// would put disk latency directly in the path of the capture hotkey, which is the
 /// one operation that has to feel instant.
 /// </para>

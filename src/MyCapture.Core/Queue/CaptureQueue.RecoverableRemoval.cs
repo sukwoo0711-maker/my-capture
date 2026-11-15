@@ -29,9 +29,12 @@ public sealed partial class CaptureQueue
     /// <summary>Legacy request name; removal still requires recoverable recycling.</summary>
     public const string ManualPermanentReason = "manual-permanent";
 
-    /// <summary>Capacity and retention eviction run without a user request.</summary>
+    /// <summary>
+    /// Item-cap and retention eviction run without a user request. Bytes are no longer a reason:
+    /// the former "byte-limit" was never written to a journal, so no stored removal names it.
+    /// </summary>
     public static bool IsAutomaticRemovalReason(string reason) =>
-        reason is "capacity" or "retention-age" or "item-limit" or "byte-limit";
+        reason is "capacity" or "retention-age" or "item-limit";
 
     /// <summary>
     /// Automatic eviction publishes its index change before recoverable cleanup. Other requests
@@ -317,19 +320,17 @@ public sealed partial class CaptureQueue
             return _records.Where(record => Available(record) && record.IsImage && !record.IsPinned
                 && record.FolderId is null && record.RetentionReference <= cutoff).ToArray();
         }
-        // Re-evaluate the current cap and ownership after waiting for the publication slot.
+        // Re-evaluate the current item cap and ownership after waiting for the publication slot.
         var excluded = _records.Where(record => !Available(record)).Select(record => record.Id).ToHashSet();
         var selected = new List<CaptureRecord>();
         int count = HistoryCount;
-        long bytes = HistoryBytes;
-        while (count > _limits.MaxItems || bytes > _limits.MaxBytes)
+        while (count > _limits.MaxItems)
         {
             CaptureRecord? victim = FindOldestUnpinned(excluded);
             if (victim is null) break;
             selected.Add(victim);
             excluded.Add(victim.Id);
             count--;
-            bytes = Math.Max(0, bytes - victim.TotalBytes);
         }
         return selected.ToArray();
     }

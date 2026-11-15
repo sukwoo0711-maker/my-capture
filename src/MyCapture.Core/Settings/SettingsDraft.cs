@@ -92,7 +92,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
-    private string _maxGiB = string.Empty;
     private string _thumbnailLongEdge = string.Empty;
     private string _capturesDirectoryOverride = string.Empty;
     private string _imageRetentionHours = string.Empty;
@@ -393,12 +392,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         get => _maxItems;
         set { if (Set(ref _maxItems, value)) ValidateInt(value, SettingsRanges.MaxItems); }
-    }
-
-    public string MaxGiB
-    {
-        get => _maxGiB;
-        set { if (Set(ref _maxGiB, value)) ValidateMaxGiB(value); }
     }
 
     public string ThumbnailLongEdge
@@ -765,7 +758,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _forceCoreShortcuts = s.Hotkeys.ForceCoreShortcuts;
 
         _maxItems = Int(s.Queue.MaxItems);
-        _maxGiB = Gib(s.Queue.MaxBytes);
+        _preservedMaxBytes = s.Queue.MaxBytes;
         _thumbnailLongEdge = Int(s.Queue.ThumbnailLongEdge);
         _capturesDirectoryOverride = DisplayDirectory(
             s.Queue.CapturesDirectoryOverride,
@@ -890,7 +883,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
         _captureTextHotkey, _pauseRecordingHotkey, B(_forceCoreShortcuts), B(_preservedCoreShortcutsAsked),
         Int(_preservedPracticeRevisionOffered),
-        _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
+        _maxItems, _preservedMaxBytes.ToString(CultureInfo.InvariantCulture), _thumbnailLongEdge, _capturesDirectoryOverride,
+        _imageRetentionHours, _folderFilePrefix,
         B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
         _gitHubIssueUrl, _gitHubToken,
         _quickSaveDirectoryOverride, B(_copyToClipboardOnQuickSave), B(_showSourceWindowTitle), _fileNamePattern,
@@ -1003,7 +997,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Queue =
             {
                 MaxItems = ParseInt(_maxItems),
-                MaxBytes = (long)Math.Round(ParseDouble(_maxGiB) * SettingsRanges.BytesPerGiB),
+                MaxBytes = _preservedMaxBytes,
                 ThumbnailLongEdge = ParseInt(_thumbnailLongEdge),
                 CapturesDirectoryOverride = PersistDirectory(
                     _capturesDirectoryOverride,
@@ -1140,7 +1134,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             nameof(RecordingStartDelaySeconds));
         ValidateRecordingPresetSize();
         ValidateInt(_maxItems, SettingsRanges.MaxItems, nameof(MaxItems));
-        ValidateMaxGiB(_maxGiB);
         ValidateInt(_thumbnailLongEdge, SettingsRanges.ThumbnailLongEdge, nameof(ThumbnailLongEdge));
         ValidateRetention(_imageRetentionHours);
         ValidateFolderFilePrefix(_folderFilePrefix);
@@ -1233,25 +1226,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         }
 
         SetErrorState(property!, range.Contains(parsed), UiText.Format("Text_CF32FE576AE7", range.Describe()));
-    }
-
-    private void ValidateMaxGiB(string value)
-    {
-        if (!double.TryParse(value?.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double gib)
-            || double.IsNaN(gib) || double.IsInfinity(gib))
-        {
-            SetError(nameof(MaxGiB), UiText.Get("Text_764879D98E25"));
-            return;
-        }
-
-        long bytes = (long)Math.Round(gib * SettingsRanges.BytesPerGiB);
-        bool ok = SettingsRanges.MaxBytes.Contains(bytes);
-        double minGiB = SettingsRanges.MaxBytes.Min / (double)SettingsRanges.BytesPerGiB;
-        double maxGiB = SettingsRanges.MaxBytes.Max / (double)SettingsRanges.BytesPerGiB;
-        SetErrorState(
-            nameof(MaxGiB),
-            ok,
-            string.Format(CultureInfo.InvariantCulture, UiText.Get("Text_3862727D2DCB"), minGiB, maxGiB));
     }
 
     private void ValidateFolderFilePrefix(string value)
@@ -1485,9 +1459,6 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     private static string Dbl(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
-    private static string Gib(long bytes) =>
-        (bytes / (double)SettingsRanges.BytesPerGiB).ToString("0.###", CultureInfo.InvariantCulture);
-
     // ================= Error bookkeeping =================
 
     private void SetErrorState(string property, bool valid, string message)
@@ -1580,6 +1551,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
+
+    // The byte cap of earlier versions has no field any more. The exact saved value goes back to the file
+    // unchanged, so a rollback still finds it (see QueueSettings.MaxBytes).
+    private long _preservedMaxBytes;
 
     /// <summary>The state <see cref="LoadFrom"/> last loaded; see <see cref="HasUnappliedChanges"/>.</summary>
     private string[] _baseline = [];

@@ -249,9 +249,10 @@ public sealed class PreservedCaptureDeliveryTests : KoreanCaptionTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapacityPressureKeepsTheNewCaptureUntilItsDeferredReceiptCloses(bool bytes) => StaTestHost.Run(() =>
+    public void CapacityPressureKeepsTheNewCaptureUntilItsDeferredReceiptCloses(bool formerByteCap) => StaTestHost.Run(() =>
     {
-        using var shell = new Shell(bytes ? new QueueSettings { MaxBytes = 1 } : new QueueSettings { MaxItems = 1 });
+        // The former byte-cap row keeps a 1-byte cap from an earlier version: bytes alone now remove nothing.
+        using var shell = new Shell(formerByteCap ? new QueueSettings { MaxBytes = 1 } : new QueueSettings { MaxItems = 1 });
         CaptureRecord older = shell.Wait(shell.Persistence.PersistOriginalAsync(shell.Frame.Bitmap, 1, "pinned", string.Empty));
         older.IsPinned = true;
         shell.App.ShowsCardAfterSaveForTest = true;
@@ -278,7 +279,9 @@ public sealed class PreservedCaptureDeliveryTests : KoreanCaptionTest
         Assert.Equal(1, shell.CardsShown);
         card.CloseNow();
         // The card and transient handoff leases both release; pinned old content is retained.
-        Assert.Null(shell.Queue.Find(saved.Id));
+        // Within the item cap, total bytes over the former byte cap leave the released capture in place.
+        if (formerByteCap) Assert.Same(saved, shell.Queue.Find(saved.Id));
+        else Assert.Null(shell.Queue.Find(saved.Id));
         Assert.Same(older, shell.Queue.Find(older.Id));
         Assert.Same(successor, shell.Queue.Find(successor.Id));
     });

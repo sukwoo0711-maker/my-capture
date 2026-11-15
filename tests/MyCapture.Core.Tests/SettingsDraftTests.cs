@@ -197,23 +197,34 @@ public sealed class SettingsDraftTests
         Assert.NotEmpty(draft.GetErrors(nameof(SettingsDraft.RecordingStartDelaySeconds)).Cast<string>());
     }
 
-    [Fact]
-    public void MaxGiB_RoundTripsToBytesWithinRange()
+    [Theory]
+    [InlineData(2L * 1024 * 1024 * 1024)]
+    [InlineData(4L * 1024 * 1024 * 1024)]
+    [InlineData(5L * 1024 * 1024 * 1024 + 12345)]
+    public void ByteCap_HasNoFieldAndRoundTripsExactly(long bytes)
     {
-        SettingsDraft draft = NewDraft();
-        draft.MaxGiB = "4";
-        Assert.False(draft.HasErrors);
+        // Total bytes no longer remove captures, so the draft offers no size field. The cap an earlier
+        // version saved still goes back to the file exactly, with no rounding through gigabytes.
+        Assert.Null(typeof(SettingsDraft).GetProperty("MaxGiB"));
+        var draft = new SettingsDraft(new AppSettings { Queue = { MaxBytes = bytes } });
+        Assert.False(draft.HasUnappliedChanges);
 
+        draft.MaxItems = "750";
+
+        Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
-        Assert.Equal(4L * 1024 * 1024 * 1024, mapped.Queue.MaxBytes);
+        Assert.Equal(bytes, mapped.Queue.MaxBytes);
+        Assert.Equal(750, mapped.Queue.MaxItems);
     }
 
     [Fact]
-    public void MaxGiB_BelowFloorIsRejected()
+    public void ByteCap_ResetToDefaultsWritesTheNewInstallValueForEarlierVersions()
     {
-        SettingsDraft draft = NewDraft();
-        draft.MaxGiB = "0.05"; // ~52 MiB, below the 128 MiB floor
-        Assert.True(draft.HasErrors);
+        var draft = new SettingsDraft(new AppSettings { Queue = { MaxBytes = 3L * 1024 * 1024 * 1024 } });
+
+        draft.ResetToDefaults();
+
+        Assert.Equal(NewInstallDefaults.Create().Queue.MaxBytes, draft.ToAppSettings().Queue.MaxBytes);
     }
 
     [Fact]

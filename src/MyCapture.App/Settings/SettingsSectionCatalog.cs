@@ -82,7 +82,6 @@ internal static class SettingsSectionCatalog
         new("UseCurrentFolderForNewCaptures", SettingsSection.Storage, null, "G12", null),
         new("FolderFilePrefix", SettingsSection.Storage, null, null, null),
         new("MaxItems", SettingsSection.Storage, "StorageLimitsExpander", "G11", null),
-        new("MaxGiB", SettingsSection.Storage, "StorageLimitsExpander", "G11", null),
         new("ThumbnailLongEdge", SettingsSection.Storage, "StorageLimitsExpander", null, null),
         new("ShowSourceWindowTitle", SettingsSection.Storage, "ImageExportExpander", "G13", null),
         new("GitHubIssueUrl", SettingsSection.Storage, "AdvancedExpander", null, null),

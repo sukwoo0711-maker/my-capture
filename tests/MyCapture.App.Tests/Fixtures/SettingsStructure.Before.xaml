@@ -1164,12 +1164,8 @@
                                      Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsRange_MaxStorage}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
-                                     Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
-
+                        <!-- The maximum storage (GB) row stood here. It was removed with its strings when the library
+                             stopped deleting by size, and this preserved layout can no longer resolve them. -->
                         <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsRange_PreviewSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"

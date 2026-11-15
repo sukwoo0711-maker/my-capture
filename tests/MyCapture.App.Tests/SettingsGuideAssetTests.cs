@@ -88,7 +88,6 @@ public sealed class SettingsGuideAssetTests
         "G10.alt" or "G10.always" => ShortcutLabels(id, after),
         "G11.time" => Timeline(after ? L("7일 경과 → 보관 기간 도달", "7 days later → Retention period reached") : L("시간 경과 → 기간 제한 없음", "Time passes → No time limit"), after ? ["1", "2", "3", "4", "5", "6", "7"] : ["1", "7", "30", "90"], after),
         "G11.items" => Timeline(after ? L("10개 + 새 캡처 → 오래된 항목 정리 대상", "10 items + new capture → Oldest eligible item") : L("항목 수 9개 / 한도 10개", "9 items / limit 10"), after ? ["1", "…", "9", "10", "+11"] : ["1", "…", "9"], after),
-        "G11.bytes" => Timeline(after ? L("0.8 + 0.4 GB → 한도 1 GB 초과", "0.8 + 0.4 GB → Above 1 GB limit") : L("보관 용량 0.8 GB / 한도 1 GB", "0.8 GB stored / limit 1 GB"), after ? ["0.4 GB", "0.4 GB", "+0.4 GB"] : ["0.4 GB", "0.4 GB"], after),
         "G12.folder" => Diagram(after ? L("새 캡처 → 라이브러리 / 업무", "New capture → Library / Work") : L("새 캡처 → 라이브러리 / 기본 폴더", "New capture → Library / Default folder"), Sample()),
         "G12.storage" => Diagram(after ? L("다시 실행 → 새 캡처 → 지정 보관 폴더", "Relaunch → New capture → Custom storage") : L("새 캡처 → 기본 보관 폴더", "New capture → Default storage"), Sample()),
         "G12.export" => Diagram(after ? L("빠른 저장 → 그림 / 예시 / capture.png", "Quick save → Pictures / Example / capture.png") : L("캡처 → 라이브러리 / 업무", "Capture → Library / Work"), Sample()),

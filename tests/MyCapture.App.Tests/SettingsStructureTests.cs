@@ -32,7 +32,7 @@ public sealed class SettingsStructureTests
         (SettingsSection.Editing, "StrokeThickness FontFamily FontSize MosaicBlockSize HighlighterOpacityPercent BlurRadius"),
         (SettingsSection.Pins, "RestoreOpenPinsOnLaunch CloseOnDoubleClick SnapWhileDragging InitialOpacity ZoomStep ClosedWindowRestoreLimit LightweightImagePins"),
         (SettingsSection.Text, "OcrQuality PreferredLanguages CacheResults"),
-        (SettingsSection.Storage, "QuickSaveDirectoryOverride FileNamePattern CapturesDirectoryOverride ImageRetentionHours UseCurrentFolderForNewCaptures FolderFilePrefix MaxItems MaxGiB ThumbnailLongEdge ShowSourceWindowTitle GitHubIssueUrl GitHubToken"),
+        (SettingsSection.Storage, "QuickSaveDirectoryOverride FileNamePattern CapturesDirectoryOverride ImageRetentionHours UseCurrentFolderForNewCaptures FolderFilePrefix MaxItems ThumbnailLongEdge ShowSourceWindowTitle GitHubIssueUrl GitHubToken"),
         (SettingsSection.Shortcuts, "AlwaysShowShortcutHints CaptureHotkey RecordRegionHotkey CaptureTextHotkey PasteToScreenHotkey HideAllPinsHotkey CaptureWindowHotkey CaptureFullScreenHotkey RepeatLastRegionHotkey ScrollingCaptureHotkey DelayedCaptureHotkey PauseRecordingHotkey OpenLibraryHotkey ToggleClickThroughHotkey RestoreClosedPinHotkey UploadGitHubImageHotkey ForceCoreShortcuts"),
         (SettingsSection.General, "Language Theme LaunchAtLogin"),
         (SettingsSection.About, "AutoCheckUpdates"),
@@ -41,7 +41,7 @@ public sealed class SettingsStructureTests
     [Fact]
     public void EveryOriginalBindingAndManualControlSurvives()
     {
-        const string original = "AbortOnFocusLoss AfterCapture AlwaysShowKeyPanel AlwaysShowShortcutHints AutoCheckUpdates AutoDetectWindows BlurRadius CacheResults CaptureFullScreenHotkey CaptureGuideColorHex CaptureGuideColorMode CaptureHotkey CaptureTextHotkey CaptureWindowHotkey CapturesDirectoryOverride CloseOnDoubleClick ClosedWindowRestoreLimit ColorFormat DelaySeconds DelayedCaptureHotkey FileNamePattern FolderFilePrefix FontSize ForceCoreShortcuts GitHubIssueUrl Header HideAllPinsHotkey HighlighterOpacityPercent IncludeCursor InitialOpacity IsCustomCaptureGuideColor IsExpanded Language LaunchAtLogin LightweightImagePins MaxGiB MaxItems MosaicBlockSize NotifyOnQuickSave OcrQuality OpenLibraryHotkey PasteToScreenHotkey PauseRecordingHotkey PlayCaptureSound PreferredLanguages QuickSaveDirectoryOverride RecordRegionHotkey RecordingCaptureMode RecordingCursorHighlight RecordingFrameRate RecordingIncludeCursor RecordingPresetHeight RecordingPresetWidth RecordingStartDelaySeconds RecordingWatermarkEnabled RegionHistoryLimit RepeatLastRegionHotkey RestoreClosedPinHotkey RestoreOpenPinsOnLaunch ScrollingCaptureHotkey ShowMagnifier ShowSelectionGrid ShowSourceWindowTitle SnapWhileDragging StrokeThickness Text Theme ThumbnailLongEdge ToggleClickThroughHotkey UploadGitHubImageHotkey UseCurrentFolderForNewCaptures UseRecordingDraggedSize UseRecordingFixedSize UseRecordingStartDelay ZoomStep";
+        const string original = "AbortOnFocusLoss AfterCapture AlwaysShowKeyPanel AlwaysShowShortcutHints AutoCheckUpdates AutoDetectWindows BlurRadius CacheResults CaptureFullScreenHotkey CaptureGuideColorHex CaptureGuideColorMode CaptureHotkey CaptureTextHotkey CaptureWindowHotkey CapturesDirectoryOverride CloseOnDoubleClick ClosedWindowRestoreLimit ColorFormat DelaySeconds DelayedCaptureHotkey FileNamePattern FolderFilePrefix FontSize ForceCoreShortcuts GitHubIssueUrl Header HideAllPinsHotkey HighlighterOpacityPercent IncludeCursor InitialOpacity IsCustomCaptureGuideColor IsExpanded Language LaunchAtLogin LightweightImagePins MaxItems MosaicBlockSize NotifyOnQuickSave OcrQuality OpenLibraryHotkey PasteToScreenHotkey PauseRecordingHotkey PlayCaptureSound PreferredLanguages QuickSaveDirectoryOverride RecordRegionHotkey RecordingCaptureMode RecordingCursorHighlight RecordingFrameRate RecordingIncludeCursor RecordingPresetHeight RecordingPresetWidth RecordingStartDelaySeconds RecordingWatermarkEnabled RegionHistoryLimit RepeatLastRegionHotkey RestoreClosedPinHotkey RestoreOpenPinsOnLaunch ScrollingCaptureHotkey ShowMagnifier ShowSelectionGrid ShowSourceWindowTitle SnapWhileDragging StrokeThickness Text Theme ThumbnailLongEdge ToggleClickThroughHotkey UploadGitHubImageHotkey UseCurrentFolderForNewCaptures UseRecordingDraggedSize UseRecordingFixedSize UseRecordingStartDelay ZoomStep";
         using Stream stream = typeof(SettingsStructureTests).Assembly.GetManifestResourceStream("SettingsFixture.Window.xaml")!;
         using var reader = new StreamReader(stream);
         string markup = reader.ReadToEnd();
@@ -51,7 +51,7 @@ public sealed class SettingsStructureTests
         XElement root = XDocument.Parse(markup).Root!;
         foreach (string name in new[] { "FontFamilyBox", "RetentionChoiceBox", "GitHubTokenBox", "RecordingWatermarkSettingsButton" })
             Assert.Single(root.Descendants(), element => (string?)element.Attribute(x + "Name") == name);
-        Assert.Equal(75, SettingsSectionCatalog.Fields.Count);
+        Assert.Equal(74, SettingsSectionCatalog.Fields.Count);
         Assert.Equal(SettingsSectionCatalog.Fields.Count, SettingsSectionCatalog.Fields.Select(field => field.DraftProperty).Distinct().Count());
     }
 
@@ -140,6 +140,37 @@ public sealed class SettingsStructureTests
         window.FilterSettings(draft.GitHubToken);
         Assert.Null(((TabControl)window.FindName("CategoryTabs")).SelectedItem);
         Assert.Null(window.FirstSearchMatch);
+    }));
+
+    [Fact]
+    public Task StorageHasNoMaximumSizeFieldToShowOrFind() => Isolated(nameof(StorageHasNoMaximumSizeFieldToShowOrFind), () => WithWindow(window =>
+    {
+        // Total bytes no longer remove captures, so the window has no size cap to set, find or explain.
+        Assert.Null(SettingsSectionCatalog.Find("MaxGiB"));
+        Assert.DoesNotContain(SettingsSectionCatalog.Fields, field => field.DraftProperty.Contains("GiB", StringComparison.Ordinal)
+            || field.DraftProperty.Contains("Bytes", StringComparison.Ordinal));
+        Assert.Null(typeof(SettingsDraft).GetProperty("MaxGiB"));
+        Assert.Empty(SettingsGuideCatalog.ForSetting("Queue.MaxBytes"));
+        Assert.Equal(new[] { "G11.time", "G11.items" }, SettingsGuideCatalog.Get("G11").Comparisons.Select(comparison => comparison.Id));
+        Assert.Null(window.FindSettingControl("MaxGiB"));
+        Assert.False(window.NavigateToSetting("MaxGiB"));
+
+        var limits = (Expander)window.FindName("StorageLimitsExpander");
+        limits.IsExpanded = true;
+        SettingsStructureEvidenceTests.Layout(window);
+        Assert.Equal(new[] { "MaxItems", "ThumbnailLongEdge" }, SettingsStructureEvidenceTests.Logical(limits).OfType<TextBox>()
+            .Select(box => BindingOperations.GetBinding(box, TextBox.TextProperty)?.Path?.Path ?? string.Empty));
+
+        // The former label finds nothing; the item cap in the same group still does.
+        var tabs = (TabControl)window.FindName("CategoryTabs");
+        window.FilterSettings("최대 저장 용량");
+        SettingsStructureEvidenceTests.Layout(window);
+        Assert.Null(tabs.SelectedItem);
+        Assert.Null(window.FirstSearchMatch);
+        window.FilterSettings(UiText.Get("Settings_LibraryMaxItems"));
+        SettingsStructureEvidenceTests.Layout(window);
+        Assert.Same(window.FindName("StorageTab"), tabs.SelectedItem);
+        Assert.NotNull(window.FirstSearchMatch);
     }));
 
     [Fact]

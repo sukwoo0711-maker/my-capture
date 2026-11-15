@@ -346,11 +346,9 @@ public sealed class SettingsStore
         s.Queue.MaxItems = ClampWithWarning(
             s.Queue.MaxItems, 10, 5000, nameof(QueueSettings.MaxItems), warnings);
 
-        // 128 MiB floor: a single 4K PNG can exceed 10 MiB, so a smaller cap would
-        // evict almost immediately and make the queue useless.
-        s.Queue.MaxBytes = ClampWithWarning(
-            s.Queue.MaxBytes, 128L * 1024 * 1024, 512L * 1024 * 1024 * 1024,
-            nameof(QueueSettings.MaxBytes), warnings);
+        // Unused by this version and absent from the settings window, so no warning names it. The clamp only
+        // keeps the value that is written back inside the range earlier versions accept after a rollback.
+        s.Queue.MaxBytes = Math.Clamp(s.Queue.MaxBytes, SettingsRanges.MaxBytes.Min, SettingsRanges.MaxBytes.Max);
 
         s.Queue.ThumbnailLongEdge = ClampWithWarning(
             s.Queue.ThumbnailLongEdge, 96, 1024, nameof(QueueSettings.ThumbnailLongEdge), warnings);
@@ -572,17 +570,6 @@ public sealed class SettingsStore
     private static int ClampWithWarning(int value, int min, int max, string name, List<string> warnings)
     {
         int clamped = Math.Clamp(value, min, max);
-        if (clamped != value)
-        {
-            warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));
-        }
-
-        return clamped;
-    }
-
-    private static long ClampWithWarning(long value, long min, long max, string name, List<string> warnings)
-    {
-        long clamped = Math.Clamp(value, min, max);
         if (clamped != value)
         {
             warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));

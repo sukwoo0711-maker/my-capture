@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
@@ -164,6 +165,60 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal(items, loaded.Queue.MaxItems);
         Assert.Equal(bytes, loaded.Queue.MaxBytes);
         Assert.Equal(json, File.ReadAllText(workspace.Paths.SettingsFile));
+    }
+
+    [Theory]
+    [InlineData(2L * 1024 * 1024 * 1024)]
+    [InlineData(5L * 1024 * 1024 * 1024)]
+    [InlineData(3L * 1024 * 1024 * 1024 + 12345)]
+    public void ExistingFile_KeepsTheFormerByteCapThroughLaterSaves(long bytes)
+    {
+        // This version never reads the byte cap but writes it back unchanged, so an earlier version
+        // installed again reads its own cap instead of the 2 GiB initializer.
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        File.WriteAllText(workspace.Paths.SettingsFile, $$"""
+            {"schemaVersion":4,"queue":{"imageRetentionHours":168,"maxItems":300,"maxBytes":{{bytes}} } }
+            """);
+        SettingsStore store = Store(workspace);
+
+        AppSettings loaded = store.Load();
+        Assert.Equal(bytes, loaded.Queue.MaxBytes);
+        loaded.Queue.MaxItems = 400;
+        store.Save(loaded);
+        Assert.Equal(bytes, SavedByteCap(workspace));
+
+        // Settings window edits go through the draft, which has no byte field and keeps the value exactly.
+        var draft = new SettingsDraft(Store(workspace).Load());
+        draft.MaxItems = "500";
+        Assert.False(draft.HasErrors);
+        store.Save(draft.ToAppSettings());
+        Assert.Equal(bytes, SavedByteCap(workspace));
+        AppSettings reloaded = Store(workspace).Load();
+        Assert.Equal(500, reloaded.Queue.MaxItems);
+        Assert.Equal(168, reloaded.Queue.ImageRetentionHours);
+        Assert.Equal(bytes, reloaded.Queue.MaxBytes);
+    }
+
+    [Fact]
+    public void ExistingFile_HandEditedByteCapOutsideTheEarlierRange_IsKeptInsideItWithoutAWarning()
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        File.WriteAllText(workspace.Paths.SettingsFile, """{"schemaVersion":4,"queue":{"maxBytes":1}}""");
+        SettingsStore store = Store(workspace);
+
+        AppSettings loaded = store.Load();
+
+        // Earlier versions accept 128 MiB to 512 GiB. Nothing in this version shows the cap, so no warning names it.
+        Assert.Equal(SettingsRanges.MaxBytes.Min, loaded.Queue.MaxBytes);
+        Assert.DoesNotContain(store.LastLoadWarnings, warning => warning.Contains(nameof(QueueSettings.MaxBytes), StringComparison.Ordinal));
+    }
+
+    private static long SavedByteCap(TempWorkspace workspace)
+    {
+        using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(workspace.Paths.SettingsFile));
+        return saved.RootElement.GetProperty("queue").GetProperty("maxBytes").GetInt64();
     }
 
     [Fact]

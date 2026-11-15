@@ -1468,9 +1468,10 @@ public sealed class CaptureTransactionRecoveryTests
     });
 
     [Fact]
-    public void EvictionLease_PreservesActiveRecordWhileByteUpdateEnforcesLimit()
+    public void EvictionLease_ByteUpdateOverTheFormerByteCapEvictsNothing()
     {
         using var workspace = new TestWorkspace();
+        // A byte cap saved by an earlier version stays in the settings; total bytes no longer remove captures.
         var limits = new QueueSettings { MaxItems = 20, MaxBytes = 100 };
         CaptureQueue queue = NewQueue(workspace.Paths, limits);
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1485,20 +1486,23 @@ public sealed class CaptureTransactionRecoveryTests
             queue.UpdateByteCount(active.Id, 60);
 
             Assert.Same(active, queue.Find(active.Id));
-            Assert.Null(queue.Find(olderDisposable.Id));
+            Assert.Same(olderDisposable, queue.Find(olderDisposable.Id));
             Assert.Same(newerDisposable, queue.Find(newerDisposable.Id));
-            Assert.Equal([olderDisposable.Id], evicted);
+            Assert.Empty(evicted);
             Assert.Equal(60, active.TotalBytes);
-            Assert.Equal(100, queue.TotalBytes);
+            Assert.Equal(140, queue.TotalBytes);
 
-            // A second explicit enforcement pass must still respect the same active lease.
+            // A second explicit enforcement pass removes nothing either.
             queue.UpdateLimits(new QueueSettings { MaxItems = 20, MaxBytes = 100 });
-            Assert.Contains(active, queue.Records);
-            Assert.Contains(newerDisposable, queue.Records);
+            Assert.Equal(3, queue.Count);
         }
 
+        // Releasing the lease re-checks the limits; three captures are within the item cap of 20.
+        Assert.Equal(3, queue.Count);
         Assert.Contains(active, queue.Records);
+        Assert.Contains(olderDisposable, queue.Records);
         Assert.Contains(newerDisposable, queue.Records);
+        Assert.Empty(evicted);
     }
 
     [Fact]

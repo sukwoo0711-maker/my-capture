@@ -66,7 +66,7 @@ MyCapture는 윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지
 
 번역은 이미지 핀과 글자 인식 결과의 한국어와 영어를 이 PC 안에서 서로 옮깁니다. 번역 모델은 처음 쓸 때 한 번 내려받습니다.
 
-라이브러리는 창 제목과 이미지 속 글자로 지난 캡처를 찾으며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 새로 설치하면 보관 기간 제한이 없고, 폴더 밖 항목이 5GB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
+라이브러리는 창 제목과 이미지 속 글자로 지난 캡처를 찾으며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 새로 설치하면 보관 기간 제한이 없고, 폴더 밖 항목이 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 차지하는 용량으로는 지우지 않습니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
 
 영역·창·전체 화면·지연·스크롤 캡처를 지원합니다. 스크롤 캡처는 한 번에 최대 40프레임, 세로 32,760픽셀, 256MB까지 이어 붙이고, 한도에 닿으면 거기까지 이어 붙인 이미지를 엽니다. 녹화는 화면만 기록하며 소리는 녹음하지 않습니다. 영역 녹화는 MP4로 저장하고, 영상 편집기에서 구간을 자르고 텍스트를 넣은 뒤 MP4나 GIF로 내보냅니다.
 
@@ -217,7 +217,7 @@ Copy text recognizes Korean and English in captures and image pins on this PC. T
 
 Translate turns Korean and English text in image pins and OCR results into the other language on this PC. The translation model is downloaded once, the first time you use it.
 
-Search the library by window title or by text inside images. Organize items into folders and export to a folder or ZIP. New installations keep items with no time limit; automatic cleanup removes the oldest items outside folders only after they pass 5 GB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
+Search the library by window title or by text inside images. Organize items into folders and export to a folder or ZIP. New installations keep items with no time limit; automatic cleanup removes the oldest items outside folders only after they pass 1,000 items, never because of the space they take up. Items marked Keep or stored in folders are never cleaned up automatically.
 
 Capture a region, window or full screen, or use delayed and scrolling capture. Scrolling capture joins up to 40 frames, 32,760 pixels in height or 256 MB, and opens what it has joined when it reaches a limit. Recording captures the screen only; no sound is recorded. Record a region to MP4, trim it, add text and export MP4 or GIF.
 

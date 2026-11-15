@@ -448,10 +448,6 @@ This cannot be undone.</value>
     <value>100%: outline only · 0%: fill completely with the stroke color</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="Text_284A54C660EC" xml:space="preserve">
-    <value>Maximum storage (GB)</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
     <value>Library images are deleted automatically, oldest first, after the configured retention period. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -643,10 +639,6 @@ This cannot be undone.</value>
   <data name="Text_38476EDDA50B" xml:space="preserve">
     <value>Delayed capture</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_3862727D2DCB" xml:space="preserve">
-    <value>The allowed range is {0:0.###}–{1:0.###} GB.</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_388CC5AD1AE8" xml:space="preserve">
     <value>Double arrow</value>
@@ -1396,10 +1388,6 @@ This cannot be undone.</value>
   <data name="Text_756622E6954E" xml:space="preserve">
     <value>{0}: captures the dragged region. With window highlighting on, click to select the window under the pointer, or click the empty desktop to select the whole monitor.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
-  </data>
-  <data name="Text_764879D98E25" xml:space="preserve">
-    <value>Enter a number for the maximum storage (GB).</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_773C24F0A693" xml:space="preserve">
     <value>The countdown window cannot be excluded from the recording.</value>
@@ -2847,7 +2835,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_F1A864DCBEC4" xml:space="preserve">
-    <value> · Storage limit temporarily exceeded to protect kept items</value>
+    <value> · Item limit temporarily exceeded to protect kept items</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_F1C1BB1D5771" xml:space="preserve">
@@ -2948,7 +2936,6 @@ This cannot be undone.</value>
   <data name="SettingsRange_Seconds1To10" xml:space="preserve"><value>1–10 s</value></data>
   <data name="SettingsRange_RegionHistory" xml:space="preserve"><value>1–200</value></data>
   <data name="SettingsRange_MaxItems" xml:space="preserve"><value>10–5000</value></data>
-  <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
   <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>Long edge 96–1024 px</value></data>
   <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
   <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 px</value></data>
@@ -2990,10 +2977,6 @@ This cannot be undone.</value>
   <data name="Text_FB68C3A34978" xml:space="preserve">
     <value>Text recognition could not start.</value>
     <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
-  </data>
-  <data name="Text_FC05BD860043" xml:space="preserve">
-    <value>Maximum storage in gigabytes</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_FD6443988325" xml:space="preserve">
     <value>Playing · Text preview active</value>
@@ -3590,15 +3573,11 @@ Open the library or Settings from the tray menu.</value></data>
 <data name="SettingsGuide.G11.time.Title" xml:space="preserve"><value>Image retention period</value></data>
 <data name="SettingsGuide.G11.time.Before" xml:space="preserve"><value>No time limit</value></data>
 <data name="SettingsGuide.G11.time.After" xml:space="preserve"><value>7 days</value></data>
-<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>Item and size limits still apply with no time limit. Items in folders and items marked to keep remain.</value></data>
+<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>The item limit still applies with no time limit. Items in folders and items marked to keep remain.</value></data>
 <data name="SettingsGuide.G11.items.Title" xml:space="preserve"><value>Maximum items</value></data>
 <data name="SettingsGuide.G11.items.Before" xml:space="preserve"><value>9 items / limit 10</value></data>
 <data name="SettingsGuide.G11.items.After" xml:space="preserve"><value>New capture at limit 10</value></data>
 <data name="SettingsGuide.G11.items.Description" xml:space="preserve"><value>At the item limit, the oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
-<data name="SettingsGuide.G11.bytes.Title" xml:space="preserve"><value>Maximum storage size</value></data>
-<data name="SettingsGuide.G11.bytes.Before" xml:space="preserve"><value>0.8 GB / limit 1 GB</value></data>
-<data name="SettingsGuide.G11.bytes.After" xml:space="preserve"><value>New capture exceeds 1 GB</value></data>
-<data name="SettingsGuide.G11.bytes.Description" xml:space="preserve"><value>The size limit applies separately from the item limit. The oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
 <data name="SettingsGuide.G12.folder.Title" xml:space="preserve"><value>Library folder for new captures</value></data>
 <data name="SettingsGuide.G12.folder.Before" xml:space="preserve"><value>Default folder</value></data>
 <data name="SettingsGuide.G12.folder.After" xml:space="preserve"><value>Use current folder</value></data>
@@ -3740,7 +3719,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and kept captures for this date.</value></data>
   <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Folders and captures move to the Windows Recycle Bin. You can bring them back from Restore recently deleted.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>{0} {0:plural:folder|folders} · {1}</value></data>
-  <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage is large. Folder contents are kept until you delete them.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>The destination is too deep. Choose a shorter path.</value></data>
   <data name="Folder410.ExportNameExists" xml:space="preserve"><value>A file with this name exists. Choose another name.</value></data>
   <data name="Folder410.ExportMissing" xml:space="preserve"><value>The source file or destination folder is missing. Check the path.</value></data>
@@ -4128,7 +4107,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsStructure_CaptureControls" xml:space="preserve"><value>Selection, delay &amp; history</value></data>
   <data name="SettingsStructure_RecordingCompatibility" xml:space="preserve"><value>Recording method</value></data>
   <data name="SettingsStructure_PinHistory" xml:space="preserve"><value>Zoom &amp; closed pin history</value></data>
-  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>Capacity &amp; thumbnails</value></data>
+  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>Item limit &amp; thumbnails</value></data>
   <data name="SettingsStructure_ImageExport" xml:space="preserve"><value>Image export</value></data>
   <data name="SettingsStructure_GitHub" xml:space="preserve"><value>GitHub connection</value></data>
   <data name="SettingsStructure_Backup" xml:space="preserve"><value>Backup &amp; previous data</value></data>
@@ -4222,8 +4201,6 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>Keys on buttons</value></data>
   <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Hold Alt to show shortcuts beneath buttons. Hover over a button to see its shortcut.</value></data>
   <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>Select, then press the key combination.</value></data>
-  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>Maximum storage (GB)</value></data>
-  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125–512 GB.</value></data>
   <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>Preview image size (pixels)</value></data>
   <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>Longest edge, 96–1024 pixels.</value></data>
   <data name="SettingsUx_Retention" xml:space="preserve"><value>Image retention (hours)</value></data>
@@ -4235,7 +4212,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Retention_Year1" xml:space="preserve"><value>1 year</value></data>
   <data name="Retention_Never" xml:space="preserve"><value>Never</value></data>
   <data name="Retention_Custom" xml:space="preserve"><value>Custom ({0} hours)</value></data>
-  <data name="Retention_SummaryNever" xml:space="preserve"><value>Library images are not deleted after a set time. When the library goes over its maximum number of items or storage, the oldest items are deleted first.</value></data>
+  <data name="Retention_SummaryNever" xml:space="preserve"><value>Library images are not deleted after a set time. When the library goes over its maximum number of items, the oldest items are deleted first.</value></data>
   <data name="Retention_Notice" xml:space="preserve"><value>Deleted {0} images past the retention period</value></data>
   <data name="Retention_NoticeAction" xml:space="preserve"><value>Change</value></data>
   <data name="Retention_NoticeActionName" xml:space="preserve"><value>Change when images are deleted automatically</value></data>
