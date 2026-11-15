@@ -28,6 +28,12 @@ internal enum CaptureSelectorMode
 
     /// <summary>A pointer-drawn outline captured with transparency.</summary>
     Freeform,
+
+    /// <summary>
+    /// A click picks the window to scroll; the selector closes and the app scrolls and stitches that
+    /// window. A drag does nothing.
+    /// </summary>
+    Scroll,
 }
 
 /// <summary>Something the selector hands back to the app instead of capturing: it closes and the app runs it.</summary>
@@ -39,25 +45,25 @@ internal enum CaptureSelectorAction
     /// <summary>The record half of the capture/record switch: the recording region selector opens.</summary>
     Record,
 
-    /// <summary>A delayed region capture after <see cref="CaptureSelectorRequest.DelaySeconds"/>.</summary>
-    DelayedCapture,
-
-    /// <summary>Scrolling capture of the window under the pointer.</summary>
+    /// <summary>Scrolling capture of the window at <see cref="CaptureSelectorRequest.ScreenPoint"/>.</summary>
     ScrollingCapture,
 
     /// <summary>The previous region again, without a selector.</summary>
     RepeatLastRegion,
 }
 
-/// <summary>One request from the selector's switch or ⋯ menu; the app runs its existing command for it.</summary>
-internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, int DelaySeconds = 0);
+/// <summary>
+/// One request from the selector's switch, its ⋯ menu or a click in the scroll mode; the app runs its
+/// existing command for it. A scrolling capture carries the clicked point in virtual-desktop pixels.
+/// </summary>
+internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, MyCapture.Core.Primitives.PointD? ScreenPoint = null);
 
 /// <summary>
 /// An icon-first mode bar at the top of the pointer's monitor. A capture/record switch sits beside
-/// the available selection targets, delay and scrolling commands. The previous region stays in ⋯.
-/// A neutral wash and a text-coloured underline identify the selected kind and mode.
-/// The ratio button opens a menu of aspect-ratio locks and fixed sizes; it carries the same wash and
-/// underline while a ratio is locked.
+/// the selection modes (region, window, freeform, scroll, text, colour) and the delay and ratio locks.
+/// The previous region stays in ⋯. A neutral wash and a text-coloured underline identify the selected
+/// kind and mode. The ratio and delay buttons each open a menu; each carries the same wash and
+/// underline while its lock is set, and the delay button then shows its seconds.
 /// </summary>
 /// <remarks>
 /// The bar is drawn from the selector's capture-guide palette (all six themes and the guide colour
@@ -78,8 +84,8 @@ internal sealed class CaptureModeBar : Border
     internal const string AccentTextKey = "CaptureBar.AccentText";
     internal const string HoverKey = "CaptureBar.Hover";
 
-    /// <summary>The delays the timer button offers, in seconds.</summary>
-    internal static readonly IReadOnlyList<int> DelayChoices = [3, 5, 10];
+    /// <summary>The delays the timer button offers, in seconds; 0 is no delay.</summary>
+    internal static readonly IReadOnlyList<int> DelayChoices = [0, 3, 5, 10];
 
     // 20x20 outline glyphs on the shared symbol grid, stroked like Icon.Glyph.
     private static readonly Geometry RegionIcon = Geometry.Parse(
@@ -119,8 +125,12 @@ internal sealed class CaptureModeBar : Border
     private readonly RadioButton _captureKind;
     private readonly RadioButton _recordKind;
     private readonly Button _fullScreen;
-    private readonly Button _scroll;
-    private readonly Button _delay;
+    private readonly RadioButton _scroll;
+    private readonly LockToggle _delay;
+    private readonly FrameworkElement _delayIcon;
+    private readonly TextBlock _delaySeconds;
+    private int _delayChoice;
+    private CaptureSelectorMode _mode;
     private readonly LockToggle _ratio;
     private readonly Button _more;
     private readonly Button _help;
@@ -198,8 +208,25 @@ internal sealed class CaptureModeBar : Border
         _freeform = ModeButton(CaptureSelectorMode.Freeform, Geometry.Parse("M5,3 C0,3 1,12 6,14 C12,19 18,13 16,7 C15,3 10,1 5,3 Z M6,14 L4,18"), new TextBlock(), modeTemplate);
         ToolTipService.SetShowOnDisabled(_freeform, true);
         _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), actionTemplate);
-        _scroll = ActionButton(ScrollIcon, null, actionTemplate);
-        _delay = ActionButton(DelayIcon, null, actionTemplate);
+        _scroll = ModeButton(CaptureSelectorMode.Scroll, ScrollIcon, new TextBlock(), modeTemplate);
+        _delay = new LockToggle { Template = modeTemplate };
+        Decorate(_delay);
+        // An armed delay replaces the clock with its seconds, so the button keeps its width and the
+        // bar its layout.
+        _delayIcon = ButtonContent(_delay, DelayIcon, null);
+        _delaySeconds = new TextBlock
+        {
+            FontSize = TypeScale.Caption,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        _delaySeconds.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = _delay });
+        var delayFace = new Grid();
+        delayFace.Children.Add(_delayIcon);
+        delayFace.Children.Add(_delaySeconds);
+        _delay.Content = delayFace;
         _ratio = new LockToggle { Template = modeTemplate };
         Decorate(_ratio);
         _ratio.Content = ButtonContent(_ratio, RatioIcon, null);
@@ -209,7 +236,6 @@ internal sealed class CaptureModeBar : Border
         _help = ActionButton(HelpIcon, label: null, actionTemplate);
         _cancel = ActionButton(CancelIcon, label: null, actionTemplate);
         _fullScreen.Click += (_, _) => FullScreenRequested?.Invoke();
-        _scroll.Click += (_, _) => ActionRequested?.Invoke(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture));
         _delay.Click += (_, _) => OpenDelayMenu();
         _ratio.Click += (_, _) => OpenRatioMenu();
         _more.Click += (_, _) => OpenMoreMenu();
@@ -252,6 +278,9 @@ internal sealed class CaptureModeBar : Border
     /// <summary>A fixed size was chosen in the ratio menu.</summary>
     internal event Action<FixedSelectionSize>? FixedSizeRequested;
 
+    /// <summary>A delay (0 for none) was chosen in the delay menu.</summary>
+    internal event Action<int>? DelayRequested;
+
     internal RadioButton CaptureButton => _capture;
     internal RadioButton WindowButton => _window;
     internal RadioButton FreeformButton => _freeform;
@@ -265,8 +294,13 @@ internal sealed class CaptureModeBar : Border
     internal RadioButton RecordKindButton => _recordKind;
 
     internal Button FullScreenButton => _fullScreen;
-    internal Button ScrollButton => _scroll;
-    internal Button DelayButton => _delay;
+    internal RadioButton ScrollButton => _scroll;
+
+    /// <summary>Opens the delay menu; checked while a delay is armed.</summary>
+    internal ToggleButton DelayButton => _delay;
+
+    /// <summary>The delay menu while it is open.</summary>
+    internal ContextMenu? DelayMenuForTest => _delayMenu;
 
     /// <summary>Opens the ratio menu; checked while a ratio is locked.</summary>
     internal ToggleButton RatioButton => _ratio;
@@ -374,11 +408,36 @@ internal sealed class CaptureModeBar : Border
             _freeform.IsChecked = mode == CaptureSelectorMode.Freeform;
             _text.IsChecked = mode == CaptureSelectorMode.Text;
             _color.IsChecked = mode == CaptureSelectorMode.Color;
+            _scroll.IsChecked = mode == CaptureSelectorMode.Scroll;
         }
         finally { _syncing = false; }
-        // The colour mode picks a pixel, not a region: nothing for a ratio to apply to.
-        _ratio.IsEnabled = mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform);
+        _mode = mode;
+        // The colour and scroll modes pick a pixel or a window, not a region: nothing for a ratio to apply to.
+        _ratio.IsEnabled = mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform or CaptureSelectorMode.Scroll);
+        // A delay waits before an image capture; text, colour and scrolling have their own flows.
+        _delay.IsEnabled = DelayApplies(mode);
     }
+
+    /// <summary>True for the modes an armed delay applies to.</summary>
+    internal static bool DelayApplies(CaptureSelectorMode mode) =>
+        mode is CaptureSelectorMode.Capture or CaptureSelectorMode.Freeform;
+
+    /// <summary>Fills in the armed delay (0 for none), without raising <see cref="DelayRequested"/>.</summary>
+    internal void ShowDelay(int seconds)
+    {
+        _delayChoice = Math.Max(0, seconds);
+        _delay.IsChecked = _delayChoice > 0;
+        _delayIcon.Visibility = _delayChoice > 0 ? Visibility.Collapsed : Visibility.Visible;
+        _delaySeconds.Visibility = _delayChoice > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _delaySeconds.Text = _delayChoice > 0 ? UiText.Format("CaptureBar_DelayArmed", _delayChoice) : string.Empty;
+        AutomationProperties.SetItemStatus(_delay, DelayName(_delayChoice));
+    }
+
+    /// <summary>The armed delay shown by the button, in seconds.</summary>
+    internal int DelayShown => _delayChoice;
+
+    internal static string DelayName(int seconds) =>
+        seconds <= 0 ? UiText.Get("CaptureBar_DelayNone") : UiText.Format("Onboard_DelayCapture", seconds);
 
     /// <summary>Fills in the current lock, without raising <see cref="RatioRequested"/>.</summary>
     internal void ShowRatio(SelectionRatio ratio)
@@ -428,7 +487,8 @@ internal sealed class CaptureModeBar : Border
     }
 
     /// <summary>
-    /// The ⋯ menu keeps the previous-region command. Delay and scrolling have direct buttons.
+    /// The ⋯ menu keeps the previous-region command. Delay and scrolling have direct buttons; on a
+    /// narrow monitor the menu takes them too, as the same mode and the same delay choices.
     /// </summary>
     internal ContextMenu CreateMoreMenu()
     {
@@ -436,13 +496,22 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(menu, UiText.Get("Onboard_BarMore"));
         if (_compactActions)
         {
-            menu.Items.Add(MenuItemFor(menu, UiText.Get("Text_4DBA30197C0A"),
-                new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture)));
-            var delay = new MenuItem { Header = UiText.Get("CaptureBar_Delay"), MinHeight = 36 };
+            string scrollName = UiText.Get("Text_4DBA30197C0A");
+            var scroll = new MenuItem
+            {
+                Header = scrollName, MinHeight = 36, IsCheckable = true, IsChecked = _mode == CaptureSelectorMode.Scroll,
+            };
+            if (scroll.IsChecked) scroll.Icon = CheckGlyph();
+            AutomationProperties.SetName(scroll, scrollName);
+            scroll.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                ModeRequested?.Invoke(CaptureSelectorMode.Scroll);
+            };
+            menu.Items.Add(scroll);
+            var delay = new MenuItem { Header = UiText.Get("CaptureBar_Delay"), MinHeight = 36, IsEnabled = DelayApplies(_mode) };
             AutomationProperties.SetName(delay, UiText.Get("CaptureBar_Delay"));
-            foreach (int seconds in DelayChoices)
-                delay.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
-                    new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+            AddDelayItems(delay.Items, menu);
             menu.Items.Add(delay);
             menu.Items.Add(new Separator());
         }
@@ -456,10 +525,27 @@ internal sealed class CaptureModeBar : Border
     {
         var menu = new ContextMenu { PlacementTarget = _delay, Placement = PlacementMode.Bottom, VerticalOffset = 4 };
         AutomationProperties.SetName(menu, UiText.Get("CaptureBar_Delay"));
-        foreach (int seconds in DelayChoices)
-            menu.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
-                new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+        AddDelayItems(menu.Items, menu);
         return menu;
+    }
+
+    /// <summary>No delay and the timed choices, the armed one checked; a choice closes the menu.</summary>
+    private void AddDelayItems(ItemCollection items, ContextMenu menu)
+    {
+        foreach (int seconds in DelayChoices)
+        {
+            string header = DelayName(seconds);
+            var item = new MenuItem { Header = header, MinHeight = 36, IsCheckable = true, IsChecked = seconds == _delayChoice };
+            if (item.IsChecked) item.Icon = CheckGlyph();
+            AutomationProperties.SetName(item, header);
+            int picked = seconds;
+            item.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                DelayRequested?.Invoke(picked);
+            };
+            items.Add(item);
+        }
     }
 
     /// <summary>
@@ -585,9 +671,9 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(_fullScreen, UiText.Get("CaptureGuide2_FullScreen"));
         Describe(_fullScreen, _recording ? "CaptureBar_RecordFullScreenHelp" : "CaptureGuide2_FullScreenHelp", key: null);
         AutomationProperties.SetName(_scroll, UiText.Get("Text_4DBA30197C0A"));
-        Describe(_scroll, "CaptureBar_ScrollHelp", key: null);
+        Describe(_scroll, "CaptureBar_ScrollHelp", "S");
         AutomationProperties.SetName(_delay, UiText.Get("CaptureBar_Delay"));
-        Describe(_delay, "CaptureBar_DelayHelp", key: null);
+        Describe(_delay, "CaptureBar_DelayHelp", "D");
         AutomationProperties.SetName(_ratio, UiText.Get("Crop.Ratio"));
         Describe(_ratio, "CaptureRatio_Help", "R");
         AutomationProperties.SetName(_text, UiText.Get("CaptureGuide2_Text"));

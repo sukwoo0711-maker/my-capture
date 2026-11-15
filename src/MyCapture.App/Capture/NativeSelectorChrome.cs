@@ -40,6 +40,10 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private RectD? _tabRequestedTarget, _tabRequestedShown;
     private double _tabRequestedScale;
     private bool _tabRequestedMonitor, _tabRequestedText, _tabRequestedElement, _tabRequestedElementHint;
+    private CaptureSelectorMode _tabRequestedMode;
+    private int _tabRequestedDelay;
+    private string? _colorGuide, _scrollGuide;
+    private bool _magnifierParked;
     private int _guideRevision, _tabGuideRevision = -1;
     private readonly Rect[] _tabAvoid = new Rect[2];
     private readonly CaptureModeBar _bar;
@@ -186,6 +190,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-magnifier-ready");
         _rendered = false;
+        _magnifierParked = false;
         _showingWindows = false;
         _guideVisible = true;
         ResetGuides();
@@ -500,8 +505,13 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.ActiveRatio);
         }
         bool precision = owner.PrecisionActive && owner.ToastMessage is null;
-        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide
-            : owner.Mode == CaptureSelectorMode.Freeform ? _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing") : _defaultGuide);
+        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide : owner.Mode switch
+        {
+            CaptureSelectorMode.Freeform => _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing"),
+            CaptureSelectorMode.Color => _colorGuide ??= UiText.Get("CaptureGuide2_ClickColor") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            CaptureSelectorMode.Scroll => _scrollGuide ??= UiText.Get("CaptureGuide2_ClickScroll") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            _ => _defaultGuide,
+        });
         if (_guideText.Text != guideText) _guideText.Text = guideText;
         if (_guideLayoutDirty || precision != _precisionGuideShown)
         {
@@ -581,8 +591,27 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             _staticReadoutBounds = new Rect(readout.X, readout.Y, readout.Width, readout.Height);
             owner.SetChromeStamps(stamps);
         }
-        if (_magnifier is not null && _magnifierWindow is not null && _magnifierSource is { } source && owner.Frame is { } frame)
+        if (_magnifierWindow is { } parked && !owner.MagnifierShown)
         {
+            if (!_magnifierParked)
+            {
+                // Keep the shown HWND out of the desktop, like the readout: no show, hide or restack.
+                ChromeGeometry geometry = _geometry[parked];
+                geometry.Bounds = new RectD(owner.ScreenBounds.Left - geometry.Size.Width * area.Scale - 64,
+                    owner.ScreenBounds.Top, geometry.Size.Width * area.Scale, geometry.Size.Height * area.Scale).ToPixelBounds();
+                ApplyPhysicalBounds(parked, geometry, Follow(parked));
+                _magnifierParked = true;
+            }
+        }
+        else if (_magnifier is not null && _magnifierWindow is not null && _magnifierSource is { } source && owner.Frame is { } frame)
+        {
+            _magnifierParked = false;
+            bool colorMode = owner.Mode == CaptureSelectorMode.Color;
+            if (_magnifierAdornment!.ColorMode != colorMode)
+            {
+                if (colorMode) _magnifierAdornment.Format = owner.ReadColorFormat();
+                _magnifierAdornment.ColorMode = colorMode;
+            }
             int width = Math.Min(15, source.PixelWidth), height = Math.Min(15, source.PixelHeight);
             int x = Math.Clamp((int)(pointer.X - frame.ScreenBounds.Left) - width / 2, 0, source.PixelWidth - width);
             int y = Math.Clamp((int)(pointer.Y - frame.ScreenBounds.Top) - height / 2, 0, source.PixelHeight - height);
@@ -620,10 +649,12 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         if (_tabRequestedTarget == target && _tabRequestedShown == shown && _tabRequestedScale == area.Scale
             && _tabRequestedMonitor == owner.HoverWholeMonitor && _tabRequestedText == owner.TextCaptureMode
             && _tabRequestedElement == owner.HoverElement && _tabRequestedElementHint == owner.ElementWheelHint
+            && _tabRequestedMode == owner.Mode && _tabRequestedDelay == owner.DelaySeconds
             && _tabGuideRevision == _guideRevision) return;
         _tabRequestedTarget = target; _tabRequestedShown = shown; _tabRequestedScale = area.Scale;
         _tabRequestedMonitor = owner.HoverWholeMonitor; _tabRequestedText = owner.TextCaptureMode;
         _tabRequestedElement = owner.HoverElement; _tabRequestedElementHint = owner.ElementWheelHint;
+        _tabRequestedMode = owner.Mode; _tabRequestedDelay = owner.DelaySeconds;
         _tabGuideRevision = _guideRevision;
         if (_hoverTabPending || _sizeWindow is not { } size) return;
         _hoverTabPending = NativeSelectorInterop.SetTimer(_geometry[size].Handle, HoverTabTimerId, 1, IntPtr.Zero) != 0;
@@ -655,7 +686,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         else _tabAvoid[1] = Rect.Empty;
         Rect tab = _hoverTab.Render(owner.ShownHoverForTest ?? target, target, owner.HoverWholeMonitor,
-            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid, owner.HoverElement, owner.ElementWheelHint);
+            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid, owner.HoverElement, owner.ElementWheelHint,
+            owner.Mode == CaptureSelectorMode.Scroll, owner.DelaySeconds);
         if (!_sizePanel.ShowsHoverTab)
         {
             _sizePanel.ShowsHoverTab = true;

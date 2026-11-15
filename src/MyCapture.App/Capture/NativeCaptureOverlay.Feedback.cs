@@ -31,6 +31,13 @@ internal sealed partial class NativeCaptureOverlay
         if (_closed || _visualFeedback is null) return;
         var pointer = _pointerInitialized ? _effectivePointer.Offset(-_bounds.Left, -_bounds.Top) : (MyCapture.Core.Primitives.PointD?)null;
         bool overBar = _pointerInitialized && _feedbackModeBarBounds?.Contains(_effectivePointer) == true;
-        _visualFeedback.Update(pointer, SelectionAnchor, ShowSelectionGrid && !_dragging && Selection is null, overBar);
+        NativePointerStyle style = Mode switch
+        {
+            CaptureSelectorMode.Color => NativePointerStyle.Eyedropper,
+            CaptureSelectorMode.Scroll => NativePointerStyle.None,
+            _ => NativePointerStyle.Crosshair,
+        };
+        _visualFeedback.Update(pointer, SelectionAnchor,
+            style == NativePointerStyle.Crosshair && ShowSelectionGrid && !_dragging && Selection is null, overBar, style);
     }
 }

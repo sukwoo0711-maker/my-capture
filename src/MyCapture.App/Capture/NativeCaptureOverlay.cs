@@ -246,11 +246,14 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         SelectorTimeline.Mark?.Invoke("native-chrome-create-start");
         NativeSelectorChrome chrome = ChromeStrategy == NativeSelectorChromeStrategy.Retained
-            ? NativeSelectorChromeCache.Acquire(this, _showMagnifier, RequireCaptureExclusion)
-            : new NativeSelectorChrome(this, _showMagnifier, RequireCaptureExclusion);
+            ? NativeSelectorChromeCache.Acquire(this, MagnifierAvailable, RequireCaptureExclusion)
+            : new NativeSelectorChrome(this, MagnifierAvailable, RequireCaptureExclusion);
         SelectorTimeline.Mark?.Invoke("native-chrome-create-complete");
         return chrome;
     }
+
+    // The colour mode needs the magnifier even when the setting leaves it off; it stays out of sight otherwise.
+    private bool MagnifierAvailable => _showMagnifier || CopyColorText is not null;
 
     internal void SetChromeStamps(IReadOnlyList<NativeSelectorStamp> stamps)
     {
@@ -297,6 +300,14 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         DismissStartGuide();
         if (Mode == CaptureSelectorMode.Color) { _ = CopyColorAtPointerAsync(); return; }
         if (Mode == CaptureSelectorMode.Freeform) { BeginFreeform(Clamp(bitmapPoint)); return; }
+        if (Mode == CaptureSelectorMode.Scroll)
+        {
+            // A click picks the window; a drag selects nothing.
+            _anchor = Clamp(bitmapPoint);
+            RefreshHover();
+            _scrollPressed = true;
+            return;
+        }
         ResetRefitCycle();
         _anchor = Clamp(bitmapPoint);
         RefreshHover();
@@ -327,6 +338,12 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     {
         try
         {
+        if (_scrollPressed)
+        {
+            _scrollPressed = false;
+            if (!_closed && Mode == CaptureSelectorMode.Scroll && IsWindowClick(Clamp(bitmapPoint))) RequestScroll(_anchor);
+            return;
+        }
         if (_closed || !_dragging) return;
         if (Mode == CaptureSelectorMode.Freeform)
         {
@@ -385,6 +402,13 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     internal void ConfirmCurrent()
     {
         if (Mode == CaptureSelectorMode.Freeform) return;
+        if (Mode == CaptureSelectorMode.Color) { _ = CopyColorAtPointerAsync(); return; }
+        if (Mode == CaptureSelectorMode.Scroll)
+        {
+            RefreshHover();
+            RequestScroll(Clamp(EffectivePointer.Offset(-_bounds.Left, -_bounds.Top)));
+            return;
+        }
         if (Selection is null && !_dragging)
         {
             RefreshHover();
@@ -436,7 +460,8 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             Hide();
             SelectionCompleted?.Invoke(this, new CaptureSelectionCompletedEventArgs(frame, region, crop, source.Title,
                 recordForRepeat: freeform is null, sourcePageUrl: source.PageUrl) { SourceDetails = source.Details, PendingSource = pending, TextCapture = TextCaptureMode,
-                    PinRequested = pinRequested });
+                    PinRequested = pinRequested, Freeform = freeform,
+                    DelaySeconds = TextCaptureMode || pinRequested ? 0 : DelaySeconds });
         }
         finally { Close(); }
     }
@@ -577,6 +602,11 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
             case 0x000F:
                 Paint(hwnd);
                 return IntPtr.Zero;
+            case 0x0020 when (lParam.ToInt64() & 0xffff) == 1 && Mode is CaptureSelectorMode.Scroll or CaptureSelectorMode.Color:
+                // WM_SETCURSOR over the client: the scroll cursor, or none under the drawn eyedropper.
+                // The message already names this window, so no lookup runs on the move path.
+                _ = NativeSelectorInterop.SetCursor(ModeCursor());
+                return new IntPtr(1);
             case 0x020A: // WM_MOUSEWHEEL: signed high word, 120 units per level.
                 if (HandleElementWheel(unchecked((short)((wParam.ToInt64() >> 16) & 0xffff)))) return IntPtr.Zero;
                 break;
@@ -637,6 +667,30 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 break;
         }
         return NativeSelectorInterop.DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    private static IntPtr _scrollCursor;
+
+    /// <summary>The system cursor the mode asks for while the pointer is over the selector (shared, never destroyed).</summary>
+    private IntPtr ModeCursor() => Mode switch
+    {
+        // The Windows vertical scroll (pan) cursor, else the vertical resize arrows.
+        CaptureSelectorMode.Scroll => _scrollCursor != IntPtr.Zero ? _scrollCursor : _scrollCursor = LoadScrollCursor(),
+        CaptureSelectorMode.Color => IntPtr.Zero,
+        _ => NativeSelectorInterop.LoadCursor(IntPtr.Zero, new IntPtr(32515)),
+    };
+
+    /// <summary>Applies <see cref="ModeCursor"/> at once after a mode change, when the pointer is over the selector.</summary>
+    private void RefreshSystemCursor()
+    {
+        if (_closed || !IsVisible) return;
+        if (NativeSelectorInterop.WindowFromPoint(ReadCursor()) == Handle) _ = NativeSelectorInterop.SetCursor(ModeCursor());
+    }
+
+    private static IntPtr LoadScrollCursor()
+    {
+        IntPtr cursor = NativeSelectorInterop.LoadCursor(IntPtr.Zero, new IntPtr(32652));
+        return cursor != IntPtr.Zero ? cursor : NativeSelectorInterop.LoadCursor(IntPtr.Zero, new IntPtr(32645));
     }
 
     private PointD Pointer()

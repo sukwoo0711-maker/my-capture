@@ -298,7 +298,7 @@ public partial class App
     }
 
     private bool IsWelcomeCaptureInProgress => _preparingAdvancedCapture || _overlay?.IsSelecting == true
-        || _activeCountdown is not null || _scrollCancellation is not null || !_capturePersistenceTask.IsCompleted
+        || _overlay?.IsCountingDown == true || _scrollCancellation is not null || !_capturePersistenceTask.IsCompleted
         || _recorder?.IsActive == true;
 
     /// <summary>Also retried after hotkey registration, even when the capture chord itself is unchanged.</summary>

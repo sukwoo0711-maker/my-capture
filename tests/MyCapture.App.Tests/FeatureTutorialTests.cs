@@ -134,7 +134,8 @@ public sealed class FeatureTutorialTests
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
             SaveHelpEvidence(help, tabs, language);
-            Assert.Equal(109, rows.Length);
+            // 111: the selector tab gained the S (scrolling capture) and D (delay) rows.
+            Assert.Equal(111, rows.Length);
             foreach (var (label, shortcut) in new[]
             {
                 ("Shortcuts.Parent", "Alt+↑"),

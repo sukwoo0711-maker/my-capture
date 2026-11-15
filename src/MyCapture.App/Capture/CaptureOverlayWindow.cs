@@ -164,6 +164,18 @@ internal sealed class CaptureOverlayWindow : Window
 
     internal void ConfirmSelectionAsPin() => _view.ConfirmSelectionAsPin();
 
+    /// <summary>Switches the selector's mode as the bar would.</summary>
+    internal void SelectMode(CaptureSelectorMode mode) => _view.SelectMode(mode);
+
+    internal CaptureSelectorMode Mode => _view.Mode;
+
+    /// <summary>The delay armed in the bar (0 for none).</summary>
+    internal int ArmedDelaySeconds
+    {
+        get => _view.ArmedDelaySeconds;
+        set => _view.ArmedDelaySeconds = value;
+    }
+
     internal string? FreeformUnavailableReason
     {
         get => _view.FreeformUnavailableReason;
@@ -506,6 +518,8 @@ internal sealed class CaptureOverlayWindow : Window
                     PinRequested = pinRequested,
                     SourceDetails = source.Details,
                     PendingSource = pendingSource,
+                    Freeform = freeformMask,
+                    DelaySeconds = textCapture || pinRequested ? 0 : _view.DelaySeconds,
                 });
         }
         finally
@@ -673,6 +687,23 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     /// </summary>
     internal bool TextCapture { get; init; }
     internal bool PinRequested { get; init; }
+
+    /// <summary>The freeform outline the selection was cut with; null for a rectangle.</summary>
+    internal MyCapture.Core.Capture.FreeformMask? Freeform { get; init; }
+
+    /// <summary>
+    /// Seconds armed in the selector: the region is captured again from the screen when they have
+    /// passed, and that capture is what is kept. Zero captures the frozen frame at once.
+    /// </summary>
+    internal int DelaySeconds { get; init; }
+
+    /// <summary>The same selection over <paramref name="frame"/>, a later picture of the same desktop.</summary>
+    internal CaptureSelectionCompletedEventArgs Retaken(FrozenFrame frame, System.Windows.Media.Imaging.BitmapSource selectedBitmap) =>
+        new(frame, BitmapRegion, selectedBitmap, SourceTitle, RecordForRepeat, SourcePageUrl)
+        {
+            SourceDetails = SourceDetails, PendingSource = PendingSource, TextCapture = TextCapture,
+            PinRequested = PinRequested, Freeform = Freeform, PracticeTarget = PracticeTarget,
+        };
 }
 
 /// <summary>The window a selection captured: its title, page and application, each possibly empty.</summary>

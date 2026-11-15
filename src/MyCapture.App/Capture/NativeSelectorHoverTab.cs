@@ -15,7 +15,11 @@ internal sealed class NativeSelectorHoverTab
         UiText.Get("CaptureGuide2_ClickWindowText"), UiText.Get("CaptureGuide2_ClickMonitorText"),
         UiText.Get("CaptureGuide2_ClickElement"), UiText.Get("CaptureGuide2_ClickElementText"),
         UiText.Get("CaptureGuide2_ClickWindow") + UiText.Get("CaptureGuide2_ElementWheelHint"),
-        UiText.Get("CaptureGuide2_ClickWindowText") + UiText.Get("CaptureGuide2_ElementWheelHint")];
+        UiText.Get("CaptureGuide2_ClickWindowText") + UiText.Get("CaptureGuide2_ElementWheelHint"),
+        UiText.Get("CaptureGuide2_ClickScroll")];
+    private const int ScrollLabel = 8;
+    private string? _delayedLabel;
+    private int _delayedIndex = -1, _delayedSeconds;
     private readonly DrawingGroup _drawing = new();
     private FormattedText? _labelText, _sizeText;
     private int _labelIndex = -1, _width, _height;
@@ -40,22 +44,30 @@ internal sealed class NativeSelectorHoverTab
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
     }
 
+    /// <summary>
+    /// Draws the tab for <paramref name="target"/>. The scroll mode names its own click; an armed
+    /// delay (seconds above zero) follows the label of a capture click.
+    /// </summary>
     internal Rect Render(RectD shown, RectD target, bool wholeMonitor, bool textMode, double scale,
-        Size viewport, IReadOnlyList<Rect> avoid, bool element = false, bool elementHint = false)
+        Size viewport, IReadOnlyList<Rect> avoid, bool element = false, bool elementHint = false,
+        bool scrollMode = false, int delaySeconds = 0)
     {
         RenderCount++;
-        int index = element ? (textMode ? 5 : 4) : elementHint && !wholeMonitor ? (textMode ? 7 : 6)
+        int index = scrollMode ? ScrollLabel : element ? (textMode ? 5 : 4) : elementHint && !wholeMonitor ? (textMode ? 7 : 6)
             : (textMode ? 2 : 0) + (wholeMonitor ? 1 : 0);
+        int delay = scrollMode || textMode ? 0 : Math.Max(0, delaySeconds);
         int width = (int)target.Width, height = (int)target.Height;
-        if (_labelText is null || _labelIndex != index || _width != width || _height != height || _scale != scale)
+        if (_labelText is null || _labelIndex != index || _width != width || _height != height || _scale != scale
+            || _delayedSeconds != delay)
         {
             string size = $"{width} × {height}";
-            _labelText = new FormattedText(_labels[index], UiText.Culture, FlowDirection.LeftToRight,
+            string text = Label(index, delay);
+            _labelText = new FormattedText(text, UiText.Culture, FlowDirection.LeftToRight,
                 _ui, TypeScale.Caption, _text, scale);
             _sizeText = new FormattedText(size, UiText.Culture, FlowDirection.LeftToRight,
                 _mono, TypeScale.Caption, _text, scale);
-            TargetLabel = _labels[index] + "  " + size;
-            _labelIndex = index; _width = width; _height = height; _scale = scale;
+            TargetLabel = text + "  " + size;
+            _labelIndex = index; _width = width; _height = height; _scale = scale; _delayedSeconds = delay;
             LayoutCount++;
         }
         FormattedText label = _labelText, dimensions = _sizeText!;
@@ -76,6 +88,18 @@ internal sealed class NativeSelectorHoverTab
             dc.DrawText(dimensions, new Point(tab.Width - 9 - dimensions.Width, (tab.Height - dimensions.Height) / 2));
         dc.Pop();
         return tab;
+    }
+
+    // The delayed label is built once per label and delay, never per frame.
+    private string Label(int index, int delay)
+    {
+        if (delay <= 0) return _labels[index];
+        if (_delayedLabel is null || _delayedIndex != index || _delayedSeconds != delay)
+        {
+            _delayedLabel = _labels[index] + "  ·  " + UiText.Format("CaptureGuide2_DelaySuffix", delay);
+            _delayedIndex = index;
+        }
+        return _delayedLabel;
     }
 
     internal void Clear()
