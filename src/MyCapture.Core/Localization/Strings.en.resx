@@ -4809,7 +4809,7 @@ Turn off: {0}</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. Click Copy in the card or press C.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. Press Ctrl+V in the destination to use the capture.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
-  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Place the pointer over the color and press C.</value></data>
+  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Press C for the eyedropper, then click the color to copy.</value></data>
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. Paste the value with Ctrl+V. Its format follows your color-format setting.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. Select Rectangle and drag over the area to mark.</value></data>

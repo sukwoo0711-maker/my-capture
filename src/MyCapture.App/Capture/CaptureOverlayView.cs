@@ -2083,7 +2083,10 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>What a click on a highlighted window or monitor does in the current mode.</summary>
-    private string ClickKey(bool wholeMonitor) => HoverElement && !wholeMonitor
+    private string ClickKey(bool wholeMonitor) => _scrollMode
+        // Scrolling capture takes the window under the pointer, as the native selector's tab says.
+        ? "CaptureGuide2_ClickScroll"
+        : HoverElement && !wholeMonitor
         ? (_textCaptureMode ? "CaptureGuide2_ClickElementText" : "CaptureGuide2_ClickElement")
         : (_textCaptureMode, wholeMonitor) switch
     {

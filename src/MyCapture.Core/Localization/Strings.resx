@@ -4809,7 +4809,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. 카드에서 복사 버튼을 선택하거나 C를 누릅니다.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. 붙여 넣을 곳에서 Ctrl+V를 눌러 결과를 사용합니다.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. 영역 캡처를 시작합니다.</value></data>
-  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. 복사할 색상 위에 포인터를 놓고 C를 누릅니다.</value></data>
+  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. C를 눌러 스포이드로 바꾸고, 복사할 색을 클릭합니다.</value></data>
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. 색상 형식 설정에 따른 값을 Ctrl+V로 붙여 넣습니다.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. 사각형 도구를 선택하고 표시할 부분을 드래그합니다.</value></data>
