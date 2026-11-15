@@ -346,9 +346,11 @@ internal sealed class PracticeGuideScene : TutorialScene
         dc.DrawImage(_frozen!, Stage.SceneBounds);
         BitmapSource receipt = OffscreenWindow.SnapshotElement(_receiptRoot!, _receiptRoot!.ActualWidth,
             _receiptRoot.ActualHeight, opaque: false);
-        double left = Math.Min(Stage.Width - _receiptRoot.ActualWidth - 18, _sampleBounds.Right + 18);
-        double top = Math.Max(12, Stage.SceneHeight - _receiptRoot.ActualHeight - 12);
-        dc.DrawImage(receipt, new Rect(left, top, _receiptRoot.ActualWidth, _receiptRoot.ActualHeight));
+        // QuickAccessWindow.Position: the card waits in the bottom-right corner of the work area,
+        // wherever the capture was taken. This practice desktop has no taskbar.
+        Rect placed = QuickAccessWindow.Position(new RectD(0, 0, Stage.Width, Stage.SceneHeight), 1,
+            _receiptRoot.ActualWidth, _receiptRoot.ActualHeight, _receipt.AllowsTransparency ? QuickAccessWindow.ShadowBand : 0);
+        dc.DrawImage(receipt, new Rect(placed.X, placed.Y, _receiptRoot.ActualWidth, _receiptRoot.ActualHeight));
     }
 
     private void PrepareLibrary()
