@@ -2833,7 +2833,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>Reopen open pins at the next launch</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>Each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place and size at the next launch. Pins you close yourself do not reopen. Turning this off deletes the saved pins right away.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>Include pointer in recordings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -3561,7 +3561,7 @@ Open the library or Settings from the tray menu.</value></data>
 <data name="SettingsGuide.G08.restart.Title" xml:space="preserve"><value>Restore open pins on launch</value></data>
 <data name="SettingsGuide.G08.restart.Before" xml:space="preserve"><value>Restore on launch off</value></data>
 <data name="SettingsGuide.G08.restart.After" xml:space="preserve"><value>Restore on launch on</value></data>
-<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins on exit and restore them on the next launch.</value></data>
+<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins whenever they change and restore them on the next launch. Pins you close yourself are not restored.</value></data>
 <data name="SettingsGuide.G08.reopen.Title" xml:space="preserve"><value>Closed pin restore limit</value></data>
 <data name="SettingsGuide.G08.reopen.Before" xml:space="preserve"><value>Close pin</value></data>
 <data name="SettingsGuide.G08.reopen.After" xml:space="preserve"><value>Reopen closed pin</value></data>

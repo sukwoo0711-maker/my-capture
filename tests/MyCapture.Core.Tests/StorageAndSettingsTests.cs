@@ -407,7 +407,9 @@ public sealed class SettingsStoreTests
         SettingsStore store = CreateStore(workspace);
         AppSettings settings = store.Load();
 
-        Assert.Equal(300, settings.Queue.MaxItems);
+        // Defaults, with the library limits of a new installation: a damaged file never starts expiring captures.
+        Assert.Equal(1000, settings.Queue.MaxItems);
+        Assert.Equal(MyCapture.Core.Queue.CaptureRetention.NeverHours, settings.Queue.ImageRetentionHours);
         Assert.NotEmpty(store.LastLoadWarnings);
     }
 

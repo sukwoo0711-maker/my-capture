@@ -96,8 +96,10 @@ public sealed class SettingsStore
 
             // A missing file is a new installation and starts from the new-install defaults.
             // An unreadable existing file belongs to an existing user, whose legacy defaults
-            // (and so whose global shortcuts) stay exactly as before.
+            // (and so whose global shortcuts) stay as before, except the library limits: a damaged
+            // file must not turn on the earlier seven-day expiry over captures the user was keeping.
             settings = existed ? new AppSettings() : NewInstallDefaults.Create();
+            if (existed) NewInstallDefaults.ApplyLibraryRetention(settings.Queue);
             settings.General.IsFirstRun = !existed;
         }
         else if (TryDeserialize(text, out AppSettings? parsed) && parsed is not null)
@@ -111,6 +113,7 @@ public sealed class SettingsStore
             warnings.Add(UiText.Get("Text_1E94B43DC922"));
             _log.LogWarning("Settings text passed validation but failed to deserialize; using defaults");
             settings = new AppSettings();
+            NewInstallDefaults.ApplyLibraryRetention(settings.Queue);
         }
 
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
@@ -415,6 +418,14 @@ public sealed class SettingsStore
 
         s.Pin.ClosedWindowRestoreLimit = ClampWithWarning(
             s.Pin.ClosedWindowRestoreLimit, 0, 100, nameof(PinSettings.ClosedWindowRestoreLimit), warnings);
+
+        if (s.Pin.RestoreOpenPinsRevision < 1)
+        {
+            // Open-pin restore became the default for existing users too. It was off for files
+            // written before that, so turn it on once; Settings writes the marker with any later choice.
+            s.Pin.RestoreOpenPinsOnLaunch = true;
+            s.Pin.RestoreOpenPinsRevision = 1;
+        }
 
         s.Pin.ZoomStep = ClampWithWarning(
             s.Pin.ZoomStep, 0.02, 0.5, nameof(PinSettings.ZoomStep), warnings);

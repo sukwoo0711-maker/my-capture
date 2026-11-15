@@ -175,7 +175,7 @@ internal sealed partial class PinManager
         double Opacity,
         PinClosedPlacement? Placement,
         long OpenedOrder = 0, Guid LogicalPracticeId = default,
-        bool IsCollapsed = false, double? CollapsedOpacity = null);
+        bool IsCollapsed = false, double? CollapsedOpacity = null, bool IsClickThrough = false);
 
     private sealed record EncodedClosedPin(
         Task<EncodedPinContent> Content,
@@ -307,7 +307,8 @@ internal sealed partial class PinManager
             pin.State.ExpandedOpacity,
             pin.GetCurrentPlacement(),
             openingAge[pin], IsCollapsed: pin.State.IsCollapsed,
-            CollapsedOpacity: pin.State.IsCollapsed ? pin.State.Opacity : null)).ToArray();
+            CollapsedOpacity: pin.State.IsCollapsed ? pin.State.Opacity : null,
+            IsClickThrough: pin.State.IsClickThrough)).ToArray();
     }
 
     /// <summary>Number of open pins.</summary>
@@ -598,17 +599,34 @@ internal sealed partial class PinManager
         }
     }
 
-    /// <summary>Reopens a saved open pin without activation, guidance, or closed-history changes.</summary>
+    /// <summary>
+    /// Reopens a saved open pin without activation, guidance, or closed-history changes. Unlike a
+    /// closed pin reopened on request, it comes back exactly as the exit left it, click-through included:
+    /// the pin's recovery handle and the open-pins menu still reach it.
+    /// </summary>
     internal PinWindow RestoreSessionPin(ClosedPin snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        return RestorePin(snapshot, activate: false);
+        PinWindow pin = RestorePin(snapshot, activate: false);
+        if (snapshot.IsClickThrough && !pin.IsClosed) pin.ApplyClickThrough(enabled: true);
+        return pin;
+    }
+
+    /// <summary>
+    /// Puts restored session pins back in their saved stacking order, bottom to top. A pin settles its
+    /// position and size after it is shown, which can raise it above a pin restored after it.
+    /// </summary>
+    internal void RestackSessionPins(IReadOnlyList<PinWindow> bottomToTop)
+    {
+        Prune();
+        IntPtr[] handles = bottomToTop.Where(pin => !pin.IsClosed && _pins.Contains(pin)).Select(pin => pin.Handle).ToArray();
+        if (handles.Length > 1) PinWindowOrder.StackBottomToTop(handles);
     }
 
     private PinWindow RestorePin(ClosedPin closed, bool activate)
     {
-        // Click-through is deliberately not carried over: the new state starts interactive.
-        // A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
+        // Click-through is not carried over to a closed pin reopened on request: the new state starts
+        // interactive. A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
         // zoom or open its menu, and the user is reopening this pin precisely to work with it.
         // Hidden (Shift+F3) state is not carried over either; a restored pin is shown.
         var state = new PinViewState(

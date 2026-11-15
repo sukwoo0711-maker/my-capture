@@ -125,6 +125,7 @@ public static class AppSettingsClone
         CloseOnDoubleClick = s.CloseOnDoubleClick,
         SnapWhileDragging = s.SnapWhileDragging,
         RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
+        RestoreOpenPinsRevision = s.RestoreOpenPinsRevision,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,
         InitialOpacity = s.InitialOpacity,
         ClosedWindowRestoreLimit = s.ClosedWindowRestoreLimit,
