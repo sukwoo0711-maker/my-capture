@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.Core.Localization;
 using Xunit;
@@ -87,19 +88,20 @@ public sealed class EditorToolRailFitTests(ITestOutputHelper output) : KoreanCap
 
         if (width == 0 && Environment.GetEnvironmentVariable("MYCAPTURE_EDTOOLS_OUT") is { Length: > 0 } folder)
         {
-            string target = Path.Combine(folder, "after");
-            Directory.CreateDirectory(target);
+            if (string.IsNullOrWhiteSpace(folder)) return;
+            if (!Path.IsPathFullyQualified(folder)) throw new IOException("Evidence requires an absolute output directory.");
+            string target = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(folder), "after"));
             string tag = language[..2];
-            File.AppendAllText(Path.Combine(target, "rail-fit.csv"), string.Create(CultureInfo.InvariantCulture,
+            File.AppendAllText(DiagnosticOutputPaths.Child(target, "rail-fit.csv"), string.Create(CultureInfo.InvariantCulture,
                 $"{tag},{window.ActualWidth},{window.ActualHeight},with-eraser,{rail.ActualHeight:0.##},{groups.ActualHeight:0.##},{spare:0.##},{compact}\n"));
-            Save(rail, Path.Combine(target, $"rail-minimum-{tag}-with-eraser.png"));
+            Save(rail, DiagnosticOutputPaths.Child(target, $"rail-minimum-{tag}-with-eraser.png"));
             // The rail as it was before the eraser: the freehand group back to one row.
             eraser.Visibility = Visibility.Collapsed;
             window.UpdateLayout();
             double spareBefore = rail.ActualHeight - rail.Padding.Top - rail.Padding.Bottom - groups.ActualHeight;
-            File.AppendAllText(Path.Combine(target, "rail-fit.csv"), string.Create(CultureInfo.InvariantCulture,
+            File.AppendAllText(DiagnosticOutputPaths.Child(target, "rail-fit.csv"), string.Create(CultureInfo.InvariantCulture,
                 $"{tag},{window.ActualWidth},{window.ActualHeight},without-eraser,{rail.ActualHeight:0.##},{groups.ActualHeight:0.##},{spareBefore:0.##},{tools[EditorTool.Pen].Margin.Top == 0}\n"));
-            Save(rail, Path.Combine(target, $"rail-minimum-{tag}-without-eraser.png"));
+            Save(rail, DiagnosticOutputPaths.Child(target, $"rail-minimum-{tag}-without-eraser.png"));
             eraser.Visibility = Visibility.Visible;
         }
     });

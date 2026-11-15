@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.Core.Primitives;
 using Xunit;
@@ -32,8 +33,8 @@ public sealed class EditorToolCursorEvidenceTests
         string? phase = Environment.GetEnvironmentVariable("MYCAPTURE_EDTOOLS_PHASE");
         string? output = Environment.GetEnvironmentVariable("MYCAPTURE_EDTOOLS_OUT");
         if (phase is not ("before" or "after") || string.IsNullOrWhiteSpace(output)) return;
-        string folder = Path.Combine(output, phase);
-        Directory.CreateDirectory(folder);
+        if (!Path.IsPathFullyQualified(output)) throw new IOException("Evidence requires an absolute output directory.");
+        string folder = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(output), phase));
 
         EditorCursorKind[] kinds = Enum.GetValues<EditorCursorKind>().Where(EditorCursorPolicy.IsCustom).ToArray();
         var table = new StringBuilder("kind,ink,size,frameW,frameH,glyphW,glyphH,hotX,hotY\n");
@@ -71,11 +72,11 @@ public sealed class EditorToolCursorEvidenceTests
             target.Render(sheet);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(target));
-            using FileStream stream = File.Create(Path.Combine(folder, $"cursors-{inkName}.png"));
+            using FileStream stream = File.Create(DiagnosticOutputPaths.Child(folder, $"cursors-{inkName}.png"));
             encoder.Save(stream);
         }
 
-        File.WriteAllText(Path.Combine(folder, "cursor-sizes.csv"), table.ToString());
+        File.WriteAllText(DiagnosticOutputPaths.Child(folder, "cursor-sizes.csv"), table.ToString());
     });
 
     /// <summary>The width and height of the visible (non-transparent) part of a cursor image.</summary>
