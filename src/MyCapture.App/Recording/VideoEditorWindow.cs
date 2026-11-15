@@ -1441,7 +1441,8 @@ internal sealed partial class VideoEditorWindow : Window
     {
         StopLoadTimers();
         _mediaFailed = true;
-        _mediaFailure = e?.ErrorException?.Message ?? UiText.Get("Text_6A72B554A7C2");
+        _mediaFailure = e?.ErrorException is { } playbackError
+            ? ThemedDialog.RecoveryMessage(playbackError) : UiText.Get("Text_6A72B554A7C2");
         _log.LogError(e?.ErrorException, "Playback of {Path} failed", _recording.OutputPath);
         _loadingLabel.Text = UiText.Get("Text_31527734190B");
         _loadingLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
@@ -2806,7 +2807,7 @@ internal sealed partial class VideoEditorWindow : Window
         catch (Exception error)
         {
             _log.LogError(error, "Could not open video export");
-            _statusLabel.Text = UiText.Format("MediaExport_Error", error.Message);
+            _statusLabel.Text = UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error));
         }
         finally { _exportDialog = null; }
     }

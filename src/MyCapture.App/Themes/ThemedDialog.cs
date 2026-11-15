@@ -211,6 +211,17 @@ internal sealed class ThemedDialog : Window
     });
 
     /// <summary>
+    /// <paramref name="general"/> followed by the specific cause when <paramref name="error"/> has one a person
+    /// can act on (an application message, a full disk, a file in use, no access); the general line alone otherwise,
+    /// so a generic fallback never repeats it.
+    /// </summary>
+    internal static string WithCause(string general, Exception error, string? location = null)
+    {
+        string? cause = UserFacingError.GetMessage(error) ?? StorageMessage(error, location);
+        return cause is null ? general : general + " " + cause;
+    }
+
+    /// <summary>
     /// A failed save: the storage case when one applies (full disk, file in use, no access),
     /// otherwise the generic "could not read or save" line, whatever the exception type.
     /// </summary>

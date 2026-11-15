@@ -176,7 +176,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_1125C68F3C22" xml:space="preserve">
-    <value>다운로드 취소</value>
+    <value>내려받기 취소</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_1145FCF19412" xml:space="preserve">
@@ -270,7 +270,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_195F0315EBCE" xml:space="preserve">
-    <value>설치 버전으로 전환합니다. 설치 위치: {0}{1}다운로드 후 설치한 앱을 다시 시작합니다. 현재 포터블 폴더와 그 안의 파일은 그대로 둡니다.</value>
+    <value>설치 버전으로 전환합니다. 설치 위치: {0}{1}내려받은 뒤 설치한 앱을 다시 시작합니다. 현재 포터블 폴더와 그 안의 파일은 그대로 둡니다.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_199EB510DA51" xml:space="preserve">
@@ -298,7 +298,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1C944F0E89C3" xml:space="preserve">
-    <value>공식 GitHub 저장소에서 최신 안정 버전을 확인합니다. 다운로드한 설치 파일의 SHA-256을 확인한 뒤 설치합니다.</value>
+    <value>공식 GitHub 저장소에서 최신 안정 버전을 확인합니다. 내려받은 설치 파일의 SHA-256을 확인한 뒤 설치합니다.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_1D9A98A69018" xml:space="preserve">
@@ -745,7 +745,7 @@
     <comment>src\MyCapture.App\Gallery\GalleryWindow.xaml</comment>
   </data>
   <data name="Text_42B9E5111FE2" xml:space="preserve">
-    <value>검증 정보 다운로드 중…</value>
+    <value>검증 정보 내려받는 중…</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_42DA25F8F77F" xml:space="preserve">
@@ -1426,7 +1426,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7926541DAB63" xml:space="preserve">
-    <value>업데이트 위치: {0}{1}다운로드 후 이 위치의 앱을 업데이트하고 다시 시작합니다.</value>
+    <value>업데이트 위치: {0}{1}내려받은 뒤 이 위치의 앱을 업데이트하고 다시 시작합니다.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_798E080A9262" xml:space="preserve">
@@ -2319,7 +2319,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_C68C66E8758A" xml:space="preserve">
-    <value>다운로드와 검증이 완료되었습니다. 작업을 저장한 뒤 설치하십시오.</value>
+    <value>내려받기와 검증이 완료되었습니다. 작업을 저장한 뒤 설치하십시오.</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_C7000F39A0DF" xml:space="preserve">
@@ -2365,7 +2365,7 @@
     <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_CE2F7B272674" xml:space="preserve">
-    <value>설치 파일 다운로드 중… {0:F0}%</value>
+    <value>설치 파일 내려받는 중… {0:F0}%</value>
     <comment>src\MyCapture.App\Updates\UpdateStrings.cs</comment>
   </data>
   <data name="Text_CE57D5CA2394" xml:space="preserve">
@@ -3891,7 +3891,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="StoreUpdate_StateAvailable" xml:space="preserve"><value>업데이트 있음</value></data>
   <data name="StoreUpdate_StateCurrent" xml:space="preserve"><value>사용 가능한 업데이트 없음</value></data>
   <data name="StoreUpdate_StateAwaitingConsent" xml:space="preserve"><value>Microsoft Store 설치 승인 대기</value></data>
-  <data name="StoreUpdate_StateDownloading" xml:space="preserve"><value>업데이트 다운로드 중</value></data>
+  <data name="StoreUpdate_StateDownloading" xml:space="preserve"><value>업데이트 내려받는 중</value></data>
   <data name="StoreUpdate_StateInstalling" xml:space="preserve"><value>업데이트 설치 중</value></data>
   <data name="StoreUpdate_StateRestartRequired" xml:space="preserve"><value>앱을 다시 실행하면 설치된 버전을 확인합니다.</value></data>
   <data name="StoreUpdate_StateCanceled" xml:space="preserve"><value>업데이트 취소됨</value></data>
@@ -5269,7 +5269,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Update_RetryAction" xml:space="preserve"><value>다시 시도</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>GitHub에서 이 앱의 새 버전을 확인합니다.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>작업을 저장한 뒤 새 버전을 설치합니다.</value></data>
-  <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 다운로드 페이지를 엽니다.</value></data>
+  <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 내려받기 페이지를 엽니다.</value></data>
   <data name="Welcome_AccurateOcr" xml:space="preserve"><value>정확한 한국어 글자 인식</value></data>
   <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>모델 약 {0} MB를 한 번만 뒤에서 내려받습니다. ‘빠름’보다 인식이 조금 느리며, 설정에서 바꿀 수 있습니다.</value></data>
   <data name="Source.Open" xml:space="preserve"><value>출처 열기</value></data>
@@ -5344,6 +5344,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings_FontScope" xml:space="preserve"><value>새 텍스트에 적용합니다. 기존 텍스트의 글꼴은 유지됩니다.</value></data>
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>원문 보기</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>서식 보기</value></data>
+  <data name="Pin_MarkdownContinued" xml:space="preserve"><value>나머지 내용은 F2에서 확인합니다.</value></data>
+  <data name="Pin_MarkdownDrawing" xml:space="preserve"><value>그리는 중</value></data>
+  <data name="Pin_MarkdownDiagramFallback" xml:space="preserve"><value>그림을 표시할 수 없어 원문을 보여줍니다.</value></data>
+  <data name="Pin_MermaidSyntaxLength" xml:space="preserve"><value>Mermaid 문법과 길이를 확인하십시오.</value></data>
+  <data name="Pin_MermaidSyntax" xml:space="preserve"><value>Mermaid 문법을 확인하십시오.</value></data>
+  <data name="Pin_MermaidTooLarge" xml:space="preserve"><value>Mermaid 그림이 너무 큽니다.</value></data>
+  <data name="Pin_MermaidNoWebView" xml:space="preserve"><value>WebView2 런타임이 없어 그림을 표시할 수 없습니다.</value></data>
+  <data name="Pin_MermaidUnavailable" xml:space="preserve"><value>Mermaid 그림을 표시할 수 없습니다.</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>설치</value></data>
   <data name="Pin_TranslationConsent" xml:space="preserve"><value>{1} 번역 모델 {0} MB를 내려받습니다.
 글은 PC 밖으로 나가지 않습니다.

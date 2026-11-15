@@ -258,7 +258,7 @@ public partial class App
         catch (Exception ex)
         {
             _log?.LogWarning(ex, "Could not apply the welcome's start-at-sign-in choice");
-            return new StartAtSignInOutcome(false, UiText.Format("Text_0FA1A9D03BE3", ex.Message));
+            return new StartAtSignInOutcome(false, UiText.Format("Text_0FA1A9D03BE3", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)));
         }
     }
 

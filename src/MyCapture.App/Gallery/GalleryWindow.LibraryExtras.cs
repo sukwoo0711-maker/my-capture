@@ -1,4 +1,5 @@
 using System.IO;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -51,7 +52,7 @@ internal sealed partial class GalleryWindow
         {
             if (await _queue.SaveSearchAsync(name, query, search?.Id) is null)
                 throw new InvalidOperationException("The saved search no longer exists.");
-        }) { Owner = this };
+        }, _log) { Owner = this };
         if (dialog.ShowDialog() == true) ShowActionStatus(UiText.Get("Library.SavedSearch.Saved"));
     }
 
@@ -72,7 +73,10 @@ internal sealed partial class GalleryWindow
             ShowActionStatus(UiText.Get("Library.SavedSearch.Deleted"));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { ShowActionStatus(UiText.Get("Library.SavedSearch.Failed")); }
+        {
+            _log.LogWarning(ex, "Could not delete a saved search");
+            ShowActionStatus(ThemedDialog.WithCause(UiText.Get("Library.SavedSearch.Failed"), ex));
+        }
     }
 
     private void OnLibraryUndoRecorded(object? sender, EventArgs e)
@@ -118,7 +122,8 @@ internal sealed partial class GalleryWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
         {
-            ShowActionStatus(UiText.Get("Library.Undo.Failed"), UiText.Get("LibraryUndo_Action"),
+            _log.LogWarning(ex, "Could not undo or redo the last library change");
+            ShowActionStatus(ThemedDialog.WithCause(UiText.Get("Library.Undo.Failed"), ex), UiText.Get("LibraryUndo_Action"),
                 UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
         }
     }
@@ -206,7 +211,7 @@ internal sealed partial class GalleryWindow
 internal sealed class GallerySavedSearchDialog : Window
 {
     private bool _saving;
-    internal GallerySavedSearchDialog(string name, Func<string, Task> save)
+    internal GallerySavedSearchDialog(string name, Func<string, Task> save, ILogger? log = null)
     {
         StandardWindowTheme.Apply(this);
         Title = UiText.Get(name.Length == 0 ? "Library.SavedSearch.Save" : "Library.SavedSearch.Rename");
@@ -235,7 +240,10 @@ internal sealed class GallerySavedSearchDialog : Window
             try { await save(input.Text); saved = true; }
             catch (ArgumentException) { KoreanWordWrap.Show(error, UiText.Get("Library.SavedSearch.Invalid")); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            { KoreanWordWrap.Show(error, UiText.Get("Library.SavedSearch.Failed")); }
+            {
+                log?.LogWarning(ex, "Could not save the saved search");
+                KoreanWordWrap.Show(error, ThemedDialog.WithCause(UiText.Get("Library.SavedSearch.Failed"), ex));
+            }
             finally { _saving = false; apply.IsEnabled = cancel.IsEnabled = input.IsEnabled = true; }
             if (saved) DialogResult = true;
         };
