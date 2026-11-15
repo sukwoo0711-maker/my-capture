@@ -191,7 +191,7 @@ public sealed class SettingsUxDefaultsTests
     }
 
     [Fact]
-    public void UnreadableExistingFile_BelongsToAnExistingUser_AndKeepsTheEarlierDefaults()
+    public void UnreadableExistingFile_BelongsToAnExistingUser_KeepsTheEarlierDefaultsButNeverExpiresCaptures()
     {
         using var workspace = new TempWorkspace();
         workspace.Paths.EnsureCreated();
@@ -202,7 +202,8 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(loaded.General.IsFirstRun);
         Assert.Equal("F3", loaded.Hotkeys.PasteToScreen.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
-        AssertLegacyLibraryDefaults(loaded.Queue);
+        // The library limits are the exception: a damaged file must not start expiring captures.
+        AssertNewLibraryDefaults(loaded.Queue);
     }
 
     [Fact]
