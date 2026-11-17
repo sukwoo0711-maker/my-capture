@@ -29,7 +29,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     private NativeSelectorStartup? _startup;
     private Task? _dibPreparation;
     private bool _displayChanged;
+    // The freeform outline's pen and the target frame's stroke and keyline (GDI COLORREFs).
     private IntPtr _borderPen;
+    private readonly uint _frameStroke, _frameKeyline;
     private bool _closed, _completing, _showing, _submitted, _dragging, _chromeReady;
     private PointD _anchor;
     private Int32Rect _selection;
@@ -51,8 +53,9 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 IntPtr.Zero, IntPtr.Zero, NativeSelectorInterop.GetModuleHandle(null), IntPtr.Zero);
             if (Handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
             Owners[Handle] = this;
-            Color border = (_palette["CaptureGuide.SelectionBorder"] as SolidColorBrush)?.Color ?? Colors.White;
-            _borderPen = NativeSelectorInterop.CreatePen(0, 2, (uint)(border.R | (border.G << 8) | (border.B << 16)));
+            _frameStroke = NativeSelectorFrame.ColorRef(_palette["CaptureGuide.SelectionBorder"], Colors.White);
+            _frameKeyline = NativeSelectorFrame.ColorRef(_palette["CaptureGuide.CrosshairShadow"], Colors.Black);
+            _borderPen = NativeSelectorInterop.CreatePen(0, 2, _frameStroke);
             if (_borderPen == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
             int disabled = 1;
             _ = NativeSelectorInterop.DwmSetWindowAttribute(Handle, 3, ref disabled, sizeof(int));
@@ -728,13 +731,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
         Int32Rect revealed = RevealedRegion;
         if (Mode == CaptureSelectorMode.Freeform) PaintFreeform(dc);
         else if (revealed.Width > 0 && revealed.Height > 0)
-        {
-            IntPtr oldPen = NativeSelectorInterop.SelectObject(dc, _borderPen);
-            IntPtr oldBrush = NativeSelectorInterop.SelectObject(dc, NativeSelectorInterop.GetStockObject(5));
-            _ = NativeSelectorInterop.Rectangle(dc, revealed.X, revealed.Y, revealed.X + revealed.Width, revealed.Y + revealed.Height);
-            _ = NativeSelectorInterop.SelectObject(dc, oldBrush);
-            _ = NativeSelectorInterop.SelectObject(dc, oldPen);
-        }
+            NativeSelectorFrame.Paint(dc, revealed, _dib.Width, _dib.Height, _frameStroke, _frameKeyline);
         _visualFeedback?.Paint(dc);
         if (!NativeSelectorInterop.GdiFlush()) throw new Win32Exception(Marshal.GetLastWin32Error());
     }

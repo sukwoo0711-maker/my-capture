@@ -2,7 +2,7 @@ using System.Windows;
 
 namespace MyCapture.App.Capture;
 
-/// <summary>Physical-pixel damage: the reveal's symmetric difference and its old/new border.</summary>
+/// <summary>Physical-pixel damage: the reveal's symmetric difference and its old and new frame.</summary>
 internal static class NativeSelectorDirtyRegions
 {
     internal static IReadOnlyList<Int32Rect> Changed(Int32Rect previous, Int32Rect current,
@@ -23,8 +23,8 @@ internal static class NativeSelectorDirtyRegions
         if (previous == current) return;
         Difference(previous, current, result);
         Difference(current, previous, result);
-        Border(previous, result);
-        Border(current, result);
+        Border(previous, width, height, result);
+        Border(current, width, height, result);
         int kept = 0;
         for (int index = 0; index < result.Count; index++)
         {
@@ -66,13 +66,12 @@ internal static class NativeSelectorDirtyRegions
         if (w > 0 && h > 0) result.Add(new Int32Rect(x, y, w, h));
     }
 
-    private static void Border(Int32Rect r, List<Int32Rect> result)
+    // Exactly the frame's stroke and keyline: outside the target, or inside on a surface edge.
+    private static void Border(Int32Rect r, int width, int height, List<Int32Rect> result)
     {
-        if (r.Width == 0 || r.Height == 0) return;
-        // Two physical pixels on either side cover the 2px GDI pen, including corner joins.
-        result.Add(new Int32Rect(r.X - 2, r.Y - 2, r.Width + 4, 4));
-        result.Add(new Int32Rect(r.X - 2, r.Y + r.Height - 2, r.Width + 4, 4));
-        result.Add(new Int32Rect(r.X - 2, r.Y - 2, 4, r.Height + 4));
-        result.Add(new Int32Rect(r.X + r.Width - 2, r.Y - 2, 4, r.Height + 4));
+        if (!NativeSelectorFrame.TryLayout(r, width, height, out NativeSelectorFrame.Rings rings)) return;
+        Span<Int32Rect> strips = stackalloc Int32Rect[4];
+        int count = NativeSelectorFrame.Ring(rings.Outer, rings.Inner, strips);
+        for (int index = 0; index < count; index++) result.Add(strips[index]);
     }
 }
