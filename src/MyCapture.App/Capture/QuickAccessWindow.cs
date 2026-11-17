@@ -345,7 +345,8 @@ internal sealed partial class QuickAccessWindow : Window
         foreach (string action in ActionOrder)
         {
             Button button = Button("QuickAccess." + action, _actions[action]);
-            button.SetResourceReference(StyleProperty, action == "Edit" ? "Button.Primary" : "Button.Ghost");
+            // Pinning beside the work is the card's main use, so the pin carries the emphasis.
+            button.SetResourceReference(StyleProperty, action == "Pin" ? "Button.Primary" : "Button.Ghost");
             string key = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint;
             button.ToolTip = AutomationProperties.GetName(button) + "  " + key;
             AutomationProperties.SetAcceleratorKey(button, key);

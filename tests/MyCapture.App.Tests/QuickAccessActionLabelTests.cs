@@ -67,8 +67,9 @@ public sealed class QuickAccessActionLabelTests
             Assert.True(labeled <= available == shown, $"{language}: names need {labeled:0.###} of {available:0.###} DIP, shown={shown}");
             if (textScale == 1) Assert.True(shown, $"{language}: the names need {labeled:0.#} of {available:0.#} DIP at normal text size");
             if (textScale == 2) Assert.False(shown);
-            Assert.Same(host.FindResource("Button.Primary"), buttons[0].Style);
-            Assert.All(buttons.Skip(1), button => Assert.Same(host.FindResource("Button.Ghost"), button.Style));
+            // The pin carries the card's one emphasis; the order and sizes stay as they were.
+            Assert.Same(host.FindResource("Button.Primary"), buttons[1].Style);
+            Assert.All(buttons.Where((_, index) => index != 1), button => Assert.Same(host.FindResource("Button.Ghost"), button.Style));
 
             RenderTargetBitmap image = QuickAccessLabelFixture.Render(host, dpi);
             var measurements = new List<object>();
