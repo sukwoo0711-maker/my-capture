@@ -94,7 +94,7 @@ public sealed class ShortcutConsistencyTests
         Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(save).OfType<TextBlock>(), item => item.Text.Contains("Ctrl+S"));
         Assert.Equal(UiText.Get("EditorFlow_SaveToFileHint"), save.ToolTip);
         MenuItem quickSave = Assert.Single(save.ContextMenu!.Items.OfType<MenuItem>(), item => Equals(item.Header, UiText.Get("Text_DFC084A111D0")));
-        MenuItem saveAs = Assert.Single(save.ContextMenu.Items.OfType<MenuItem>(), item => Equals(item.Header, UiText.Get("Text_57950AFF46BC")));
+        MenuItem saveAs = Assert.Single(save.ContextMenu.Items.OfType<MenuItem>(), item => Equals(item.Header, UiText.Get("Text_A81F975C401F")));
         Assert.Equal("Ctrl+S", quickSave.InputGestureText);
         Assert.Equal("Ctrl+Shift+S", saveAs.InputGestureText);
         Button delete = Assert.Single(elements.OfType<Button>(), item => AutomationProperties.GetAutomationId(item) == "AnnotationDeleteSelection");

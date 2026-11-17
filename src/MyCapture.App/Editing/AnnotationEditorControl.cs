@@ -2182,14 +2182,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         _redactButton = IconTextButton(
             UiText.Get("Text_E395E2567985"),
             UiText.Get("Text_A31A72A338DD"),
-            "Icon.Mosaic", FallbackMosaic,
+            "Icon.Lock", FallbackLock,
             () => _ = ApplyPrivacyRedactionsAsync());
-        _redactButton.IsEnabled = _privacyRedactionService?.IsAvailable == true;
-        AutomationProperties.SetHelpText(
-            _redactButton,
-            _redactButton.IsEnabled
-                ? UiText.Get("Text_EB9AB8D7D13C")
-                : UiText.Get("Text_39E626945336"));
+        ToolTipService.SetShowOnDisabled(_redactButton, true);
+        RefreshRedactAvailability();
         left.Children.Add(_redactButton);
 
         // Text recognition of what the editor shows now, beside the other text-reading command.
@@ -2199,6 +2195,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             "Icon.Text", FallbackText,
             () => _ = RecognizeCurrentTextAsync());
         AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
+        ToolTipService.SetShowOnDisabled(_copyTextButton, true);
         RefreshCopyTextAvailability();
         left.Children.Add(_copyTextButton);
 
@@ -2238,7 +2235,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
-        // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
+        // last where it could be taken for a tool (the T on the tool rail) or is not self-evident (the padlock).
         CommandButtonPresentation.CollapseOrder(crop, 2);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
@@ -2404,12 +2401,12 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var saveAs = new MenuItem
         {
-            Header = UiText.Get("Text_57950AFF46BC"),
+            Header = UiText.Get("Text_A81F975C401F"),
             InputGestureText = ShortcutCatalog.Get(ShortcutScope.Annotation, "SaveAs").Hint,
             Icon = BuildIcon("Icon.SaveAs", FallbackSaveAs, 16),
         };
         saveAs.Click += (_, _) => Commit(EditorCommitAction.SaveAs);
-        AutomationName(saveAs, UiText.Get("Text_57950AFF46BC"));
+        AutomationName(saveAs, UiText.Get("Text_A81F975C401F"));
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
@@ -3408,6 +3405,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private static Geometry FallbackImage() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,13 L8,9 L11,12 L14,9 L17,12 M12.5,7.5 A1,1 0 1 1 12.4,7.5");
 
+    private static Geometry FallbackLock() => Geometry.Parse("M4,9 H16 V18 H4 Z M6,9 V6 A4,4 0 0 1 14,6 V9 M10,12 V15");
     private static Geometry FallbackMosaic() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,9 H9 V4 M9,9 H15 M9,9 V16 M15,9 V14 A2,2 0 0 1 13,16");
 
     private static Geometry FallbackBlur() => Geometry.Parse("M10,2.75 C10,2.75 4.75,8.6 4.75,12 A5.25,5.25 0 0 0 15.25,12 C15.25,8.6 10,2.75 10,2.75 Z M7.6,12.4 A2.4,2.4 0 0 0 10,14.8");
@@ -3927,7 +3925,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         CommitActiveText();
         _redactionInProgress = true;
-        _redactButton.IsEnabled = false;
+        RefreshRedactAvailability();
         _redactionCts?.Dispose();
         _redactionCts = new CancellationTokenSource();
         CancellationTokenSource operation = _redactionCts;
@@ -3949,6 +3947,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             {
                 case PrivacyRedactionStatus.Success:
                     int count = _controller.AddPrivacyRedactions(result.Regions);
+                    // The controller switches to the select tool; the rail follows like every other switch.
+                    SyncToolButtons();
                     SetStatus(UiText.Format("Text_E68817537C75", count));
                     break;
                 case PrivacyRedactionStatus.NoMatches:
@@ -3974,8 +3974,24 @@ internal sealed partial class AnnotationEditorControl : Grid
             }
 
             _redactionInProgress = false;
-            _redactButton.IsEnabled = _privacyRedactionService.IsAvailable;
+            RefreshRedactAvailability();
         }
+    }
+
+    /// <summary>
+    /// Enables the privacy command only when the search service is available and none is running,
+    /// and lets its tooltip say which of the two it is while the button is disabled.
+    /// </summary>
+    private void RefreshRedactAvailability()
+    {
+        bool available = _privacyRedactionService?.IsAvailable == true;
+        _redactButton.IsEnabled = available && !_redactionInProgress;
+        _redactButton.ToolTip = UiText.Get(!available ? "Text_39E626945336"
+            : _redactionInProgress ? "EditorFlow_RedactBusy" : "Text_A31A72A338DD");
+        // The tooltip names the key after the command; setting a new text must keep that.
+        ShortcutPresentation.Describe(_redactButton, ShortcutScope.Annotation, "Privacy");
+        AutomationProperties.SetHelpText(_redactButton,
+            UiText.Get(available ? "Text_EB9AB8D7D13C" : "Text_39E626945336"));
     }
 
     /// <summary>
@@ -4016,6 +4032,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         bool available = TextRecognitionRoute.CanShow;
         _copyTextButton.IsEnabled = available && !_textRecognitionInProgress;
+        _copyTextButton.ToolTip = UiText.Get(!available ? "TextCapture_Unavailable"
+            : _textRecognitionInProgress ? "EditorFlow_CopyTextBusy" : "EditorFlow_CopyTextHint");
         AutomationProperties.SetHelpText(_copyTextButton,
             UiText.Get(available ? "EditorFlow_CopyTextHint" : "TextCapture_Unavailable"));
     }
@@ -4222,6 +4240,14 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         if (_completed || _commitInProgress)
         {
+            return;
+        }
+
+        // The running search announces "취소하려면 Esc"; honour it before any other step back.
+        if (_redactionInProgress && _redactionCts is { IsCancellationRequested: false } search)
+        {
+            search.Cancel();
+            SetStatus(UiText.Get("Text_6AE98E57E121"));
             return;
         }
 

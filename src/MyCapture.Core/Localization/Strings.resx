@@ -4018,7 +4018,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>단계 번호 — 클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다</value></data>
   <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>순서를 표시할 위치를 클릭합니다.</value></data>
   <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>다음 번호</value></data>
-  <data name="EditorStep_Number" xml:space="preserve"><value>번호</value></data>
+  <data name="EditorStep_Number" xml:space="preserve"><value>선택한 번호</value></data>
   <data name="EditorStep_NumberRange" xml:space="preserve"><value>1–999 사이의 번호를 입력하십시오.</value></data>
   <data name="EditorStep_Size" xml:space="preserve"><value>크기</value></data>
   <data name="EditorStep_SizeRange" xml:space="preserve"><value>24–{0} px</value></data>
@@ -4151,7 +4151,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Support_Diagnostics" xml:space="preserve"><value>진단 정보</value></data>
   <data name="Support_Message" xml:space="preserve"><value>문의 내용</value></data>
   <data name="Support_GitHub" xml:space="preserve"><value>GitHub 이슈로 보내기</value></data>
-  <data name="Support_StoreReview" xml:space="preserve"><value>Microsoft Store 리뷰 남기기</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Microsoft Store에서 평가</value></data>
   <data name="Support_Accounts" xml:space="preserve"><value>GitHub 이슈는 GitHub 계정이 필요하며 Store 리뷰는 Microsoft 계정을 사용합니다.</value></data>
   <data name="Support_GitHubAccount" xml:space="preserve"><value>GitHub 이슈를 보내려면 GitHub 계정이 필요합니다.</value></data>
   <data name="Support_Opened" xml:space="preserve"><value>문의 페이지 열림</value></data>
@@ -4299,6 +4299,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>이미지 자르기와 회전</value></data>
   <data name="EditorFlow_CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
   <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>편집한 이미지의 텍스트 인식</value></data>
+  <data name="EditorFlow_CopyTextBusy" xml:space="preserve"><value>텍스트를 인식하는 중입니다. 끝난 뒤에 다시 사용할 수 있습니다.</value></data>
+  <data name="EditorFlow_RedactBusy" xml:space="preserve"><value>개인정보를 찾는 중입니다. 끝나거나 Esc로 취소한 뒤에 다시 사용할 수 있습니다.</value></data>
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>자르기 적용</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>자르기 취소</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>
@@ -5479,7 +5481,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboarding.TableStorage" xml:space="preserve"><value>저장 장치</value></data>
   <data name="Onboarding.TrayLocation" xml:space="preserve"><value>MyCapture 아이콘은 ^ 단추 안에 있습니다.</value></data>
   <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture 아이콘</value></data>
-  <data name="Onboarding.AboutBody" xml:space="preserve"><value>캡처, 핀, 라이브러리를 직접 해 보는 3단계 안내입니다.</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>캡처, 핀, 라이브러리를 3개 주제 15단계로 직접 해 보는 안내입니다.</value></data>
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>빠른 저장은 항상 이 폴더에 저장합니다. 비워 두면 기본 캡처 폴더를 사용합니다.</value></data>
   <data name="Pin.ClickThroughOff" xml:space="preserve"><value>클릭 허용 끄기</value></data>
   <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>여기를 누르면 다시 끕니다</value></data>
@@ -5488,7 +5490,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
   <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>업데이트 {0}</value></data>
-  <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가하기</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가</value></data>
   <data name="LibraryUx_SelectCard" xml:space="preserve"><value>{0} 선택</value></data>
   <data name="LibraryUx_PinHint" xml:space="preserve"><value>핀으로 띄우기 (P)</value></data>
   <data name="Library.Properties" xml:space="preserve"><value>속성</value></data>

@@ -4018,7 +4018,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>Step number — Adds 1, 2, 3… in order with each click</value></data>
   <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>Click to mark the order.</value></data>
   <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>Next number</value></data>
-  <data name="EditorStep_Number" xml:space="preserve"><value>Number</value></data>
+  <data name="EditorStep_Number" xml:space="preserve"><value>Selected number</value></data>
   <data name="EditorStep_NumberRange" xml:space="preserve"><value>Enter a number from 1 to 999.</value></data>
   <data name="EditorStep_Size" xml:space="preserve"><value>Size</value></data>
   <data name="EditorStep_SizeRange" xml:space="preserve"><value>24–{0} px</value></data>
@@ -4151,7 +4151,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Support_Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
   <data name="Support_Message" xml:space="preserve"><value>Message</value></data>
   <data name="Support_GitHub" xml:space="preserve"><value>Send to GitHub issue</value></data>
-  <data name="Support_StoreReview" xml:space="preserve"><value>Review in Microsoft Store</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Rate in Microsoft Store</value></data>
   <data name="Support_Accounts" xml:space="preserve"><value>GitHub issues need a GitHub account; Store reviews use your Microsoft account.</value></data>
   <data name="Support_GitHubAccount" xml:space="preserve"><value>You need a GitHub account to send an issue.</value></data>
   <data name="Support_Opened" xml:space="preserve"><value>Contact page opened</value></data>
@@ -4299,6 +4299,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>Crop and rotate the image</value></data>
   <data name="EditorFlow_CopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>Recognize the text in the edited image</value></data>
+  <data name="EditorFlow_CopyTextBusy" xml:space="preserve"><value>Text recognition is running. It can be used again when it finishes.</value></data>
+  <data name="EditorFlow_RedactBusy" xml:space="preserve"><value>Searching for personal information. It can be used again when the search ends or Esc cancels it.</value></data>
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>Apply the crop</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>Cancel the crop</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
@@ -5479,7 +5481,7 @@ Install the model?</value></data>
   <data name="Onboarding.TableStorage" xml:space="preserve"><value>Storage</value></data>
   <data name="Onboarding.TrayLocation" xml:space="preserve"><value>The MyCapture icon is inside the ^ button.</value></data>
   <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture icon</value></data>
-  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Three steps to try capture, pin and the library.</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Fifteen steps in three topics to try capture, pin and the library.</value></data>
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
   <data name="Pin.ClickThroughOff" xml:space="preserve"><value>Turn off click-through</value></data>
   <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>Click here to turn it off</value></data>
