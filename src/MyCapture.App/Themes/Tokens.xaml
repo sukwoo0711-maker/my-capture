@@ -219,7 +219,10 @@
     <SolidColorBrush x:Key="CaptureGuide.CrosshairShadow" Color="#FF000000" />
     <SolidColorBrush x:Key="CaptureGuide.StartPoint" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.ChipSurface" Color="#F2151E2B" />
-    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF9789FF" />
+    <!-- Chip outline (the DWM border on Windows 11), divider and key-cap roles: neutral, never the guide colour. -->
+    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF2E3B4E" />
+    <SolidColorBrush x:Key="CaptureGuide.ChipHairline" Color="#FF263244" />
+    <SolidColorBrush x:Key="CaptureGuide.KeycapSurface" Color="#FF1E293B" />
     <SolidColorBrush x:Key="CaptureGuide.Text" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="CaptureGuide.MutedText" Color="#FFECF1F9" />
     <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />

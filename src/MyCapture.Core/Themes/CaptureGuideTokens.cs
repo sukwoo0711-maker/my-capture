@@ -19,6 +19,9 @@ public static class CaptureGuideTokens
         // A neutral keyline keeps a custom dark/light crosshair visible on image pixels.
         bool lightAccent = accent.R * 299 + accent.G * 587 + accent.B * 114 >= 140000;
         ThemeColor contrast = lightAccent ? ThemeColor.Rgb(0, 0, 0) : ThemeColor.Rgb(255, 255, 255);
+        // The chips' outline, divider and key-cap roles are calm neutrals of the chip's own lightness,
+        // never the guide colour: one accent (the chosen mode) is enough on the selector.
+        bool lightChip = IsLightSurface(palette["Surface.Floating"]);
         return new Dictionary<string, ThemeColor>(StringComparer.Ordinal)
         {
             ["CaptureGuide.SelectionBorder"] = accent,
@@ -29,7 +32,9 @@ public static class CaptureGuideTokens
             ["CaptureGuide.CrosshairShadow"] = contrast,
             ["CaptureGuide.StartPoint"] = accent,
             ["CaptureGuide.ChipSurface"] = palette["Surface.Floating"],
-            ["CaptureGuide.ChipBorder"] = accent,
+            ["CaptureGuide.ChipBorder"] = lightChip ? ThemeColor.Rgb(0xCB, 0xD5, 0xE1) : ThemeColor.Rgb(0x2E, 0x3B, 0x4E),
+            ["CaptureGuide.ChipHairline"] = lightChip ? ThemeColor.Rgb(0xE2, 0xE8, 0xF0) : ThemeColor.Rgb(0x26, 0x32, 0x44),
+            ["CaptureGuide.KeycapSurface"] = lightChip ? ThemeColor.Rgb(0xF1, 0xF5, 0xF9) : ThemeColor.Rgb(0x1E, 0x29, 0x3B),
             ["CaptureGuide.Text"] = palette["Text.Primary"],
             ["CaptureGuide.MutedText"] = palette["Text.Secondary"],
             ["CaptureGuide.MagnifierBorder"] = accent,
@@ -38,6 +43,13 @@ public static class CaptureGuideTokens
             ["CaptureGuide.AccentText"] = ReadableTextOn(accent),
         };
     }
+
+    /// <summary>
+    /// True when the chip surface, as the opaque selector chrome shows it, is light: the chrome
+    /// windows paint the surface's own colour under it, so its alpha does not change the answer.
+    /// </summary>
+    private static bool IsLightSurface(ThemeColor surface) =>
+        ThemeContrast.RelativeLuminance(surface with { A = 255 }) >= 0.5;
 
     /// <summary>
     /// Black or white, whichever has the higher WCAG contrast on <paramref name="accent"/>. One of

@@ -218,6 +218,8 @@ public sealed class Capture410AppTests
         Assert.Equal(100, editor.DisplayedBitmap.PixelHeight);
     });
 
+    private static Color ToColor(ThemeColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);
+
     [Fact]
     public void SixPalettesUseEveryToken_AndHighContrastAlwaysUsesSystemColors() => StaTestHost.Run(() =>
     {
@@ -226,12 +228,23 @@ public sealed class Capture410AppTests
             foreach (bool systemHighContrast in new[] { false, true })
             {
                 var brushes = CaptureGuidePalette.Create(theme, "#FF1234", systemHighContrast);
-                Assert.Equal(15, brushes.Count);
+                Assert.Equal(17, brushes.Count);
                 Assert.All(brushes.Values, brush => Assert.True(brush.IsFrozen));
                 bool highContrast = systemHighContrast || theme == AppTheme.HighContrast;
-                foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "ChipBorder", "MagnifierBorder" })
+                foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "MagnifierBorder" })
                     Assert.Equal(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(255, 18, 52),
                         ((SolidColorBrush)brushes["CaptureGuide." + role]).Color);
+                // Chip outlines and dividers are neutral, never the guide colour; high contrast uses the
+                // system's text colour for them and its window colour for the key-cap surface.
+                foreach (string role in new[] { "ChipBorder", "ChipHairline" })
+                {
+                    ThemeColor neutral = CaptureGuideTokens.ColorsFor(theme)["CaptureGuide." + role];
+                    Assert.Equal(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(neutral.R, neutral.G, neutral.B),
+                        ((SolidColorBrush)brushes["CaptureGuide." + role]).Color);
+                }
+                Assert.Equal(highContrast ? SystemColors.WindowColor
+                        : ToColor(CaptureGuideTokens.ColorsFor(theme)["CaptureGuide.KeycapSurface"]),
+                    ((SolidColorBrush)brushes["CaptureGuide.KeycapSurface"]).Color);
                 Color accent = ((SolidColorBrush)brushes["CaptureGuide.SelectionBorder"]).Color;
                 Color accentText = ((SolidColorBrush)brushes["CaptureGuide.AccentText"]).Color;
                 // Accent-filled labels stay at AA contrast, including the system's own pair.

@@ -190,15 +190,50 @@ public sealed class Capture410CoreTests
         {
             var normal = CaptureGuideTokens.ColorsFor(theme);
             var custom = CaptureGuideTokens.ColorsFor(theme, "#123456");
-            Assert.Equal(15, normal.Count);
+            Assert.Equal(17, normal.Count);
             Assert.Equal(ThemeCatalog.ColorsFor(theme)["Overlay.SelectionBorder"], normal["CaptureGuide.SelectionBorder"]);
-            foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "ChipBorder", "MagnifierBorder" })
+            foreach (string role in new[] { "SelectionBorder", "Crosshair", "StartPoint", "MagnifierBorder" })
                 Assert.Equal(ThemeColor.Rgb(0x12, 0x34, 0x56), custom["CaptureGuide." + role]);
             Assert.Equal((byte)32, custom["CaptureGuide.InnerGlow"].A);
             Assert.Equal((byte)120, custom["CaptureGuide.Line"].A);
-            Assert.Equal(normal["CaptureGuide.ChipSurface"], custom["CaptureGuide.ChipSurface"]);
-            Assert.Equal(normal["CaptureGuide.Text"], custom["CaptureGuide.Text"]);
+            // Chip surfaces, outlines, dividers and key caps are neutral: the guide colour never reaches them.
+            foreach (string role in new[] { "ChipSurface", "ChipBorder", "ChipHairline", "KeycapSurface", "Text", "MutedText" })
+                Assert.Equal(normal["CaptureGuide." + role], custom["CaptureGuide." + role]);
             Assert.Equal(normal, CaptureGuideTokens.ColorsFor(theme, "invalid"));
+        }
+    }
+
+    [Fact]
+    public void ChipNeutralsFollowTheThemeLightness()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = CaptureGuideTokens.ColorsFor(theme);
+            bool light = AppThemeNames.IsLight(theme);
+            Assert.Equal(light ? ThemeColor.Rgb(0xCB, 0xD5, 0xE1) : ThemeColor.Rgb(0x2E, 0x3B, 0x4E), colors["CaptureGuide.ChipBorder"]);
+            Assert.Equal(light ? ThemeColor.Rgb(0xE2, 0xE8, 0xF0) : ThemeColor.Rgb(0x26, 0x32, 0x44), colors["CaptureGuide.ChipHairline"]);
+            Assert.Equal(light ? ThemeColor.Rgb(0xF1, 0xF5, 0xF9) : ThemeColor.Rgb(0x1E, 0x29, 0x3B), colors["CaptureGuide.KeycapSurface"]);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("#123456")]
+    [InlineData("#FFFFFF")]
+    public void EveryChipTextReachesAaOnEveryChipSurfaceInEveryTheme(string? custom)
+    {
+        // The selector chrome is opaque: the chip surface is painted over its own opaque colour.
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = CaptureGuideTokens.ColorsFor(theme, custom);
+            ThemeColor chip = colors["CaptureGuide.ChipSurface"] with { A = 255 };
+            ThemeColor keycap = ThemeContrast.Composite(colors["CaptureGuide.KeycapSurface"], chip);
+            foreach (string text in new[] { "CaptureGuide.Text", "CaptureGuide.MutedText" })
+                foreach ((string name, ThemeColor surface) in new[] { ("chip", chip), ("keycap", keycap) })
+                {
+                    double ratio = ThemeContrast.Ratio(ThemeContrast.Composite(colors[text], surface), surface);
+                    Assert.True(ratio >= 4.5, $"{theme} {custom}: {text} on {name} is {ratio:0.00}:1");
+                }
         }
     }
 
