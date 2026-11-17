@@ -409,7 +409,7 @@ internal sealed partial class PinWindow
     internal void OnNativeZoomShown(double zoom)
     {
         HideNativeToolTip();
-        ShowFeedback(ZoomReadout(zoom));
+        ShowZoomReadout(zoom);
     }
 
     internal void OnNativeOpacityShown(double opacity)

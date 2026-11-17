@@ -31,7 +31,9 @@ public sealed class PinViewState
     {
         ImageWidthDip = Math.Max(1.0, imageWidthDip);
         ImageHeightDip = Math.Max(1.0, imageHeightDip);
-        Zoom = PinGeometry.ClampZoom(initialZoom, ImageWidthDip, ImageHeightDip);
+        // The initial fit may go below the user's floor (a long strip fitted to the work area).
+        Zoom = PinGeometry.ClampZoom(initialZoom);
+        _fittedZoom = Zoom;
         Opacity = PinGeometry.ClampOpacity(initialOpacity);
         _zoomStep = zoomStep <= 0 ? 0.1 : zoomStep;
     }
@@ -53,6 +55,15 @@ public sealed class PinViewState
 
     /// <summary>The smallest zoom this pin's image allows (<see cref="PinGeometry.MinimumZoom"/>).</summary>
     public double MinimumZoom => PinGeometry.MinimumZoom(ImageWidthDip, ImageHeightDip);
+
+    // The lowest zoom the pin itself chose: the initial fit and any later fit to the work area.
+    private double _fittedZoom;
+
+    /// <summary>
+    /// Where a user zoom-out or edge drag stops: <see cref="MinimumZoom"/>, or the pin's own fit when that
+    /// went lower, so zooming in from such a fit works and zooming out never shrinks the pin past it.
+    /// </summary>
+    public double UserMinimumZoom => Math.Min(MinimumZoom, _fittedZoom);
 
     public double Opacity { get; private set; }
 
@@ -95,15 +106,19 @@ public sealed class PinViewState
     public double ApplyZoomStep(int notches)
     {
         if (IsCollapsed) return Zoom;
-        Zoom = PinGeometry.ClampZoom(PinGeometry.StepZoom(Zoom, notches, _zoomStep), ImageWidthDip, ImageHeightDip);
+        Zoom = Math.Clamp(PinGeometry.StepZoom(Zoom, notches, _zoomStep), UserMinimumZoom, PinGeometry.MaxZoom);
         return Zoom;
     }
 
-    /// <summary>Sets an absolute zoom, clamped.</summary>
+    /// <summary>
+    /// Sets an absolute zoom, clamped to the supported range only: a fit to the work area may go below
+    /// <see cref="MinimumZoom"/>. User edge drags reach it already held to <see cref="UserMinimumZoom"/>.
+    /// </summary>
     public double SetZoom(double zoom)
     {
         if (IsCollapsed) return Zoom;
-        Zoom = PinGeometry.ClampZoom(zoom, ImageWidthDip, ImageHeightDip);
+        Zoom = PinGeometry.ClampZoom(zoom);
+        _fittedZoom = Math.Min(_fittedZoom, Zoom);
         return Zoom;
     }
 

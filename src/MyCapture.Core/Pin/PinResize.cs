@@ -41,7 +41,7 @@ public static class PinResize
     /// Bounds and pointer deltas share one coordinate plane. DPI ratios allow that plane to
     /// remain physical desktop pixels when the window moves to a differently scaled monitor.
     /// Corner deltas are projected onto the original diagonal, so either pointer axis can resize.
-    /// <paramref name="minimumZoom"/> is the pin's own floor (<see cref="PinGeometry.MinimumZoom"/>), so the
+    /// <paramref name="minimumZoom"/> is the pin's own floor (<see cref="PinViewState.UserMinimumZoom"/>), so the
     /// fixed edge stays where it is when the pointer drags past it.
     /// </summary>
     public static PinGeometry.Placement Calculate(RectD start, double startZoom, PinResizeEdge edge,

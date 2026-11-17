@@ -184,8 +184,9 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
         UpdateImageRasterLayout();
 
-        // The bottom message wraps inside narrow pins. It takes the pointer only to pause its
-        // countdown and to offer a close button for a failure; dragging through it still moves the pin.
+        // The bottom message wraps inside narrow pins (a zoom readout stays on one line: ShowZoomReadout). It takes
+        // the pointer only to pause its countdown and to offer a close button for a failure; dragging through it
+        // still moves the pin.
         _feedbackText = new TextBlock
         {
             FontSize = TypeScale.Caption,
@@ -223,11 +224,11 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8, 0, 8, 8),
+            Margin = FeedbackMargin,
             // The hover bar's one-DIP Border.Subtle outline keeps the message apart from a light
             // picture; the padding gives that DIP back, so the size and text position stay put
             // up to the border's device-pixel rounding (at 150% it takes two pixels, as the bar's does).
-            Padding = new Thickness(9, 4, 9, 4),
+            Padding = FeedbackPadding,
             BorderThickness = new Thickness(1),
             BorderBrush = ThemeBrushes.Follow("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             CornerRadius = new CornerRadius(6),
@@ -1515,7 +1516,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             _resizeEdge, x - _resizeStartCursor.X, y - _resizeStartCursor.Y,
             dpi.DpiScaleX / _resizeStartDpi.DpiScaleX, dpi.DpiScaleY / _resizeStartDpi.DpiScaleY,
             _state.ImageWidthDip * dpi.DpiScaleX, _state.ImageHeightDip * dpi.DpiScaleY,
-            dpi.DpiScaleX, dpi.DpiScaleY, _state.MinimumZoom);
+            dpi.DpiScaleX, dpi.DpiScaleY, _state.UserMinimumZoom);
         ApplyZoom(placement.Zoom, placement.Left, placement.Top, physicalPosition: true);
         if (Math.Abs(_state.Zoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
@@ -1864,7 +1865,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double newZoom = _state.ApplyZoomStep(notches);
         if (Math.Abs(newZoom - oldZoom) < 1e-9)
         {
-            ShowFeedback(ZoomReadout(newZoom));
+            ShowZoomReadout(newZoom);
             return;
         }
 
@@ -1882,7 +1883,60 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double pixels = scale > 0 && double.IsFinite(scale) ? scale : 1;
         long width = (long)Math.Round(Math.Max(1.0, imageWidthDip * zoom) * pixels, MidpointRounding.AwayFromZero);
         long height = (long)Math.Round(Math.Max(1.0, imageHeightDip * zoom) * pixels, MidpointRounding.AwayFromZero);
-        return $"{zoom * 100:0}% · {width} × {height} px";
+        return $"{ZoomPercent(zoom)} · {width} × {height} px";
+    }
+
+    /// <summary>The readout's first part, alone when the pin has no room for the rest (<see cref="FitZoomReadout"/>).</summary>
+    internal static string ZoomPercent(double zoom) => $"{zoom * 100:0}%";
+
+    // The bottom message's usual spacing around its one-DIP outline.
+    private static readonly Thickness FeedbackPadding = new(9, 4, 9, 4);
+    private static readonly Thickness FeedbackMargin = new(8, 0, 8, 8);
+
+    /// <summary>A zoom readout on one line: the full text or only the zoom, and the spacing that leaves.</summary>
+    internal readonly record struct FeedbackFit(bool Full, Thickness Padding, Thickness Margin);
+
+    /// <summary>
+    /// Fits a zoom readout on one line inside a pin of <paramref name="roomWidth"/> × <paramref name="roomHeight"/>
+    /// DIP: the full text with the usual spacing when that fits, otherwise only the zoom. On each axis the message
+    /// keeps as much of its usual padding, then margin, as the room leaves.
+    /// </summary>
+    internal static FeedbackFit FitZoomReadout(double roomWidth, double roomHeight, double fullWidth,
+        double compactWidth, double lineHeight)
+    {
+        // The two outline DIPs and two more for device-pixel rounding (an outline DIP takes two pixels at 150%).
+        const double outline = 4;
+        double usualSide = FeedbackPadding.Left + FeedbackMargin.Left;
+        bool full = fullWidth + outline + (2 * usualSide) <= roomWidth;
+        double side = full ? usualSide : Math.Clamp(Math.Floor((roomWidth - compactWidth - outline) / 2), 0, usualSide);
+        double padX = Math.Min(FeedbackPadding.Left, side);
+        double marginX = Math.Min(FeedbackMargin.Left, side - padX);
+        double spareY = Math.Max(0, Math.Floor(roomHeight - lineHeight - outline));
+        double padY = Math.Min(FeedbackPadding.Top, Math.Floor(spareY / 2));
+        double marginY = Math.Min(FeedbackMargin.Bottom, spareY - (2 * padY));
+        return new(full, new Thickness(padX, padY, padX, padY), new Thickness(marginX, 0, marginX, marginY));
+    }
+
+    // A zoom readout stays on one line and inside the pin, down to the smallest pin a user zoom leaves.
+    private void ShowZoomReadout(double zoom)
+    {
+        string full = ZoomReadout(zoom);
+        string compact = ZoomPercent(zoom);
+        (double fullWidth, double lineHeight) = MeasureFeedbackText(full);
+        FeedbackFit fit = FitZoomReadout(_state.WidthDip, _state.HeightDip, fullWidth,
+            MeasureFeedbackText(compact).Width, lineHeight);
+        ShowFeedback(fit.Full ? full : compact, FeedbackKind.Echo, fit);
+    }
+
+    /// <summary>The width and line height <paramref name="text"/> takes in the bottom message, in DIP.</summary>
+    internal (double Width, double Height) MeasureFeedbackText(string text)
+    {
+        var typeface = new Typeface(_feedbackText.FontFamily, _feedbackText.FontStyle, _feedbackText.FontWeight,
+            _feedbackText.FontStretch);
+        var formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight, typeface, _feedbackText.FontSize, Brushes.Black, null,
+            TextOptions.GetTextFormattingMode(_feedbackText), VisualTreeHelper.GetDpi(_feedbackText).PixelsPerDip);
+        return (formatted.WidthIncludingTrailingWhitespace, formatted.Height);
     }
 
     private void ApplyZoom(double zoom, double left, double top, bool physicalPosition = false)
@@ -1897,7 +1951,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         else
             ApplyPositionKeepingGrabbable(left, top);
         BeginLiveZoom();
-        ShowFeedback(ZoomReadout(newZoom));
+        ShowZoomReadout(newZoom);
     }
 
     private void ZoomCentered(int notches)
@@ -1917,7 +1971,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double newZoom = _state.ResetZoom();
 
         ZoomToState(oldZoom, centerX, centerY);
-        ShowFeedback(ZoomReadout(newZoom));
+        ShowZoomReadout(newZoom);
         if (Math.Abs(newZoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
 
@@ -2344,7 +2398,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     /// over them and they come back when it expires; any other message is the newer outcome
     /// and replaces them.
     /// </remarks>
-    private void ShowFeedback(string text, FeedbackKind kind = FeedbackKind.Echo)
+    private void ShowFeedback(string text, FeedbackKind kind = FeedbackKind.Echo, FeedbackFit? oneLine = null)
     {
         // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
         // Never restart that timer or animate a window whose lifetime has ended.
@@ -2376,7 +2430,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             _heldFeedback = FeedbackTiming.DisplayTime(kind) is null ? (text, kind) : null;
         }
 
-        PresentFeedback(text, kind, announce: true);
+        PresentFeedback(text, kind, announce: true, oneLine);
     }
 
     private void CancelPendingProgress()
@@ -2394,7 +2448,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         PresentFeedback(text, FeedbackKind.Progress, announce: true);
     }
 
-    private void PresentFeedback(string text, FeedbackKind kind, bool announce)
+    private void PresentFeedback(string text, FeedbackKind kind, bool announce, FeedbackFit? oneLine = null)
     {
         bool dismissible = FeedbackTiming.StaysUntilDismissed(kind);
         bool showing = _feedback.Visibility == Visibility.Visible && !_feedbackHiding;
@@ -2402,6 +2456,10 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         _feedbackHiding = false;
         _feedbackKind = kind;
         KoreanWordWrap.Show(_feedbackText, text);
+        // A zoom readout keeps one line with the spacing it was fitted to (ShowZoomReadout); other messages wrap.
+        _feedbackText.TextWrapping = oneLine is null ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        _feedback.Padding = oneLine?.Padding ?? FeedbackPadding;
+        _feedback.Margin = oneLine?.Margin ?? FeedbackMargin;
         _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, dismissible ? "State.Danger" : "Text.Primary");
         _feedbackDismiss.Visibility = dismissible ? Visibility.Visible : Visibility.Collapsed;
         _feedback.Visibility = Visibility.Visible;
@@ -2608,7 +2666,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             if (_selectTextItem is null)
             {
                 _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
-                    (_, _) => ToggleTextSelection(), inputGestureText: "F2");
+                    (_, _) => ToggleTextSelection(),
+                    inputGestureText: ShortcutCatalog.Get(ShortcutScope.Pin, "SelectText").Hint);
                 _selectTextItem.IsCheckable = true;
                 menu.Items.Insert(index, _selectTextItem);
             }
