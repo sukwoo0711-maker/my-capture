@@ -40,7 +40,9 @@ public sealed class EditorFillOpacityTests
         // The default is a hollow shape: transparency 100 in the model, opacity 0 on the bar.
         Assert.Equal(100, controller.FillTransparency);
         Assert.Equal(0, fill.Value);
-        Assert.Equal("채움 불투명도", UiText.Get("EditorProperty_FillTransparency"));
+        // The bar keeps the short name so the default window still fits every property on one row
+        // (EditorDisplayScaleTests); the tooltip, the accessible name and the status say "채움 불투명도".
+        Assert.Equal("채움", UiText.Get("EditorProperty_FillTransparency"));
 
         // Dragging right makes the fill more solid: the model's transparency goes down.
         fill.Value = 70;
