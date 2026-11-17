@@ -37,7 +37,7 @@ internal sealed partial class NativeCaptureOverlay
         if (elements.HasElement) _hoverWholeMonitor = false;
         // Element steps are exact: a click must match the visible rectangle, including during siblings.
         if (elements.Depth > 0 || _snapElementHover)
-        { _shownHover = _glideTarget = _hoverRegion; _gliding = false; StopHoverFrames(); }
+        { _shownHover = _hoverRegion; _hoverGlide.Snap(_hoverRegion); StopHoverFrames(); }
     }
     private bool PrepareElements()
     {

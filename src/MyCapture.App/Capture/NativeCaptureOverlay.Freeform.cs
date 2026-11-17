@@ -44,7 +44,8 @@ internal sealed partial class NativeCaptureOverlay
         _selectedWindow = null;
         ClearHover();
         StopHoverFrames();
-        _shownHover = _glideTarget = null;
+        _shownHover = null;
+        _hoverGlide.Reset();
         _dragging = true;
         SetSelection(Int32Rect.Empty);
         _dib?.BeginFreeform();

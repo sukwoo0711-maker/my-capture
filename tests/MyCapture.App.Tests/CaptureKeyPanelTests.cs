@@ -330,7 +330,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         view.ReadCursor = () => pointer;
         view.ReadClock = () => now;
         view.SimulatedPointerInside = true;
-        // Both under a quarter of the screen, so the highlight glides from one to the other.
+        // Two separate windows: the highlight glides from one to the other.
         var notes = Notes with { ScreenBounds = new RectD(120, 90, 440, 420) };
         var browser = Browser with { ScreenBounds = new RectD(760, 200, 400, 400) };
         view.WindowCandidates = [browser, notes, Taskbar, Shell];

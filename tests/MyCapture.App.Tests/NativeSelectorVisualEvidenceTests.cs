@@ -336,7 +336,8 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
             view.UpdatePointer(false, false);
             owner.UpdatePointer(false, false);
             owner.RefreshHover();
-            foreach (int milliseconds in new[] { 0, 25, 50 })
+            // Notes to Chat is a nearby window of a similar size: the fast glide.
+            foreach (int milliseconds in new[] { 0, 21, 42, 83 })
             {
                 now = TimeSpan.FromMilliseconds(milliseconds);
                 view.FlushFeedbackForTest();
@@ -351,12 +352,12 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
                 Assert.Equal(view.TargetLabelForTest, chrome.TargetLabelForTest);
                 Assert.EndsWith("180 × 140", chrome.TargetLabelForTest!, StringComparison.Ordinal);
                 if (milliseconds == 0) Assert.Equal(notes.ScreenBounds, owner.ShownHoverForTest);
-                if (milliseconds == 25)
+                if (milliseconds is 21 or 42)
                 {
                     Assert.NotEqual(notes.ScreenBounds, owner.ShownHoverForTest);
                     Assert.NotEqual(chat.ScreenBounds, owner.ShownHoverForTest);
                 }
-                if (milliseconds == 50) Assert.Equal(chat.ScreenBounds, owner.ShownHoverForTest);
+                if (milliseconds == 83) Assert.Equal(chat.ScreenBounds, owner.ShownHoverForTest);
                 string name = milliseconds == 0 ? "initial" : $"{milliseconds}ms";
                 SavePair(directory, "item-06-hover-" + name, wpf, native);
                 Rect wpfTab = Assert.IsType<Rect>(view.TargetTabForTest);
