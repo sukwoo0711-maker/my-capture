@@ -1493,6 +1493,7 @@
     <value>취소하려면 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하십시오.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
+  <data name="ScrollCapture_CancelHintEsc" xml:space="preserve"><value>취소하려면 Esc 키를 누르거나 트레이 메뉴에서 ‘스크롤 캡처 취소’를 선택하십시오.</value></data>
   <data name="Text_8300472A5BE3" xml:space="preserve">
     <value>설정된 빠른 저장 폴더에 원본 해상도의 PNG 파일로 저장합니다.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -4097,7 +4098,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_NextFrameShort" xml:space="preserve">
     <value>다음 프레임</value>
   </data>
-  <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>자르기와 레이어를 라이브러리의 이 녹화에 적용합니다. 원본은 보존되며 나중에 다시 편집할 수 있습니다.</value></data>
+  <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>자르기와 레이어를 라이브러리의 이 녹화에 적용합니다. 원본은 보존되며 나중에 다시 편집할 수 있습니다. 저장한 뒤 창을 닫습니다.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>자르기와 레이어를 적용한 새 MP4 또는 GIF 파일을 만듭니다. 라이브러리의 녹화는 바뀌지 않습니다.</value></data>
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>편집한 내용을 라이브러리에 저장하시겠습니까?</value></data>
   <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>저장하지 않으면 이번에 한 자르기와 레이어 편집이 사라집니다. 원본 녹화는 그대로 남습니다.</value></data>
@@ -4741,6 +4742,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
+  <data name="Onboard_QuickCardKeysTip" xml:space="preserve"><value>{0}: 키보드 조작</value></data>
   <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 오류 보고를 눌러 보낼 내용을 확인한 뒤 보내십시오.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture를 시작할 수 없습니다</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>MyCapture를 다시 실행하십시오. 계속 실패하면 컴퓨터를 다시 시작한 뒤 실행하십시오. 그래도 시작되지 않으면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>

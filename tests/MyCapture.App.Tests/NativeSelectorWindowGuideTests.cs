@@ -1,0 +1,175 @@
+using System.Windows;
+using System.Windows.Controls;
+using MyCapture.App.Capture;
+using MyCapture.Core.Localization;
+using MyCapture.Core.Primitives;
+using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
+using Xunit;
+
+namespace MyCapture.App.Tests;
+
+/// <summary>
+/// The native selector's guide chip and magnifier in window selection: the chip names the click as well
+/// as the drag, and the magnifier waits until a drag leaves the click.
+/// </summary>
+public sealed class NativeSelectorWindowGuideTests
+{
+    private static readonly WindowCandidate Notes = new(new IntPtr(0x3401), new RectD(40, 30, 200, 150), "Notes");
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void WindowSelectionGuideNamesClickDragAndEscInAChipThatFitsThem(string culture) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage(culture);
+        PointD pointer = new(80, 80);
+        using NativeCaptureOverlay owner = Owner(() => pointer, magnifier: true, detectWindows: true);
+        using var chrome = new NativeSelectorChrome(owner, true, false);
+        chrome.Update(pointer, owner.DisplayedRegionForTest);
+
+        string expected = UiText.Get("CaptureGuide2_ClickWindow") + "  ·  " + UiText.Get("CaptureGuide2_DragCapture")
+            + "  ·  " + UiText.Get("CaptureGuide2_Esc");
+        Assert.True(owner.GuidesWindowClick);
+        Assert.Equal(expected, chrome.GuideTextForTest);
+        Window guide = Assert.IsType<Window>(chrome.GuideWindowForTest);
+        double width = chrome.GuideWidthForTest;
+        Assert.Equal(width, chrome.LogicalSizeForTest(guide).Width);
+        Assert.Equal(38, chrome.LogicalSizeForTest(guide).Height);
+        var panel = Assert.IsType<Border>(guide.Content);
+        var text = Assert.IsType<TextBlock>(panel.Child);
+        text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double needed = text.DesiredSize.Width + panel.Padding.Left + panel.Padding.Right
+            + panel.BorderThickness.Left + panel.BorderThickness.Right;
+        Assert.True(needed <= width, $"{culture}: the guide needs {needed:0.#} DIPs in a {width:0.#} DIP chip.");
+        Assert.True(width >= 320);
+        if (culture == "en-US") Assert.True(width > 320, "The English guide does not fit the usual 320 DIP chip.");
+
+        // A press and a drag keep the same chip, so it is not rebuilt under the first drag samples.
+        owner.BeginSelection(pointer);
+        pointer = new PointD(180, 150);
+        owner.MoveSelection(pointer);
+        chrome.Update(pointer, owner.SelectionRectangle);
+        Assert.True(owner.Selection.HasValue);
+        Assert.Equal(expected, chrome.GuideTextForTest);
+        Assert.Equal(width, chrome.GuideWidthForTest);
+    });
+
+    [Fact]
+    public void RegionAndScrollGuidesKeepTheUsualChip() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("en-US");
+        PointD pointer = new(80, 80);
+        using NativeCaptureOverlay region = Owner(() => pointer, magnifier: true, detectWindows: false);
+        using (var chrome = new NativeSelectorChrome(region, true, false))
+        {
+            chrome.Update(pointer, region.DisplayedRegionForTest);
+            Assert.False(region.GuidesWindowClick);
+            Assert.Equal(UiText.Get("CaptureGuide2_DragCapture") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+                chrome.GuideTextForTest);
+            Assert.Equal(320, chrome.GuideWidthForTest);
+        }
+
+        using NativeCaptureOverlay scroll = Owner(() => pointer, magnifier: true, detectWindows: true);
+        using var scrollChrome = new NativeSelectorChrome(scroll, true, false);
+        scrollChrome.Update(pointer, scroll.DisplayedRegionForTest);
+        Assert.NotEqual(320, scrollChrome.GuideWidthForTest);
+        scroll.SelectMode(CaptureSelectorMode.Scroll);
+        Assert.Equal(CaptureSelectorMode.Scroll, scroll.Mode);
+        scrollChrome.Update(pointer, scroll.DisplayedRegionForTest);
+        Assert.False(scroll.GuidesWindowClick);
+        Assert.Equal(UiText.Get("CaptureGuide2_ClickScroll") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            scrollChrome.GuideTextForTest);
+        Assert.Equal(320, scrollChrome.GuideWidthForTest);
+    });
+
+    [Fact]
+    public void WindowSelectionMagnifierWaitsUntilADragLeavesTheClick() => StaTestHost.Run(() =>
+    {
+        PointD pointer = new(80, 80);
+        using NativeCaptureOverlay owner = Owner(() => pointer, magnifier: true, detectWindows: true);
+        using var chrome = new NativeSelectorChrome(owner, true, false);
+        chrome.Update(pointer, owner.DisplayedRegionForTest);
+        Assert.Equal(Notes.ScreenBounds, owner.HoverRegion);
+        Assert.False(owner.MagnifierShown);
+        Assert.True(chrome.IsMagnifierParkedForTest);
+        Assert.True(chrome.BoundsForTest(chrome.Windows.Last()).Right <= owner.ScreenBounds.Left);
+
+        // Within the click distance the press still takes the highlighted window.
+        owner.BeginSelection(pointer);
+        owner.MoveSelection(new PointD(81, 81));
+        chrome.Update(pointer, owner.SelectionRectangle);
+        Assert.Null(owner.Selection);
+        Assert.False(owner.MagnifierShown);
+        Assert.True(chrome.IsMagnifierParkedForTest);
+
+        pointer = new PointD(180, 150);
+        owner.MoveSelection(pointer);
+        chrome.Update(pointer, owner.SelectionRectangle);
+        Assert.NotNull(owner.Selection);
+        Assert.True(owner.MagnifierShown);
+        Assert.False(chrome.IsMagnifierParkedForTest);
+        RectD shown = chrome.BoundsForTest(chrome.Windows.Last());
+        Assert.True(owner.ScreenBounds.Contains(new PointD(shown.Left, shown.Top)));
+    });
+
+    [Fact]
+    public void ScrollModeParksTheMagnifierAndTheOtherModesKeepTheirRules() => StaTestHost.Run(() =>
+    {
+        PointD pointer = new(320, 180);
+        using NativeCaptureOverlay owner = Owner(() => pointer, magnifier: true, detectWindows: false);
+        owner.CopyColorText = _ => Task.FromResult(true);
+        using var chrome = new NativeSelectorChrome(owner, true, false);
+        chrome.Update(pointer, owner.DisplayedRegionForTest);
+        // Region selection shows it before a drag, as before.
+        Assert.True(owner.MagnifierShown);
+        Assert.False(chrome.IsMagnifierParkedForTest);
+
+        owner.SelectMode(CaptureSelectorMode.Scroll);
+        chrome.Update(pointer, owner.DisplayedRegionForTest);
+        Assert.False(owner.MagnifierShown);
+        Assert.True(chrome.IsMagnifierParkedForTest);
+
+        owner.SelectMode(CaptureSelectorMode.Color);
+        chrome.Update(pointer, owner.DisplayedRegionForTest);
+        Assert.True(owner.MagnifierShown);
+        Assert.False(chrome.IsMagnifierParkedForTest);
+    });
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void TheSettingDecidesOutsideTheColourModeAndRecordingSelectionFollowsIt(bool magnifier, bool recording) =>
+        StaTestHost.Run(() =>
+        {
+            PointD pointer = new(80, 80);
+            using NativeCaptureOverlay owner = Owner(() => pointer, magnifier, detectWindows: true);
+            owner.RecordingSelection = recording;
+            owner.RefreshHover();
+            // Recording selection never takes a window by click, so it follows the setting from the start.
+            Assert.Equal(magnifier && recording, owner.MagnifierShown);
+            owner.BeginSelection(pointer);
+            owner.MoveSelection(new PointD(180, 150));
+            Assert.NotNull(owner.Selection);
+            Assert.Equal(magnifier, owner.MagnifierShown);
+        });
+
+    private static NativeCaptureOverlay Owner(Func<PointD> pointer, bool magnifier, bool detectWindows)
+    {
+        FrozenFrame frame = WindowDetectOverlayTests.Frame();
+        MonitorInfo[] monitors = [new("fixture", frame.ScreenBounds, frame.ScreenBounds, 96, true)];
+        var owner = new NativeCaptureOverlay(frame.ScreenBounds, false, magnifier)
+        {
+            ReadCursor = pointer, PlaceCursor = _ => false, ReadMonitors = () => monitors,
+            SourceWindows = [Notes], DetectWindows = detectWindows, OffersOtherActions = true,
+            ReadClock = () => TimeSpan.FromSeconds(10),
+        };
+        owner.AttachFrame(frame);
+        owner.PreparePointerFeedback();
+        owner.UpdatePointer(false, false);
+        owner.RefreshHover();
+        return owner;
+    }
+}

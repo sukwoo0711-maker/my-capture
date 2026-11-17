@@ -392,15 +392,21 @@ internal sealed class VideoScene : TutorialScene
 
     /// <summary>
     /// The accessible status line; independent of the editor grid's row numbers. The status bar's
-    /// border holds the line directly or, since the frame save, a dock panel with the line beside
-    /// the "show in library" button.
+    /// border holds the line directly or through dock panels: the frame save's row with the "show in
+    /// library" button, inside the row that ends with new capture.
     /// </summary>
     private string StatusText() =>
-        _host.Find<TextBlock>().Single(text => (text.Parent is DockPanel row ? row.Parent : text.Parent) is Border { Parent: Grid } bar
-            && (ReferenceEquals(bar.Child, text) || ReferenceEquals(bar.Child, text.Parent))
+        _host.Find<TextBlock>().Single(text => InStatusBar(text)
             && text.TextTrimming == TextTrimming.CharacterEllipsis
             && System.Windows.Automation.AutomationProperties.GetLiveSetting(text)
                 == System.Windows.Automation.AutomationLiveSetting.Polite).Text;
+
+    private static bool InStatusBar(TextBlock text)
+    {
+        FrameworkElement current = text;
+        while (current.Parent is DockPanel row) current = row;
+        return current.Parent is Border { Parent: Grid } bar && ReferenceEquals(bar.Child, current);
+    }
 
     /// <summary>A cheap fingerprint of the preview pixels, to wait until a sought frame is on screen.</summary>
     private long PreviewSignature()

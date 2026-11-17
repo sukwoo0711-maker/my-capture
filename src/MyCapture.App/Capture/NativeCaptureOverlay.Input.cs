@@ -73,8 +73,16 @@ internal sealed partial class NativeCaptureOverlay
     internal Func<IntPtr, RectD?> ReadScrollBounds { get; set; } =
         handle => WindowTitleService.TryReadClientBounds(handle, out RectD bounds) ? bounds : null;
 
-    /// <summary>The magnifier follows the pointer for the setting and always in the colour mode.</summary>
-    internal bool MagnifierShown => _showMagnifier || Mode == CaptureSelectorMode.Color;
+    /// <summary>
+    /// The magnifier follows the pointer for the setting and always in the colour mode. Nothing is aimed
+    /// at a pixel in the scroll mode or while a click would take the window, so it waits there until a
+    /// drag leaves the click or a region is adjusted.
+    /// </summary>
+    internal bool MagnifierShown => Mode == CaptureSelectorMode.Color
+        || (_showMagnifier && Mode != CaptureSelectorMode.Scroll && !AwaitsWindowClick);
+
+    /// <summary>Window selection before a drag: a press still counts as a click on the highlighted window.</summary>
+    private bool AwaitsWindowClick => UsesWindowDetection && Selection is null && (!_dragging || _hoverRegion.HasValue);
     internal Func<bool> CanRepeatLastRegion { get; set; } = () => true;
     internal event EventHandler<CaptureSelectorRequest>? ActionRequested;
     internal bool DetectWindows
@@ -84,6 +92,12 @@ internal sealed partial class NativeCaptureOverlay
     }
     internal RectD? HoverRegion => _hoverRegion;
     internal bool UsesWindowDetection => DetectWindows && _windowSelected && !RecordingSelection && Mode != CaptureSelectorMode.Freeform;
+
+    /// <summary>
+    /// The guide names the window click as well as the drag: window selection in the capture mode. It
+    /// stays through a drag, so the chip is not rebuilt under the first drag sample.
+    /// </summary>
+    internal bool GuidesWindowClick => Mode == CaptureSelectorMode.Capture && UsesWindowDetection && (Selection is null || _dragging);
     internal System.Drawing.Size? PresetSize
     {
         get => _presetSize;

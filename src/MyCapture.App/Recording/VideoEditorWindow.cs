@@ -715,7 +715,11 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(timelineScroll, UiText.Get("Text_D9378793F9FE"));
         Grid.SetRow(timelineScroll, 3);
         root.Children.Add(timelineScroll);
-        var statusBar = new Border { MinHeight = 20, Margin = new Thickness(0, 4, 0, 0), Child = BuildFrameSaveStatus() };
+        // New capture leaves the editing commands for the right end of the status bar, as in the image editor.
+        FrameworkElement newCapture = MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true);
+        DockPanel.SetDock(newCapture, Dock.Right);
+        var statusBar = new Border { MinHeight = 20, Margin = new Thickness(0, 4, 0, 0),
+            Child = new DockPanel { Name = "VideoEditorStatusBar", Children = { newCapture, BuildFrameSaveStatus() } } };
         Grid.SetRow(statusBar, 4);
         Grid.SetColumnSpan(statusBar, 2);
         root.Children.Add(statusBar);
@@ -805,7 +809,6 @@ internal sealed partial class VideoEditorWindow : Window
         ShortcutPresentation.Attach(export, ShortcutScope.Video, "Export");
         export.Click += (_, _) => _shortcutActions["Export"]();
         _editControls.Add(saveEdits); _editControls.Add(export);
-        output.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton());
         output.Children.Add(export); output.Children.Add(saveEdits);
         bar.Children.Add(new CommandGroupsPanel { Children = { editing, output } });
         BuildMoreToolsMenu();

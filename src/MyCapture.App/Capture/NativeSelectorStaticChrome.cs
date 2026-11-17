@@ -13,21 +13,23 @@ internal sealed class NativeSelectorStaticChrome(FrameworkElement size, Framewor
     private readonly Border _guide = new() { Background = CaptureWindowExclusion.OpaqueBackground(), Child = guide };
     private string? _sizeText, _guideText;
     private double _scale;
+    private int _guideWidth;
     private byte[]? _sizePixels, _guidePixels;
 
     internal IReadOnlyList<NativeSelectorStamp> Update(string sizeText, string guideText, PointD pointer,
-        RectD workArea, RectD screenBounds, double scale, bool guideVisible)
+        RectD workArea, RectD screenBounds, double scale, bool guideVisible, int guideWidth = 320)
     {
         if (_sizeText != sizeText || _scale != scale || _sizePixels is null)
             _sizePixels = Rasterize(_size, 190, 36, scale);
-        if (_guideText != guideText || _scale != scale || _guidePixels is null)
-            _guidePixels = Rasterize(_guide, 320, 38, scale);
+        if (_guideText != guideText || _scale != scale || _guideWidth != guideWidth || _guidePixels is null)
+            _guidePixels = Rasterize(_guide, guideWidth, 38, scale);
         _sizeText = sizeText;
         _guideText = guideText;
         _scale = scale;
+        _guideWidth = guideWidth;
         NativeSelectorStamp readout = Place(_sizePixels, 190, 36, pointer.X + 20 * scale, pointer.Y + 20 * scale);
         if (!guideVisible) return [readout];
-        return [Place(_guidePixels, 320, 38, workArea.Left + (workArea.Width - 320 * scale) / 2,
+        return [Place(_guidePixels, guideWidth, 38, workArea.Left + (workArea.Width - guideWidth * scale) / 2,
             workArea.Top + 68 * scale), readout];
 
         NativeSelectorStamp Place(byte[] pixels, double width, double height, double x, double y)

@@ -37,6 +37,35 @@ public sealed class RecordingSelectorFallbackTests
     });
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void BothRenderersFollowTheCaptureMagnifierSetting(bool magnifier, bool wpf) => StaTestHost.Run(() =>
+    {
+        using var test = new Fixture();
+        test.Coordinator.ShowMagnifier = () => magnifier;
+        if (wpf) test.Coordinator.UseNativeDibSelector = false;
+        test.StartAndWait();
+        var selector = new RecordingSelector(test.Coordinator, native: !wpf);
+        Assert.True(selector.IsVisible);
+        Assert.Equal(magnifier, selector.ShowsMagnifier);
+    });
+
+    [Fact]
+    public void AFallbackKeepsTheMagnifierSettingOfItsSelection() => StaTestHost.Run(() =>
+    {
+        using var test = new Fixture();
+        test.Coordinator.ShowMagnifier = () => false;
+        test.FailNative("show");
+        test.Coordinator.Toggle();
+        // Read once per selection, like the grid: a change while the fallback prepares waits for the next one.
+        test.Coordinator.ShowMagnifier = () => true;
+        test.WaitForWpf();
+        Assert.False(new RecordingSelector(test.Coordinator, native: false).ShowsMagnifier);
+    });
+
+    [Theory]
     [InlineData("create")]
     [InlineData("prepare")]
     [InlineData("show")]
@@ -212,11 +241,11 @@ public sealed class RecordingSelectorFallbackTests
                 ShowSelectionGrid = () => false,
                 OpenControlsForTest = Regions.Add,
             };
-            Coordinator.CreateNativeSelector = bounds =>
+            Coordinator.CreateNativeSelector = (bounds, magnifier) =>
             {
                 NativeCreates++;
                 if (NativeFault == "create") throw Failure();
-                return Native = new NativeCaptureOverlay(bounds, abortOnFocusLoss: false, showMagnifier: true);
+                return Native = new NativeCaptureOverlay(bounds, abortOnFocusLoss: false, showMagnifier: magnifier);
             };
             Coordinator.ExcludeNativeSelectionWindow = _ =>
             {

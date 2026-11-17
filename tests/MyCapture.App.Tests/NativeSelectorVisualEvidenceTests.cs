@@ -187,6 +187,7 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
         WriteAnchorEvidence(run, scale, new PointD(300, 250), new PointD(520, 430), "central");
         WriteAnchorEvidence(run, scale, new PointD(1279, 719), new PointD(1000, 500), "near-edge");
         WriteHoverEvidence(run, scale);
+        WriteWindowSelectEvidence(run, scale);
         WriteGridEvidence(run, scale);
         WriteAnchorEvidence(run, scale, new PointD(300, 250), new PointD(520, 430), "central",
             new System.Drawing.Size(320, 180), new RectD(300, 250, 320, 180));
@@ -371,6 +372,96 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
         {
             view.ReleaseResources();
             FluidMotion.AnimationsEnabledOverrideForTest = previousMotion;
+        }
+    }
+
+    /// <summary>
+    /// Window selection with the magnifier setting on: the guide chip in both languages, a drag that left
+    /// the click, and the scroll mode. Only existing selector APIs are used, so the same writer renders
+    /// a build without the window guide for comparison.
+    /// </summary>
+    private static void WriteWindowSelectEvidence(string directory, double scale)
+    {
+        var notes = new WindowCandidate(new IntPtr(0x3311), new RectD(40, 30, 200, 150), "Notes");
+        var chat = new WindowCandidate(new IntPtr(0x3312), new RectD(400, 40, 180, 140), "Chat");
+        foreach ((string culture, string name) in new[] { ("ko-KR", "ko"), ("en-US", "en") })
+        {
+            using var language = UiText.UseLanguage(culture);
+            Render(CaptureSelectorMode.Capture, new PointD(100, 100), "item-09-window-select-" + name,
+                drag: name == "ko" ? new PointD(330, 260) : null);
+        }
+        using (UiText.UseLanguage("ko-KR"))
+            Render(CaptureSelectorMode.Scroll, new PointD(490, 120), "item-09-scroll-ko", drag: null);
+
+        void Render(CaptureSelectorMode mode, PointD start, string name, PointD? drag)
+        {
+            FrozenFrame frame = HoverFrame(notes.ScreenBounds, chat.ScreenBounds);
+            RectD bounds = frame.ScreenBounds;
+            PointD pointer = start;
+            MonitorInfo[] monitors = [new("window-select-evidence", bounds, bounds, (uint)Math.Round(96 * scale), true)];
+            var view = new CaptureOverlayView(frame, showMagnifier: true, showSelectionGrid: false)
+            {
+                ReadCursor = () => pointer,
+                PlaceCursor = _ => false,
+                SimulatedPointerInside = true,
+                ReadMonitors = () => monitors,
+                ReadClock = () => TimeSpan.Zero,
+                DetectWindows = true,
+                WindowCandidates = [notes, chat],
+                OffersOtherActions = true,
+                ShowModeBar = true,
+            };
+            CaptureCueEvidenceTests.UsePalette(view, CaptureGuidePalette.Resolve());
+            using var owner = new NativeCaptureOverlay(bounds, false, true, showSelectionGrid: false)
+            {
+                ReadCursor = () => pointer,
+                PlaceCursor = _ => false,
+                ReadMonitors = () => monitors,
+                ReadClock = () => TimeSpan.Zero,
+                DetectWindows = true,
+                SourceWindows = [notes, chat],
+                OffersOtherActions = true,
+                ReadScrollBounds = handle => handle == chat.Handle ? chat.ScreenBounds : null,
+            };
+            owner.AttachFrame(frame);
+            using var chrome = new NativeSelectorChrome(owner, true, false);
+            try
+            {
+                if (mode != CaptureSelectorMode.Capture)
+                {
+                    view.SelectMode(mode);
+                    owner.SelectMode(mode);
+                    Assert.Equal(mode, owner.Mode);
+                }
+                owner.PreparePointerFeedback();
+                owner.PrepareVisualFeedback();
+                view.InitializePointer();
+                owner.UpdatePointer(false, false);
+                owner.RefreshHover();
+                Save(name, owner.DisplayedRegionForTest);
+                if (drag is not { } end) return;
+                view.SimulatePointerDown();
+                owner.BeginSelection(pointer);
+                pointer = end;
+                view.SimulatePointerMove();
+                owner.UpdatePointer(false, false);
+                owner.MoveSelection(end);
+                Assert.NotNull(owner.Selection);
+                Save(name.Replace("-select-", "-drag-", StringComparison.Ordinal), owner.SelectionRectangle);
+            }
+            finally { view.ReleaseResources(); }
+
+            void Save(string item, Int32Rect region)
+            {
+                view.UpdatePointer(false, false);
+                _ = CaptureCueEvidenceTests.Render(view, scale);
+                view.FlushFeedbackForTest();
+                BitmapSource wpf = CaptureCueEvidenceTests.Render(view, scale);
+                owner.FlushFeedbackForTest();
+                chrome.Update(pointer, region);
+                chrome.FlushHoverTabForTest();
+                SavePair(directory, item, wpf, NativeSelectorTestRenderer.Render(owner, chrome));
+            }
         }
     }
 

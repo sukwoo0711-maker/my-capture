@@ -189,6 +189,45 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         finally { if (closed == 0) card.Close(); }
     });
 
+    [Theory]
+    [InlineData("ko-KR", "Alt+Q:\u00A0키보드\u00A0조작", "카드\u00A0클릭:\u00A0키보드\u00A0조작")]
+    [InlineData("en-US", "Alt+Q:\u00A0use\u00A0the\u00A0keys", "Click\u00A0the\u00A0card:\u00A0use\u00A0the\u00A0keys")]
+    public void TheFirstUseLineNamesTheCatalogueKeyOnceItIsRegisteredForTheCard(string language, string registered,
+        string unregistered) => RunCard(router =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string tip = UiText.Get("Onboard_FirstCaptureTip");
+        Assert.Equal("Alt+Q", ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate").Hint);
+        Assert.Equal(tip + " · " + registered, QuickAccessWindow.FirstUseLine(tip, true));
+        Assert.Equal(tip + " · " + unregistered, QuickAccessWindow.FirstUseLine(tip, false));
+
+        QuickAccessWindow card = QuickAccessWindow.ForPendingCapture(Image(), copiedToClipboard: true,
+            targetMonitor: Offscreen(), firstCaptureTip: tip, keyboardRouter: router);
+        try
+        {
+            // Without a window the card cannot hold Alt+Q yet, and the line says to click it first. Its
+            // visual tree does not exist yet either, so the line is found in the logical tree.
+            TextBlock line = Logical(card).OfType<TextBlock>()
+                .First(text => KoreanWordWrap.Strip(text.Text) == QuickAccessWindow.FirstUseLine(tip, false));
+            Assert.Equal(UiText.Get("Onboard_QuickCardTipNoHotkey"), card.ToolTip);
+            card.Show();
+            Assert.True(router.IsRegisteredFor(card));
+            Assert.Equal(QuickAccessWindow.FirstUseLine(tip, true), KoreanWordWrap.Strip(line.Text));
+            Assert.Equal(KoreanWordWrap.Strip(line.Text), System.Windows.Automation.AutomationProperties.GetName(line));
+            Assert.Equal(UiText.Get("Onboard_QuickCardTip"), card.ToolTip);
+            Assert.Same(line, TipText(card, tip));
+        }
+        finally { card.Close(); }
+
+        static IEnumerable<object> Logical(object node)
+        {
+            yield return node;
+            if (node is not DependencyObject parent) yield break;
+            foreach (object child in LogicalTreeHelper.GetChildren(parent))
+                foreach (object item in Logical(child)) yield return item;
+        }
+    });
+
     [Fact]
     public void TheCountdownStartsWhenTheCardShowsButCannotCloseItBeforeTheCaptureIsSaved() => RunCard(router =>
     {
@@ -815,8 +854,10 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
 
     private static Button CopyButton(QuickAccessWindow card) => card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf("Copy")];
 
+    // The first-use line ends with the keyboard hint, which names Alt+Q only while it is registered for the card.
     private static TextBlock TipText(QuickAccessWindow card, string tip) =>
-        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => KoreanWordWrap.Strip(text.Text) == tip);
+        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => KoreanWordWrap.Strip(text.Text) is { } shown
+            && (shown == QuickAccessWindow.FirstUseLine(tip, true) || shown == QuickAccessWindow.FirstUseLine(tip, false)));
 
     private static QuickAccessWindow Pending(ReceiptKeyboardRouter router, bool? copied) =>
         QuickAccessWindow.ForPendingCapture(Image(), copied, targetMonitor: Offscreen(), keyboardRouter: router);

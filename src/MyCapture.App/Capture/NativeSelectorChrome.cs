@@ -60,10 +60,13 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private readonly Border? _magnifierPanel;
     private BitmapSource? _magnifierSource;
     private readonly string _defaultGuide = DefaultGuide;
+    private readonly string _windowGuide = UiText.Get("CaptureGuide2_ClickWindow") + "  ·  " + DefaultGuide;
     private readonly string _precisionGuide = UiText.Get("CapturePrecisionActive");
     private string? _freeformGuide;
     private readonly Size _precisionGuideSize;
+    private readonly double _windowGuideWidth;
     private bool _precisionGuideShown;
+    private double _guideWidth = GuideWidth;
     private bool _guideLayoutDirty = true;
     private int _readoutWidth = -1, _readoutHeight = -1;
     private SelectionRatio _readoutRatio;
@@ -106,6 +109,10 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             TextBlock precisionMeasure = Text(_precisionGuide, palette);
             precisionMeasure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             _precisionGuideSize = new Size(precisionMeasure.DesiredSize.Width + 20, precisionMeasure.DesiredSize.Height + 12);
+            // Three actions do not fit the usual chip in every language: it widens instead of clipping them.
+            TextBlock windowMeasure = Text(_windowGuide, palette);
+            windowMeasure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _windowGuideWidth = Math.Max(GuideWidth, Math.Ceiling(windowMeasure.DesiredSize.Width) + 32);
             if (owner.ChromeStrategy == NativeSelectorChromeStrategy.Dib)
                 _static = new NativeSelectorStaticChrome(_sizePanel, Chip(_guideText, palette));
             else
@@ -131,6 +138,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     }
 
     private static string DefaultGuide => UiText.Get("CaptureGuide2_DragCapture") + "  ·  " + UiText.Get("CaptureGuide2_Esc");
+    private const int GuideWidth = 320;
     private static string PaletteKey(IReadOnlyDictionary<string, Brush> palette) =>
         string.Join(";", palette.OrderBy(pair => pair.Key).Select(pair => pair.Key + "=" + pair.Value));
     internal bool AllCaptureExcluded { get; private set; }
@@ -149,6 +157,10 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     internal NativeSelectorStamp? AnchorStampForTest => _anchorChip.Stamp;
     internal int AnchorBuildCountForTest => _anchorChip.BuildCount;
     internal bool IsReadoutVisibleForTest => _readoutVisible;
+    internal string GuideTextForTest => _guideText.Text;
+    internal double GuideWidthForTest => _guideWidth;
+    internal Window? GuideWindowForTest => _guideWindow;
+    internal bool IsMagnifierParkedForTest => _magnifierParked;
     internal Rect? TargetTabForTest => _hoverTab.Bounds is not null && _sizeWindow is { } size && _owner is { } owner
         ? new Rect((_geometry[size].Bounds.Left - owner.ScreenBounds.Left) / _geometry[size].Scale,
             (_geometry[size].Bounds.Top - owner.ScreenBounds.Top) / _geometry[size].Scale,
@@ -526,19 +538,22 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             CaptureSelectorMode.Freeform => _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing"),
             CaptureSelectorMode.Color => _colorGuide ??= UiText.Get("CaptureGuide2_ClickColor") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
             CaptureSelectorMode.Scroll => _scrollGuide ??= UiText.Get("CaptureGuide2_ClickScroll") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            _ when owner.GuidesWindowClick => _windowGuide,
             _ => _defaultGuide,
         });
         if (_guideText.Text != guideText) _guideText.Text = guideText;
-        if (_guideLayoutDirty || precision != _precisionGuideShown)
+        double guideWidth = ReferenceEquals(guideText, _windowGuide) ? _windowGuideWidth : GuideWidth;
+        if (_guideLayoutDirty || precision != _precisionGuideShown || guideWidth != _guideWidth)
         {
             _guideLayoutDirty = false;
             _guideRevision++;
             _precisionGuideShown = precision;
+            _guideWidth = guideWidth;
             if (_guideWindow is { } guide && _content[guide] is Border panel)
             {
                 panel.CornerRadius = new CornerRadius(precision ? 6 : 0);
                 panel.Padding = precision ? new Thickness(9, 5, 9, 5) : new Thickness(7);
-                _geometry[guide].Size = precision ? _precisionGuideSize : new Size(320, 38);
+                _geometry[guide].Size = precision ? _precisionGuideSize : new Size(guideWidth, 38);
                 double top = precision ? 12 + _geometry[_barWindow].Size.Height + 8 : 68;
                 Place(guide, _workArea.Left + (_workArea.Width - _geometry[guide].Size.Width * _scale) / 2,
                     _workArea.Top + top * _scale, Follow(guide));
@@ -571,7 +586,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         if (_static is not null)
         {
-            IReadOnlyList<NativeSelectorStamp> stamps = _static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible);
+            IReadOnlyList<NativeSelectorStamp> stamps = _static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible, (int)_guideWidth);
             Int32Rect readout = stamps[^1].Bounds;
             _staticReadoutBounds = new Rect(readout.X, readout.Y, readout.Width, readout.Height);
             owner.SetChromeStamps(stamps);

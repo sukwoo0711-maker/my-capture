@@ -69,6 +69,8 @@ internal sealed partial class QuickAccessWindow : Window
     private bool _placing;
     private NativeHotkeyRegistrar? _activationKey;
     private bool _activationRegistered;
+    private readonly string? _firstCaptureTip;
+    private string? _firstUseLine;
     private const int ActivationKeyId = 0x7102;
     private readonly Dictionary<string, Action> _actions = [];
     private readonly Button _libraryButton;
@@ -367,9 +369,8 @@ internal sealed partial class QuickAccessWindow : Window
         panel.Children.Add(actions);
         _firstUseTip.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
         _firstUseTip.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        KoreanWordWrap.Show(_firstUseTip, firstCaptureTip ?? string.Empty);
+        _firstCaptureTip = firstCaptureTip;
         _firstUseTip.Visibility = firstCaptureTip is null ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(_firstUseTip, KoreanWordWrap.Strip(_firstUseTip.Text));
         AutomationProperties.SetHelpText(_firstUseTip, UiText.Get("Onboard_QuickCardTip"));
         panel.Children.Add(_firstUseTip);
         if (captureActions is null) SetCaptureActionsEnabled(false);
@@ -410,7 +411,7 @@ internal sealed partial class QuickAccessWindow : Window
         // The implicit Window style, which carries the shared entrance, does not reach a subclass.
         // A card receiving a flying capture replaces it with its own fade (PrepareLanding).
         FluidMotion.SetWindowEntrance(this, true);
-        ToolTip = UiText.Get("Onboard_QuickCardTip");
+        ShowActivationHint(registered: true);
         if (_keyboardRouter is not null)
         {
             _keyboardRouter.RegistrationChanged += RefreshSharedActivationHint;
@@ -542,11 +543,35 @@ internal sealed partial class QuickAccessWindow : Window
         ShortcutDefinition activation = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate");
         _activationRegistered = _activationKey.TryRegister(ActivationKeyId,
             new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _);
-        ToolTip = UiText.Get(_activationRegistered ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
+        ShowActivationHint(_activationRegistered);
     }
 
-    private void RefreshSharedActivationHint() => ToolTip = UiText.Get(
-        _keyboardRouter?.IsRegisteredFor(this) == true ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
+    private void RefreshSharedActivationHint() => ShowActivationHint(_keyboardRouter?.IsRegisteredFor(this) == true);
+
+    /// <summary>The tooltip and the first-use line name the card's key only while it is registered for this card.</summary>
+    private void ShowActivationHint(bool registered)
+    {
+        ToolTip = UiText.Get(registered ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
+        if (_firstCaptureTip is null) return;
+        string line = FirstUseLine(_firstCaptureTip, registered);
+        if (line == _firstUseLine) return;
+        _firstUseLine = line;
+        KoreanWordWrap.Show(_firstUseTip, line);
+        AutomationProperties.SetName(_firstUseTip, KoreanWordWrap.Strip(_firstUseTip.Text));
+    }
+
+    /// <summary>
+    /// The first-use line: the capture tip, then how the card is worked from the keyboard. The key is
+    /// the catalogue's activation key; without it the card is clicked first.
+    /// </summary>
+    internal static string FirstUseLine(string tip, bool activationKey)
+    {
+        string keys = activationKey
+            ? UiText.Format("Onboard_QuickCardKeysTip", ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Activate").Hint)
+            : UiText.Get("Onboard_QuickCardTipNoHotkey");
+        // When the line wraps, it breaks before the keyboard hint rather than inside it.
+        return tip + " · " + keys.Replace(' ', ' ');
+    }
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
 
