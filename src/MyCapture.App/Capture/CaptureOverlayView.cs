@@ -128,15 +128,9 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     private RectD? _drawnHover;
     private RectD? _drawnHoverTarget;
     private bool _drawnHoverWholeMonitor;
-    // The highlight glide: _hoverRegion is what a click captures, _shownHover where the reveal clip,
-    // the band and the tab are drawn while they ease towards it.
-    private RectD? _shownHover;
-    private RectD? _glideTarget;
-    private RectD _glideFrom;
-    private TimeSpan _glideStart;
-    private TimeSpan _glideLength;
-    private IEasingFunction? _glideEasing;
-    private bool _gliding;
+    // The highlight glide: _hoverRegion is what a click captures, its Shown rectangle where the
+    // reveal clip, the band and the tab are drawn while they ease towards it.
+    private readonly HoverGlide _hoverGlide = new();
     private static readonly Func<TimeSpan> MotionClock = static () => Stopwatch.GetElapsedTime(0);
     private FormattedText? _tabLabelText;
     private FormattedText? _tabSizeText;
@@ -248,8 +242,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal void FlushFeedbackForTest() => _feedbackScheduler.FlushForTest();
     internal RectD? HoverRegionForTest => _hoverRegion;
     internal bool HoverWholeMonitorForTest => _hoverWholeMonitor;
-    internal RectD? ShownHoverForTest => _shownHover;
-    internal bool HoverGlidingForTest => _gliding;
+    internal RectD? ShownHoverForTest => _hoverGlide.Shown;
+    internal bool HoverGlidingForTest => _hoverGlide.IsGliding;
 
     /// <summary>The clock the highlight glide reads; tests step it.</summary>
     internal Func<TimeSpan> ReadClock { get; set; } = MotionClock;
@@ -305,15 +299,6 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>Pointer travel, in DIPs, after which the start guide gets out of the way.</summary>
     internal const double StartGuideMoveDismissDip = 96;
-
-    /// <summary>
-    /// How long the window highlight glides to a new window: shorter than the fast motion token, so
-    /// the highlight lands before the pointer reaches the next window.
-    /// </summary>
-    internal static readonly TimeSpan HoverGlideLength = TimeSpan.FromMilliseconds(50);
-
-    /// <summary>Frame pixels the farthest edge must move before the window highlight glides.</summary>
-    internal const double HoverGlideMinimumShift = 8;
 
     /// <summary>
     /// Highlights the frontmost top-level window under the pointer and lets a click select it.
@@ -646,8 +631,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         _hoverWindow = _selectedWindow = null;
         _hoverRegion = null;
         _hoverWholeMonitor = false;
-        _shownHover = _glideTarget = null;
-        _gliding = false;
+        _hoverGlide.Reset();
         _monitors = null;
         _copyColorText = null;
         ColorCopied = null;
@@ -1461,80 +1445,22 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// Where the reveal clip, the band and the tab show the highlighted <paramref name="target"/>.
-    /// A new target glides there from the rectangle on screen over <see cref="HoverGlideLength"/>,
-    /// so the highlight follows the pointer from window to window instead of jumping; a new target
-    /// during a glide snaps, so a pointer sweeping across windows never trails the highlight.
+    /// A new target glides there from the rectangle on screen (<see cref="HoverGlide"/>), also in
+    /// the middle of another glide, so the highlight follows the pointer from window to window of
+    /// any size instead of jumping.
     /// </summary>
     /// <remarks>
     /// Only the picture moves. The hover a click captures and the tab's words change at once. The
     /// first highlight, one that follows no highlight, every highlight with Windows animation
-    /// effects off, a move of a few pixels and a move to or from a window larger than a quarter of
-    /// the screen snap: a large window's glide redraws most of the screen on every frame. A glide
-    /// asks for the next composition frame until it lands; each of those frames moves the reveal
-    /// clip and redraws the selection layer, never the frozen desktop.
+    /// effects off and a move of a few pixels snap. A glide asks for the next composition frame
+    /// until it lands; each of those frames moves the reveal clip and redraws the selection layer,
+    /// never the frozen desktop.
     /// </remarks>
     private RectD? GlideHover(RectD? target)
     {
-        if (target is not { } to)
-        {
-            _gliding = false;
-            _shownHover = _glideTarget = null;
-            return null;
-        }
-
-        TimeSpan now = ReadClock();
-        if (_glideTarget != to)
-        {
-            RectD? from = _gliding ? null : _shownHover;
-            _glideTarget = to;
-            _gliding = from is { } start && GlidesBetween(start, to);
-            if (_gliding)
-            {
-                _glideFrom = from!.Value;
-                _glideStart = now;
-                _glideLength = HoverGlideLength;
-                _glideEasing = FluidMotion.StandardEasing;
-            }
-        }
-
-        if (!_gliding)
-        {
-            _shownHover = to;
-            return to;
-        }
-
-        RectD shown = GlideAt(now);
-        _shownHover = shown;
-        if (now - _glideStart >= _glideLength) _gliding = false;
-        else QueueFeedback();
+        RectD? shown = _hoverGlide.Update(target, target is null ? TimeSpan.Zero : ReadClock(), FluidMotion.AnimationsEnabled);
+        if (_hoverGlide.IsGliding) QueueFeedback();
         return shown;
-    }
-
-    /// <summary>Whether the highlight glides from <paramref name="from"/> to <paramref name="to"/> instead of snapping.</summary>
-    private bool GlidesBetween(RectD from, RectD to)
-    {
-        if (!FluidMotion.AnimationsEnabled) return false;
-        double shift = Math.Max(
-            Math.Max(Math.Abs(to.Left - from.Left), Math.Abs(to.Top - from.Top)),
-            Math.Max(Math.Abs(to.Right - from.Right), Math.Abs(to.Bottom - from.Bottom)));
-        if (shift < HoverGlideMinimumShift) return false;
-        double quarter = (double)PixelWidth * PixelHeight / 4;
-        return from.Width * from.Height <= quarter && to.Width * to.Height <= quarter;
-    }
-
-    /// <summary>The glide's rectangle at <paramref name="now"/>, on whole frame pixels.</summary>
-    private RectD GlideAt(TimeSpan now)
-    {
-        RectD to = _glideTarget!.Value;
-        double progress = _glideLength > TimeSpan.Zero ? (now - _glideStart) / _glideLength : 1;
-        if (progress >= 1) return to;
-        double eased = _glideEasing?.Ease(Math.Max(0, progress)) ?? progress;
-        RectD from = _glideFrom;
-        double left = Math.Round(from.Left + ((to.Left - from.Left) * eased));
-        double top = Math.Round(from.Top + ((to.Top - from.Top) * eased));
-        double right = Math.Round(from.Right + ((to.Right - from.Right) * eased));
-        double bottom = Math.Round(from.Bottom + ((to.Bottom - from.Bottom) * eased));
-        return new RectD(left, top, right - left, bottom - top);
     }
 
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
@@ -1867,18 +1793,38 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal Rect? AnchorChipBoundsForTest { get; private set; }
 
     /// <summary>
-    /// The start-point chip around a <paramref name="text"/>-sized label: its top-left corner where it
-    /// has always been, just below and to the right of the point the drag started from, with the
-    /// size read-out's padding and its distance from the edges of a <paramref name="view"/>-sized
-    /// screen. It used to pad its label by 4 × 2 DIPs, under half the read-out's 9 × 5.
+    /// The start-point chip around a <paramref name="text"/>-sized label, with the size read-out's
+    /// padding, kept <c>ReadoutEdge</c> from the edges of a <paramref name="view"/>-sized screen.
+    /// Given where the drag is heading (<paramref name="pointer"/>), the chip sits outside the
+    /// selection on the side the drag leaves behind: dragging right and down puts it above and to
+    /// the left of the start point, clear of a frame drawn <paramref name="outset"/> DIPs outside the
+    /// selection. Without room there it moves beside the frame on the drag's vertical side, and only
+    /// with neither inside the selection's corner. Without a direction it keeps its first place,
+    /// just below and to the right of the start point.
     /// </summary>
-    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view)
+    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view, Point? pointer = null, double outset = 0)
     {
         double width = text.Width + (ReadoutPaddingX * 2);
         double height = text.Height + (ReadoutPaddingY * 2);
-        double x = Math.Clamp(anchor.X + 11, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
-        double y = Math.Clamp(anchor.Y + 10, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
-        return new Rect(x, y, width, height);
+        if (pointer is { } toward)
+        {
+            bool right = toward.X >= anchor.X, down = toward.Y >= anchor.Y;
+            double gap = outset + 6;
+            double outsideX = right ? anchor.X - gap - width : anchor.X + gap;
+            double outsideY = down ? anchor.Y - gap - height : anchor.Y + gap;
+            if (FitsX(outsideX) && FitsY(outsideY)) return new Rect(outsideX, outsideY, width, height);
+            double besideY = down ? anchor.Y - outset : anchor.Y + outset - height;
+            if (FitsX(outsideX) && FitsY(besideY)) return new Rect(outsideX, besideY, width, height);
+            double insideX = right ? anchor.X + 11 : anchor.X - 11 - width;
+            double insideY = down ? anchor.Y + 10 : anchor.Y - 10 - height;
+            return new Rect(ClampX(insideX), ClampY(insideY), width, height);
+        }
+        return new Rect(ClampX(anchor.X + 11), ClampY(anchor.Y + 10), width, height);
+
+        bool FitsX(double x) => x >= ReadoutEdge - 0.0001 && x + width <= view.Width - ReadoutEdge + 0.0001;
+        bool FitsY(double y) => y >= ReadoutEdge - 0.0001 && y + height <= view.Height - ReadoutEdge + 0.0001;
+        double ClampX(double x) => Math.Clamp(x, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
+        double ClampY(double y) => Math.Clamp(y, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
     }
 
     /// <summary>

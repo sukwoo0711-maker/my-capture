@@ -188,6 +188,7 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
         WriteAnchorEvidence(run, scale, new PointD(1279, 719), new PointD(1000, 500), "near-edge");
         WriteHoverEvidence(run, scale);
         WriteWindowSelectEvidence(run, scale);
+        WriteMaximizedHoverEvidence(run, scale);
         WriteGridEvidence(run, scale);
         WriteAnchorEvidence(run, scale, new PointD(300, 250), new PointD(520, 430), "central",
             new System.Drawing.Size(320, 180), new RectD(300, 250, 320, 180));
@@ -337,7 +338,8 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
             view.UpdatePointer(false, false);
             owner.UpdatePointer(false, false);
             owner.RefreshHover();
-            foreach (int milliseconds in new[] { 0, 25, 50 })
+            // Notes to Chat is a nearby window of a similar size: the fast glide.
+            foreach (int milliseconds in new[] { 0, 21, 42, 83 })
             {
                 now = TimeSpan.FromMilliseconds(milliseconds);
                 view.FlushFeedbackForTest();
@@ -352,12 +354,12 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
                 Assert.Equal(view.TargetLabelForTest, chrome.TargetLabelForTest);
                 Assert.EndsWith("180 × 140", chrome.TargetLabelForTest!, StringComparison.Ordinal);
                 if (milliseconds == 0) Assert.Equal(notes.ScreenBounds, owner.ShownHoverForTest);
-                if (milliseconds == 25)
+                if (milliseconds is 21 or 42)
                 {
                     Assert.NotEqual(notes.ScreenBounds, owner.ShownHoverForTest);
                     Assert.NotEqual(chat.ScreenBounds, owner.ShownHoverForTest);
                 }
-                if (milliseconds == 50) Assert.Equal(chat.ScreenBounds, owner.ShownHoverForTest);
+                if (milliseconds == 83) Assert.Equal(chat.ScreenBounds, owner.ShownHoverForTest);
                 string name = milliseconds == 0 ? "initial" : $"{milliseconds}ms";
                 SavePair(directory, "item-06-hover-" + name, wpf, native);
                 Rect wpfTab = Assert.IsType<Rect>(view.TargetTabForTest);
@@ -366,7 +368,113 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
                 nativeTab.Scale(scale, scale);
                 SaveComparison(directory, "item-06-hover-" + name + "-tab",
                     CropDetail(wpf, wpfTab), CropDetail(native, nativeTab));
+                if (milliseconds != 83) continue;
+                // The landed frame's corner at eight times: native keyline and stroke lie outside.
+                var corner = new Int32Rect((int)chat.ScreenBounds.Left - 10, (int)chat.ScreenBounds.Bottom - 14, 24, 24);
+                SaveComparison(directory, "item-06-hover-frame-corner-x8", Zoom(wpf, corner, 8), Zoom(native, corner, 8));
             }
+        }
+        finally
+        {
+            view.ReleaseResources();
+            FluidMotion.AnimationsEnabledOverrideForTest = previousMotion;
+        }
+    }
+
+    private static void WriteMaximizedHoverEvidence(string directory, double scale)
+    {
+        // From a small window to a maximized one behind it: no size limit, the longer glide, and a
+        // frame that stays visible on the screen edge once it lands.
+        var notes = new WindowCandidate(new IntPtr(0x3303), new RectD(40, 30, 200, 150), "Notes");
+        var maximized = new WindowCandidate(new IntPtr(0x3304), new RectD(0, 0, Width, Height), "Chat");
+        FrozenFrame frame = HoverFrame(notes.ScreenBounds, maximized.ScreenBounds, chatBehind: true);
+        RectD bounds = frame.ScreenBounds;
+        PointD pointer = new(100, 100);
+        TimeSpan now = TimeSpan.Zero;
+        MonitorInfo[] monitors = [new("hover-maximized-evidence", bounds, bounds, (uint)Math.Round(96 * scale), true)];
+        bool? previousMotion = FluidMotion.AnimationsEnabledOverrideForTest;
+        var view = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false)
+        {
+            ReadCursor = () => pointer,
+            PlaceCursor = _ => false,
+            SimulatedPointerInside = true,
+            ReadMonitors = () => monitors,
+            ReadClock = () => now,
+            DetectWindows = true,
+            WindowCandidates = [notes, maximized],
+            ShowModeBar = true,
+        };
+        CaptureCueEvidenceTests.UsePalette(view, CaptureGuidePalette.Resolve());
+        using var owner = new NativeCaptureOverlay(bounds, false, false, showSelectionGrid: false)
+        {
+            ReadCursor = () => pointer,
+            PlaceCursor = _ => false,
+            ReadMonitors = () => monitors,
+            ReadClock = () => now,
+            DetectWindows = true,
+            SourceWindows = [notes, maximized],
+        };
+        owner.AttachFrame(frame);
+        using var chrome = new NativeSelectorChrome(owner, false, false);
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        try
+        {
+            owner.PreparePointerFeedback();
+            owner.PrepareVisualFeedback();
+            view.InitializePointer();
+            owner.UpdatePointer(false, false);
+            owner.RefreshHover();
+            _ = CaptureCueEvidenceTests.Render(view, scale);
+            view.FlushFeedbackForTest();
+            _ = CaptureCueEvidenceTests.Render(view, scale);
+            Assert.Equal(notes.ScreenBounds, view.ShownHoverForTest);
+            Assert.Equal(view.ShownHoverForTest, owner.ShownHoverForTest);
+
+            pointer = new PointD(900, 500);
+            view.UpdatePointer(false, false);
+            owner.UpdatePointer(false, false);
+            owner.RefreshHover();
+            Assert.Equal(HoverGlide.NormalLength, HoverGlide.Length(notes.ScreenBounds, maximized.ScreenBounds));
+            BitmapSource? landed = null;
+            foreach (int milliseconds in new[] { 0, 21, 42, 83, 125, 167 })
+            {
+                now = TimeSpan.FromMilliseconds(milliseconds);
+                view.FlushFeedbackForTest();
+                BitmapSource wpf = CaptureCueEvidenceTests.Render(view, scale);
+                owner.FlushFeedbackForTest();
+                chrome.Update(pointer, owner.DisplayedRegionForTest);
+                chrome.FlushHoverTabForTest();
+                BitmapSource native = NativeSelectorTestRenderer.Render(owner, chrome);
+                Assert.Equal(view.ShownHoverForTest, owner.ShownHoverForTest);
+                Assert.Equal(maximized.ScreenBounds, owner.HoverRegion);
+                Assert.Equal(view.TargetLabelForTest, chrome.TargetLabelForTest);
+                if (milliseconds == 0) Assert.Equal(notes.ScreenBounds, owner.ShownHoverForTest);
+                else if (milliseconds < 167)
+                {
+                    Assert.True(owner.HoverGlidingForTest);
+                    Assert.NotEqual(notes.ScreenBounds, owner.ShownHoverForTest);
+                    Assert.NotEqual(maximized.ScreenBounds, owner.ShownHoverForTest);
+                }
+                else
+                {
+                    Assert.False(owner.HoverGlidingForTest);
+                    Assert.Equal(maximized.ScreenBounds, owner.ShownHoverForTest);
+                    landed = native;
+                }
+                SavePair(directory, "item-10-hover-maximized-" + (milliseconds == 0 ? "initial" : $"{milliseconds}ms"), wpf, native);
+                if (landed is not null)
+                {
+                    var edge = new Int32Rect(0, Height / 2 - 12, 24, 24);
+                    SaveComparison(directory, "item-10-hover-maximized-edge-x8", Zoom(wpf, edge, 8), Zoom(native, edge, 8));
+                }
+            }
+            // Landed on the whole screen, the frame is inside the screen edge: stroke, then keyline.
+            (Color stroke, Color keyline) = (((SolidColorBrush)CaptureGuidePalette.Resolve()["CaptureGuide.SelectionBorder"]).Color,
+                ((SolidColorBrush)CaptureGuidePalette.Resolve()["CaptureGuide.CrosshairShadow"]).Color);
+            Assert.Equal(stroke with { A = 255 }, Pixel(landed!, 0, Height / 2));
+            Assert.Equal(stroke with { A = 255 }, Pixel(landed!, 1, Height / 2));
+            Assert.Equal(keyline with { A = 255 }, Pixel(landed!, 2, Height / 2));
+            Assert.Equal(stroke with { A = 255 }, Pixel(landed!, Width - 1, Height / 2));
         }
         finally
         {
@@ -519,6 +627,13 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
             if (expectedPreset is { } expected) Assert.Equal(expected, view.Selection);
             string prefix = preset.HasValue ? "item-08-preset-" : "item-05-anchor-";
             SavePair(directory, prefix + name, wpf, native);
+            if (!preset.HasValue)
+            {
+                // The drag frame's left edge at eight times: native keyline and stroke lie outside.
+                Int32Rect selected = owner.SelectionRectangle;
+                var edge = new Int32Rect(Math.Max(0, selected.X - 12), selected.Y + selected.Height / 2 - 12, 24, 24);
+                SaveComparison(directory, prefix + name + "-frame-x8", Zoom(wpf, edge, 8), Zoom(native, edge, 8));
+            }
 
             Rect wpfAnchor = Assert.IsType<Rect>(view.AnchorChipBoundsForTest);
             Rect nativeAnchor = Assert.IsType<Rect>(chrome.AnchorChipBoundsForTest);
@@ -615,14 +730,15 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
         return rendered;
     }
 
-    private static FrozenFrame HoverFrame(RectD notes, RectD chat)
+    private static FrozenFrame HoverFrame(RectD notes, RectD chat, bool chatBehind = false)
     {
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
         {
             dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(47, 85, 122)), null, new Rect(0, 0, Width, Height));
+            if (chatBehind) DrawWindow(chat, "Chat", Color.FromRgb(30, 36, 49), Color.FromRgb(44, 52, 69), Colors.White);
             DrawWindow(notes, "Notes", Color.FromRgb(247, 248, 250), Color.FromRgb(228, 232, 238), Colors.Black);
-            DrawWindow(chat, "Chat", Color.FromRgb(30, 36, 49), Color.FromRgb(44, 52, 69), Colors.White);
+            if (!chatBehind) DrawWindow(chat, "Chat", Color.FromRgb(30, 36, 49), Color.FromRgb(44, 52, 69), Colors.White);
 
             void DrawWindow(RectD bounds, string title, Color body, Color header, Color text)
             {
@@ -654,6 +770,28 @@ public sealed class NativeSelectorVisualEvidenceTests(ITestOutputHelper output)
         Assert.Equal(Width, native.PixelWidth);
         Assert.Equal(Height, native.PixelHeight);
         SaveComparison(directory, name, wpf, native);
+    }
+
+    /// <summary>A region enlarged by whole pixels without smoothing, so single-pixel rings stay readable.</summary>
+    private static BitmapSource Zoom(BitmapSource scene, Int32Rect region, int factor)
+    {
+        var crop = new FormatConvertedBitmap(new CroppedBitmap(scene, region), PixelFormats.Bgra32, null, 0);
+        int width = region.Width, height = region.Height;
+        byte[] source = new byte[width * height * 4], zoomed = new byte[width * factor * height * factor * 4];
+        crop.CopyPixels(source, width * 4, 0);
+        for (int y = 0; y < height * factor; y++)
+            for (int x = 0; x < width * factor; x++)
+                Array.Copy(source, ((y / factor * width) + (x / factor)) * 4, zoomed, ((y * width * factor) + x) * 4, 4);
+        BitmapSource bitmap = BitmapSource.Create(width * factor, height * factor, 96, 96, PixelFormats.Bgra32, null, zoomed, width * factor * 4);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private static Color Pixel(BitmapSource scene, int x, int y)
+    {
+        var pixel = new byte[4];
+        new FormatConvertedBitmap(new CroppedBitmap(scene, new Int32Rect(x, y, 1, 1)), PixelFormats.Bgra32, null, 0).CopyPixels(pixel, 4, 0);
+        return Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]);
     }
 
     private static BitmapSource CropDetail(BitmapSource scene, Rect bounds)

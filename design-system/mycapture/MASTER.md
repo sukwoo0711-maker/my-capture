@@ -15,7 +15,7 @@ The product has one UI accent, red. At runtime `AccentPalette.RedOverrides` (`Ap
 theme except high contrast a deep red primary fill with white ink: fill `#C9352C`, hover `#BD3129`,
 pressed `#B32E26`, ink `#FFFFFF` (5.2:1, and hover and pressed only darken). The brighter brand red
 `#E0453C` stays on what marks the brand or a live recording over other apps: the pin outline and the
-recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines.
+recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines; the capture selector's chosen mode is its one accent-filled toolbar button, and its magnifier rings the centre pixel in the accent.
 The accent rows in the token table below are the `Tokens.xaml` startup defaults that this runtime palette
 replaces, not the colours users see. The six themes are Midnight, Glass,
 Workspace, Daylight, GlassLight and HighContrast; System follows Windows. Windows high contrast takes
@@ -127,7 +127,9 @@ default, hover, pressed, focused, selected and disabled states through shared re
 Motion is 83/167/250 ms, animates opacity and transforms only (never capture geometry or timeline
 dimensions), stays interruptible and respects reduced animation. An intended exception: the delayed-capture
 countdown's digit lands over 200 ms (`CountdownWindow.LandingDuration`), a beat longer than the 167 ms fade
-it lands with, because it is the only thing moving on that surface.
+it lands with, because it is the only thing moving on that surface. Another: the selector's hover frame glides
+its geometry over 83/167 ms (`HoverGlide`), because it is a pointer-following cue, not captured geometry;
+reduced animation snaps it.
 Text meets WCAG AA (4.5:1); focus and non-text indicators meet 3:1. Every icon-only control has an
 accessible name and a tooltip. Colour is never the only signal: keep labels, shapes or hatching.
 

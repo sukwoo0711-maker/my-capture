@@ -13,16 +13,16 @@ using static MyCapture.App.Tests.WindowDetectOverlayTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The window-detect highlight glides from window to window over
-/// <see cref="CaptureOverlayView.HoverGlideLength"/> while the hover, what a click captures and the
-/// tab's words change at once. A new window during a glide, a move of a few pixels and a window
-/// larger than a quarter of the screen snap.
+/// The window-detect highlight glides from window to window of any size (<see cref="HoverGlide"/>)
+/// while the hover, what a click captures and the tab's words change at once. A new window during a
+/// glide carries on from where the highlight is; a move of a few pixels and every move without
+/// motion snap.
 /// </summary>
 public sealed class WindowDetectGlideTests
 {
-    // Notes and Chat are each under a quarter of the 640 × 360 frame, Panel sits 4 pixels inside
-    // Notes and the desktop is the whole frame.
-    private static readonly WindowCandidate Panel = new(new IntPtr(31), new RectD(44, 34, 192, 142), "Panel");
+    // Notes and Chat are of a similar size and close together, Panel's left edge sits 3 pixels
+    // inside Notes and the desktop is the whole 640 × 360 frame.
+    private static readonly WindowCandidate Panel = new(new IntPtr(31), new RectD(43, 30, 197, 150), "Panel");
     private static readonly WindowCandidate Notes = new(new IntPtr(32), new RectD(40, 30, 200, 150), "Notes");
     private static readonly WindowCandidate Chat = new(new IntPtr(33), new RectD(400, 40, 180, 140), "Chat");
     private static readonly WindowCandidate Desktop = new(new IntPtr(34), new RectD(0, 0, 640, 360), "Desktop");
@@ -30,7 +30,8 @@ public sealed class WindowDetectGlideTests
     private static readonly PointD OnNotes = new(42, 100);
     private static readonly PointD OnChat = new(500, 100);
     private static readonly PointD OnDesktop = new(300, 300);
-    private static readonly TimeSpan Glide = CaptureOverlayView.HoverGlideLength;
+    private static readonly TimeSpan Glide = HoverGlide.FastLength;
+    private static readonly TimeSpan LongGlide = HoverGlide.NormalLength;
 
     [Theory]
     [InlineData(false)]
@@ -71,11 +72,18 @@ public sealed class WindowDetectGlideTests
             Assert.Equal(shown, shown.ToPixelBounds());
             Assert.Equal(new Rect(shown.Left, shown.Top, shown.Width, shown.Height), RevealClip(view));
             Assert.True(Visual(view, "_selectionVisual").ContentBounds.Left < 390);
-            // The tab's words are laid out once per target, not on every glide frame.
+            Rect tab = view.TargetTabForTest!.Value;
+            // The tab's words are laid out once per target, not on every glide frame, and the tab
+            // moves with the drawn frame as one piece.
             object label = Field(view, "_tabLabelText");
             now += TimeSpan.FromMilliseconds(8);
             Draw(view);
             Assert.Same(label, Field(view, "_tabLabelText"));
+            RectD later = view.ShownHoverForTest!.Value;
+            Assert.NotEqual(shown, later);
+            Rect moved = view.TargetTabForTest!.Value;
+            Assert.Equal(tab.Left - shown.Left, moved.Left - later.Left, 6);
+            Assert.Equal(tab.Size, moved.Size);
 
             // A click during the glide captures the window under the pointer, exactly as before.
             Assert.True(view.HoverGlidingForTest);
@@ -91,7 +99,7 @@ public sealed class WindowDetectGlideTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ANewWindowDuringAGlideSnapsAndALandedGlideMatchesASnap(bool native) => Run(motion: true, () =>
+    public void ANewWindowDuringAGlideCarriesOnFromTheShownRectangleAndALandedGlideMatchesASnap(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnNotes;
         TimeSpan now = TimeSpan.FromSeconds(10);
@@ -106,8 +114,8 @@ public sealed class WindowDetectGlideTests
             view.UpdatePointer(false, false);
             Draw(view);
 
-            // Back to Notes a quarter of the way through: the highlight jumps there instead of
-            // starting another glide, so a pointer sweeping across windows never trails it.
+            // Back to Notes a quarter of the way through: the highlight turns round from where it
+            // is on screen with a new clock, so a pointer sweeping across windows never sees it jump.
             now += Glide / 4;
             Draw(view);
             RectD onScreen = view.ShownHoverForTest!.Value;
@@ -116,10 +124,25 @@ public sealed class WindowDetectGlideTests
             pointer = OnNotes;
             view.UpdatePointer(false, false);
             Draw(view);
+            Assert.True(view.HoverGlidingForTest);
+            Assert.Equal(Notes.ScreenBounds, view.HoverRegionForTest);
+            Assert.Equal(onScreen, view.ShownHoverForTest);
+            Assert.Equal(new Rect(onScreen.Left, onScreen.Top, onScreen.Width, onScreen.Height), RevealClip(view));
+            Assert.EndsWith("200 × 150", view.TargetLabelForTest, StringComparison.Ordinal);
+
+            // After the first glide would have ended it is still on its way back, and it lands on
+            // Notes one glide length after the turn.
+            now += Glide * 0.8;
+            Draw(view);
+            Assert.True(view.HoverGlidingForTest);
+            RectD returning = view.ShownHoverForTest!.Value;
+            Assert.InRange(returning.Left, 41, onScreen.Left - 1);
+            Assert.Equal(new Rect(returning.Left, returning.Top, returning.Width, returning.Height), RevealClip(view));
+            now += Glide * 0.2;
+            Draw(view);
             Assert.False(view.HoverGlidingForTest);
             Assert.Equal(Notes.ScreenBounds, view.ShownHoverForTest);
             Assert.Equal(new Rect(40, 30, 200, 150), RevealClip(view));
-            Assert.EndsWith("200 × 150", view.TargetLabelForTest, StringComparison.Ordinal);
 
             // From rest the next window glides again and lands after the glide length, exactly
             // where a snap draws it.
@@ -147,40 +170,68 @@ public sealed class WindowDetectGlideTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AMoveOfAFewPixelsAndAWindowLargerThanAQuarterOfTheScreenSnap(bool native) => Run(motion: true, () =>
+    public void AMoveOfAFewPixelsSnapsAndWindowsOfAnySizeGlide(bool native) => Run(motion: true, () =>
     {
         PointD pointer = OnPanel;
         TimeSpan now = TimeSpan.FromSeconds(10);
         GlideSelector view = GlidingView(native, () => pointer, Panel);
         view.ReadClock = () => now;
+        GlideSelector snapped = GlidingView(native, () => OnChat);
         try
         {
             view.InitializePointer();
             Draw(view);
             Assert.Equal(Panel.ScreenBounds, view.ShownHoverForTest);
 
-            // From Panel to the window around it every edge moves 4 pixels: no glide.
+            // From Panel to the window around it the centre moves 1.5 pixels and the width 3: no glide.
             pointer = OnNotes;
             view.UpdatePointer(false, false);
             Draw(view);
             Assert.False(view.HoverGlidingForTest);
             Assert.Equal(Notes.ScreenBounds, view.ShownHoverForTest);
 
-            // The desktop fills the screen: to it and back from it the highlight snaps.
+            // The desktop fills the screen: the highlight grows into it over the longer glide.
             pointer = OnDesktop;
             view.UpdatePointer(false, false);
+            Draw(view);
+            Assert.True(view.HoverGlidingForTest);
+            Assert.Equal(Desktop.ScreenBounds, view.HoverRegionForTest);
+            Assert.Equal(Notes.ScreenBounds, view.ShownHoverForTest);
+            Assert.EndsWith("640 × 360", view.TargetLabelForTest, StringComparison.Ordinal);
+            now += Glide;
+            Draw(view);
+            Assert.True(view.HoverGlidingForTest);
+            RectD growing = view.ShownHoverForTest!.Value;
+            Assert.InRange(growing.Left, 1, 39);
+            Assert.InRange(growing.Right, 241, 639);
+            Assert.Equal(new Rect(growing.Left, growing.Top, growing.Width, growing.Height), RevealClip(view));
+            now += LongGlide - Glide;
             Draw(view);
             Assert.False(view.HoverGlidingForTest);
             Assert.Equal(Desktop.ScreenBounds, view.ShownHoverForTest);
             Assert.Equal(new Rect(0, 0, 640, 360), RevealClip(view));
+
+            // From the whole screen down to Chat it glides as well and lands where a snap draws it.
             pointer = OnChat;
             view.UpdatePointer(false, false);
             Draw(view);
+            Assert.True(view.HoverGlidingForTest);
+            Assert.Equal(Desktop.ScreenBounds, view.ShownHoverForTest);
+            now += LongGlide;
+            Draw(view);
             Assert.False(view.HoverGlidingForTest);
+            snapped.InitializePointer();
+            Draw(snapped);
             Assert.Equal(Chat.ScreenBounds, view.ShownHoverForTest);
             Assert.Equal(new Rect(400, 40, 180, 140), RevealClip(view));
+            Assert.Equal(RevealClip(snapped), RevealClip(view));
+            Assert.Equal(snapped.TargetTabForTest, view.TargetTabForTest);
         }
-        finally { view.ReleaseResources(); }
+        finally
+        {
+            view.ReleaseResources();
+            snapped.ReleaseResources();
+        }
     });
 
     [Theory]
@@ -200,6 +251,12 @@ public sealed class WindowDetectGlideTests
             Assert.False(view.HoverGlidingForTest);
             Assert.Equal(Chat.ScreenBounds, view.ShownHoverForTest);
             Assert.Equal(new Rect(400, 40, 180, 140), RevealClip(view));
+            pointer = OnDesktop;
+            view.UpdatePointer(false, false);
+            Draw(view);
+            Assert.False(view.HoverGlidingForTest);
+            Assert.Equal(Desktop.ScreenBounds, view.ShownHoverForTest);
+            Assert.Equal(new Rect(0, 0, 640, 360), RevealClip(view));
         }
         finally { view.ReleaseResources(); }
     });
@@ -245,6 +302,21 @@ public sealed class WindowDetectGlideTests
             Assert.False(view.HoverGlidingForTest);
             Assert.False(view.HasPendingFeedback);
             Assert.Equal(Chat.ScreenBounds, view.ShownHoverForTest);
+
+            // Growing to the whole screen drives frames the same way, still without a desktop redraw.
+            pointer = OnDesktop;
+            view.UpdatePointer(false, false);
+            view.FlushFeedbackForTest();
+            Assert.True(view.HoverGlidingForTest);
+            Assert.True(view.HasPendingFeedback);
+            now += LongGlide / 2;
+            view.FlushFeedbackForTest();
+            Assert.True(view.HasPendingFeedback);
+            now += LongGlide;
+            view.FlushFeedbackForTest();
+            Assert.False(view.HoverGlidingForTest);
+            Assert.False(view.HasPendingFeedback);
+            Assert.Equal(Desktop.ScreenBounds, view.ShownHoverForTest);
             Assert.Equal(desktop, view.StaticRenderCount);
             Assert.Equal(dimmer, view.DimmerRenderCount);
         }

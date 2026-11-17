@@ -54,9 +54,13 @@ internal static class CaptureCueLayout
     /// <param name="insideOnly">True for a whole monitor.</param>
     /// <param name="pixelX">DIPs per physical pixel, horizontally.</param>
     /// <param name="pixelY">DIPs per physical pixel, vertically.</param>
+    /// <param name="frame">
+    /// A floating chip's spacing around a frame drawn outside the region (see
+    /// <see cref="TabSpacing"/>); the default attaches the tab to the region's own edge.
+    /// </param>
     internal static (Rect Bounds, CaptureCueTabPlacement Placement) PlaceTab(
         Rect target, Size tab, Size viewport, IReadOnlyList<Rect> avoid, bool insideOnly,
-        double pixelX = 1, double pixelY = 1)
+        double pixelX = 1, double pixelY = 1, TabSpacing frame = default)
     {
         ArgumentNullException.ThrowIfNull(avoid);
         pixelX = pixelX > 0 ? pixelX : 1;
@@ -67,43 +71,50 @@ internal static class CaptureCueLayout
         Rect visible = Rect.Intersect(target, screen);
         if (visible.IsEmpty) visible = new Rect(Math.Clamp(target.X, 0, viewport.Width), Math.Clamp(target.Y, 0, viewport.Height), 0, 0);
         // A display narrower than the tab gets a shortened tab rather than one spilling onto its neighbour.
-        if (insideOnly) width = Math.Min(width, Math.Max(pixelX, Down(visible.Width, pixelX)));
+        if (insideOnly) width = Math.Min(width, Math.Max(pixelX, Down(visible.Width - 2 * frame.Inset, pixelX)));
 
-        // Left-aligned with the region, kept on screen and, when it fits, within the region.
-        double x = visible.Left;
-        if (width <= visible.Width) x = Math.Min(x, visible.Right - width);
-        x = Snap(Math.Clamp(x, 0, Math.Max(0, viewport.Width - width)), pixelX);
+        // Outside the region the chip lines up with the frame's outer edge; inside, it keeps the
+        // inset from the region's corner. Either way it stays on screen and, when it fits, within
+        // the region's width.
+        double OnRow(double left)
+        {
+            double value = left;
+            if (width <= visible.Width) value = Math.Min(value, visible.Right - width);
+            return Snap(Math.Clamp(value, 0, Math.Max(0, viewport.Width - width)), pixelX);
+        }
+        double outsideX = OnRow(visible.Left - frame.Outset), insideX = OnRow(visible.Left + frame.Inset);
 
         bool OnScreen(double y) => y >= -0.0001 && y + height <= viewport.Height + 0.0001;
         bool Clear(Rect candidate) => !avoid.Any(chrome => Overlaps(chrome, candidate));
-        Rect At(double y) => new(x, Snap(y, pixelY), width, height);
+        Rect At(double x, double y) => new(x, Snap(y, pixelY), width, height);
 
         if (!insideOnly)
         {
-            Rect above = At(visible.Top - height);
+            Rect above = At(outsideX, visible.Top - frame.Outset - frame.Gap - height);
             if (OnScreen(above.Top) && Clear(above)) return (above, CaptureCueTabPlacement.Above);
         }
 
         // Inside: only a region that holds the whole tab, so a small window is not buried under it.
-        bool fitsInside = width <= visible.Width + 0.0001 && height <= visible.Height + 0.0001;
+        bool fitsInside = width + 2 * frame.Inset <= visible.Width + 0.0001 && height + 2 * frame.Inset <= visible.Height + 0.0001;
         if (fitsInside || insideOnly)
         {
-            Rect inside = At(visible.Top);
+            Rect inside = At(insideX, visible.Top + frame.Inset);
             if (OnScreen(inside.Top) && Clear(inside)) return (inside, CaptureCueTabPlacement.InsideTop);
             // Under the chips, but still inside the region (a monitor smaller than the tab: on screen).
             Rect lowered = BelowChrome(inside);
-            bool holds = !fitsInside || lowered.Bottom <= visible.Bottom + 0.0001;
+            bool holds = !fitsInside || lowered.Bottom <= visible.Bottom - frame.Inset + 0.0001;
             if (holds && OnScreen(lowered.Top)) return (lowered, CaptureCueTabPlacement.Floating);
         }
 
         if (!insideOnly)
         {
-            Rect below = At(visible.Bottom);
+            Rect below = At(outsideX, visible.Bottom + frame.Outset + frame.Gap);
             if (OnScreen(below.Top) && Clear(below)) return (below, CaptureCueTabPlacement.Below);
         }
 
         // Nothing fits cleanly: stay on screen at the region's top edge.
-        Rect clamped = At(Math.Clamp(visible.Top, 0, Math.Max(0, viewport.Height - height)));
+        Rect clamped = At(frame.IsDefault ? outsideX : insideX,
+            Math.Clamp(visible.Top + frame.Inset, 0, Math.Max(0, viewport.Height - height)));
         return (clamped, CaptureCueTabPlacement.Floating);
 
         // Steps down past every chip it touches; chips are stacked, so one ordered pass suffices.
@@ -116,6 +127,18 @@ internal static class CaptureCueLayout
             }
             return candidate;
         }
+    }
+
+    /// <summary>
+    /// Spacing for a chip that floats beside a frame drawn outside the region rather than attached
+    /// to the region's edge. All values are overlay DIPs.
+    /// </summary>
+    /// <param name="Outset">How far the frame reaches outside the region.</param>
+    /// <param name="Gap">Space between the frame's outer edge and a chip placed outside it.</param>
+    /// <param name="Inset">Space between the region's top-left corner and a chip flipped inside it.</param>
+    internal readonly record struct TabSpacing(double Outset, double Gap, double Inset)
+    {
+        internal bool IsDefault => Outset == 0 && Gap == 0 && Inset == 0;
     }
 
     /// <summary>Positive-area intersection; rectangles that only share an edge do not overlap.</summary>

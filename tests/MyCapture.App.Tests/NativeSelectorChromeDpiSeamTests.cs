@@ -118,6 +118,17 @@ public sealed class NativeSelectorChromeDpiSeamTests
             overlay.Chrome?.FlushHoverTabForTest();
         }
         if (overlay.IsClosed || overlay.Chrome is null) return bounds;
+        // The last sample moves between the two monitors' desktops, which glides for up to 167 ms. Land
+        // it now, as its own frames would, so every pass reads the chrome at rest.
+        if (overlay.HoverGlidingForTest)
+        {
+            Func<TimeSpan> clock = overlay.ReadClock;
+            overlay.ReadClock = () => clock() + HoverGlide.NormalLength;
+            overlay.FlushFeedbackForTest();
+            overlay.ReadClock = clock;
+            Assert.False(overlay.HoverGlidingForTest);
+            overlay.Chrome.FlushHoverTabForTest();
+        }
         foreach (System.Windows.Window window in overlay.Chrome.Windows)
         {
             IntPtr hwnd = new WindowInteropHelper(window).Handle;

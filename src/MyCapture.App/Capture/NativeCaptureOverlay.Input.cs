@@ -226,7 +226,8 @@ internal sealed partial class NativeCaptureOverlay
                 _selectedWindow = null;
                 ClearHover();
                 StopHoverFrames();
-                _shownHover = _glideTarget = null;
+                _shownHover = null;
+                _hoverGlide.Reset();
                 SetSelection(Int32Rect.Empty);
             }
         }

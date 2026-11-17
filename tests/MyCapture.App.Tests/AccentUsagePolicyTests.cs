@@ -111,6 +111,15 @@ public sealed class AccentUsagePolicyTests
                     or "_recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? \"Text.Primary\" : \"Recording.Live\");",
                 // The recording region selector's cue, the same red as the frame that follows.
                 "src/MyCapture.App/Capture/RecordingSelectionCue.cs" => line == "ThemeColor live = ThemeCatalog.ColorsFor(theme)[\"Recording.Live\"];",
+                // The capture selector's chosen mode: the bar's one accent-filled button, with its
+                // on-accent icon and the accent's hover and pressed steps. The switch and the locks
+                // keep their neutral check, so every other line in the bar still fails.
+                "src/MyCapture.App/Capture/CaptureModeBar.cs" => line is "else checkedLayer.SetResourceReference(Border.BackgroundProperty, \"Accent.Default\");"
+                    or "on.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension(\"Text.OnAccent\")));"
+                    or "template.Triggers.Add(CheckedState(UIElement.IsMouseOverProperty, new DynamicResourceExtension(\"Accent.Hover\")));"
+                    or "template.Triggers.Add(CheckedState(ButtonBase.IsPressedProperty, new DynamicResourceExtension(\"Accent.Pressed\")));",
+                // The magnifier's centre-pixel ring, outside a white one, so the pixel reads on any colour.
+                "src/MyCapture.App/Capture/NativeSelectorMagnifier.cs" => line == "_reticleBrush = Application.Current?.TryFindResource(\"Accent.Default\") as Brush ?? palette[\"CaptureGuide.MagnifierBorder\"];",
                 // Diagnostic contrast role classification does not paint a control.
                 "src/MyCapture.App/Diagnostics/UxReviewSelfTest.cs" => line == "|| brushKey is \"Text.OnAccent\" or \"Text.Badge\"",
                 // User-editable drawing colors and the capture-guide color preference.

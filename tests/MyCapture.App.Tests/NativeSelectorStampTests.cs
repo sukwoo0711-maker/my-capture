@@ -22,7 +22,9 @@ public sealed class NativeSelectorStampTests
         var chrome = new NativeSelectorStaticChrome(size, guide);
         var bounds = new RectD(-2000, -800, 2000, 1200);
         var work = new RectD(-1800, -700, 1600, 900);
-        var first = chrome.Update(size.Text, guide.Text, new PointD(-201, 199), work, bounds, scale, true);
+        // The hint sits under the mode bar, at the top of the work area.
+        double guideTop = work.Top + 68 * scale;
+        var first = chrome.Update(size.Text, guide.Text, new PointD(-201, 199), work, bounds, scale, true, guideTop);
         Assert.Equal(2, first.Count);
         foreach (var stamp in first)
         {
@@ -31,13 +33,13 @@ public sealed class NativeSelectorStampTests
             Assert.True(work.Contains(new PointD(stamp.Bounds.X + stamp.Bounds.Width + bounds.Left, stamp.Bounds.Y + stamp.Bounds.Height + bounds.Top)));
             for (int i = 3; i < stamp.Pixels.Length; i += 4) Assert.Equal((byte)255, stamp.Pixels[i]);
         }
-        var moved = chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, true);
+        var moved = chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, true, guideTop);
         Assert.Same(first[0].Pixels, moved[0].Pixels);
         Assert.Same(first[1].Pixels, moved[1].Pixels);
         Assert.NotEqual(first[1].Bounds, moved[1].Bounds);
-        Assert.Single(chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, false));
+        Assert.Single(chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, false, guideTop));
         size.Text = "50 × 50";
-        var changed = chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, true);
+        var changed = chrome.Update(size.Text, guide.Text, new PointD(-1600, -500), work, bounds, scale, true, guideTop);
         Assert.NotSame(first[1].Pixels, changed[1].Pixels);
         Assert.Same(first[0].Pixels, changed[0].Pixels);
     });

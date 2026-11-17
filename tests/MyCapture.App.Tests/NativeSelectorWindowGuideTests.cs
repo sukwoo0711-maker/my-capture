@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using MyCapture.App.Capture;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
@@ -35,15 +36,16 @@ public sealed class NativeSelectorWindowGuideTests
         Window guide = Assert.IsType<Window>(chrome.GuideWindowForTest);
         double width = chrome.GuideWidthForTest;
         Assert.Equal(width, chrome.LogicalSizeForTest(guide).Width);
-        Assert.Equal(38, chrome.LogicalSizeForTest(guide).Height);
+        Assert.Equal(NativeSelectorHint.ChipHeight, chrome.LogicalSizeForTest(guide).Height);
         var panel = Assert.IsType<Border>(guide.Content);
-        var text = Assert.IsType<TextBlock>(panel.Child);
-        text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        double needed = text.DesiredSize.Width + panel.Padding.Left + panel.Padding.Right
+        var hint = Assert.IsType<NativeSelectorHint>(panel.Child);
+        hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double needed = hint.DesiredSize.Width + panel.Padding.Left + panel.Padding.Right
             + panel.BorderThickness.Left + panel.BorderThickness.Right;
         Assert.True(needed <= width, $"{culture}: the guide needs {needed:0.#} DIPs in a {width:0.#} DIP chip.");
-        Assert.True(width >= 320);
-        if (culture == "en-US") Assert.True(width > 320, "The English guide does not fit the usual 320 DIP chip.");
+        Assert.True(width >= needed);
+        if (culture == "en-US") Assert.True(width > MeasureGuideWidth(chrome, DefaultGuide),
+            "The English window guide needs more width than the region guide.");
 
         // A press and a drag keep the same chip, so it is not rebuilt under the first drag samples.
         owner.BeginSelection(pointer);
@@ -67,20 +69,21 @@ public sealed class NativeSelectorWindowGuideTests
             Assert.False(region.GuidesWindowClick);
             Assert.Equal(UiText.Get("CaptureGuide2_DragCapture") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
                 chrome.GuideTextForTest);
-            Assert.Equal(320, chrome.GuideWidthForTest);
+            Assert.Equal(MeasureGuideWidth(chrome, DefaultGuide), chrome.GuideWidthForTest);
         }
 
         using NativeCaptureOverlay scroll = Owner(() => pointer, magnifier: true, detectWindows: true);
         using var scrollChrome = new NativeSelectorChrome(scroll, true, false);
         scrollChrome.Update(pointer, scroll.DisplayedRegionForTest);
-        Assert.NotEqual(320, scrollChrome.GuideWidthForTest);
+        Assert.NotEqual(MeasureGuideWidth(scrollChrome, DefaultGuide), scrollChrome.GuideWidthForTest);
         scroll.SelectMode(CaptureSelectorMode.Scroll);
         Assert.Equal(CaptureSelectorMode.Scroll, scroll.Mode);
         scrollChrome.Update(pointer, scroll.DisplayedRegionForTest);
         Assert.False(scroll.GuidesWindowClick);
         Assert.Equal(UiText.Get("CaptureGuide2_ClickScroll") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
             scrollChrome.GuideTextForTest);
-        Assert.Equal(320, scrollChrome.GuideWidthForTest);
+        Assert.Equal(MeasureGuideWidth(scrollChrome, UiText.Get("CaptureGuide2_ClickScroll") + "  ·  "
+            + UiText.Get("CaptureGuide2_Esc")), scrollChrome.GuideWidthForTest);
     });
 
     [Fact]
@@ -155,6 +158,18 @@ public sealed class NativeSelectorWindowGuideTests
             Assert.NotNull(owner.Selection);
             Assert.Equal(magnifier, owner.MagnifierShown);
         });
+
+    private static string DefaultGuide => UiText.Get("CaptureGuide2_DragCapture") + "  ·  " + UiText.Get("CaptureGuide2_Esc");
+
+    private static double MeasureGuideWidth(NativeSelectorChrome chrome, string text)
+    {
+        double scale = chrome.ScaleForTest(chrome.GuideWindowForTest!);
+        var hint = new NativeSelectorHint(CaptureGuidePalette.Resolve()) { Outlined = chrome.HintForTest.Outlined };
+        hint.SetScale(scale);
+        hint.Show(text);
+        hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return Math.Ceiling(hint.DesiredSize.Width * scale - 0.0001) / scale;
+    }
 
     private static NativeCaptureOverlay Owner(Func<PointD> pointer, bool magnifier, bool detectWindows)
     {
