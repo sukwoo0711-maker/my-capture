@@ -92,7 +92,7 @@ public sealed class NativeSelectorHintTests
         }
         TextBlock dot = hint.WordsForTest.Single(word => word.Text == "·");
         Assert.Equal(Color(palette, "CaptureGuide.MutedText"), ((SolidColorBrush)dot.Foreground).Color);
-        Assert.Equal(0.6, dot.Opacity, 8);
+        Assert.Equal(1, dot.Opacity, 8);
         Assert.All(hint.WordsForTest.Where(word => word.Text != "·"),
             word => Assert.Equal(Color(palette, "CaptureGuide.Text"), ((SolidColorBrush)word.Foreground).Color));
 

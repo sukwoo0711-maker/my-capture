@@ -30,7 +30,9 @@ public sealed class SurfaceShortcutHintTests
         using var language = UiText.UseLanguage("en-US");
         var capture = new CaptureModeBar { Resources = SystemHighContrastThemeTests.LoadTheme() };
         capture.Configure(true, true, true, otherActions: true);
-        CheckStates(capture, 800, [capture.TextButton, capture.ColorButton, capture.CancelButton]);
+        // The selector bar is a compact surface (Size.HitTarget.Compact): every command has a key, and
+        // with Alt held its 34-DIP face reaches one DIP into the bar's padding above and below.
+        CheckStates(capture, 800, [capture.TextButton, capture.ColorButton, capture.CancelButton], CaptureModeBar.ButtonSize, 1);
 
         BitmapSource bitmap = BitmapSource.Create(24, 16, 96, 96, PixelFormats.Bgra32, null, new byte[24 * 16 * 4], 24 * 4);
         var card = new QuickAccessWindow(bitmap, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
@@ -154,7 +156,8 @@ public sealed class SurfaceShortcutHintTests
         return root;
     }
 
-    private static void CheckStates(FrameworkElement root, double width, ButtonBase[] commands)
+    private static void CheckStates(FrameworkElement root, double width, ButtonBase[] commands, double minimumHeight = 36,
+        double faceOverhang = 0)
     {
         foreach (ButtonBase command in commands) command.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
         var resting = new Dictionary<ButtonBase, Size>();
@@ -177,22 +180,25 @@ public sealed class SurfaceShortcutHintTests
                 if (hint.Text.Length == 0) Assert.Equal(0, face.MinWidth);
                 if (resting.TryGetValue(command, out Size previous)) Assert.Equal(previous, command.RenderSize);
                 else resting.Add(command, command.RenderSize);
-                Assert.True(command.ActualHeight >= 36);
+                Assert.True(command.ActualHeight >= minimumHeight);
                 AssertInside(command, root);
                 if (reveal)
                 {
-                    AssertInside(face, command);
-                    AssertInside(hint, command);
+                    AssertInside(face, command, faceOverhang);
+                    AssertInside(hint, command, faceOverhang);
+                    // Whatever reaches past a compact command stays on its surface.
+                    AssertInside(face, root);
                 }
             }
         }
     }
 
-    private static void AssertInside(FrameworkElement child, FrameworkElement parent)
+    private static void AssertInside(FrameworkElement child, FrameworkElement parent, double overhang = 0)
     {
         Rect bounds = child.TransformToAncestor(parent).TransformBounds(new Rect(child.RenderSize));
-        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= parent.ActualWidth + 0.5
-            && bounds.Bottom <= parent.ActualHeight + 0.5,
+        double slack = 0.5 + overhang;
+        Assert.True(bounds.Left >= -slack && bounds.Top >= -slack && bounds.Right <= parent.ActualWidth + slack
+            && bounds.Bottom <= parent.ActualHeight + slack,
             $"{child.GetType().Name} {bounds} exceeds {parent.GetType().Name} {parent.RenderSize}.");
     }
 

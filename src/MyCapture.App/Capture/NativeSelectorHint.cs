@@ -189,7 +189,8 @@ internal sealed partial class NativeSelectorHint : Border
     private TextBlock Dot(double gap) => new()
     {
         Text = "·", Tag = DotTag, FontFamily = _ui, FontSize = TypeScale.Caption, FontWeight = FontWeights.Medium,
-        Foreground = _palette["CaptureGuide.MutedText"], Opacity = 0.6, Margin = new Thickness(gap, 0, gap, 0),
+        // Full secondary ink: at 60% the 12-DIP dot all but vanished on the chip (design review, round 2).
+        Foreground = _palette["CaptureGuide.MutedText"], Margin = new Thickness(gap, 0, gap, 0),
         VerticalAlignment = VerticalAlignment.Center,
     };
 

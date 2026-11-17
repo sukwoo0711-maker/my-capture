@@ -446,8 +446,8 @@ public abstract class CaptureRatioContractTests
             bar.Arrange(new Rect(bar.DesiredSize));
             // Offered while capturing and while recording, with the size of its neighbours.
             Assert.Equal(Visibility.Visible, bar.RatioButton.Visibility);
-            Assert.Equal(36, bar.RatioButton.ActualWidth);
-            Assert.Equal(36, bar.RatioButton.ActualHeight);
+            Assert.Equal(CaptureModeBar.ButtonSize, bar.RatioButton.ActualWidth);
+            Assert.Equal(CaptureModeBar.ButtonSize, bar.RatioButton.ActualHeight);
             Assert.True(bar.RatioButton.IsEnabled);
 
             // The colour mode picks a pixel; there is no region to give a ratio.
