@@ -399,7 +399,10 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         }
     }
 
-    /// <summary>How long the hover bar stays after the pointer leaves the pin and the bar.</summary>
+    /// <summary>
+    /// How long the hover bar stays after the pointer leaves the pin and the bar. The bar sits
+    /// <see cref="PinHoverBar.EdgeGap"/> outside the pin, so the pointer crosses that gap well within it.
+    /// </summary>
     internal static readonly TimeSpan HoverBarHideDelay = TimeSpan.FromMilliseconds(300);
 
     /// <summary>The work area the hover bar is kept on; tests keep it off the desktop.</summary>
@@ -415,8 +418,14 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     /// <summary>Test hook: the hide timer's tick, without waiting for it.</summary>
     internal void ForceHoverBarHideForTest() => OnHoverHideTick(this, EventArgs.Empty);
 
+    /// <summary>Test hook: the hover bar leaves when <see cref="HoverBarHideDelay"/> runs out.</summary>
+    internal bool IsHoverBarHidePendingForTest => _hoverHideTimer.IsEnabled;
+
+    /// <summary>Test hook: the delay the hide timer counts.</summary>
+    internal TimeSpan HoverBarHideIntervalForTest => _hoverHideTimer.Interval;
+
     /// <summary>
-    /// Shows copy, text copy, save and close in the pin's top-right corner (or just above a small pin).
+    /// Shows copy, text copy, save and close just above the pin's top-right corner (see <see cref="PinHoverBar.Place"/>).
     /// Not while the pin is hidden, passes clicks through, is being dragged or is closing.
     /// </summary>
     internal void ShowHoverBar()
@@ -498,11 +507,20 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         bar.SourceButton.ContextMenu = null;
         if (!Provenance.HasSource) return;
         ContextMenu menu = SourceChip.CreateMenu(Provenance,
-            status => ShowFeedback(status, FeedbackKind.Result),
+            status => ShowFeedback(status, SourceStatusKind(status)),
             menu: MyCapture.App.Capture.CaptureWindowExclusion.CreateContextMenu());
         menu.Opened += (_, _) => MyCapture.App.Capture.CaptureWindowExclusion.ExcludeMenuPopup(menu);
         bar.SourceButton.ContextMenu = menu;
     }
+
+    /// <summary>
+    /// A copied address or path is a success over the pin's content, as short as the pin's other
+    /// confirmations; a source that could not be opened or found keeps a result's time to read.
+    /// </summary>
+    internal static FeedbackKind SourceStatusKind(string status) =>
+        status == UiText.Get("Library.SourcePage.Copied") || status == UiText.Get("Library.Source.PathCopied")
+            ? FeedbackKind.Confirmation
+            : FeedbackKind.Result;
 
     private void ScheduleHoverBarHide()
     {
@@ -705,8 +723,9 @@ internal sealed partial class PinWindow : Window, IPinAnchor
                 string fileName = string.IsNullOrWhiteSpace(result.Path)
                     ? "PNG"
                     : System.IO.Path.GetFileName(result.Path);
-                // The file name is worth reading, so this is a result rather than a quick confirmation.
-                ShowFeedback(UiText.Format("Text_E3F51EDC0F16", fileName), FeedbackKind.Result);
+                // A success drawn over the pinned content covers its last line, so it stays as long as any
+                // confirmation over content, file name included.
+                ShowFeedback(UiText.Format("Text_E3F51EDC0F16", fileName), FeedbackKind.Confirmation);
                 break;
             case PinSaveStatus.Cancelled:
                 ShowFeedback(UiText.Get("Text_F122632462DF"), FeedbackKind.Confirmation);
@@ -1496,7 +1515,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             _resizeEdge, x - _resizeStartCursor.X, y - _resizeStartCursor.Y,
             dpi.DpiScaleX / _resizeStartDpi.DpiScaleX, dpi.DpiScaleY / _resizeStartDpi.DpiScaleY,
             _state.ImageWidthDip * dpi.DpiScaleX, _state.ImageHeightDip * dpi.DpiScaleY,
-            dpi.DpiScaleX, dpi.DpiScaleY);
+            dpi.DpiScaleX, dpi.DpiScaleY, _state.MinimumZoom);
         ApplyZoom(placement.Zoom, placement.Left, placement.Top, physicalPosition: true);
         if (Math.Abs(_state.Zoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
@@ -1845,13 +1864,25 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double newZoom = _state.ApplyZoomStep(notches);
         if (Math.Abs(newZoom - oldZoom) < 1e-9)
         {
-            ShowFeedback($"{newZoom * 100:0}%");
+            ShowFeedback(ZoomReadout(newZoom));
             return;
         }
 
         // The state, readout and session have the new zoom now; the window moves to it (PinWindow.ZoomMotion).
         ZoomToState(oldZoom, pointerXDip, pointerYDip);
         UserZoomChanged?.Invoke(PracticeId);
+    }
+
+    /// <summary>The zoom readout: the zoom and the size the pin takes on the screen, in pixels.</summary>
+    internal string ZoomReadout(double zoom) =>
+        ZoomReadout(zoom, _state.ImageWidthDip, _state.ImageHeightDip, AnchorScale);
+
+    internal static string ZoomReadout(double zoom, double imageWidthDip, double imageHeightDip, double scale)
+    {
+        double pixels = scale > 0 && double.IsFinite(scale) ? scale : 1;
+        long width = (long)Math.Round(Math.Max(1.0, imageWidthDip * zoom) * pixels, MidpointRounding.AwayFromZero);
+        long height = (long)Math.Round(Math.Max(1.0, imageHeightDip * zoom) * pixels, MidpointRounding.AwayFromZero);
+        return $"{zoom * 100:0}% · {width} × {height} px";
     }
 
     private void ApplyZoom(double zoom, double left, double top, bool physicalPosition = false)
@@ -1866,7 +1897,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         else
             ApplyPositionKeepingGrabbable(left, top);
         BeginLiveZoom();
-        ShowFeedback($"{newZoom * 100:0}%");
+        ShowFeedback(ZoomReadout(newZoom));
     }
 
     private void ZoomCentered(int notches)
@@ -1886,7 +1917,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         double newZoom = _state.ResetZoom();
 
         ZoomToState(oldZoom, centerX, centerY);
-        ShowFeedback("100%");
+        ShowFeedback(ZoomReadout(newZoom));
         if (Math.Abs(newZoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
 
@@ -2457,6 +2488,11 @@ internal sealed partial class PinWindow : Window, IPinAnchor
 
     internal int ContextMenuBuildCountForTest { get; private set; }
 
+    /// <remarks>
+    /// The icon column follows the library card menu's rule: a row carries an icon only when the pin's
+    /// hover bar has a button for the same command, and it is that button's icon (copy, text copy, save,
+    /// translation, close). Every other row has none, so the copy commands no longer share one icon.
+    /// </remarks>
     private void BuildContextMenu()
     {
         ContextMenuBuildCountForTest++;
@@ -2470,8 +2506,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             UiText.Get("Text_A81F975C401F"),
             (_, _) => RequestSave(PinSaveMode.SaveAs),
             UiText.Get("Text_78C743CC6F59"),
-            "Icon.SaveAs",
-            "Ctrl+Shift+S"));
+            inputGestureText: "Ctrl+Shift+S"));
         menu.Items.Add(MenuItemFor(
             UiText.Get("Text_DFC084A111D0"),
             (_, _) => RequestSave(PinSaveMode.QuickSave),
@@ -2490,22 +2525,22 @@ internal sealed partial class PinWindow : Window, IPinAnchor
                 UiText.Get("Text_976A6C92B870"),
                 (_, _) => RequestOriginalTextCopy(),
                 UiText.Get("Text_BB7798D87E07"),
-                "Icon.Copy",
+                "Icon.Ocr",
                 UiText.Get("Text_C7011B8D345C")));
             // While the translation is shown, its own copy item (at the top) is the one this follows.
             if (!TranslationCopyItemShown) menu.Items.Add(CopyImageOnlyMenuItem());
         }
         else
         {
-            menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
+            menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Ocr", inputGestureText: UiText.Get("Text_C7011B8D345C")));
         }
         int selectTextIndex = menu.Items.Count;
         RefreshTextSelectionMenuItem(menu, selectTextIndex);
         // Every key sits in the right-hand column; the names carry no key text.
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("100%", (_, _) => ResetZoomCentered(), inputGestureText: "0"));
-        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomIn"), (_, _) => ZoomCentered(1), iconResourceKey: "Icon.ZoomIn", inputGestureText: "+"));
-        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomOut"), (_, _) => ZoomCentered(-1), iconResourceKey: "Icon.ZoomOut", inputGestureText: "-"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomIn"), (_, _) => ZoomCentered(1), inputGestureText: "+"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinZoomOut"), (_, _) => ZoomCentered(-1), inputGestureText: "-"));
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor(UiText.Get("Onboard_PinMoreTransparent"), (_, _) =>
         {
@@ -2522,8 +2557,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             UiText.Get("Onboard_PinAllowClickThrough"),
             (_, _) => ToggleClickThrough(),
             UiText.Format("Onboard_PinAllowClickThroughHelp", ClickThroughRecoveryHint()),
-            "Icon.Select",
-            ClickThroughGesture());
+            inputGestureText: ClickThroughGesture());
         menu.Items.Add(_clickThroughItem);
         menu.Items.Add(new Separator());
         _collapseItem = MenuItemFor(UiText.Get(_state.IsCollapsed ? "Pin_Expand" : "Pin_Collapse"),
@@ -2540,12 +2574,11 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             UiText.Get("Onboard_TrayReopenPin"),
             (_, _) => RestoreClosedRequested?.Invoke(this, EventArgs.Empty),
             UiText.Get("PinRestore_CommandHelp"),
-            "Icon.Pin",
-            RestoreClosedGesture());
+            inputGestureText: RestoreClosedGesture());
         _restoreClosedItem.IsEnabled = false;
         menu.Items.Add(_restoreClosedItem);
         menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => CloseWithExit(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
-        menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty)));
         _refreshContextMenu = () =>
         {
             // A selection made since the menu was built changes what the first copy item copies.
@@ -2566,8 +2599,7 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     private MenuItem CopyImageOnlyMenuItem() => MenuItemFor(
         UiText.Get("Pin_CopyImageOnly"),
         (_, _) => CopyImageOnlyToClipboard(),
-        UiText.Get("Pin_CopyImageOnlyHelp"),
-        "Icon.Copy");
+        UiText.Get("Pin_CopyImageOnlyHelp"));
 
     private void RefreshTextSelectionMenuItem(ContextMenu menu, int index)
     {
@@ -2643,7 +2675,8 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         RoutedEventHandler onClick,
         string? helpText = null,
         string? iconResourceKey = null,
-        string? inputGestureText = null)
+        string? inputGestureText = null,
+        Geometry? icon = null)
     {
         var item = new MenuItem { Header = header, InputGestureText = inputGestureText };
         AutomationProperties.SetName(item, header);
@@ -2653,13 +2686,13 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             AutomationProperties.SetHelpText(item, helpText);
         }
 
-        if (iconResourceKey is not null && Application.Current?.TryFindResource(iconResourceKey) is Geometry geometry)
+        if ((icon ?? (iconResourceKey is null ? null : Application.Current?.TryFindResource(iconResourceKey) as Geometry)) is { } geometry)
         {
             var glyph = SymbolIcon.Create(geometry, SymbolIcon.InlineSize);
             glyph.SetBinding(SymbolIcon.ForegroundProperty, new Binding(nameof(Control.Foreground))
             {
                 RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(MenuItem), 1),
-                FallbackValue = Application.Current.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
+                FallbackValue = Application.Current?.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
             });
             item.Icon = glyph;
         }

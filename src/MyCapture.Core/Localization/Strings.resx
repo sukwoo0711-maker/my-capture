@@ -1723,6 +1723,9 @@
   <data name="Pin_SelectTextImageHint" xml:space="preserve">
     <value>Ctrl+더블클릭으로 이미지의 글자를 인식해 복사합니다.</value>
   </data>
+  <data name="Pin_SelectTextTip" xml:space="preserve">
+    <value>{0}: 글자 선택</value>
+  </data>
   <data name="Text_97B224926F71" xml:space="preserve">
     <value>{0} {1} 변경</value>
     <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
@@ -4699,7 +4702,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tray_PinKindTable" xml:space="preserve"><value>표</value></data>
   <data name="Tray_PinKindImage" xml:space="preserve"><value>이미지</value></data>
   <data name="Tray_PinImageTitle" xml:space="preserve"><value>{0} × {1} px</value></data>
-  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>그 외 {0}개</value></data>
+  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>그 외 {0}개 앞으로 가져오기</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>

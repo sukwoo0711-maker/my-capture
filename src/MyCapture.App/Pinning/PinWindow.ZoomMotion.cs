@@ -66,7 +66,7 @@ internal sealed partial class PinWindow : INativeMotionTarget
             CaptureZoomBase(shown, anchorX, anchorY);
             ShowZoomStep();
             BeginLiveZoom();
-            ShowFeedback($"{_state.Zoom * 100:0}%");
+            ShowFeedback(ZoomReadout(_state.Zoom));
             return;
         }
         CaptureZoomBase(shown, anchorX, anchorY);
@@ -76,7 +76,7 @@ internal sealed partial class PinWindow : INativeMotionTarget
         ShowZoomStep();
         if (_zoomMotion.IsActive) StartZoomClock();
         else EndZoomMotion();
-        ShowFeedback($"{_state.Zoom * 100:0}%");
+        ShowFeedback(ZoomReadout(_state.Zoom));
     }
 
     private bool CanPlaceZoomAtOnce => _handle != IntPtr.Zero && IsVisible && !_isClosed && !_state.IsCollapsed;

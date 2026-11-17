@@ -205,7 +205,9 @@ public sealed class PinTidyTests
         Assert.Equal(16, rows.Count);
         Assert.All(rows.Take(15), row => Assert.NotNull(row.Thumbnail));
         Assert.Null(rows[^1].Thumbnail);
-        Assert.False(rows[^1].IsEnabled);
+        // The row is the command that brings the unlisted pins forward (TrayMenuLayout.ActivateUnlistedPins).
+        Assert.True(rows[^1].IsEnabled);
+        Assert.NotNull(rows[^1].Action);
     });
 
     [Fact]

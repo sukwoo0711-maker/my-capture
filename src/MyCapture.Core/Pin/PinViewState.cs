@@ -31,7 +31,7 @@ public sealed class PinViewState
     {
         ImageWidthDip = Math.Max(1.0, imageWidthDip);
         ImageHeightDip = Math.Max(1.0, imageHeightDip);
-        Zoom = PinGeometry.ClampZoom(initialZoom);
+        Zoom = PinGeometry.ClampZoom(initialZoom, ImageWidthDip, ImageHeightDip);
         Opacity = PinGeometry.ClampOpacity(initialOpacity);
         _zoomStep = zoomStep <= 0 ? 0.1 : zoomStep;
     }
@@ -50,6 +50,9 @@ public sealed class PinViewState
     }
 
     public double Zoom { get; private set; }
+
+    /// <summary>The smallest zoom this pin's image allows (<see cref="PinGeometry.MinimumZoom"/>).</summary>
+    public double MinimumZoom => PinGeometry.MinimumZoom(ImageWidthDip, ImageHeightDip);
 
     public double Opacity { get; private set; }
 
@@ -92,7 +95,7 @@ public sealed class PinViewState
     public double ApplyZoomStep(int notches)
     {
         if (IsCollapsed) return Zoom;
-        Zoom = PinGeometry.StepZoom(Zoom, notches, _zoomStep);
+        Zoom = PinGeometry.ClampZoom(PinGeometry.StepZoom(Zoom, notches, _zoomStep), ImageWidthDip, ImageHeightDip);
         return Zoom;
     }
 
@@ -100,7 +103,7 @@ public sealed class PinViewState
     public double SetZoom(double zoom)
     {
         if (IsCollapsed) return Zoom;
-        Zoom = PinGeometry.ClampZoom(zoom);
+        Zoom = PinGeometry.ClampZoom(zoom, ImageWidthDip, ImageHeightDip);
         return Zoom;
     }
 

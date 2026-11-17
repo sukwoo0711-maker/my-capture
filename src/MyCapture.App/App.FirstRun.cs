@@ -469,14 +469,20 @@ public partial class App
         if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0) return;
         if (FirstUseTips.ShowNextPinTip(_settings.General, tip =>
         {
-            Hotkey hotkey = _settings.Hotkeys.HideAllPins;
-            string text = tip == PinFirstUseTip.Size ? UiText.Get("Onboard_PinSizeTip")
-                : hotkey.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hotkey) : UiText.Get("Onboard_FirstPinTipUnassigned");
+            (string text, string? detail) = PinTipText(tip, _settings.Hotkeys.HideAllPins);
             return _shellPresenter.ShowCaptureReceipt(text,
                 tip == PinFirstUseTip.Size ? HandleSettingsRequested
                     : () => HandleShortcutSettingsRequested(nameof(SettingsDraft.HideAllPinsHotkey)),
-                answersCommand: true, actionTooltip: UiText.Get("Help.Settings"));
+                detail, answersCommand: true, actionTooltip: UiText.Get("Help.Settings"));
         })) SaveFirstUseTips();
     }
+
+    /// <summary>
+    /// A pin tip's text and the line under it. The first pin's tip adds the text selection key, read from
+    /// the shortcut catalog, because F2 is otherwise only in the pin menu and the shortcut window.
+    /// </summary>
+    internal static (string Text, string? Detail) PinTipText(PinFirstUseTip tip, Hotkey hideAllPins) => tip == PinFirstUseTip.Size
+        ? (UiText.Get("Onboard_PinSizeTip"), UiText.Format("Pin_SelectTextTip", ShortcutCatalog.Get(ShortcutScope.Pin, "SelectText").Hint))
+        : (hideAllPins.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hideAllPins) : UiText.Get("Onboard_FirstPinTipUnassigned"), null);
 
 }

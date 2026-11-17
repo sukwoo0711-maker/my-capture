@@ -69,6 +69,19 @@ internal static class TrayMenuLayout
     internal const int MaxPinTitleLength = 40;
     private const int MaxPinTitleCodeUnits = 512;
 
+    /// <summary>
+    /// Brings the pins the menu does not list to the front, oldest first, so the newest of them ends on
+    /// top and active. Each one comes back like a listed pin: shown, clicks caught again, find cue played.
+    /// </summary>
+    internal static void ActivateUnlistedPins(IReadOnlyList<PinWindow> openPins, Action<PinWindow> activatePin)
+    {
+        ArgumentNullException.ThrowIfNull(openPins);
+        ArgumentNullException.ThrowIfNull(activatePin);
+        // Copied first: activating a pin can reorder or prune the list the menu was built from.
+        PinWindow[] unlisted = openPins.Skip(MaxOpenPinEntries).Reverse().ToArray();
+        foreach (PinWindow pin in unlisted) activatePin(pin);
+    }
+
     internal static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(
         TrayMenuCommands commands, HotkeySettings keys, bool canRestoreClosedPin, bool scrollingActive) =>
         Build(commands, keys, new TrayMenuState(canRestoreClosedPin, scrollingActive));
@@ -119,8 +132,12 @@ internal static class TrayMenuLayout
                     LiteralLabel: true, Thumbnail: pin.PinnedContent.Image,
                     IsMuted: pin.State.IsHidden, ItemStatus: OpenPinStatus(pin)))
                 .ToList();
+            // The rest cannot be told apart in a menu, so their row brings them all to the front instead.
             if (openPins.Count > MaxOpenPinEntries)
-                children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries), null, IsEnabled: false));
+            {
+                children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries),
+                    () => ActivateUnlistedPins(openPins, activatePin)));
+            }
             entries.Add(new(UiText.Get("Tray_OpenPins"), null, children));
         }
 

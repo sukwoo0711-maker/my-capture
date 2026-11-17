@@ -19,7 +19,7 @@ using MyCapture.Platform.Display;
 namespace MyCapture.App.Pinning;
 
 /// <summary>
-/// The small bar a pinned image shows in its top-right corner while the pointer is over it: copy,
+/// The small bar a pinned image shows just above its top-right corner while the pointer is over it: copy,
 /// text copy, save, translation and source when the pin offers them, and close, so the commonest pin
 /// commands no longer hide in a long tooltip and the right-click menu.
 /// </summary>
@@ -57,7 +57,8 @@ internal sealed class PinHoverBar : Window
     // 20x20 outline glyphs on the shared symbol grid.
     private static readonly Geometry SourceGlyph = Geometry.Parse(
         "M8,5 H4 V16 H15 V12 M10,4 H16 V10 M9,11 L16,4");
-    private static readonly Geometry TranslationGlyph = Geometry.Parse(
+    /// <summary>The translation button's glyph, which the pin menu's translation command also shows.</summary>
+    internal static readonly Geometry TranslationGlyph = Geometry.Parse(
         "M2,4 H11 M6,2 V4 M4,7 L10,13 M9,4 C9,8 6,11 2,13 M11,17 L15,7 L19,17 M12.5,14 H17.5");
 
     private readonly List<TextBlock> _labels = [];
@@ -341,7 +342,7 @@ internal sealed class PinHoverBar : Window
 
     /// <summary>
     /// The opacity menu (the pin's O key) without opening it. The bar has no opacity button; the menu
-    /// opens just under the bar, in the pin's top-right corner.
+    /// opens just under the bar, at the pin's top-right corner.
     /// </summary>
     internal ContextMenu CreateOpacityMenu()
     {
@@ -373,18 +374,25 @@ internal sealed class PinHoverBar : Window
     }
 
     /// <summary>
-    /// Where the bar goes, in physical pixels: inside the pin's top-right corner when the pin is large
-    /// enough to keep most of its image visible, otherwise just above it (or below it at the top of the
-    /// work area), right-aligned and kept on the work area.
+    /// Where the bar goes, in physical pixels: just above the pin, right-aligned, whatever the pin's size,
+    /// so it never covers the first line of the code or table the pin shows. Without room above on the
+    /// pin's work area it goes just below; only a pin that leaves no room on either side takes it inside
+    /// the top-right corner of its visible part. Kept on the work area.
     /// </summary>
     internal static RectD Place(RectD pin, double barWidth, double barHeight, RectD workArea, double scale)
     {
         double gap = EdgeGap * (scale > 0 ? scale : 1);
-        bool inside = pin.Width >= barWidth + (gap * 4) && pin.Height >= (barHeight + gap) * 2.5;
-        double x = pin.Right - barWidth - (inside ? gap : 0);
-        double y = inside ? pin.Top + gap
-            : pin.Top - barHeight - gap >= workArea.Top ? pin.Top - barHeight - gap
-            : pin.Bottom + gap;
+        double above = pin.Top - barHeight - gap;
+        double below = pin.Bottom + gap;
+        double x = pin.Right - barWidth;
+        double y;
+        if (above >= workArea.Top) y = above;
+        else if (below + barHeight <= workArea.Bottom) y = below;
+        else
+        {
+            x = Math.Min(pin.Right, workArea.Right) - barWidth - gap;
+            y = Math.Max(pin.Top, workArea.Top) + gap;
+        }
         x = Math.Clamp(x, workArea.Left, Math.Max(workArea.Left, workArea.Right - barWidth));
         y = Math.Clamp(y, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - barHeight));
         return new RectD(Math.Round(x), Math.Round(y), Math.Ceiling(barWidth), Math.Ceiling(barHeight));

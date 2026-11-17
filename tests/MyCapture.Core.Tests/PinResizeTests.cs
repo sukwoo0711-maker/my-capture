@@ -76,6 +76,23 @@ public sealed class PinResizeTests
         }
     }
 
+    [Theory]
+    [InlineData(PinResizeEdge.TopLeft, -1, -1)]
+    [InlineData(PinResizeEdge.Right, 1, 0)]
+    [InlineData(PinResizeEdge.Bottom, 0, 1)]
+    public void DraggingPastThePinsOwnFloorStopsAtItWithTheOppositeEdgeStill(PinResizeEdge edge, int x, int y)
+    {
+        var start = new RectD(-400, -200, 200, 100);
+        double floor = PinGeometry.MinimumZoom(200, 100);
+        PinGeometry.Placement result = PinResize.Calculate(start, 1, edge, -x * 10000d, -y * 10000d, minimumZoom: floor);
+        Assert.Equal(floor, result.Zoom, 9);
+        Assert.Equal(PinGeometry.MinShortSideDip, result.Height, 6);
+        double ax = x < 0 ? 1 : x > 0 ? 0 : 0.5;
+        double ay = y < 0 ? 1 : y > 0 ? 0 : 0.5;
+        Assert.Equal(start.Left + start.Width * ax, result.Left + result.Width * ax, 8);
+        Assert.Equal(start.Top + start.Height * ay, result.Top + result.Height * ay, 8);
+    }
+
     [Fact]
     public void CornerProjectionRespondsToEitherAxisWithoutChangingAspectRatio()
     {

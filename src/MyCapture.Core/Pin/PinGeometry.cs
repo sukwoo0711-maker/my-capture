@@ -26,6 +26,30 @@ public static class PinGeometry
     /// <summary>Largest zoom factor a pin can reach (800%).</summary>
     public const double MaxZoom = 8.0;
 
+    /// <summary>
+    /// The shortest side a user can zoom a pin down to, in DIP: the size at which the edge resize
+    /// zones (<see cref="PinResize.HitZoneDip"/>, at most <see cref="PinResize.MaxHitZoneFraction"/>
+    /// of a side) stop shrinking, so both edges keep their full zone and the middle keeps
+    /// 40 - 2 × 8 = 24 DIP, the pin's grab margin, to move it by.
+    /// </summary>
+    public const double MinShortSideDip = PinResize.HitZoneDip / PinResize.MaxHitZoneFraction;
+
+    /// <summary>
+    /// The smallest zoom for an image of this natural size: <see cref="MinZoom"/>, raised so the short
+    /// side stays at least <see cref="MinShortSideDip"/>. An image already shorter than that at 1:1
+    /// keeps 100% as its floor rather than being enlarged.
+    /// </summary>
+    public static double MinimumZoom(double imageWidthDip, double imageHeightDip)
+    {
+        double shortSide = Math.Min(imageWidthDip, imageHeightDip);
+        if (!double.IsFinite(shortSide) || shortSide <= 0) return MinZoom;
+        return Math.Clamp(MinShortSideDip / shortSide, MinZoom, 1.0);
+    }
+
+    /// <summary>Constrains a zoom factor to the supported range for an image of this natural size.</summary>
+    public static double ClampZoom(double zoom, double imageWidthDip, double imageHeightDip) =>
+        Math.Clamp(zoom, MinimumZoom(imageWidthDip, imageHeightDip), MaxZoom);
+
     /// <summary>Lowest opacity a pin can be dimmed to; never fully invisible.</summary>
     public const double MinOpacity = 0.2;
 
@@ -35,8 +59,9 @@ public static class PinGeometry
     /// <summary>
     /// Fraction of the working area a new pin may occupy before its initial zoom is reduced
     /// to fit. A pin shows its content at the size it had on screen whenever it fits: the
-    /// window is exactly the image (the one-DIP outline is drawn over the image's edge and
-    /// the hover bar sits inside the pin), so no margin is reserved.
+    /// window is exactly the image (the one-DIP outline is drawn over the image's edge, and
+    /// the hover bar goes above or below the pin and inside it only when neither side has
+    /// room), so no margin is reserved.
     /// </summary>
     public const double InitialFitFraction = 1.0;
 

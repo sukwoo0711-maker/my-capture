@@ -91,6 +91,22 @@ public sealed class PinViewStateTests
         var state = NewState(step: 0);
         Assert.Equal(1.1, state.ApplyZoomStep(1), 6);
     }
+
+    [Fact]
+    public void ZoomingOutStopsWhereTheShortSideReachesTheMinimum()
+    {
+        var state = NewState();
+        Assert.Equal(PinGeometry.MinimumZoom(400, 300), state.MinimumZoom, 9);
+        state.ApplyZoomStep(-100);
+        Assert.Equal(PinGeometry.MinShortSideDip, state.HeightDip, 6);
+        Assert.Equal(state.MinimumZoom, state.SetZoom(0.01), 9);
+        // Construction and restored sessions are held to the same floor.
+        Assert.Equal(state.MinimumZoom, NewState(zoom: 0.01).Zoom, 9);
+        // An image already smaller than the minimum stays at 1:1 and can still be enlarged.
+        var small = new PinViewState(200, 24, 1, 1, 0.1);
+        Assert.Equal(1.0, small.ApplyZoomStep(-3), 9);
+        Assert.Equal(1.1, small.ApplyZoomStep(1), 9);
+    }
 }
 
 /// <summary>

@@ -1723,6 +1723,9 @@ This cannot be undone.</value>
   <data name="Pin_SelectTextImageHint" xml:space="preserve">
     <value>Ctrl+double-click recognizes and copies text from the image.</value>
   </data>
+  <data name="Pin_SelectTextTip" xml:space="preserve">
+    <value>{0}: select text</value>
+  </data>
   <data name="Text_97B224926F71" xml:space="preserve">
     <value>Change {1} of {0}</value>
     <comment>src\MyCapture.Core\Undo\AnnotationCommands.cs</comment>
@@ -4699,7 +4702,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_PinKindTable" xml:space="preserve"><value>Table</value></data>
   <data name="Tray_PinKindImage" xml:space="preserve"><value>Image</value></data>
   <data name="Tray_PinImageTitle" xml:space="preserve"><value>{0} × {1} px</value></data>
-  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>{0} more</value></data>
+  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>Bring {0} more to front</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>

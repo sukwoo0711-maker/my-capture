@@ -286,7 +286,8 @@ internal sealed partial class PinWindow
     private void AddTranslationMenuItem(ContextMenu menu)
     {
         if (TranslationState == PinTranslationState.Unavailable) return;
-        var action = MenuItemFor(TranslationActionLabel, (_, _) => InvokeTranslationAction());
+        // The hover bar's translation button runs the same command, so the row shows its icon.
+        var action = MenuItemFor(TranslationActionLabel, (_, _) => InvokeTranslationAction(), icon: PinHoverBar.TranslationGlyph);
         action.IsEnabled = TranslationActionEnabled;
         if (TranslationState == PinTranslationState.Disabled) action.ToolTip = TranslationActionHelp;
         menu.Items.Add(action);

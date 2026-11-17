@@ -1506,7 +1506,7 @@ internal sealed class NativePinWindow : IDisposable, INativeMotionTarget
             InvalidateSettle();
             var placement = PinResize.Calculate(_gestureBounds, _gestureZoom, _resizeEdge, dx, dy,
                 DpiScale / _gestureDpi, DpiScale / _gestureDpi,
-                State.ImageWidthDip * DpiScale, State.ImageHeightDip * DpiScale, DpiScale, DpiScale);
+                State.ImageWidthDip * DpiScale, State.ImageHeightDip * DpiScale, DpiScale, DpiScale, State.MinimumZoom);
             State.SetZoom(placement.Zoom);
             _left = Coordinate(placement.Left); _top = Coordinate(placement.Top);
             BeginLiveZoom(); Render(highQuality: false); if (IsVisible) Present();
