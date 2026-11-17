@@ -1867,18 +1867,38 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     internal Rect? AnchorChipBoundsForTest { get; private set; }
 
     /// <summary>
-    /// The start-point chip around a <paramref name="text"/>-sized label: its top-left corner where it
-    /// has always been, just below and to the right of the point the drag started from, with the
-    /// size read-out's padding and its distance from the edges of a <paramref name="view"/>-sized
-    /// screen. It used to pad its label by 4 × 2 DIPs, under half the read-out's 9 × 5.
+    /// The start-point chip around a <paramref name="text"/>-sized label, with the size read-out's
+    /// padding, kept <c>ReadoutEdge</c> from the edges of a <paramref name="view"/>-sized screen.
+    /// Given where the drag is heading (<paramref name="pointer"/>), the chip sits outside the
+    /// selection on the side the drag leaves behind: dragging right and down puts it above and to
+    /// the left of the start point, clear of a frame drawn <paramref name="outset"/> DIPs outside the
+    /// selection. Without room there it moves beside the frame on the drag's vertical side, and only
+    /// with neither inside the selection's corner. Without a direction it keeps its first place,
+    /// just below and to the right of the start point.
     /// </summary>
-    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view)
+    internal static Rect AnchorChipBounds(Point anchor, Size text, Size view, Point? pointer = null, double outset = 0)
     {
         double width = text.Width + (ReadoutPaddingX * 2);
         double height = text.Height + (ReadoutPaddingY * 2);
-        double x = Math.Clamp(anchor.X + 11, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
-        double y = Math.Clamp(anchor.Y + 10, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
-        return new Rect(x, y, width, height);
+        if (pointer is { } toward)
+        {
+            bool right = toward.X >= anchor.X, down = toward.Y >= anchor.Y;
+            double gap = outset + 6;
+            double outsideX = right ? anchor.X - gap - width : anchor.X + gap;
+            double outsideY = down ? anchor.Y - gap - height : anchor.Y + gap;
+            if (FitsX(outsideX) && FitsY(outsideY)) return new Rect(outsideX, outsideY, width, height);
+            double besideY = down ? anchor.Y - outset : anchor.Y + outset - height;
+            if (FitsX(outsideX) && FitsY(besideY)) return new Rect(outsideX, besideY, width, height);
+            double insideX = right ? anchor.X + 11 : anchor.X - 11 - width;
+            double insideY = down ? anchor.Y + 10 : anchor.Y - 10 - height;
+            return new Rect(ClampX(insideX), ClampY(insideY), width, height);
+        }
+        return new Rect(ClampX(anchor.X + 11), ClampY(anchor.Y + 10), width, height);
+
+        bool FitsX(double x) => x >= ReadoutEdge - 0.0001 && x + width <= view.Width - ReadoutEdge + 0.0001;
+        bool FitsY(double y) => y >= ReadoutEdge - 0.0001 && y + height <= view.Height - ReadoutEdge + 0.0001;
+        double ClampX(double x) => Math.Clamp(x, ReadoutEdge, Math.Max(ReadoutEdge, view.Width - width - ReadoutEdge));
+        double ClampY(double y) => Math.Clamp(y, ReadoutEdge, Math.Max(ReadoutEdge, view.Height - height - ReadoutEdge));
     }
 
     /// <summary>

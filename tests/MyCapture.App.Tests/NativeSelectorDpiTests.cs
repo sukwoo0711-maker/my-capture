@@ -180,12 +180,32 @@ public sealed class NativeSelectorDpiTests
         MonitorInfo monitor = Monitors.Single(item => pointer.X >= item.Bounds.Left && pointer.X < item.Bounds.Right);
         Size logical = chrome.LogicalSizeForTest(chrome.Windows[1]);
         double width = logical.Width * scale, height = logical.Height * scale, edge = 8 * scale;
-        double x = Math.Clamp(Desktop.Left + selection.X, monitor.WorkArea.Left + edge, monitor.WorkArea.Right - width - edge);
-        double y = selection.Y - height - edge;
-        if (y < monitor.WorkArea.Top + edge) y = Math.Min(monitor.WorkArea.Bottom - height - edge, selection.Y + selection.Height + edge);
+        // Six DIPs above the frame drawn outside the selection, its left edge on the frame's outer
+        // edge. Near the top, or over the mode bar or hint, inside the selection's corner when it
+        // holds the chip clear of them, else below the frame.
+        double outset = CaptureFrameStyle.Outset, gap = 6 * scale, inset = 8 * scale;
+        double left = Desktop.Left + selection.X, top = Desktop.Top + selection.Y;
+        RectD bar = chrome.BoundsForTest(chrome.Windows[0]), hint = chrome.BoundsForTest(chrome.Windows[2]);
+        Rect topChrome = Rect.Union(new Rect(bar.Left, bar.Top, bar.Width, bar.Height), new Rect(hint.Left, hint.Top, hint.Width, hint.Height));
+        double x = OnRow(left - outset), y = top - outset - gap - height;
+        if (y < monitor.WorkArea.Top + edge || Covers(x, y))
+        {
+            double insideX = OnRow(left + inset), insideY = top + inset;
+            if (width + 2 * inset <= selection.Width && height + 2 * inset <= selection.Height && !Covers(insideX, insideY))
+            {
+                x = insideX;
+                y = insideY;
+            }
+            else y = Math.Min(monitor.WorkArea.Bottom - height - edge, top + selection.Height + outset + gap);
+        }
+        Assert.False(new Rect(x, y, width, height).IntersectsWith(topChrome));
+        Assert.Equal(NativeSelectorChrome.ReadoutHeight, logical.Height);
         RectD expected = new RectD(x, y, width, height).ToPixelBounds();
         Assert.True(chrome.IsReadoutVisibleForTest);
         AssertGeometry(chrome, chrome.Windows[1], scale, expected);
+
+        double OnRow(double value) => Math.Clamp(value, monitor.WorkArea.Left + edge, monitor.WorkArea.Right - width - edge);
+        bool Covers(double l, double t) => new Rect(l, t, width, height).IntersectsWith(topChrome);
     }
 
     private static void AssertGeometry(NativeSelectorChrome chrome, Window window, double scale, RectD expected)

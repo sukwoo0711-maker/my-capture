@@ -21,7 +21,7 @@ public sealed class NativeSelectorMagnifierTests
     [InlineData(1.25)]
     [InlineData(1.5)]
     [InlineData(2.0)]
-    public void CornerMasksAreRetainedTopOnlyGeometryWithoutImageClipping(double scale) => StaTestHost.Run(() =>
+    public void RoundedWindowsMaskTheImageTopCornersAndSquareWindowsOutlineTheirEdge(double scale) => StaTestHost.Run(() =>
     {
         PointD pointer = new(320, 180);
         MonitorInfo[] monitors = [new("fixture", Bounds, Bounds, (uint)Math.Round(96 * scale), true)];
@@ -34,17 +34,20 @@ public sealed class NativeSelectorMagnifierTests
         var panel = Assert.IsType<Border>(chrome.Windows.Last().Content);
         var image = Assert.IsType<Image>(panel.Child);
         NativeSelectorMagnifier magnifier = Assert.IsType<NativeSelectorMagnifier>(chrome.MagnifierForTest);
+        // A rounded (Windows 11) window: DWM rounds the window at 8 DIPs, so the image's top
+        // corners, 3 DIPs inside, follow a 5-DIP radius painted in the panel colour.
+        magnifier.WindowRounded = true;
         DrawingGroup drawing = magnifier.DrawingForTest;
         GeometryDrawing mask = Assert.Single(drawing.Children.OfType<GeometryDrawing>(),
             item => item.Geometry is StreamGeometry);
         Geometry corners = mask.Geometry;
         Assert.True(corners.IsFrozen);
-        Assert.Equal(6, NativeSelectorMagnifier.ImageRadius);
+        Assert.Equal(5, NativeSelectorMagnifier.ImageRadius);
         double width = magnifier.ImageSizeForTest.Width;
         Assert.Equal(0, corners.Bounds.Left, 8);
         Assert.Equal(0, corners.Bounds.Top, 8);
         Assert.Equal(width, corners.Bounds.Width, 8);
-        Assert.Equal(6, corners.Bounds.Height, 8);
+        Assert.Equal(5, corners.Bounds.Height, 8);
         Assert.True(corners.FillContains(new Point(0.25, 0.25)));
         Assert.True(corners.FillContains(new Point(width - 0.25, 0.25)));
         Assert.False(corners.FillContains(new Point(3, 3)));
@@ -60,6 +63,22 @@ public sealed class NativeSelectorMagnifierTests
         GeometryDrawing nextMask = Assert.Single(magnifier.DrawingForTest.Children.OfType<GeometryDrawing>(),
             item => item.Geometry is StreamGeometry);
         Assert.Same(corners, nextMask.Geometry);
+        Assert.DoesNotContain(magnifier.DrawingForTest.Children.OfType<GeometryDrawing>(), IsWindowOutline);
+
+        // A square (Windows 10) window: no corner mask, a one-pixel chip-border edge around the window.
+        magnifier.WindowRounded = false;
+        drawing = magnifier.DrawingForTest;
+        Assert.DoesNotContain(drawing.Children.OfType<GeometryDrawing>(), item => item.Geometry is StreamGeometry);
+        GeometryDrawing outline = Assert.Single(drawing.Children.OfType<GeometryDrawing>(), IsWindowOutline);
+        double pixel = 1 / scale, inset = magnifier.ImageOffsetForTest.X;
+        Assert.Equal(-inset + pixel / 2, outline.Geometry.Bounds.Left, 6);
+        Assert.Equal(-inset + pixel / 2, outline.Geometry.Bounds.Top, 6);
+        Assert.Equal(width + 6 - pixel, outline.Geometry.Bounds.Width, 6);
+        Assert.Equal(pixel, outline.Pen.Thickness, 6);
+
+        static bool IsWindowOutline(GeometryDrawing item) => item.Brush is null && item.Pen is { } pen
+            && pen.Brush is SolidColorBrush brush && item.Geometry is RectangleGeometry { RadiusX: 0 } rectangle
+            && rectangle.Rect.Left < 0 && brush.Color == ((SolidColorBrush)CaptureGuidePalette.Resolve()["CaptureGuide.ChipBorder"]).Color;
     });
 
     [Fact]
@@ -172,12 +191,23 @@ public sealed class NativeSelectorMagnifierTests
             Assert.True(physicalImage.Contains(physicalCell),
                 $"Cell {cell} at scale {scale}: physical cell {physicalCell}, image {physicalImage}.");
             Assert.True(magnifier.GridFillCount > 0);
-            Assert.Equal(TypeScale.Caption, NativeSelectorMagnifier.ColorFontSize);
+            // Latin hex digits and coordinates at Micro; a Korean colour name stays at Caption.
+            Assert.Equal(TypeScale.Micro, NativeSelectorMagnifier.ColorFontSize);
             Assert.Equal(TypeScale.Micro, NativeSelectorMagnifier.CoordinateFontSize);
+            Assert.Equal(TypeScale.Caption, NativeSelectorMagnifier.NameFontSize);
             Assert.False(magnifier.ColorBoundsForTest.IntersectsWith(magnifier.CoordinateBoundsForTest));
-            var footer = new Rect(0, image.Height, image.Width, magnifier.FooterHeightForTest);
-            Assert.True(footer.Contains(magnifier.ColorBoundsForTest));
-            Assert.True(footer.Contains(magnifier.CoordinateBoundsForTest));
+            // The footer is the band below the hairline divider, across the whole window.
+            Rect divider = magnifier.DividerBoundsForTest;
+            double inset = magnifier.ImageOffsetForTest.X;
+            Assert.Equal(-inset, divider.Left, 8);
+            Assert.Equal(image.Height + inset, divider.Top, 8);
+            Assert.Equal(image.Width + 6, divider.Width, 8);
+            var footer = new Rect(divider.Left, divider.Bottom, divider.Width,
+                image.Height + magnifier.FooterHeightForTest + 6 - inset - divider.Bottom);
+            Assert.True(footer.Contains(magnifier.ColorBoundsForTest), $"{magnifier.ColorBoundsForTest} outside {footer}");
+            Assert.True(footer.Contains(magnifier.CoordinateBoundsForTest), $"{magnifier.CoordinateBoundsForTest} outside {footer}");
+            Assert.True(footer.Contains(magnifier.SwatchBoundsForTest));
+            Assert.False(magnifier.SwatchBoundsForTest.IntersectsWith(magnifier.ColorBoundsForTest));
         }
     });
 

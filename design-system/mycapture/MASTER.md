@@ -15,7 +15,7 @@ The product has one UI accent, red. At runtime `AccentPalette.RedOverrides` (`Ap
 theme except high contrast a deep red primary fill with white ink: fill `#C9352C`, hover `#BD3129`,
 pressed `#B32E26`, ink `#FFFFFF` (5.2:1, and hover and pressed only darken). The brighter brand red
 `#E0453C` stays on what marks the brand or a live recording over other apps: the pin outline and the
-recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines.
+recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines; the capture selector's chosen mode is its one accent-filled toolbar button, and its magnifier rings the centre pixel in the accent.
 The accent rows in the token table below are the `Tokens.xaml` startup defaults that this runtime palette
 replaces, not the colours users see. The six themes are Midnight, Glass,
 Workspace, Daylight, GlassLight and HighContrast; System follows Windows. Windows high contrast takes
