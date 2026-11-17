@@ -318,7 +318,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_1E0DD4F46A0C" xml:space="preserve">
-    <value>Fill transparency · 100%</value>
+    <value>Fill opacity · 0%</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_1E8C10206F5B" xml:space="preserve">
@@ -445,7 +445,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_27FD5EFB7773" xml:space="preserve">
-    <value>100%: outline only · 0%: fill completely with the stroke color</value>
+    <value>0%: outline only · 100%: fill completely with the stroke color</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
@@ -597,7 +597,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_35E5667BB610" xml:space="preserve">
-    <value>Shape fill transparency (percent)</value>
+    <value>Shape fill opacity (percent)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_35E85A6E99A5" xml:space="preserve">
@@ -917,7 +917,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_5321CB80BCA3" xml:space="preserve">
-    <value>Fill transparency</value>
+    <value>Fill opacity</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
   </data>
   <data name="Text_53A86A0A3347" xml:space="preserve">
@@ -1045,7 +1045,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5D92A3982F2F" xml:space="preserve">
-    <value>Fill transparency · {0:0}%</value>
+    <value>Fill opacity · {0:0}%</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DBC2621FC1E" xml:space="preserve">
@@ -3398,7 +3398,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_CustomColor" xml:space="preserve"><value>Custom color</value></data>
   <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
-  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill opacity</value></data>
   <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>Width</value></data>
   <data name="EditorProperty_ArrowHead" xml:space="preserve"><value>Head</value></data>
   <data name="EditorProperty_ArrowHeadEnd" xml:space="preserve"><value>End</value></data>

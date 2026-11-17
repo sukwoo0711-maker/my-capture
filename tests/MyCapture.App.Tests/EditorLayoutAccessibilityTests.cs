@@ -243,7 +243,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             ComboBox style = FindDescendants<ComboBox>(host.Editor)
                 .Single(combo => AutomationProperties.GetName(combo) == "도형 선 종류");
             Slider fill = FindDescendants<Slider>(host.Editor)
-                .Single(slider => AutomationProperties.GetName(slider) == "도형 내부 투명도 (퍼센트)");
+                .Single(slider => AutomationProperties.GetName(slider) == "도형 채움 불투명도 (퍼센트)");
             Assert.Equal(2, style.SelectedIndex);
             Assert.Equal(50, fill.Value);
             Assert.False(controller.CanUndo);
@@ -268,7 +268,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             ComboBox style = FindDescendants<ComboBox>(inspector)
                 .Single(combo => AutomationProperties.GetName(combo) == "도형 선 종류");
             Slider fill = FindDescendants<Slider>(inspector)
-                .Single(slider => AutomationProperties.GetName(slider) == "도형 내부 투명도 (퍼센트)");
+                .Single(slider => AutomationProperties.GetName(slider) == "도형 채움 불투명도 (퍼센트)");
             Assert.True(inspector.IsVisible);
             Assert.True(style.IsVisible);
             Assert.True(fill.IsVisible);

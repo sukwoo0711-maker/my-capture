@@ -115,8 +115,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _textRecognitionInProgress;
     private Slider _thicknessSlider = null!;
     private ComboBox _strokeStyleComboBox = null!;
-    private Slider _fillTransparencySlider = null!;
-    private TextBlock _fillTransparencyLabel = null!;
+    private Slider _fillOpacitySlider = null!;
+    private TextBlock _fillOpacityLabel = null!;
     private FrameworkElement _shapeStyleSection = null!;
     private Slider _fontSizeSlider = null!;
     private FrameworkElement _fontSizeSection = null!;
@@ -2913,13 +2913,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         panel.Children.Add(_strokeStyleComboBox);
         var fillPanel = PropertyGroup("AnnotationFillProperties");
         _fillSection = fillPanel;
-        _fillTransparencyLabel = PropertyLabel(UiText.Get("EditorProperty_FillTransparency"));
-        fillPanel.Children.Add(_fillTransparencyLabel);
-        _fillTransparencySlider = new Slider
+        _fillOpacityLabel = PropertyLabel(UiText.Get("EditorProperty_FillTransparency"));
+        fillPanel.Children.Add(_fillOpacityLabel);
+        // The slider shows opacity (100 = solid fill); the model keeps transparency (100 = hollow).
+        _fillOpacitySlider = new Slider
         {
             Minimum = 0,
             Maximum = 100,
-            Value = 100,
+            Value = FillOpacityOf(100),
             SmallChange = 1,
             LargeChange = 10,
             TickFrequency = 1,
@@ -2930,20 +2931,26 @@ internal sealed partial class AnnotationEditorControl : Grid
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        AutomationName(_fillTransparencySlider, UiText.Get("Text_35E5667BB610"));
-        AutomationProperties.SetHelpText(_fillTransparencySlider, (string)_fillTransparencySlider.ToolTip);
-        _fillTransparencySlider.ValueChanged += (_, args) =>
+        AutomationName(_fillOpacitySlider, UiText.Get("Text_35E5667BB610"));
+        AutomationProperties.SetHelpText(_fillOpacitySlider, (string)_fillOpacitySlider.ToolTip);
+        _fillOpacitySlider.ValueChanged += (_, args) =>
         {
             if (!_syncingInspector)
             {
-                _controller.ApplyFillTransparency(args.NewValue);
+                _controller.ApplyFillTransparency(FillTransparencyOf(args.NewValue));
                 RememberPreferences();
             }
         };
-        fillPanel.Children.Add(ValueEntry(_fillTransparencySlider, "%", UiText.Get("Text_35E5667BB610")).Element);
-        fillPanel.Children.Add(_fillTransparencySlider);
+        fillPanel.Children.Add(ValueEntry(_fillOpacitySlider, "%", UiText.Get("Text_35E5667BB610")).Element);
+        fillPanel.Children.Add(_fillOpacitySlider);
         return panel;
     }
+
+    /// <summary>The fill opacity the property bar shows for a stored fill transparency (the mapping is its own inverse).</summary>
+    internal static double FillOpacityOf(double fillTransparency) => 100 - fillTransparency;
+
+    /// <summary>The fill transparency the model stores for a fill opacity chosen on the property bar.</summary>
+    internal static double FillTransparencyOf(double fillOpacity) => 100 - fillOpacity;
 
     private FrameworkElement BuildFontSizeSection()
     {
@@ -3809,7 +3816,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                     .Select(item => item.StrokeStyle).Distinct().Take(2).ToArray();
                 _strokeStyleComboBox.SelectedIndex = styles.Length > 1 ? -1
                     : (int)(styles.Length == 1 ? styles[0] : _controller.StrokeStyle);
-                _fillTransparencySlider.Value = shape?.FillTransparency ?? _controller.FillTransparency;
+                _fillOpacitySlider.Value = FillOpacityOf(shape?.FillTransparency ?? _controller.FillTransparency);
             }
 
             if (fontSizeApplies)

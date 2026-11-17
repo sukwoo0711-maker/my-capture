@@ -108,7 +108,7 @@ public sealed class EditorKeysTests
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorController controller = Controller(host.Editor);
         Assert.True(Press(host.Editor, Key.R, ime: false));
-        Slider fill = Field<Slider>(host.Editor, "_fillTransparencySlider");
+        Slider fill = Field<Slider>(host.Editor, "_fillOpacitySlider");
         Assert.True(fill.Focus());
 
         Assert.True(Press(fill, Key.T, ime));
