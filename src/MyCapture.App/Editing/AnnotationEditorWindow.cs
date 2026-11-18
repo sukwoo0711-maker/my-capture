@@ -53,6 +53,9 @@ internal partial class AnnotationEditorWindow : Window
         ArgumentNullException.ThrowIfNull(selectedBitmap);
 
         StandardWindowTheme.Apply(this);
+        // The original image must be at its final coordinates and opacity from frame one.
+        // This host reveals only its editor chrome after that frame, never the whole content.
+        FluidMotion.SetWindowEntrance(this, false);
 
         Title = title ?? UiText.Get("Text_199EB510DA51");
         Background = Application.Current?.TryFindResource("Surface.Base") as Brush
@@ -106,6 +109,7 @@ internal partial class AnnotationEditorWindow : Window
         // capture, or starting a draft. Its owner closes this unshown host after drawing.
         if (prewarm) return;
 
+        _editor.PrepareWorkspaceEntrance();
         ContentRendered += OnContentRendered;
         InitializeDraftRecovery();
         MyCapture.App.Capture.CaptureEditorRegistry.Track(this, static editor => new MyCapture.App.Capture.CaptureGuardState
@@ -826,6 +830,7 @@ internal partial class AnnotationEditorWindow : Window
 
     private void OnContentRendered(object? sender, EventArgs e)
     {
+        _editor.BeginWorkspaceEntrance();
         if (DraftRecordSource?.Invoke() is { } record) PracticeSignals.Ready(record.Id, _editor);
         _ = Activate();
         _ = _editor.Focus();
@@ -844,6 +849,7 @@ internal partial class AnnotationEditorWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _windowClosed = true;
+        _editor.CompleteWorkspaceEntrance();
         _editor.CancelPendingMosaics(closing: true);
         FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;

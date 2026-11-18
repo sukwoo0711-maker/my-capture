@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -63,9 +64,14 @@ public sealed class EditorFileSizeTests
             typeof(AnnotationEditorControl).GetMethod("OnHistoryChanged", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window.Editor, null);
             Assert.Equal("720 × 300 px · 2.4 MB", Dimensions(window.Editor));
             Button capture = Descendants(window).OfType<Button>().Single(button => button.Name == "NewCapture");
-            Button info = Descendants(window).OfType<Button>().Single(button => button.Name == "MediaInfo");
-            Assert.Same(capture.Style, info.Style);
-            Assert.Equal(capture.Height, info.Height);
+            Assert.Equal(36, capture.Height);
+            Button more = Descendants(window).OfType<Button>()
+                .Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowMore");
+            MenuItem info = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(),
+                item => Equals(item.Header, UiText.Get("MediaInfo.Title")));
+            Assert.Same(info, more.ContextMenu.Items[^1]);
+            Assert.Equal(UiText.Get("MediaInfo.Title"), AutomationProperties.GetName(info));
+            Assert.DoesNotContain(Descendants(window).OfType<Button>(), button => button.Name == "MediaInfo");
         }
         finally { window.Close(); }
     });
