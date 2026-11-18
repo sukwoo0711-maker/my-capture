@@ -124,8 +124,15 @@ public sealed class QuickAccessHierarchyTests
     });
 
     [Fact]
-    public void AltQEntersOnPinThenTabTraversesTheCommandsAndEnterPinsOnce() => StaTestHost.Run(() =>
+    public Task AltQEntersOnPinThenTabTraversesTheCommandsAndEnterPinsOnce() => SettingsThemePreviewTests.RunIsolated(
+        nameof(AltQEntersOnPinThenTabTraversesTheCommandsAndEnterPinsOnce), () =>
     {
+        // As in the product, the theme lives in Application resources: the card menu's popup must
+        // keep the implicit styles it resolved before the popup existed (see QuickAccessContextMenuTests).
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary
+            { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
         bool? previousMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         using var router = new ReceiptKeyboardRouter(_ => new QuickAccessContextMenuTests.NoHotkeys());
@@ -135,7 +142,6 @@ public sealed class QuickAccessHierarchyTests
             () => Task.FromResult("unused.png"), excludeFromCapture: false, targetMonitor: Offscreen(), keyboardRouter: router);
         try
         {
-            Ocr410Fixture.LoadTheme(card);
             card.IsKept = true;
             card.Show();
             card.UpdateLayout();
@@ -160,11 +166,19 @@ public sealed class QuickAccessHierarchyTests
             Assert.True(card.CardMenu.IsOpen);
             Assert.All(card.CardMenu.Items.OfType<MenuItem>(), item => Assert.True(item.Focusable));
             card.CardMenu.IsOpen = false;
-            Assert.True(EditorKeysTests.Press(card, Key.Escape, ime: false));
+            // The closing menu hands keyboard focus back to the card on the dispatcher; a person's
+            // next key arrives after that, so the test lets it run before pressing Esc.
+            card.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+            Assert.True(EditorKeysTests.Press(card, Key.Escape, ime: false),
+                $"Esc after menu: focused={Keyboard.FocusedElement}, within={card.IsKeyboardFocusWithin}, active={card.IsActive}, state={card.TimeoutStateForTest}");
             Assert.False(card.IsVisible);
         }
-        finally { card.CardMenu.IsOpen = false; card.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previousMotion; }
-    });
+        finally
+        {
+            card.CardMenu.IsOpen = false; card.Close(); FluidMotion.AnimationsEnabledOverrideForTest = previousMotion;
+            application.Shutdown();
+        }
+    }, typeof(QuickAccessHierarchyTests));
 
     [Fact]
     public void PendingSaveAndFailureKeepOneStatusLineAndTheFullFailureDetail() => StaTestHost.Run(() =>
