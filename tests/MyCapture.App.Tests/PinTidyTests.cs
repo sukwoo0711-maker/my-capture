@@ -24,7 +24,7 @@ public sealed class PinTidyTests
 {
     [Theory]
     [InlineData("ko-KR", "숨기기", "이 핀만 보기", "접기", "Shift+더블클릭")]
-    [InlineData("en-US", "Hide", "Show only this pin", "Collapse", "Shift+Double-click")]
+    [InlineData("en-US", "Hide", "Show only this pin", "Collapse", "Shift+double-click")]
     public void MenuGroupsAndAvailabilityFollowOtherShownPins(string language, string hide, string only, string collapse, string gesture) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);

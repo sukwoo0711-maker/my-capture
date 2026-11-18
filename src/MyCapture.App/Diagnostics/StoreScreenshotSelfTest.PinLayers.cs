@@ -559,7 +559,8 @@ internal static partial class StoreScreenshotSelfTest
             try
             {
                 OpenLayerWindow(card, 344, 215, 150);
-                Emit("quick-access/api-doc.png", RenderLayerWindow(card), 344, 215);
+                FrameworkElement cardClient = LayerClient(card);
+                Emit("quick-access/api-doc.png", RenderLayerWindow(card), cardClient.ActualWidth, cardClient.ActualHeight);
             }
             finally { CloseLayerWindow(card); }
             PinContent content = PinContent.FromImage(ApiCapture(2));
@@ -582,7 +583,8 @@ internal static partial class StoreScreenshotSelfTest
                 CanRestoreClosedPin: true, ClipboardHasContent: true);
             IReadOnlyList<ThemedShellPresenter.MenuEntry> entries = TrayMenuLayout.Build(commands, NewInstallDefaults.Create().Hotkeys, state);
             ContextMenu menu = new ThemedShellPresenter(() => true).CreateMenu(entries);
-            string[] required = ["Tray_PinClipboard", "Tray_HideAllPins", "Tray_ClearClickThrough", "Onboard_TrayReopenPin"];
+            // 6.0 order (TrayMenuLayout): recovery stays at the top of the pin group, every-pin commands last.
+            string[] required = ["Tray_PinClipboard", "Tray_ClearClickThrough", "Onboard_TrayReopenPin", "Tray_HideAllPins"];
             string[] actual = menu.Items.OfType<MenuItem>().Select(item => item.Header?.ToString() ?? "").ToArray();
             int previous = -1;
             foreach (string key in required)
@@ -611,9 +613,14 @@ internal static partial class StoreScreenshotSelfTest
                 menu.UpdateLayout();
                 if (pass == 0) Pump(20);
             }
-            var bitmap = new RenderTargetBitmap((int)Math.Round(menu.ActualWidth * Scale), (int)Math.Round(menu.ActualHeight * Scale),
-                96 * Scale, 96 * Scale, PixelFormats.Pbgra32);
-            bitmap.Render(menu);
+            // 6.0 gives every ContextMenu a 12-DIP margin for its popup shadow. The render carries that
+            // offset, so draw the margin too and keep only the menu box (the same geometry as before).
+            Vector offset = VisualTreeHelper.GetOffset(menu);
+            var full = new RenderTargetBitmap((int)Math.Round((offset.X + menu.ActualWidth) * Scale),
+                (int)Math.Round((offset.Y + menu.ActualHeight) * Scale), 96 * Scale, 96 * Scale, PixelFormats.Pbgra32);
+            full.Render(menu);
+            var bitmap = new CroppedBitmap(full, new Int32Rect((int)Math.Round(offset.X * Scale), (int)Math.Round(offset.Y * Scale),
+                (int)Math.Round(menu.ActualWidth * Scale), (int)Math.Round(menu.ActualHeight * Scale)));
             bitmap.Freeze();
             Emit(path, bitmap, menu.ActualWidth, menu.ActualHeight);
             _report.AppendLine($"Menu {path} logical size: {menu.ActualWidth:0.###}x{menu.ActualHeight:0.###} DIP; detached, measured and arranged twice; transparent outside menu.");

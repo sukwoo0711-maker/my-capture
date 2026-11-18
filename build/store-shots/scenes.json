@@ -35,7 +35,7 @@
       "slug": "spec-table-pin",
       "title_ko": "사양 표를 띄워 두고 코딩합니다",
       "title_en": "Code with the spec table in view",
-      "subline_ko": "엑셀에서 Ctrl+C → F3 · Ctrl+휠: 투명도",
+      "subline_ko": "엑셀에서 Ctrl+C → F3 · Ctrl+휠: 불투명도",
       "subline_en": "Ctrl+C in Excel, then F3 · Ctrl+wheel: opacity",
       "layers": [
         {
@@ -283,16 +283,16 @@
           "crop": [
             0,
             0,
-            3000,
+            3720,
             1600
           ],
           "placement": [
             160,
             360
           ],
-          "scale": 0.75,
+          "scale": 0.6,
           "z": 0,
-          "final": "LibraryWindow의 1240×760 DIP, 3× 레이어입니다. 검색어 'timeout'으로 결과 세 개를 표시합니다. 첫 항목은 창 제목 CaptureService.cs — timeout, 둘째는 이미지 OCR 본문 Request timeout, 셋째는 둘 다 일치합니다. 검색어와 일치 근거를 crop 안에 배치합니다."
+          "final": "LibraryWindow의 1240×760 DIP, 3× 레이어입니다. 검색어 'timeout'으로 결과 세 개를 표시합니다. 첫 항목은 창 제목 CaptureService.cs — timeout, 둘째는 이미지 OCR 본문 Request timeout, 셋째는 둘 다 일치합니다. 검색어와 일치 근거를 crop 안에 배치합니다. 6.0.0: 검색창 오른쪽의 캡처·녹화 단추까지 창 전체 폭을 보입니다(언어마다 검색창 폭이 달라 한 자르기로 맞출 수 없음)."
         }
       ],
       "final": "임시 합성 캡처 세 개와 OCR 색인을 자체 테스트 저장소에 준비합니다. 실제 사용자의 라이브러리는 읽거나 수정하지 않습니다. 검색 필드, 결과 제목, 제목·이미지 글자 일치 설명이 보여야 합니다."

@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
@@ -385,8 +386,10 @@ internal static partial class StoreScreenshotSelfTest
             try
             {
                 OpenLayerWindow(window, 344, 215, 250);
-                Emit("quick-access/dashboard.png", RenderLayerWindow(window), 344, 215);
-                _report.AppendLine("Quick card: 344x215 DIP at 3x, kept and not activated; C/E/P/S/T live in tooltips and automation names, so no key captions are drawn.");
+                // 6.0 sizes the card from the capture's proportions, so the layer takes the product's own client size.
+                FrameworkElement cardClient = LayerClient(window);
+                Emit("quick-access/dashboard.png", RenderLayerWindow(window), cardClient.ActualWidth, cardClient.ActualHeight);
+                _report.AppendLine($"Quick card: {cardClient.ActualWidth:0.##}x{cardClient.ActualHeight:0.##} DIP at 3x, kept and not activated; C/E/P/S/T live in tooltips and automation names, so no key captions are drawn.");
             }
             finally { CloseLayerWindow(window); }
         }
@@ -402,7 +405,9 @@ internal static partial class StoreScreenshotSelfTest
                 window.SetSourceImage(source);
                 MethodInfo method = typeof(OcrResultWindow).GetMethod("ApplyResult", BindingFlags.Instance | BindingFlags.NonPublic)
                     ?? throw new MissingMethodException(nameof(OcrResultWindow), "ApplyResult");
-                method.Invoke(window, [result, "dotnet test · CaptureService.Tests"]);
+                method.Invoke(window, [result, "dotnet test · CaptureService.Tests", false]);
+                // As ShowResult after a default (Fast, 1x) capture; ApplyResult alone leaves the accuracy box empty.
+                window.SetResultQuality(OcrQuality.Fast);
                 OpenLayerWindow(window, 1100, 640, 300);
                 foreach (TextBox box in UxReviewSelfTest.Descendants(window).OfType<TextBox>()) box.Select(0, 0);
                 Emit("ocr/result-source.png", RenderLayerWindow(window), 1100, 640);
@@ -583,6 +588,19 @@ internal static partial class StoreScreenshotSelfTest
                     throw new InvalidOperationException("The video editor changed the required 0.4-2.6 s trim.");
                 if (window.RenderCurrentFrameForTest() is null)
                     throw new InvalidOperationException("The video editor has no rendered preview frame.");
+
+                // The timeline filmstrip decodes on a background thread; a render before it finishes
+                // shows a partial strip with empty tiles. Wait as the responsiveness self-test does:
+                // decoder completed, queued publications drained, timeline redrawn.
+                TwoLineTimeline timeline = window.TimelineForTest;
+                WaitForLayerVideo(() => timeline.FilmstripForTest?.IsCompleted == true,
+                    "The video editor's timeline filmstrip did not finish decoding.", 15000);
+                bool drained = false;
+                _ = window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => drained = true));
+                WaitForLayerVideo(() => drained, "The filmstrip publications did not drain.", 2000);
+                timeline.FlushRenderForTest();
+                window.UpdateLayout();
+                _report.AppendLine($"PASS video editor filmstrip completed: {timeline.FilmstripForTest?.PublishedCount} of {timeline.FilmstripForTest?.Layout.TileCount} tiles published.");
 
                 Emit("video/editor.png", RenderLayerWindow(window), 1240, 800);
                 _report.AppendLine($"Video editor: 1240x800 DIP at 3x; trim {window.TimelineForTest.InMs:0}-{window.TimelineForTest.OutMs:0} ms; kept {document.OutputDurationMs:0} ms; two timed text tracks; media ready; preview at {coordinator.PresentedPositionMs:0.###} ms.");

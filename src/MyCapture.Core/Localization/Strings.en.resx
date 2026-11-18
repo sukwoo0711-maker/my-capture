@@ -5694,7 +5694,7 @@ Install the model?</value></data>
   </data>
   <data name="Pin_Collapse" xml:space="preserve"><value>Collapse</value></data>
   <data name="Pin_Expand" xml:space="preserve"><value>Expand</value></data>
-  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+Double-click</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+double-click</value></data>
   <data name="Pin_CollapsedTip" xml:space="preserve"><value>Double-click to expand the pin.</value></data>
   <data name="Tray_PinCollapsed" xml:space="preserve"><value>Collapsed</value></data>
   <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>Snap to edges and other pins while dragging</value></data>
