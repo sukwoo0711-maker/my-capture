@@ -1012,7 +1012,9 @@ internal sealed partial class WelcomeWindow : Window
             int end = display.IndexOf(close, index + 1);
             if (end < 0) continue;
             _instruction.Inlines.Add(new Run(display[start..(index + 1)]));
-            var name = ControlLabelTypography.Apply(new Run(display[(index + 1)..end]));
+            // The quoted name is the control the step asks for: running text, not control chrome.
+            var name = new Run(display[(index + 1)..end]);
+            name.SetResourceReference(TextElement.FontWeightProperty, "FontWeight.Emphasis");
             name.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
             _instruction.Inlines.Add(name);
             start = end; index = end;

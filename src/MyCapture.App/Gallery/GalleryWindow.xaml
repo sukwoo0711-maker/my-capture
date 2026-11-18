@@ -2111,10 +2111,10 @@
                         </Button>
                         <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
-                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
+                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text QuickAccess.Edit}">
                             <StackPanel Orientation="Horizontal">
                                 <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text QuickAccess.Edit}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
