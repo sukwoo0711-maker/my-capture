@@ -285,7 +285,7 @@ public sealed class GitHubUpdateService : IUpdateService
             Directory.CreateDirectory(fullSessionDir);
             UpdateInstaller.AssertNoReparsePoints(fullSessionDir);
             string installerName = UpdatePaths.InstallerName(package.Version);
-            tempInstallerPath = UpdatePaths.Child(fullSessionDir, installerName + ".downloading");
+            tempInstallerPath = UpdatePaths.Child(fullSessionDir, UpdatePaths.DownloadingInstallerName);
             finalInstallerPath = UpdatePaths.Child(fullSessionDir, installerName);
             checksumFilePath = UpdatePaths.Child(fullSessionDir, "SHA256SUMS.txt");
         }

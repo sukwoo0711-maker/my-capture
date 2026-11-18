@@ -182,6 +182,207 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # The native Windows on ARM build. The app and its tests run as ARM64 processes on a hosted ARM64
+  # runner. The setup program is x64 in the x64 and arm64 packages, so its tests run under the
+  # runner's x64 emulation, which is how an ARM64 PC runs it. Steps after the build run even when
+  # an earlier one fails, and the last script step lists every failed test and self-test by name.
+  arm64-native:
+    name: Windows ARM64 native build, tests and packaged self-tests
+    runs-on: windows-11-arm
+    timeout-minutes: 120
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Require a native ARM64 shell and SDK
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE; Windows $([Environment]::OSVersion.Version)"
+          $info = @(dotnet --info)
+          $info | ForEach-Object { Write-Host $_ }
+          if ($env:PROCESSOR_ARCHITECTURE -cne 'ARM64') { throw 'This job must run in a native ARM64 shell.' }
+          $sdkRuntime = @($info | ForEach-Object { if ($_ -match '^\s*RID:\s+(\S+)\s*$') { $Matches[1] } })
+          if ($sdkRuntime.Count -ne 1 -or $sdkRuntime[0] -cne 'win-arm64') { throw "The .NET SDK is not win-arm64: $($sdkRuntime -join ', ')" }
+      - name: Build arm64 tests and the x64 setup
+        id: build
+        shell: powershell
+        run: |
+          dotnet build tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release -p:Platform=arm64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj -c Release -p:Platform=arm64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          . .\build\publish-architecture.ps1
+          $expected = [ordered]@{
+              'tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0/MyCapture.App.Tests.dll' = 0xAA64
+              'tests/MyCapture.Core.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0/MyCapture.Core.Tests.dll' = 0xAA64
+              'tests/MyCapture.Setup.Tests/bin/Release/net48/MyCaptureSetup.exe' = 0x8664
+              'src/MyCapture.Setup/bin/arm64/Release/net48/MyCaptureSetup.exe' = 0x8664
+          }
+          foreach ($path in $expected.Keys) {
+              $kind = Get-PublishImageKind -Path (Join-Path $PWD $path)
+              if ($null -eq $kind -or $kind.Machine -ne $expected[$path]) { throw ('{0} is not machine 0x{1:X4}.' -f $path, $expected[$path]) }
+              Write-Host ('{0}: machine 0x{1:X4}' -f $path, $kind.Machine)
+          }
+      - name: Publish self-contained arm64 app
+        id: publish
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-arm64 --self-contained true -p:Platform=arm64 -p:PublishProfile=win-arm64-self-contained -o artifacts/ci-arm64/publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          . .\build\publish-architecture.ps1
+          Assert-PublishArchitecture -PublishRoot (Join-Path $PWD 'artifacts/ci-arm64/publish') -Architecture arm64
+      # The hosted ARM64 image starts with its own windows over the desktop: a full-screen, topmost
+      # "Microsoft account" prompt (WWAHost, the whole 1024x768 screen) that owns the foreground,
+      # and sometimes a terminal the image opens for wsl.exe. Once the prompt has gone the Search
+      # flyout (SearchHost, topmost, 800x684) takes the foreground; stopping its host only makes it
+      # come back, so it is dismissed with Escape as a person would. These cover the windows the
+      # capture, recording and input tests put on screen. Only the two named image processes are
+      # stopped, on a throwaway runner; nothing in the product or the tests changes. The next step
+      # reports the desktop afterwards.
+      - name: Clear the image's own windows from the runner desktop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          foreach ($name in 'WWAHost', 'WindowsTerminal') {
+              foreach ($prompt in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+                  Write-Host "Closing $name $($prompt.Id): '$($prompt.MainWindowTitle)'"
+                  Stop-Process -Id $prompt.Id -Force -ErrorAction SilentlyContinue
+              }
+          }
+          Start-Sleep -Seconds 4
+          $keys = New-Object -ComObject WScript.Shell
+          foreach ($attempt in 1..2) {
+              $keys.SendKeys('{ESC}')
+              Start-Sleep -Seconds 2
+          }
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 2
+          foreach ($name in 'WWAHost', 'WindowsTerminal') {
+              Write-Host "$name processes left: $(@(Get-Process -Name $name -ErrorAction SilentlyContinue).Count)"
+          }
+      # Diagnostics only; nothing here changes the runner. The first run failed on what this image
+      # differs in: WPF effects through RenderTargetBitmap, a WWAHost window that owned the
+      # foreground over the capture fixtures, the tray, and long-path Recycle Bin moves.
+      - name: Describe the ARM64 runner desktop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          $probeBuild = Join-Path $env:RUNNER_TEMP 'runner-desktop-probe'
+          dotnet run --file build/tools/runner-desktop-probe.cs --artifacts-path $probeBuild -- (Join-Path $PWD 'tests/MyCapture.App.Tests/bin/arm64/Release/net10.0-windows10.0.22000.0')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $fileSystem = Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -ErrorAction SilentlyContinue
+          Write-Host "PROBE long paths: LongPathsEnabled=$($fileSystem.LongPathsEnabled); TEMP=$env:TEMP; workspace=$PWD"
+          foreach ($volume in @(Get-ChildItem -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume' -ErrorAction SilentlyContinue)) {
+              $bin = Get-ItemProperty -LiteralPath $volume.PSPath
+              Write-Host "PROBE recycle bin $($volume.PSChildName): MaxCapacity=$($bin.MaxCapacity) MB, NukeOnDelete=$($bin.NukeOnDelete)"
+          }
+          foreach ($drive in @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=3')) {
+              Write-Host "PROBE volume $($drive.DeviceID): $($drive.FileSystem), $([math]::Round($drive.FreeSpace / 1GB, 1)) of $([math]::Round($drive.Size / 1GB, 1)) GB free"
+          }
+          $languages = @(Get-WinUserLanguageList | ForEach-Object { "$($_.LanguageTag) [$($_.InputMethodTips -join ',')]" })
+          Write-Host "PROBE languages: $($languages -join '; '); system locale $((Get-WinSystemLocale).Name); culture $((Get-Culture).Name)"
+          try {
+              $null = [Windows.Graphics.Capture.GraphicsCaptureSession, Windows.Graphics.Capture, ContentType = WindowsRuntime]
+              Write-Host "PROBE graphics capture: IsSupported=$([Windows.Graphics.Capture.GraphicsCaptureSession]::IsSupported())"
+          } catch { Write-Host "PROBE graphics capture: $($_.Exception.Message)" }
+          foreach ($process in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='WWAHost.exe' OR Name='explorer.exe' OR Name='ShellExperienceHost.exe' OR Name='StartMenuExperienceHost.exe'")) {
+              Write-Host "PROBE process $($process.Name) $($process.ProcessId) session $($process.SessionId): $($process.CommandLine)"
+          }
+      - name: Run the eight packaged self-tests natively
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:MYCAPTURE_DATA_ROOT = Join-Path $env:RUNNER_TEMP ('MyCapture-arm64-data-' + [guid]::NewGuid().ToString('N'))
+          .\build\run-packaged-self-tests.ps1 -PublishRoot artifacts/ci-arm64/publish -OutputRoot artifacts/ci-arm64/packaged-self-tests
+      - name: Test Core natively
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          dotnet test tests/MyCapture.Core.Tests/MyCapture.Core.Tests.csproj -c Release -p:Platform=arm64 --no-build --logger "trx;LogFileName=core-arm64.trx" --results-directory artifacts/ci-arm64/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test App natively
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          # The one excluded test loads the x64 setup assembly into the in-box Windows PowerShell,
+          # which is an ARM64 process on this runner. The setup tests below cover that assembly.
+          dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release -p:Platform=arm64 --no-build --filter "FullyQualifiedName!~GitHubUpdateServiceTests.DownloadedSessionPassesActualInstallerPathGuard" --blame-hang --blame-hang-timeout 15m --blame-hang-dump-type none --logger "trx;LogFileName=app-arm64.trx" --results-directory artifacts/ci-arm64/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test the x64 setup under emulation
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: powershell
+        run: |
+          dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release --no-build --logger "trx;LogFileName=setup-x64-on-arm64.trx" --results-directory artifacts/ci-arm64/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: List failed tests and self-tests
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $namespace = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+          $files = @(Get-ChildItem -Path artifacts/ci-arm64/results -Filter *.trx -File -Recurse -ErrorAction SilentlyContinue | Sort-Object Name)
+          if ($files.Count -eq 0) { $lines.Add('Tests: no result file was written.') }
+          foreach ($file in $files) {
+              [xml]$trx = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+              $results = @(Select-Xml -Xml $trx -XPath '//t:UnitTestResult' -Namespace $namespace | ForEach-Object { $_.Node })
+              $passed = @($results | Where-Object { $_.outcome -ceq 'Passed' })
+              $skipped = @($results | Where-Object { $_.outcome -ceq 'NotExecuted' })
+              $failed = @($results | Where-Object { $_.outcome -cne 'Passed' -and $_.outcome -cne 'NotExecuted' })
+              $lines.Add("$($file.Name): $($results.Count) results, $($passed.Count) passed, $($skipped.Count) skipped, $($failed.Count) failed")
+              # A crashed or hung test host leaves its reason here instead of a failed result.
+              foreach ($text in @(Select-Xml -Xml $trx -XPath '//t:RunInfo/t:Text' -Namespace $namespace | ForEach-Object { $_.Node.InnerText.Trim() })) {
+                  if ($text -like '*All tests finished running*') { continue }
+                  if ($text.Length -gt 600) { $text = $text.Substring(0, 600) }
+                  $lines.Add("  RUN MESSAGE $text")
+              }
+              foreach ($result in $failed) {
+                  $message = @(([string]$result.Output.ErrorInfo.Message) -split "`r?`n" | Where-Object { $_.Trim() })
+                  $first = if ($message.Count -gt 0) { $message[0].Trim() } else { '(no message)' }
+                  if ($first.Length -gt 300) { $first = $first.Substring(0, 300) }
+                  $lines.Add("  FAILED [$($result.outcome)] $($result.testName): $first")
+              }
+          }
+          $runs = @(Get-ChildItem -Path artifacts/ci-arm64/packaged-self-tests -Directory -ErrorAction SilentlyContinue)
+          if ($runs.Count -eq 0) { $lines.Add('Packaged self-tests: not run.') }
+          foreach ($run in $runs) {
+              $resultPath = Join-Path $run.FullName 'result.json'
+              if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { $lines.Add("Packaged self-tests: $($run.Name) wrote no result.json."); continue }
+              $result = Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8 | ConvertFrom-Json
+              $lines.Add("Packaged self-tests: $($result.Result), $($result.PassCount)/$(@($result.Tests).Count) passed; Windows projection $($result.WindowsProjection.Result)")
+              foreach ($failure in @($result.Failures)) { $lines.Add("  FAILED $failure") }
+              foreach ($test in @($result.Tests | Where-Object { $_.Result -cne 'RESULT: PASS' })) {
+                  $report = Join-Path $run.FullName ([string]$test.Path)
+                  if (Test-Path -LiteralPath $report -PathType Leaf) {
+                      Write-Host "----- last lines of $($test.Path) -----"
+                      Get-Content -LiteralPath $report -Encoding UTF8 -Tail 40 | ForEach-Object { Write-Host $_ }
+                  }
+              }
+          }
+          $lines | ForEach-Object { Write-Host $_ }
+          @('```') + $lines.ToArray() + @('```') | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      - name: Upload ARM64 test results and self-test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ci-arm64-results-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/ci-arm64/results/**/*.trx
+            artifacts/ci-arm64/results/**/Sequence_*.xml
+            artifacts/ci-arm64/packaged-self-tests/**/*report.txt
+            artifacts/ci-arm64/packaged-self-tests/**/result.json
+            artifacts/ci-arm64/packaged-self-tests/**/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
   # A library delete of many captures uses one Shell operation and Undo one Recycle Bin restore.
   # The canary moves the 124 directories of the 2026-11-06 report both ways through the runner's
   # real Recycle Bin, brings every one back, and fails when the batch is not faster.

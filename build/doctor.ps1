@@ -124,7 +124,7 @@ if (-not $Quiet) {
     Write-Host "  SDK:     $selectedVersion (required by global.json: $requiredText, rollForward: latestFeature)"
     Write-Host "  dotnet:  $selectedPath"
     Write-Host "  OS:      $([Environment]::OSVersion.VersionString)"
-    Write-Host "  CPU:     $env:PROCESSOR_ARCHITECTURE (target: win-x64)"
+    Write-Host "  CPU:     $env:PROCESSOR_ARCHITECTURE (default target: win-x64; packages: win-x64, win-x86, win-arm64)"
 
     if ($env:OS -eq 'Windows_NT' -and [Environment]::OSVersion.Version.Build -lt 19045) {
         Write-Warning 'The build may succeed, but MyCapture requires Windows 10 22H2 (build 19045) or newer at runtime.'

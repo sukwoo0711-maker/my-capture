@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using MyCapture.App.Updates;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using Xunit;
 
@@ -69,8 +70,17 @@ public sealed class UpdateChannelResolverTests
         Assert.Equal(UpdateChannel.None, UpdateChannelResolver.Resolve(false, root));
     }
 
-    private static string CreatePublishedPortable(string? root = null)
+    [Fact]
+    public void PublishedCopyForAnotherArchitectureIsNotThisPortableBuild()
     {
+        string other = AppArchitecture.Name == "arm64" ? "win-x64" : "win-arm64";
+        string root = CreatePublishedPortable(runtime: other);
+        Assert.Equal(UpdateChannel.None, UpdateChannelResolver.Resolve(false, root));
+    }
+
+    private static string CreatePublishedPortable(string? root = null, string? runtime = null)
+    {
+        runtime ??= AppArchitecture.RuntimeIdentifier;
         root ??= Directory.CreateTempSubdirectory("mycapture-update-portable-").FullName;
         foreach (string name in new[] { "MyCapture.exe", "MyCapture.dll", "coreclr.dll", "hostfxr.dll",
             "hostpolicy.dll", "System.Private.CoreLib.dll", "PresentationCore.dll", "PresentationFramework.dll" })
@@ -82,7 +92,7 @@ public sealed class UpdateChannelResolverTests
                 new { name = "Microsoft.WindowsDesktop.App", version = "10.0.0" } } },
         }));
         File.WriteAllText(Path.Combine(root, "MyCapture.deps.json"),
-            """{"runtimeTarget":{"name":".NETCoreApp,Version=v10.0/win-x64"}}""");
+            JsonSerializer.Serialize(new { runtimeTarget = new { name = ".NETCoreApp,Version=v10.0/" + runtime } }));
         return root;
     }
 }

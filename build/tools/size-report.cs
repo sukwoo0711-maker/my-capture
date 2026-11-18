@@ -114,7 +114,7 @@ internal static class SizeReport
     }
 
     private static bool IsDebuggerFile(string path) => Regex.IsMatch(path,
-        @"\A(?:mscordaccore(?:_(?:amd64_amd64|x86_x86)_[0-9]+(?:\.[0-9]+){3})?|mscordbi|Microsoft\.DiaSymReader\.Native\.(?:amd64|x86))\.dll\z",
+        @"\A(?:mscordaccore(?:_(?:amd64_amd64|x86_x86|arm64_arm64)_[0-9]+(?:\.[0-9]+){3})?|mscordbi|Microsoft\.DiaSymReader\.Native\.(?:amd64|x86|arm64))\.dll\z",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static FolderReport Inventory(string root)

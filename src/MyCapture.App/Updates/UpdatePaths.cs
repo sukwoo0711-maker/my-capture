@@ -24,7 +24,24 @@ internal static class UpdatePaths
         return true;
     }
 
-    internal static string ChecksumName => AppArchitecture.IsX86 ? "SHA256SUMS-win-x86.txt" : "SHA256SUMS.txt";
+    internal static string ChecksumName => ChecksumNameFor(AppArchitecture.Name);
+
+    /// <summary>
+    /// The in-flight download keeps a fixed short name: the installer name carries up to three
+    /// ten-digit version parts and the architecture, and with a ".downloading" suffix the win-arm64
+    /// name reached MAX_PATH under a long device TEMP. The file lives only inside one staging call
+    /// (it is moved to <see cref="InstallerName"/> or deleted), so Setup and cleanup never read it.
+    /// </summary>
+    internal const string DownloadingInstallerName = "installer.downloading";
+
+    /// <summary>The x64 release keeps the unsuffixed checksum file it has always published.</summary>
+    internal static string ChecksumNameFor(string architecture) => architecture switch
+    {
+        "x64" => "SHA256SUMS.txt",
+        "x86" or "arm64" => "SHA256SUMS-win-" + architecture + ".txt",
+        _ => throw new IOException("Unsupported update architecture."),
+    };
+
     internal static string SessionName(UpdateVersion version)
     {
         _ = InstallerName(version); // Apply the same stable numeric version policy.
@@ -35,7 +52,7 @@ internal static class UpdatePaths
     internal static string InstallerName(UpdateVersion version, string? architecture = null)
     {
         architecture ??= AppArchitecture.Name;
-        if (architecture is not ("x86" or "x64"))
+        if (architecture is not ("x86" or "x64" or "arm64"))
             throw new IOException("Unsupported update architecture.");
         if (version.IsPrerelease || version.Major < 0 || version.Minor < 0 || version.Patch < 0)
             throw new IOException("Only stable numeric update versions can be staged.");

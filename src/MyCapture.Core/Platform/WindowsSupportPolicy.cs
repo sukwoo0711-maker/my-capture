@@ -8,15 +8,20 @@ namespace MyCapture.Core.Platform;
 /// <remarks>
 /// Windows 10 version 22H2 is the x64 floor. Its API contract is shared with build 19041,
 /// while the host gate and package manifests enforce build 19045. ARM64 x64 emulation needs
-/// Windows 11. Contract tests keep MSBuild, installer and Store metadata aligned with this
-/// policy; optional API availability is handled separately by WindowsFeatureSupport.
+/// Windows 11. The native arm64 build is installed by an x64 setup that depends on that
+/// emulation, so ARM64 PCs keep the same floor for either build. Contract tests keep MSBuild,
+/// installer and Store metadata aligned with this policy; optional API availability is handled
+/// separately by WindowsFeatureSupport.
 /// </remarks>
 public static class WindowsSupportPolicy
 {
     /// <summary>Windows 10 version 22H2. Anything lower is unsupported.</summary>
     public const int MinimumBuild = 19045;
 
-    /// <summary>Windows 11 introduced x64 emulation on ARM64.</summary>
+    /// <summary>
+    /// Windows 11 introduced x64 emulation on ARM64. The x64 build and the setup of the native
+    /// arm64 build both run under it.
+    /// </summary>
     public const int MinimumArm64EmulationBuild = 22000;
 
     /// <summary>Human-readable name of the minimum supported release.</summary>

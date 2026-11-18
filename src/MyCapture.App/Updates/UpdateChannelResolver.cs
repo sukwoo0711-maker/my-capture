@@ -24,7 +24,7 @@ internal static class UpdateChannelResolver
                 return UpdateTarget.Resolve(sourceRoot, UpdateTarget.DefaultRoot).IsPortableMigration
                     ? UpdateChannel.None : UpdateChannel.GitHubInstall;
 
-            // package.ps1 publishes a self-contained win-x64 runtime; ordinary build output
+            // package.ps1 publishes a self-contained runtime for this architecture; ordinary build output
             // (even when copied elsewhere) lacks these binaries and included-framework metadata.
             foreach (string name in new[] { "MyCapture.exe", "MyCapture.dll", "coreclr.dll", "hostfxr.dll",
                 "hostpolicy.dll", "System.Private.CoreLib.dll", "PresentationCore.dll", "PresentationFramework.dll" })

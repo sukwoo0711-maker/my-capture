@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 using System.Xml.Linq;
 using Xunit;
@@ -11,10 +12,13 @@ public sealed class WindowsProjectionReleaseContractTests
     [Theory]
     [InlineData("x64", "Release", null, "true")]
     [InlineData("x86", "Release", null, "true")]
+    [InlineData("arm64", "Release", null, "true")]
     [InlineData("x64", "Release", "false", "false")]
     [InlineData("x86", "Release", "false", "false")]
+    [InlineData("arm64", "Release", "false", "false")]
     [InlineData("x64", "Debug", null, "false")]
     [InlineData("x86", "Debug", null, "false")]
+    [InlineData("arm64", "Debug", null, "false")]
     public void ReleaseProfile_OnlyLinksProjectionAndHonorsDiagnosticOverride(
         string architecture, string configuration, string? trimOverride, string expected)
     {
@@ -123,23 +127,37 @@ public sealed class WindowsProjectionReleaseContractTests
             WorkingDirectory = RepositoryRoot(), UseShellExecute = false,
             RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
         };
-        string[] arguments = ["run", "--file", PathFor("build/tools/projection-identity.cs"),
-            "--artifacts-path", Path.Combine(Path.GetTempPath(), "mycapture-projection-identity-tests", Guid.NewGuid().ToString("N")),
-            "--verbosity", "quiet", "--", published, original];
-        foreach (string argument in arguments) start.ArgumentList.Add(argument);
-        using Process process = Process.Start(start) ?? throw new InvalidOperationException("Projection metadata reader did not start.");
-        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
-        Task<string> stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(60000))
+        // The tool's build output is read back below, so it lives in a directory this test owns.
+        string artifacts = OwnedTestDirectory.Create("mycapture-projection-identity-");
+        try
         {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
-            Assert.Fail("Projection metadata reader exceeded 60 seconds.");
+            string[] arguments = ["run", "--file", PathFor("build/tools/projection-identity.cs"),
+                "--artifacts-path", artifacts, "--verbosity", "quiet", "--", published, original];
+            foreach (string argument in arguments) start.ArgumentList.Add(argument);
+            using Process process = Process.Start(start) ?? throw new InvalidOperationException("Projection metadata reader did not start.");
+            Task<string> stdout = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(60000))
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit();
+                Assert.Fail("Projection metadata reader exceeded 60 seconds.");
+            }
+            string output = stdout.GetAwaiter().GetResult();
+            string errors = stderr.GetAwaiter().GetResult();
+            Assert.True(process.ExitCode == expectedExit, $"Metadata reader exit {process.ExitCode}, expected {expectedExit}: {output}\n{errors}");
+            // The repository's x64 PlatformTarget default reaches file-based tools; an x64 tool or
+            // apphost cannot start under the arm64 muxer of a native ARM64 build host.
+            string tool = Path.Combine(artifacts, "bin", "debug", "projection-identity.dll");
+            using (var reader = new PEReader(File.OpenRead(tool)))
+            {
+                Assert.Equal(Machine.I386, reader.PEHeaders.CoffHeader.Machine);
+                Assert.Equal((CorFlags)0, reader.PEHeaders.CorHeader!.Flags & (CorFlags.Requires32Bit | CorFlags.Prefers32Bit));
+            }
+            Assert.False(File.Exists(Path.ChangeExtension(tool, ".exe")), "The metadata reader must run through the invoking muxer.");
+            return JsonDocument.Parse(output);
         }
-        string output = stdout.GetAwaiter().GetResult();
-        string errors = stderr.GetAwaiter().GetResult();
-        Assert.True(process.ExitCode == expectedExit, $"Metadata reader exit {process.ExitCode}, expected {expectedExit}: {output}\n{errors}");
-        return JsonDocument.Parse(output);
+        finally { OwnedTestDirectory.Delete(artifacts); }
     }
 
     [Fact]
@@ -199,6 +217,7 @@ public sealed class WindowsProjectionReleaseContractTests
     [Theory]
     [InlineData("Release", "x64", null, null, true)]
     [InlineData("Release", "x86", null, null, true)]
+    [InlineData("Release", "arm64", null, null, true)]
     [InlineData("Release", "x86", "false", null, false)]
     [InlineData("Debug", "x86", null, null, false)]
     [InlineData("Release", null, null, null, false)]

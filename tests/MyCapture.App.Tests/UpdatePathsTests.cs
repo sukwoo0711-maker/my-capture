@@ -51,7 +51,7 @@ public sealed class UpdatePathsTests
         Assert.Throws<IOException>(() => UpdatePaths.SessionName(package));
         // SettingsWindow uses the numeric assembly version for the running application.
         var running = UpdateVersion.FromVersion(new Version(4, 2, 1, 0));
-        Assert.Equal("MyCapture-4.2.1-win-x64-setup.exe", UpdatePaths.InstallerName(running));
+        Assert.Equal($"MyCapture-4.2.1-{MyCapture.Core.Platform.AppArchitecture.RuntimeIdentifier}-setup.exe", UpdatePaths.InstallerName(running));
         Assert.Matches(@"\Aupdate-4\.2\.1-[a-f0-9]{32}\z", UpdatePaths.SessionName(running));
     }
 

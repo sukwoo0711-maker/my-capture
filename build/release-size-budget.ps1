@@ -3,7 +3,7 @@ function Assert-ReleaseSizeBudget {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$PublishRoot,
-        [Parameter(Mandatory = $true)][ValidateSet('x64', 'x86')][string]$Architecture,
+        [Parameter(Mandatory = $true)][ValidateSet('x64', 'x86', 'arm64')][string]$Architecture,
         [string]$PortableZip,
         [string]$BudgetPath = (Join-Path $PSScriptRoot 'ReleaseSizeBudgets.props')
     )

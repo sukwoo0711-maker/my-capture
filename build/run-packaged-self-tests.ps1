@@ -322,7 +322,8 @@ if ($VerifyWindowsProjection) {
             $appStream.Position = $headerOffset
             if ($appReader.ReadUInt32() -ne 0x4550) { throw 'Published app has no PE header.' }
             $machine = $appReader.ReadUInt16()
-            $probeRuntime = switch ($machine) { 0x8664 { 'win-x64' } 0x014C { 'win-x86' } default { throw 'Projection validation requires an x64 or x86 app host.' } }
+            # The companion is built for the application's own architecture so that it can load the published DLLs.
+            $probeRuntime = switch ($machine) { 0x8664 { 'win-x64' } 0x014C { 'win-x86' } 0xAA64 { 'win-arm64' } default { throw 'Projection validation requires an x64, x86 or arm64 app host.' } }
         }
         finally { $appReader.Dispose(); $appStream.Dispose() }
         $appDependencies = Get-Content -LiteralPath (Join-Path $publish 'MyCapture.deps.json') -Raw -Encoding UTF8 | ConvertFrom-Json

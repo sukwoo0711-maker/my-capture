@@ -155,7 +155,7 @@ public sealed class UpdateInstallerTests
             WriteOwnedInstallation(installed);
             Target = UpdateTarget.Resolve(installed, UpdateTarget.DefaultRoot);
             byte[] data = [1, 2, 3, 4];
-            string installer = Path.Combine(Directory, "MyCapture-1.8.0-win-x64-setup.exe");
+            string installer = Path.Combine(Directory, UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0)));
             File.WriteAllBytes(installer, data);
             string hash = Convert.ToHexString(SHA256.HashData(data));
             Package = new VerifiedUpdatePackage(new UpdateVersion(1, 8, 0), installer, hash, hash, data.Length,

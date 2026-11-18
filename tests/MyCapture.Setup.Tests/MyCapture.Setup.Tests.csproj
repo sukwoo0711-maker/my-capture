@@ -8,6 +8,10 @@
     <RootNamespace>MyCapture.Setup.Tests</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'arm64'">
+    <!-- The setup stays x64 in the arm64 package (see MyCapture.Setup.csproj), and so do its tests. -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />

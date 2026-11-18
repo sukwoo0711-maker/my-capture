@@ -29,16 +29,36 @@ public sealed class X86CompatibilityTests
     [Theory]
     [InlineData("x86")]
     [InlineData("x64")]
+    [InlineData("arm64")]
     public void InstallerNamesAreArchitectureSpecific(string architecture) =>
         Assert.Equal($"MyCapture-3.0.1-win-{architecture}-setup.exe",
             UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1), architecture));
 
+    [Theory]
+    [InlineData("x64", "SHA256SUMS.txt")]
+    [InlineData("x86", "SHA256SUMS-win-x86.txt")]
+    [InlineData("arm64", "SHA256SUMS-win-arm64.txt")]
+    public void ChecksumNamesAreArchitectureSpecific(string architecture, string expected) =>
+        Assert.Equal(expected, UpdatePaths.ChecksumNameFor(architecture));
+
+    [Theory]
+    [InlineData(System.Runtime.InteropServices.Architecture.X64, "x64")]
+    [InlineData(System.Runtime.InteropServices.Architecture.X86, "x86")]
+    [InlineData(System.Runtime.InteropServices.Architecture.Arm64, "arm64")]
+    public void ReleaseArchitectureIsTheProcessArchitecture(System.Runtime.InteropServices.Architecture process, string expected) =>
+        // The x64 build emulated on an ARM64 PC is an x64 process, so it keeps taking x64 updates.
+        Assert.Equal(expected, AppArchitecture.NameOf(process));
+
     [Fact]
     public void UpdateDefaultsFollowProcessArchitectureAndRejectUnknownArchitectures()
     {
+        Assert.Equal(AppArchitecture.NameOf(System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture), AppArchitecture.Name);
         Assert.Contains(AppArchitecture.RuntimeIdentifier, UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1)));
-        Assert.Equal(AppArchitecture.IsX86 ? "SHA256SUMS-win-x86.txt" : "SHA256SUMS.txt", UpdatePaths.ChecksumName);
+        Assert.Equal(UpdatePaths.ChecksumNameFor(AppArchitecture.Name), UpdatePaths.ChecksumName);
+        Assert.Equal(AppArchitecture.IsX86 ? "SHA256SUMS-win-x86.txt" : AppArchitecture.Name == "arm64" ? "SHA256SUMS-win-arm64.txt" : "SHA256SUMS.txt", UpdatePaths.ChecksumName);
         Assert.Throws<System.IO.IOException>(() => UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1), "../x86"));
+        Assert.Throws<System.IO.IOException>(() => UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1), "arm"));
+        Assert.Throws<System.IO.IOException>(() => UpdatePaths.ChecksumNameFor("../x86"));
     }
 
     [Theory]
@@ -91,8 +111,10 @@ public sealed class X86CompatibilityTests
             {"tag_name":"v3.0.1","draft":false,"prerelease":false,"assets":[
               {"name":"MyCapture-3.0.1-win-x64-setup.exe","size":100,"browser_download_url":"ROOTMyCapture-3.0.1-win-x64-setup.exe"},
               {"name":"MyCapture-3.0.1-win-x86-setup.exe","size":100,"browser_download_url":"ROOTMyCapture-3.0.1-win-x86-setup.exe"},
+              {"name":"MyCapture-3.0.1-win-arm64-setup.exe","size":100,"browser_download_url":"ROOTMyCapture-3.0.1-win-arm64-setup.exe"},
               {"name":"SHA256SUMS.txt","size":100,"browser_download_url":"ROOTSHA256SUMS.txt"},
-              {"name":"SHA256SUMS-win-x86.txt","size":100,"browser_download_url":"ROOTSHA256SUMS-win-x86.txt"}]}
+              {"name":"SHA256SUMS-win-x86.txt","size":100,"browser_download_url":"ROOTSHA256SUMS-win-x86.txt"},
+              {"name":"SHA256SUMS-win-arm64.txt","size":100,"browser_download_url":"ROOTSHA256SUMS-win-arm64.txt"}]}
             """.Replace("ROOT", root, StringComparison.Ordinal);
         using var client = new HttpClient(new ReleaseHandler(release));
         using var service = new GitHubUpdateService(client);
@@ -101,6 +123,35 @@ public sealed class X86CompatibilityTests
         Assert.NotNull(result.PackageInfo);
         Assert.Equal(UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1)), result.PackageInfo.SetupAssetName);
         Assert.EndsWith(UpdatePaths.ChecksumName, result.PackageInfo.ChecksumDownloadUrl.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task ReleaseWithoutThisArchitectureIsNeverReplacedByAnotherArchitecture()
+    {
+        // Releases up to 5.3.0 carry x64 and x86 assets only. A native arm64 build must report
+        // the missing asset instead of installing the x64 package over itself.
+        const string root = "https://github.com/sukwoo0711-maker/my-capture/releases/download/v3.0.1/";
+        string release = """
+            {"tag_name":"v3.0.1","draft":false,"prerelease":false,"assets":[
+              {"name":"MyCapture-3.0.1-win-x64-setup.exe","size":100,"browser_download_url":"ROOTMyCapture-3.0.1-win-x64-setup.exe"},
+              {"name":"MyCapture-3.0.1-win-x86-setup.exe","size":100,"browser_download_url":"ROOTMyCapture-3.0.1-win-x86-setup.exe"},
+              {"name":"SHA256SUMS.txt","size":100,"browser_download_url":"ROOTSHA256SUMS.txt"},
+              {"name":"SHA256SUMS-win-x86.txt","size":100,"browser_download_url":"ROOTSHA256SUMS-win-x86.txt"}]}
+            """.Replace("ROOT", root, StringComparison.Ordinal);
+        using var client = new HttpClient(new ReleaseHandler(release));
+        using var service = new GitHubUpdateService(client);
+        var result = await service.CheckForUpdateAsync(new UpdateVersion(3, 0, 0));
+        if (AppArchitecture.Name == "arm64")
+        {
+            Assert.False(result.IsUpdateAvailable);
+            Assert.Equal(UpdateErrorKind.AssetNotFound, result.ErrorKind);
+            Assert.Null(result.PackageInfo);
+        }
+        else
+        {
+            Assert.True(result.IsUpdateAvailable, result.ErrorMessage);
+            Assert.Equal(UpdatePaths.InstallerName(new UpdateVersion(3, 0, 1)), result.PackageInfo!.SetupAssetName);
+        }
     }
 
     [Fact]

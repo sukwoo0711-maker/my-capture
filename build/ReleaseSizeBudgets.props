@@ -14,4 +14,10 @@
     <MyCapturePortableSizeBudgetBytes Condition="'$(MyCapturePortableSizeBudgetBytes)' == ''">107500000</MyCapturePortableSizeBudgetBytes>
     <MyCaptureProjectionSizeBudgetBytes Condition="'$(MyCaptureProjectionSizeBudgetBytes)' == ''">1970000</MyCaptureProjectionSizeBudgetBytes>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <!-- Measured 2026-11-11 (cross-built on x64): installed 255270319, ZIP 110944470, projection 2416640. -->
+    <MyCaptureInstalledSizeBudgetBytes Condition="'$(MyCaptureInstalledSizeBudgetBytes)' == ''">260400000</MyCaptureInstalledSizeBudgetBytes>
+    <MyCapturePortableSizeBudgetBytes Condition="'$(MyCapturePortableSizeBudgetBytes)' == ''">113200000</MyCapturePortableSizeBudgetBytes>
+    <MyCaptureProjectionSizeBudgetBytes Condition="'$(MyCaptureProjectionSizeBudgetBytes)' == ''">2470000</MyCaptureProjectionSizeBudgetBytes>
+  </PropertyGroup>
 </Project>

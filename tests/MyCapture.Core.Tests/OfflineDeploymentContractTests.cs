@@ -37,6 +37,7 @@ public sealed class OfflineDeploymentContractTests
     [Theory]
     [InlineData("x64")]
     [InlineData("x86")]
+    [InlineData("arm64")]
     public void PublishProfile_IsExplicitlySelfContainedAndUntrimmed(string architecture)
     {
         string path = RepositoryPath(
@@ -70,6 +71,57 @@ public sealed class OfflineDeploymentContractTests
         Assert.Contains("hostpolicy.dll", package, StringComparison.Ordinal);
         Assert.Contains("includedFrameworks", package, StringComparison.Ordinal);
         Assert.Contains("RequiresPreinstalledDotNet = $false", package, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackageScript_ReadsTheArchitectureOfEveryPublishedImage()
+    {
+        // An arm64 package is cross-built on an x64 PC that cannot start it, so the package script
+        // judges the files themselves before it builds the ZIP and the installer.
+        string package = File.ReadAllText(RepositoryPath("build/package.ps1"));
+        string gate = File.ReadAllText(RepositoryPath("build/publish-architecture.ps1"));
+
+        Assert.Contains("[ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64'", package, StringComparison.Ordinal);
+        Assert.Contains(". (Join-Path $PSScriptRoot 'publish-architecture.ps1')", package, StringComparison.Ordinal);
+        const string check = "Assert-PublishArchitecture -PublishRoot $publish -Architecture $Architecture";
+        Assert.Contains(check, package, StringComparison.Ordinal);
+        Assert.True(package.IndexOf(check, StringComparison.Ordinal)
+            < package.IndexOf("New-InventoryZip $publish $portable $inventory", StringComparison.Ordinal));
+        Assert.Contains("'x64' = 0x8664; 'x86' = 0x014C; 'arm64' = 0xAA64", gate, StringComparison.Ordinal);
+        Assert.Contains("function Assert-PublishArchitecture", gate, StringComparison.Ordinal);
+        Assert.Contains("MyCapture.exe is not a native win-$Architecture application host", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Arm64Package_CarriesTheX64Setup()
+    {
+        // Setup runs on the in-box .NET Framework 4.8; a native ARM64 process needs 4.8.1.
+        string package = File.ReadAllText(RepositoryPath("build/package.ps1"));
+        Assert.Contains("$setupMachine = if ($Architecture -eq 'x86') { 0x014C } else { 0x8664 }", package, StringComparison.Ordinal);
+        Assert.Contains("$setupKind.Machine -ne $setupMachine", package, StringComparison.Ordinal);
+        // The self-extractor follows the packaging PC; an ARM64 one must never reach an x64 or x86 package.
+        Assert.Contains(
+            "$extractorMachines = if ($Architecture -eq 'x86') { @(0x014C) } elseif ($Architecture -eq 'x64') { @(0x8664) } else { @(0x8664, 0xAA64) }",
+            package, StringComparison.Ordinal);
+        Assert.Contains("$extractorMachines -notcontains $extractorKind.Machine", package, StringComparison.Ordinal);
+
+        foreach (string project in new[] { "src/MyCapture.Setup/MyCapture.Setup.csproj", "tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj" })
+        {
+            XDocument document = XDocument.Load(RepositoryPath(project));
+            XElement group = Assert.Single(document.Root!.Elements("PropertyGroup"),
+                element => element.Attribute("Condition")?.Value == "'$(Platform)' == 'arm64'");
+            Assert.Equal("x64", Assert.Single(group.Elements("PlatformTarget")).Value);
+            Assert.Equal("net48", document.Descendants("TargetFramework").Single().Value);
+        }
+
+        XDocument props = XDocument.Load(RepositoryPath("Directory.Build.props"));
+        Assert.Equal("x64;x86;arm64", props.Descendants("Platforms").Single().Value);
+        Assert.Contains(props.Descendants("PlatformTarget"), element => element.Value == "arm64"
+            && element.Attribute("Condition")?.Value.Contains("'$(RuntimeIdentifier)' == 'win-arm64'", StringComparison.Ordinal) == true);
+        // x64 remains the default on every build host, an ARM64 PC included.
+        Assert.Equal("x64", props.Descendants("PlatformTarget").Last().Value);
+        XDocument app = XDocument.Load(RepositoryPath("src/MyCapture.App/MyCapture.App.csproj"));
+        Assert.Equal("win-x64;win-x86;win-arm64", app.Descendants("RuntimeIdentifiers").Single().Value);
     }
 
     [Fact]

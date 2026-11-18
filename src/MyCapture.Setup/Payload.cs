@@ -81,7 +81,8 @@ public static class Payload
     {
         string exe = Path.Combine(root, "MyCapture.exe"), dll = Path.Combine(root, "MyCapture.dll");
         if (!File.Exists(exe) || !File.Exists(dll)) throw new SetupException(14, "Payload is missing MyCapture.exe or MyCapture.dll.");
-        if (PeMachine(exe) != (manifest.Architecture == "x86" ? 0x014c : 0x8664)) throw new SetupException(14, "MyCapture.exe architecture does not match its manifest.");
+        int machine = manifest.Architecture == "x86" ? 0x014c : manifest.Architecture == "arm64" ? 0xAA64 : 0x8664;
+        if (PeMachine(exe) != machine) throw new SetupException(14, "MyCapture.exe architecture does not match its manifest.");
         if ((FileVersionInfo.GetVersionInfo(dll).ProductVersion ?? "").Split('+')[0] != manifest.Version)
             throw new SetupException(14, "Payload product version does not match manifest version.");
         foreach (string asset in new[] { "tray-idle.ico", "tray-capturing.ico", "tray-busy.ico", "tray-error.ico" })
