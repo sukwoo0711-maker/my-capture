@@ -55,17 +55,17 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         {
             card.Show();
             Assert.True(card.IsPending);
-            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
-            Assert.False(card.LibraryButtonForTest.IsEnabled);
-            Assert.Equal((UiText.Get("QuickAccess.Copied"), FeedbackKind.Confirmation, true, false), card.StatusForTest);
+            Assert.All(card.CaptureActionControlsForTest, button => Assert.False(button.IsEnabled));
+            Assert.False(card.LibraryMenuItemForTest.IsEnabled);
+            Assert.Equal((UiText.Get("QuickAccess.Saving"), FeedbackKind.Progress, true, false), card.StatusForTest);
 
             // Neither their keys nor a click do anything yet: Edit and Library do not close the card.
-            foreach (string action in QuickAccessWindow.ActionOrder) card.ShortcutActions[action]();
-            card.LibraryButtonForTest.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            foreach (string action in QuickAccessWindow.MenuActionOrder) card.ShortcutActions[action]();
+            card.LibraryMenuItemForTest.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Pump();
             Assert.True(card.IsVisible);
             Assert.Contains("busy=False", card.TimeoutStateForTest, StringComparison.Ordinal);
-            Assert.Equal(UiText.Get("QuickAccess.Copied"), card.StatusForTest.Text);
+            Assert.Equal(UiText.Get("QuickAccess.Saving"), card.StatusForTest.Text);
 
             card.BindCapture(new QuickAccessCardActions(
                 () => { copies++; return Task.FromResult(true); }, () => edits++,
@@ -73,8 +73,8 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
                 () => library++, () => Task.FromResult("unused.png"),
                 () => { texts++; return Task.FromResult(new TextCaptureOutcome(TextCaptureStatus.Copied, null, 3)); }));
             Assert.False(card.IsPending);
-            Assert.All(card.ActionButtonsForTest, button => Assert.True(button.IsEnabled));
-            Assert.True(card.LibraryButtonForTest.IsEnabled);
+            Assert.All(card.CaptureActionControlsForTest, button => Assert.True(button.IsEnabled));
+            Assert.True(card.LibraryMenuItemForTest.IsEnabled);
             foreach (string action in new[] { "Copy", "Pin", "Save", "CopyText" }) card.ShortcutActions[action]();
             Pump();
             Assert.Equal((1, 1, 1, 1), (copies, pins, saves, texts));
@@ -97,11 +97,11 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
             Assert.Contains("pending=True", card.TimeoutStateForTest, StringComparison.Ordinal);
 
             card.ReportInitialCopy(true);
-            Assert.Equal(("복사됨", FeedbackKind.Confirmation, true, false), card.StatusForTest);
+            Assert.Equal(("저장 중…", FeedbackKind.Progress, true, false), card.StatusForTest);
             Assert.Equal("복사됨", card.LastAnnouncementForTest);
             // The copy reports once.
             card.ReportInitialCopy(false);
-            Assert.Equal(("복사됨", FeedbackKind.Confirmation, true, false), card.StatusForTest);
+            Assert.Equal(("저장 중…", FeedbackKind.Progress, true, false), card.StatusForTest);
         }
         finally { card.Close(); }
     });
@@ -170,7 +170,7 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
             Assert.Equal(title + " " + detail, card.LastAnnouncementForTest);
             // The tip names P, which the card no longer offers.
             Assert.Equal(Visibility.Collapsed, TipText(card, tip).Visibility);
-            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
+            Assert.All(card.CaptureActionControlsForTest, button => Assert.False(button.IsEnabled));
             card.Advance(TimeSpan.FromHours(1), interacting: false);
             Assert.Equal(0, closed);
 
@@ -180,7 +180,7 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
             Assert.Equal("복사됨", card.LastAnnouncementForTest);
             // A capture that was not saved never gets actions.
             card.BindCapture(Actions());
-            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
+            Assert.All(card.CaptureActionControlsForTest, button => Assert.False(button.IsEnabled));
             Assert.True(card.HasCaptureFailed);
 
             card.ShortcutActions["Close"]();
@@ -312,8 +312,8 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         Assert.Null(shell.LatestReceipt);
         Assert.Same(shell.Selection.SelectedBitmap, card.PreviewForTest.Source);
         Assert.Equal(("복사 중…", FeedbackKind.Progress, true, false), card.StatusForTest);
-        Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
-        Assert.False(card.LibraryButtonForTest.IsEnabled);
+        Assert.All(card.CaptureActionControlsForTest, button => Assert.False(button.IsEnabled));
+        Assert.False(card.LibraryMenuItemForTest.IsEnabled);
         Assert.Equal(Visibility.Visible, TipText(card, UiText.Get("Onboard_FirstCaptureTip")).Visibility);
         Assert.False(shell.Settings.General.FirstCaptureTipShown);
         Assert.Equal(0, shell.Settings.StoreRating.SuccessfulCaptureCount);
@@ -322,8 +322,8 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         shell.PumpUntil(() => !card.IsPending);
         CaptureRecord saved = Assert.IsType<CaptureRecord>(shell.CurrentRecord);
         Assert.Equal(saved.Id, shell.LatestReceipt);
-        Assert.All(card.ActionButtonsForTest, button => Assert.True(button.IsEnabled));
-        Assert.True(card.LibraryButtonForTest.IsEnabled);
+        Assert.All(card.CaptureActionControlsForTest, button => Assert.True(button.IsEnabled));
+        Assert.True(card.LibraryMenuItemForTest.IsEnabled);
         Assert.Equal("복사 중…", card.StatusForTest.Text);
         Assert.True(shell.Settings.General.FirstCaptureTipShown);
         Assert.Equal(0, shell.Settings.StoreRating.SuccessfulCaptureCount);
@@ -392,7 +392,7 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         Task handler = shell.Select();
         shell.RunSendTurn();
         QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
-        Assert.Equal((UiText.Get("QuickAccess.Copied"), FeedbackKind.Confirmation, true, false), card.StatusForTest);
+        Assert.Equal((UiText.Get("QuickAccess.Saving"), FeedbackKind.Progress, true, false), card.StatusForTest);
         shell.Wait(handler);
         Assert.False(card.IsPending);
         Assert.Equal(UiText.Get("QuickAccess.Copied"), card.StatusForTest.Text);
@@ -497,7 +497,7 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
         Assert.True(card.HasCaptureFailed);
         Assert.Equal((UiText.Get("Text_4033027EAEDB"), FeedbackKind.ActionRequired, true, false), card.StatusForTest);
         Assert.Equal((App.LibrarySaveFailureMessage(AfterCaptureAction.QuickAccess, failure), true), card.DetailForTest);
-        Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
+        Assert.All(card.CaptureActionControlsForTest, button => Assert.False(button.IsEnabled));
         Assert.Empty(shell.Notices);
         // The capture is kept for the recovery editor, as before; nothing counts as a success.
         Assert.Null(shell.CurrentRecord);
@@ -765,7 +765,7 @@ public sealed class QuickAccessCardFirstTests(ITestOutputHelper output) : Korean
 
         QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
         Assert.False(card.IsPending);
-        Assert.All(card.ActionButtonsForTest, button => Assert.True(button.IsEnabled));
+        Assert.All(card.CaptureActionControlsForTest, button => Assert.True(button.IsEnabled));
         Assert.Equal(UiText.Get("QuickAccess.Copied"), card.StatusForTest.Text);
         Assert.Equal(Assert.IsType<CaptureRecord>(shell.CurrentRecord).Id, shell.LatestReceipt);
         Assert.True(shell.Settings.General.FirstCaptureTipShown);

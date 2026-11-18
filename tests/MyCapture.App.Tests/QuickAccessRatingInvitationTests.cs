@@ -792,7 +792,7 @@ public sealed class QuickAccessRatingInvitationTests
         QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
         Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
         // Saved and bound while the copy still runs: an action fails before the capture has reported.
-        shell.PumpUntil(() => card.LibraryButtonForTest.IsEnabled);
+        shell.PumpUntil(() => card.LibraryMenuItemForTest.IsEnabled);
         shell.Wait(card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned"));
         Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
         Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
@@ -1153,7 +1153,7 @@ public sealed class QuickAccessRatingInvitationTests
         .OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "Dialog.Close");
 
     private static FrameworkElement[] Controls(QuickAccessWindow card) =>
-        [.. card.ActionButtonsForTest, card.LibraryButtonForTest, card.KeepToggleForTest, CloseButton(card), card.PreviewForTest];
+        [.. card.ActionButtonsForTest, card.MoreButtonForTest, card.KeepToggleForTest, CloseButton(card), card.PreviewForTest];
 
     private static Rect[] ControlBounds(QuickAccessWindow card) => Controls(card).Select(control => Bounds(control, card.SurfaceForTest)).ToArray();
     private static Rect Bounds(FrameworkElement element, Visual ancestor) => element.TransformToAncestor(ancestor).TransformBounds(new Rect(element.RenderSize));

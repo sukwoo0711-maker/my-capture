@@ -58,15 +58,17 @@ public sealed class QuickAccessReceiptLayoutTests
             var preview = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<Image>());
             var surface = Assert.IsType<Border>(preview.Parent);
             Assert.Same(bitmap, preview.Source);
-            Assert.Equal(Stretch.Uniform, preview.Stretch);
-            Assert.InRange(surface.ActualHeight, 0.1, 180);
+            Assert.Equal(Stretch.Fill, preview.Stretch);
+            Assert.InRange(surface.ActualHeight, 0.1, height > width ? 240 : 180);
             Assert.True(surface.ClipToBounds);
 
-            // Inspect WPF's actual image drawing, including its Uniform stretch result.
+            // Inspect WPF's actual image drawing in the explicitly pixel-aspect-sized box.
             ImageDrawing drawing = RenderedPreview(host, preview, scale);
             Assert.Same(bitmap, drawing.ImageSource);
-            Assert.Equal(bitmap.Width / bitmap.Height, drawing.Rect.Width / drawing.Rect.Height, 6);
-            Assert.InRange(drawing.Rect.Height, 0.01, 180);
+            Assert.Equal((double)bitmap.PixelWidth / bitmap.PixelHeight, drawing.Rect.Width / drawing.Rect.Height, 6);
+            Assert.InRange(drawing.Rect.Height, 0.01, height > width ? 240 : 180);
+            Assert.Equal(drawing.Rect.Width / drawing.Rect.Height, preview.Width / preview.Height, 6);
+            Assert.Equal(preview.Height, surface.Height);
             Assert.True(drawing.Rect.Width * scale <= bitmap.PixelWidth * 2 + 0.01);
             Assert.True(drawing.Rect.Height * scale <= bitmap.PixelHeight * 2 + 0.01);
             if (width == 24)
@@ -144,10 +146,10 @@ public sealed class QuickAccessReceiptLayoutTests
             var buttons = QuickAccessDetachedFixture.Descendants(host).OfType<Button>().ToArray();
             Button close = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
             Assert.Equal("Esc", AutomationProperties.GetAcceleratorKey(close));
-            Button library = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get("QuickAccess.Library"));
-            Assert.Equal(UiText.Get("QuickAccess.Library"), Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(library)).Text);
+            Assert.DoesNotContain(buttons, button => AutomationProperties.GetName(button) == UiText.Get("QuickAccess.Library"));
+            Assert.Equal(UiText.Get("QuickAccess.Library"), card.LibraryMenuItemForTest.Header);
 
-            FrameworkElement[] controls = [.. card.ActionButtonsForTest, library, close, card.KeepToggleForTest];
+            FrameworkElement[] controls = [.. card.ActionButtonsForTest, card.MoreButtonForTest, close, card.KeepToggleForTest];
             foreach (FrameworkElement control in controls)
             {
                 Rect bounds = Bounds(control, host);
@@ -156,7 +158,7 @@ public sealed class QuickAccessReceiptLayoutTests
                 Assert.True(control.ActualWidth >= 28 && control.ActualHeight >= 28);
             }
 
-            var actions = card.ActionButtonsForTest.Append(library).ToArray();
+            var actions = card.ActionButtonsForTest.Append(card.MoreButtonForTest).ToArray();
             for (int i = 1; i < actions.Length; i++)
                 Assert.True(Bounds(actions[i - 1], host).Right <= Bounds(actions[i], host).Left,
                     "Adjacent receipt actions overlap");

@@ -230,13 +230,14 @@ internal sealed partial class PinWindow : Window, IPinAnchor
             Padding = FeedbackPadding,
             BorderThickness = new Thickness(1),
             BorderBrush = ThemeBrushes.Follow("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = FoundationMetrics.FloatingCornerRadius,
             Background = ThemeBrushes.Follow("Surface.Floating", Color.FromArgb(0xE8, 0x15, 0x1E, 0x2B)),
             Child = new DockPanel { Children = { _feedbackDismiss, _translationStrip, _feedbackText } },
             Visibility = Visibility.Collapsed,
         };
         // The message is the pin's own interface text, so it takes the UI font and text settings
         // of the hover bar above it. The pin window itself keeps the system font for its content.
+        _feedback.SetResourceReference(Border.CornerRadiusProperty, "Radius.Floating");
         _feedback.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
         ThemeFonts.ApplyText(_feedback);
 
@@ -2304,14 +2305,15 @@ internal sealed partial class PinWindow : Window, IPinAnchor
     {
         if (_landingClock is not { } clock) return;
         double elapsed = clock.Elapsed.TotalMilliseconds;
-        double duration = PinLandingDecoration.OutlineEndMs * (_findCueRunning ? 2 : 1);
+        double duration = _findCueRunning ? PinLandingDecoration.FindCueCycleMs * 2 : PinLandingDecoration.OutlineEndMs;
         if (elapsed >= duration)
         {
             StopLandingEffect();
             return;
         }
-        double amount = PinLandingDecoration.Render(_findCueRunning
-            ? elapsed % PinLandingDecoration.OutlineEndMs : elapsed).BorderAccentAmount;
+        double amount = _findCueRunning
+            ? PinLandingDecoration.FindCueAccent(elapsed % PinLandingDecoration.FindCueCycleMs)
+            : PinLandingDecoration.Render(elapsed).BorderAccentAmount;
         if (amount == _landingAccentAmount) return;
         _landingAccentAmount = amount;
         UpdateChromeColor(animate: false);

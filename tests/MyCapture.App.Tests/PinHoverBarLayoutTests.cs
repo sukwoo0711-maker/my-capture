@@ -64,13 +64,14 @@ public sealed class PinHoverBarLayoutTests
         PinHoverBar.ApplyCaptureExclusion = _ => true;
         string? evidence = Environment.GetEnvironmentVariable(EvidenceVariable) is { Length: > 0 } requested
             ? DiagnosticOutputPaths.Create(requested) : null;
-        var table = new StringBuilder("language\tstate\tmode\tbarWidth\tbarHeight\tlabeledWidth\tbudget\tnamesAt480\tbutton\tx\twidth\theight\tminWidth\ticonOffsetX\ticonCenterY\tlabel\n");
+        var table = new StringBuilder("theme\tlanguage\tstate\tmode\tbarWidth\tbarHeight\tlabeledWidth\tbudget\tnamesAt480\tbutton\tx\twidth\theight\tminWidth\ticonOffsetX\ticonCenterY\tlabel\n");
         var failures = new List<string>();
         try
         {
-            ThemeService.ApplyFromSettings(AppThemeNames.ToSetting(AppTheme.Glass));
+            foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.GlassLight })
             foreach (string language in new[] { "ko-KR", "en-US" })
             {
+                ThemeService.ApplyFromSettings(AppThemeNames.ToSetting(theme));
                 using var scope = UiText.UseLanguage(language);
                 foreach (BarState state in States)
                 foreach (bool compact in new[] { false, true })
@@ -86,13 +87,17 @@ public sealed class PinHoverBarLayoutTests
                         bar.Show();
                         Settle(bar);
                         var surface = (Border)bar.Content;
+                        Assert.Same(application.FindResource("Surface.Floating"), surface.Background);
+                        Assert.Equal(bar.AllowsTransparency ? (CornerRadius)application.FindResource("Radius.Floating")
+                            : new CornerRadius(0), surface.CornerRadius);
+                        Assert.All(bar.CommandOrder, button => Assert.Equal(TypeScale.Body, button.FontSize));
                         string mode = compact ? "icons" : "names";
                         List<ButtonMetrics> buttons = Measure(surface);
                         foreach (ButtonMetrics button in buttons)
-                            table.Append(CultureInfo.InvariantCulture, $"{language}\t{state.Name}\t{mode}\t{surface.ActualWidth:0.##}\t{surface.ActualHeight:0.##}\t{labeled:0.##}\t{bar.LabeledWidthBudget:0.##}\t{namesAt480}\t{button.Name}\t{button.X:0.##}\t{button.Width:0.##}\t{button.Height:0.##}\t{button.MinWidth:0.##}\t{button.IconOffsetX:0.##}\t{button.IconCenterY:0.##}\t{button.Label}\n");
+                            table.Append(CultureInfo.InvariantCulture, $"{theme}\t{language}\t{state.Name}\t{mode}\t{surface.ActualWidth:0.##}\t{surface.ActualHeight:0.##}\t{labeled:0.##}\t{bar.LabeledWidthBudget:0.##}\t{namesAt480}\t{button.Name}\t{button.X:0.##}\t{button.Width:0.##}\t{button.Height:0.##}\t{button.MinWidth:0.##}\t{button.IconOffsetX:0.##}\t{button.IconCenterY:0.##}\t{button.Label}\n");
                         if (evidence is not null)
-                            Save(surface, Path.Combine(evidence, $"{language[..2]}-{state.Name}-{mode}.png"));
-                        failures.AddRange(RuleViolations(bar, buttons, compact, labeled).Select(problem => $"{language} {state.Name} {mode}: {problem}"));
+                            Save(surface, Path.Combine(evidence, $"{theme}-{language[..2]}-{state.Name}-{mode}.png"));
+                        failures.AddRange(RuleViolations(bar, buttons, compact, labeled).Select(problem => $"{theme} {language} {state.Name} {mode}: {problem}"));
                     }
                     finally { bar.Close(); }
                 }
@@ -106,6 +111,39 @@ public sealed class PinHoverBarLayoutTests
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
             application.Shutdown();
         }
+    }
+
+    [Fact]
+    public Task PinNoticeUsesTheFloatingRadiusSurfaceAndSupportingType() => SettingsThemePreviewTests.RunIsolated(
+        nameof(PinNoticeUsesTheFloatingRadiusSurfaceAndSupportingType), VerifyNoticeRoles, typeof(PinHoverBarLayoutTests));
+
+    private static void VerifyNoticeRoles()
+    {
+        Application application = ThemedApplication();
+        try
+        {
+            foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.GlassLight, AppTheme.HighContrast })
+            {
+                ThemeService.ApplyFromSettings(AppThemeNames.ToSetting(theme));
+                BitmapSource picture = BitmapSource.Create(160, 100, 96, 96, PixelFormats.Bgra32, null, new byte[160 * 100 * 4], 160 * 4);
+                picture.Freeze();
+                var pin = new PinWindow(PinContent.FromImage(picture), new PinViewState(160, 100, 1, 1, .1),
+                    -10000, -10000, () => new PinSettings()) { ShowActivated = false };
+                try
+                {
+                    var notice = Assert.IsType<Border>(pin.FeedbackSurfaceForTest);
+                    Assert.Equal((CornerRadius)application.FindResource("Radius.Floating"), notice.CornerRadius);
+                    Assert.Equal(Assert.IsType<SolidColorBrush>(application.FindResource("Surface.Floating")).Color,
+                        Assert.IsType<SolidColorBrush>(notice.Background).Color);
+                    var text = Assert.Single(Assert.IsType<DockPanel>(notice.Child).Children.OfType<TextBlock>());
+                    Assert.Equal(TypeScale.Caption, text.FontSize);
+                    Assert.Equal(Assert.IsType<SolidColorBrush>(application.FindResource("Text.Primary")).Color,
+                        Assert.IsType<SolidColorBrush>(text.Foreground).Color);
+                }
+                finally { pin.Close(); }
+            }
+        }
+        finally { application.Shutdown(); }
     }
 
     /// <summary>

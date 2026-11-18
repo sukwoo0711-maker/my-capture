@@ -5,10 +5,10 @@ using MyCapture.App.Themes;
 
 namespace MyCapture.App.Capture;
 
-/// <summary>Keeps every action name below its icon, or hides all names when the card is too narrow.</summary>
+/// <summary>Keeps the three direct commands together, with names beside their icons when they fit.</summary>
 internal sealed class QuickAccessActionPanel : Panel
 {
-    // The six named actions fit at the default caption size in Korean and English.
+    // The primary command and its two neighbours fit beside the menu at normal text size.
     // The card reserves this width even when the captured image is only a few pixels wide.
     internal const double MinimumDefaultTextWidth = 310;
 
@@ -19,10 +19,10 @@ internal sealed class QuickAccessActionPanel : Panel
         var label = new TextBlock
         {
             Text = name, TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.None,
-            Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         };
-        label.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
-        var primary = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        label.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Control");
+        var primary = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         icon.HorizontalAlignment = HorizontalAlignment.Center;
         icon.SetBinding(SymbolIcon.StrokeProperty,
             new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
@@ -36,8 +36,8 @@ internal sealed class QuickAccessActionPanel : Panel
         CommandButtonPresentation.Apply(button, compact: true);
         button.Height = double.NaN;
         button.MinHeight = 36;
-        button.Padding = new Thickness(4, 0, 4, 0);
-        button.Margin = new Thickness(2, 0, 2, 0);
+        button.Padding = new Thickness(8, 0, 8, 0);
+        button.Margin = new Thickness(0, 0, 4, 0);
         CommandButtonPresentation.ReserveHint(button);
         // The shared shortcut line remains below the icon/name stack, including at larger text sizes.
         ((Grid)button.Content).RowDefinitions[0].Height = GridLength.Auto;
@@ -51,7 +51,7 @@ internal sealed class QuickAccessActionPanel : Panel
         && face.Children[0] is StackPanel stack
         ? stack.Children.OfType<Grid>().FirstOrDefault()?.Children.OfType<SymbolIcon>().FirstOrDefault() : null;
 
-    /// <summary>The name shown under an action's icon, or null for a button this panel does not hold.</summary>
+    /// <summary>The name beside an action's icon, or null for a button this panel does not hold.</summary>
     internal static TextBlock? LabelOf(Button button) =>
         button.Content is Grid { Name: "CommandButtonFace", Children.Count: > 0 } face
         && face.Children[0] is StackPanel stack ? stack.Children.OfType<TextBlock>().SingleOrDefault() : null;
@@ -116,8 +116,7 @@ internal sealed class QuickAccessActionPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        double width = InternalChildren.Cast<UIElement>().Sum(action => action.DesiredSize.Width);
-        double left = Math.Max(0, (finalSize.Width - width) / 2);
+        double left = 0;
         foreach (UIElement action in InternalChildren)
         {
             action.Arrange(new Rect(left, 0, action.DesiredSize.Width, finalSize.Height));

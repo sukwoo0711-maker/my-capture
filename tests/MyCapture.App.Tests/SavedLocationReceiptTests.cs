@@ -198,7 +198,7 @@ public sealed class SavedLocationReceiptTests
 
     private static void Choose(QuickAccessWindow card, string choice)
     {
-        if (choice == "Library") card.LibraryButtonForTest.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        if (choice == "Library") card.LibraryMenuItemForTest.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         else if (choice == "Replaced") card.CloseNow();
         else if (choice != "Close") card.ShortcutActions[choice]();
     }

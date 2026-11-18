@@ -42,7 +42,7 @@ public sealed class SurfaceShortcutHintTests
             FrameworkElement root = Prepare(card);
             ButtonBase[] commands = Descendants(root).OfType<ButtonBase>()
                 .Where(button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))).ToArray();
-            Assert.Equal(6, commands.Length);
+            Assert.Equal(5, commands.Length); // Pin, Edit, Copy, More and Close retain visible shortcut captions.
             CheckStates(root, card.Width, [.. commands, card.KeepToggleForTest]);
         }
         finally { card.Close(); }

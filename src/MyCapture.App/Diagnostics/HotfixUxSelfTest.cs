@@ -266,7 +266,8 @@ internal static class HotfixUxSelfTest
                     Console.WriteLine("External fixture input trace:\n" + inputTrace);
                     Check("Ctrl+V pastes image in external app without refocusing", external.Text.EndsWith("[image:320x180]", StringComparison.Ordinal));
                     Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Pin"));
-                    Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Save"));
+                    Click(inputHandle, keyboardCard.MoreButtonForTest);
+                    Click(inputHandle, CardControl<MenuItem>(keyboardCard, "QuickAccess.Save"));
                     Check("pin/save clicks preserve external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && saves == 1);
                     var preview = CardControl<Image>(keyboardCard, "QuickAccess.Preview");
                     Click(inputHandle, preview);
@@ -283,7 +284,10 @@ internal static class HotfixUxSelfTest
                         var actionCard = new QuickAccessWindow(sample, () => Task.FromResult(true), () => invoked++,
                             () => Task.CompletedTask, () => Task.FromResult(true), () => invoked++, () => Task.FromResult(dragPath)) { IsKept = true };
                         owned.Add(actionCard); actionCard.Show(); Pump(80);
-                        var action = CardControl<Button>(actionCard, library ? "QuickAccess.Library" : "QuickAccess.Edit");
+                        if (library) Click(inputHandle, actionCard.MoreButtonForTest);
+                        FrameworkElement action = library
+                            ? CardControl<MenuItem>(actionCard, "QuickAccess.Library")
+                            : CardControl<Button>(actionCard, "QuickAccess.Edit");
                         Click(inputHandle, action); WaitForExit(actionCard);
                         Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
                     }
@@ -647,7 +651,8 @@ internal static class HotfixUxSelfTest
         && face.Children.Count > 0 ? face.Children[0] : button.Content;
 
     internal static T CardControl<T>(QuickAccessWindow card, string automationId) where T : FrameworkElement =>
-        Ux402VisualMetrics.Descendants((DependencyObject)card.Content).OfType<T>()
+        Ux402VisualMetrics.Descendants((DependencyObject)card.Content)
+            .Concat(card.CardMenu.Items.OfType<DependencyObject>()).OfType<T>()
             .Single(control => AutomationProperties.GetAutomationId(control) == automationId);
 
     private static QuickAccessWindow Card(BitmapSource image, bool excludeFromCapture = true) => new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), excludeFromCapture);
