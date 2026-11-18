@@ -73,7 +73,7 @@ internal sealed partial class SettingsWindow
         InitializeLegacyImport();
         // The tab is the "About" category (header in XAML); the label carries the version, so
         // name the product without it.
-        UpdateVersionLabel.Text = AppIdentity.WindowLabel + " · " + UpdateStrings.Current(CurrentUpdateVersion);
+        KoreanWordWrap.Show(UpdateVersionLabel, AppIdentity.WindowLabel + " · " + UpdateStrings.Current(CurrentUpdateVersion));
         InitializeUpdateChannel(AppPackage.IsPackaged ? UpdateChannel.Store : UpdateChannel.None);
     }
 

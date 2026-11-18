@@ -33,7 +33,7 @@ public sealed class HotkeyRecorder : StackPanel
 
     public HotkeyRecorder()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var row = new WrapPanel { Orientation = Orientation.Horizontal };
         _record.SetResourceReference(FrameworkElement.StyleProperty, "Button.InputField");
         _record.ToolTip = UiText.Get("SettingsUx_RecordHotkeyTip");
         row.Children.Add(_record);

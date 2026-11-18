@@ -162,7 +162,7 @@ public sealed class LocalControlLanguageAppearanceTests
     public void HotkeyRecorderUsesTheInputFaceAndPreservesItsHitAreaAndInvalidState(AppTheme theme, bool systemContrast) => StaTestHost.Run(() =>
     {
         var recorder = new HotkeyRecorder { Resources = Resources(theme, systemContrast) };
-        var row = Assert.IsType<StackPanel>(recorder.Children[0]);
+        var row = Assert.IsType<WrapPanel>(recorder.Children[0]);
         var button = Assert.IsType<Button>(row.Children[0]);
         Render(recorder, 400, 80);
         Assert.Same(recorder.Resources["Button.InputField"], button.Style);

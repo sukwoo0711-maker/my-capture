@@ -75,7 +75,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
                 GalleryWindow window = fixture.Window;
                 window.Show();
                 window.UpdateLayout();
-                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+                var previewButton = (MenuItem)window.FindName("PreviewSelectedButton");
                 var clock = Stopwatch.StartNew();
                 using var foreign = new ForeignSendCounter(window.Dispatcher);
                 foreach ((CaptureRecord record, long fileBytes) in fixture.Images)
@@ -155,7 +155,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
 
     // One preview opening from a settled library; its row says how the sample counts.
     private static (string Phase, double Handled, double Opened, double Longest, long ForeignSend) Sample(GalleryWindow window,
-        ProbeFixture fixture, Button button, CaptureRecord record, long fileBytes, int sample, UiStallWatch? watch,
+        ProbeFixture fixture, MenuItem button, CaptureRecord record, long fileBytes, int sample, UiStallWatch? watch,
         ForeignSendCounter foreign, Stopwatch clock, Rect32 primaryWork, string label, List<string> rows)
     {
         Settle(window);
@@ -171,7 +171,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
         return (phase, handled, opened, longest, others);
     }
 
-    private static (double Handled, double Opened, double Longest, bool OnPrimary) Open(GalleryWindow window, Button button, Guid id,
+    private static (double Handled, double Opened, double Longest, bool OnPrimary) Open(GalleryWindow window, MenuItem button, Guid id,
         UiStallWatch? watch, Stopwatch clock, Rect32 primaryWork)
     {
         var frame = new DispatcherFrame();
@@ -189,7 +189,7 @@ public sealed class GalleryPreviewResponsivenessProbeTests
         {
             watch?.Reset();
             double start = clock.Elapsed.TotalMilliseconds;
-            button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            button.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             double handled = clock.Elapsed.TotalMilliseconds;
             timeout.Start();
             if (double.IsNaN(openedAt)) Dispatcher.PushFrame(frame);
