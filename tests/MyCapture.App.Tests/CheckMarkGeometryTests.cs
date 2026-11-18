@@ -3,6 +3,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Xml.Linq;
+using MyCapture.App.Themes;
+using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -25,35 +27,60 @@ public sealed class CheckMarkGeometryTests
         XElement[] marks = document.Descendants(Presentation + "Path")
             .Where(path => (string?)path.Attribute(Xaml + "Name") == name).ToArray();
         Assert.Equal(count, marks.Length);
-        foreach (XElement mark in marks)
+        _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
+        _ = new FrameworkElement();
+        var resources = new ResourceDictionary
         {
-            XElement box = mark.Parent!;
-            double inset = Number(box, "BorderThickness");
-            double size = box.Attribute("Width") is null ? Number(box.Parent!, "Width") : Number(box, "Width");
-            double stroke = Number(mark, "StrokeThickness");
-            var pen = new Pen(Brushes.Black, stroke)
+            Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml"),
+        };
+        foreach (AppTheme theme in new[] { AppTheme.Midnight, AppTheme.HighContrast })
+        {
+            ThemeService.ApplyResources(theme, resources, systemHighContrast: false);
+            foreach (XElement mark in marks)
             {
-                StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round,
-            };
-            // The indeterminate dash replaces the mark through a template setter.
-            IEnumerable<string> figures = mark.Ancestors(Presentation + "ControlTemplate").Descendants(Presentation + "Setter")
-                .Where(setter => (string?)setter.Attribute("TargetName") == name && (string?)setter.Attribute("Property") == "Path.Data")
-                .Select(setter => (string)setter.Attribute("Value")!)
-                .Prepend((string)mark.Attribute("Data")!);
-            foreach (string figure in figures)
-            {
-                Rect bounds = Geometry.Parse(figure).GetRenderBounds(pen);
-                bounds.Offset(inset, inset);
-                double centre = size / 2;
-                Assert.InRange(bounds.Left + bounds.Width / 2, centre - .1, centre + .1);
-                // A check's weight sits at its vertex, so the mark may rise half a DIP; it never sits low.
-                Assert.InRange(bounds.Top + bounds.Height / 2, centre - .5, centre + .1);
-                Assert.True(bounds.Left >= inset + 1 && bounds.Top >= inset + 1
-                    && bounds.Right <= size - inset - 1 && bounds.Bottom <= size - inset - 1,
-                    $"{file}: {figure} touches the {size}-DIP box edge ({bounds}).");
+                XElement box = mark.Parent!;
+                Thickness border = ResolvedThickness(box, "BorderThickness", resources);
+                Assert.Equal(border.Left, border.Top);
+                Assert.Equal(border.Left, border.Right);
+                Assert.Equal(border.Left, border.Bottom);
+                double inset = border.Left;
+                Thickness margin = ResolvedThickness(mark, "Margin", resources);
+                double size = box.Attribute("Width") is null ? Number(box.Parent!, "Width") : Number(box, "Width");
+                double stroke = Number(mark, "StrokeThickness");
+                var pen = new Pen(Brushes.Black, stroke)
+                {
+                    StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round,
+                };
+                // The indeterminate dash replaces the mark through a template setter.
+                IEnumerable<string> figures = mark.Ancestors(Presentation + "ControlTemplate").Descendants(Presentation + "Setter")
+                    .Where(setter => (string?)setter.Attribute("TargetName") == name && (string?)setter.Attribute("Property") == "Path.Data")
+                    .Select(setter => (string)setter.Attribute("Value")!)
+                    .Prepend((string)mark.Attribute("Data")!);
+                foreach (string figure in figures)
+                {
+                    Rect bounds = Geometry.Parse(figure).GetRenderBounds(pen);
+                    bounds.Offset(inset + margin.Left, inset + margin.Top);
+                    double centre = size / 2;
+                    Assert.InRange(bounds.Left + bounds.Width / 2, centre - .1, centre + .1);
+                    // A check's weight sits at its vertex, so the mark may rise half a DIP; it never sits low.
+                    Assert.InRange(bounds.Top + bounds.Height / 2, centre - .5, centre + .1);
+                    Assert.True(bounds.Left >= inset + 1 && bounds.Top >= inset + 1
+                        && bounds.Right <= size - inset - 1 && bounds.Bottom <= size - inset - 1,
+                        $"{file}: {figure} touches the {size}-DIP box edge ({bounds}).");
+                }
             }
         }
     });
+
+    private static Thickness ResolvedThickness(XElement element, string attribute, ResourceDictionary resources)
+    {
+        string? value = (string?)element.Attribute(attribute);
+        if (value is null) return new Thickness(0);
+        const string prefix = "{DynamicResource ";
+        if (value.StartsWith(prefix, StringComparison.Ordinal) && value.EndsWith('}'))
+            return Assert.IsType<Thickness>(resources[value[prefix.Length..^1]]);
+        return (Thickness)new ThicknessConverter().ConvertFromInvariantString(value)!;
+    }
 
     private static double Number(XElement element, string attribute) =>
         double.Parse((string)element.Attribute(attribute)!, CultureInfo.InvariantCulture);

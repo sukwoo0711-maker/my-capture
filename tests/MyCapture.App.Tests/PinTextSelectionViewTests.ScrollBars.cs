@@ -50,17 +50,27 @@ public sealed partial class PinTextSelectionViewTests
             Color Expected(string key) => contrast ? Assert.IsType<SolidColorBrush>(resources[key]).Color : PaletteColor(expected, key);
             foreach (ScrollBar bar in bars)
             {
-                Assert.Equal(Expected("Surface.Base"), Assert.IsType<SolidColorBrush>(bar.Background).Color);
+                Assert.Equal(Assert.IsType<SolidColorBrush>(resources["Scroll.Lane"]).Color,
+                    Assert.IsType<SolidColorBrush>(bar.Background).Color);
                 Thumb thumb = Descendants<Thumb>(bar).Single();
-                Border grip = Assert.IsType<Border>(thumb.Template.FindName("Grip", thumb));
-                Assert.Equal(Expected("Border.Strong"), Assert.IsType<SolidColorBrush>(grip.Background).Color);
+                ScrollThumbChrome grip = Assert.IsType<ScrollThumbChrome>(thumb.Template.FindName("Grip", thumb));
+                Assert.Equal(Expected("Fill.ScrollThumb"), Assert.IsType<SolidColorBrush>(grip.RestBrush).Color);
+                Assert.Equal(Expected("Fill.ScrollThumbHover"), Assert.IsType<SolidColorBrush>(grip.HoverBrush).Color);
+                Assert.Equal(Expected("Fill.ScrollThumbPressed"), Assert.IsType<SolidColorBrush>(grip.PressedBrush).Color);
+                Assert.Equal(bar.Orientation, grip.Orientation);
+                Assert.Equal(3, grip.GripWidth);
                 Assert.Equal(Expected("Text.Muted"), Assert.IsType<SolidColorBrush>(thumb.FindResource("Text.Muted")).Color);
                 Assert.Equal(Expected("Text.Primary"), Assert.IsType<SolidColorBrush>(thumb.FindResource("Text.Primary")).Color);
             }
             var outside = new ScrollBar { Height = 100 };
             host.Children.Add(outside);
             outside.ApplyTemplate();
-            Assert.Equal(Assert.IsType<SolidColorBrush>(resources["Surface.Base"]).Color, Assert.IsType<SolidColorBrush>(outside.Background).Color);
+            Assert.Equal(Assert.IsType<SolidColorBrush>(resources["Scroll.Lane"]).Color, Assert.IsType<SolidColorBrush>(outside.Background).Color);
+            Thumb outsideThumb = Descendants<Thumb>(outside).Single();
+            outsideThumb.ApplyTemplate();
+            var outsideGrip = Assert.IsType<ScrollThumbChrome>(outsideThumb.Template.FindName("Grip", outsideThumb));
+            Assert.Equal(Assert.IsType<SolidColorBrush>(resources["Fill.ScrollThumb"]).Color,
+                Assert.IsType<SolidColorBrush>(outsideGrip.RestBrush).Color);
             host.Children.Remove(outside);
             var menu = new ContextMenu();
             view.ContextMenu = menu;
@@ -69,6 +79,7 @@ public sealed partial class PinTextSelectionViewTests
                 Assert.IsType<SolidColorBrush>(view.FindResource("Text.Primary")).Color);
             var image = RenderTableView(host, 400, 240);
             SaveTableEvidence(image, $"scrollbars-{theme}-{contrast}-{darkCode}");
+            foreach (ScrollBar bar in bars) AssertPinScrollGrip(host, view, bar, image);
             if (!darkCode)
                 Assert.Equal(Assert.IsType<SolidColorBrush>(view.Background).Color, Pixel(image, 392, 232));
         }
@@ -136,9 +147,15 @@ public sealed partial class PinTextSelectionViewTests
                 Assert.Equal(2, bars.Length);
                 foreach (ScrollBar bar in bars)
                 {
-                    Color expected = palette is { } light ? PaletteColor(light, "Surface.Base")
-                        : Assert.IsType<SolidColorBrush>(resources["Surface.Base"]).Color;
+                    Color expected = Assert.IsType<SolidColorBrush>(resources["Scroll.Lane"]).Color;
                     Assert.True(expected == Assert.IsType<SolidColorBrush>(bar.Background).Color, $"{step}: bar {bar.Orientation} {bar.Background}, expected {expected}");
+                    Thumb thumb = Descendants<Thumb>(bar).Single();
+                    var grip = Assert.IsType<ScrollThumbChrome>(thumb.Template.FindName("Grip", thumb));
+                    Color expectedGrip = palette is { } light ? PaletteColor(light, "Fill.ScrollThumb")
+                        : Assert.IsType<SolidColorBrush>(resources["Fill.ScrollThumb"]).Color;
+                    Assert.Equal(expectedGrip, Assert.IsType<SolidColorBrush>(grip.RestBrush).Color);
+                    Assert.Equal(expectedGrip, grip.GripColor);
+                    AssertPinScrollGrip(host, view, bar, RenderTableView(host, 400, 240));
                 }
             }
         }
@@ -153,5 +170,24 @@ public sealed partial class PinTextSelectionViewTests
     {
         ThemeColor color = ThemeCatalog.ColorsFor(theme)[key];
         return Color.FromArgb(color.A, color.R, color.G, color.B);
+    }
+
+    private static void AssertPinScrollGrip(FrameworkElement host, PinTextSelectionView view, ScrollBar bar, System.Windows.Media.Imaging.BitmapSource image)
+    {
+        Thumb thumb = Descendants<Thumb>(bar).Single();
+        var grip = Assert.IsType<ScrollThumbChrome>(thumb.Template.FindName("Grip", thumb));
+        bool vertical = bar.Orientation == Orientation.Vertical;
+        Point painted = grip.TranslatePoint(vertical ? new Point(grip.ActualWidth - 5.5, grip.ActualHeight / 2)
+            : new Point(grip.ActualWidth / 2, grip.ActualHeight - 5.5), host);
+        Point clear = grip.TranslatePoint(vertical ? new Point(grip.ActualWidth - 1, grip.ActualHeight / 2)
+            : new Point(grip.ActualWidth / 2, grip.ActualHeight - 1), host);
+        Color lane = Pixel(image, (int)clear.X, (int)clear.Y);
+        Color paintedGrip = Pixel(image, (int)painted.X, (int)painted.Y);
+        static ThemeColor Theme(Color color) => ThemeColor.Argb(color.A, color.R, color.G, color.B);
+        ThemeColor expectedLane = ThemeContrast.Composite(Theme(Assert.IsType<SolidColorBrush>(bar.Background).Color),
+            Theme(Assert.IsType<SolidColorBrush>(view.Background).Color));
+        Assert.Equal(expectedLane, Theme(lane));
+        Assert.True(ThemeContrast.Ratio(Theme(paintedGrip), Theme(lane)) >= 1.5,
+            $"The {bar.Orientation} grip must remain visible on the pin's own background: {paintedGrip} on {lane}.");
     }
 }

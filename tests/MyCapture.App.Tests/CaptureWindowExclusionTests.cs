@@ -202,6 +202,8 @@ public sealed class CaptureWindowExclusionTests
         var window = new PinHoverBar();
         try
         {
+            // The floating corner is a live foundation resource, as in the real application.
+            Ocr410Fixture.LoadTheme(window);
             window.Show();
             window.Reveal();
             NativeExclusion.AssertWindow(window, supported);
@@ -218,7 +220,10 @@ public sealed class CaptureWindowExclusionTests
     public void EveryShellNotificationSelectsModeAndExcludesItsActualHwnd(bool supported) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(supported);
-        using var shell = new ThemedShellPresenter(() => false);
+        using var shell = new ThemedShellPresenter(() => false)
+        {
+            NotificationMonitor = () => new MonitorInfo("test", new RectD(0, 0, 1366, 768), new RectD(0, 0, 1366, 768), 96, true),
+        };
         Action[] show =
         [
             () => shell.ShowNotification("Title", "Message", TrayBalloonKind.Information),
@@ -334,10 +339,11 @@ public sealed class CaptureWindowExclusionTests
                 PixelFormats.Bgr32, null, new byte[32 * 32 * 4], 128);
             bitmap.Freeze();
             var frame = new FrozenFrame(bitmap, new RectD(0, 0, 32, 32), null, 0);
+            var monitor = new MonitorInfo("test", new RectD(0, 0, 1366, 768), new RectD(0, 0, 1366, 768), 96, true);
             Window[] windows =
             [
                 new CaptureOverlayWindow(frame, abortOnFocusLoss: false, showMagnifier: false),
-                new AnnotationEditorWindow(frame, new RectD(0, 0, 32, 32), bitmap),
+                new AnnotationEditorWindow(frame, new RectD(0, 0, 32, 32), bitmap, pointerMonitor: monitor),
                 new GalleryVideoPlayerWindow(),
             ];
             try
@@ -403,7 +409,7 @@ public sealed class CaptureWindowExclusionTests
                 CollectFully();
                 ThemeService.ApplyResources(theme, application.Resources, systemHighContrast: false);
                 Color token = Assert.IsType<SolidColorBrush>(application.Resources["Surface.Floating"]).Color;
-                Assert.True(token.A < 255, $"{theme} must keep a translucent floating token for this test.");
+                Assert.Equal(255, token.A);
                 Color expected = Color.FromRgb(token.R, token.G, token.B);
                 Assert.Equal(expected, brush.Color);
                 CollectFully();

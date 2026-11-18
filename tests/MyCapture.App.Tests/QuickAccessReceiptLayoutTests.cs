@@ -176,8 +176,7 @@ public sealed class QuickAccessReceiptLayoutTests
     });
 
     // Off, the keep icon stays Text.Primary like the card's other command icons. On, it takes the
-    // toggle's selection ink, so the on state's fill (Text.SelectionBackground, the colour of
-    // Text.Primary) cannot hide it.
+    // toggle's checked ink, which is paired with its checked fill in every palette.
     [Fact]
     public void KeepIconTakesTheToggleInkOnTheSelectionFill() => StaTestHost.Run(() =>
     {
@@ -194,8 +193,8 @@ public sealed class QuickAccessReceiptLayoutTests
             var fill = Assert.IsType<Border>(keep.Template.FindName("CheckedLayer", keep));
             Color stroke = Assert.IsType<SolidColorBrush>(icon.Stroke).Color;
             Color background = ((SolidColorBrush)fill.Background).Color;
-            Assert.Equal(Ink(host, "Text.SelectionForeground"), stroke);
-            Assert.Equal(Ink(host, "Text.SelectionBackground"), background);
+            Assert.Equal(Ink(host, "Toggle.CheckedForeground"), stroke);
+            Assert.Equal(Ink(host, "Toggle.CheckedFill"), background);
             Assert.True(MyCapture.Core.Themes.ThemeContrast.Ratio(Theme(stroke), Theme(background)) >= 4.5,
                 "the keep icon must read on the on-state fill");
 

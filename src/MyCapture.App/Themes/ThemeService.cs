@@ -233,8 +233,11 @@ internal static class ThemeService
             return;
         }
 
-        Color top = ((SolidColorBrush)resources["Stroke.ButtonTop"]).Color;
-        Color bottom = ((SolidColorBrush)resources["Stroke.ButtonBottom"]).Color;
+        // Overlay and crop dictionaries intentionally contain only the roles they consume.
+        if (resources["Stroke.ButtonTop"] is not SolidColorBrush topBrush
+            || resources["Stroke.ButtonBottom"] is not SolidColorBrush bottomBrush) return;
+        Color top = topBrush.Color;
+        Color bottom = bottomBrush.Color;
         var border = new LinearGradientBrush
         {
             StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
@@ -272,11 +275,17 @@ internal static class ThemeService
         resources["Check.CheckedThickness"] = new Thickness(legacy ? 2 : 0);
         resources["Check.Radius"] = new CornerRadius(legacy ? 5 : 4);
         resources["Check.MarkMargin"] = new Thickness(legacy ? 0 : 2);
-        Color surface = ((SolidColorBrush)resources["Surface.Base"]).Color;
-        SetBrush(resources, "Check.Mark", legacy ? ((SolidColorBrush)resources["Text.Primary"]).Color
-            : Color.FromRgb(surface.R, surface.G, surface.B));
-        SetBrush(resources, "Radio.Mark", legacy ? ((SolidColorBrush)resources["Surface.Raised"]).Color
-            : Color.FromRgb(surface.R, surface.G, surface.B));
+        // Derive marks only when their source is present; sparse scopes have no check/radio chrome.
+        if (resources[legacy ? "Text.Primary" : "Surface.Base"] is SolidColorBrush checkMark)
+        {
+            Color color = checkMark.Color;
+            SetBrush(resources, "Check.Mark", legacy ? color : Color.FromRgb(color.R, color.G, color.B));
+        }
+        if (resources[legacy ? "Surface.Raised" : "Surface.Base"] is SolidColorBrush radioMark)
+        {
+            Color color = radioMark.Color;
+            SetBrush(resources, "Radio.Mark", legacy ? color : Color.FromRgb(color.R, color.G, color.B));
+        }
         Alias("Selection.Stroke", legacy ? "Text.Primary" : "Stroke.Selected");
         resources["Selection.Thickness"] = new Thickness(legacy ? 2 : 1);
         Alias("Toggle.CheckedFill", legacy ? "Text.SelectionBackground" : "Surface.Floating");

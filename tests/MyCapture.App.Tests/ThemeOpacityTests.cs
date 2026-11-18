@@ -9,6 +9,44 @@ namespace MyCapture.App.Tests;
 
 public sealed class ThemeOpacityTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SparseScopesRefreshWithoutRequiringUnrelatedControlBrushes(bool contrast) => StaTestHost.Run(() =>
+    {
+        foreach (AppTheme theme in new[] { AppTheme.Midnight, AppTheme.Daylight, AppTheme.HighContrast,
+                     AppTheme.Workspace, AppTheme.Glass, AppTheme.GlassLight })
+        foreach (bool hasSurface in new[] { false, true })
+        {
+            var resources = new ResourceDictionary();
+            ThemeService.ApplyCropResources(resources, false);
+            var original = new SolidColorBrush(Colors.Magenta);
+            original.Freeze();
+            if (hasSurface) resources["Surface.Base"] = original;
+            // A partially supplied command edge must also be safe, not just an empty scope.
+            resources["Stroke.ButtonTop"] = original;
+            int version = ThemeService.ResourceVersion;
+
+            ThemeService.ApplyResources(theme, resources, systemHighContrast: contrast);
+
+            Assert.True(ThemeService.ResourceVersion > version);
+            Assert.False(resources.Contains("Stroke.ButtonBottom"));
+            Assert.False(resources.Contains("Surface.Raised"));
+            Assert.Same(contrast ? SystemColors.WindowTextBrush : Brushes.White, resources["Crop.Frame"]);
+            Assert.Equal(Colors.Magenta, original.Color);
+            if (hasSurface)
+            {
+                var surface = Assert.IsType<SolidColorBrush>(resources["Surface.Base"]);
+                ThemeColor expected = ThemeCatalog.ColorsFor(theme)["Surface.Base"];
+                Assert.NotSame(original, surface);
+                Assert.True(surface.IsFrozen);
+                Assert.Equal(contrast ? SystemColors.WindowColor
+                    : Color.FromArgb(expected.A, expected.R, expected.G, expected.B), surface.Color);
+            }
+            else Assert.False(resources.Contains("Surface.Base"));
+        }
+    });
+
     [Fact]
     public void HighContrastRefreshReadsSystemStateAfterHigherPriorityNotifications() => StaTestHost.Run(() =>
     {
