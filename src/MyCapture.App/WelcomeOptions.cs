@@ -9,6 +9,8 @@ internal sealed class WelcomeOptions
     internal bool ShowCoreShortcutsConsent { get; init; }
     internal bool CoreShortcutsNotice { get; init; }
     internal bool FeaturePractice { get; init; }
+    internal bool FirstPinExperience { get; init; }
+    internal bool StartAtGroups { get; init; }
     internal bool? StartAtSignIn { get; init; }
     internal bool? UseAccurateOcr { get; init; }
     internal IWelcomeClipboard? Clipboard { get; init; }
@@ -22,6 +24,7 @@ internal sealed class WelcomeOptions
     internal Func<MyCapture.Platform.Display.MonitorInfo>? MonitorProvider { get; init; }
     internal Func<ITutorialMedia>? MediaFactory { get; init; }
     internal Func<uint>? CopyPracticePicture { get; init; }
+    internal Func<uint>? ClipboardSequenceProvider { get; init; }
 }
 
 /// <summary>A write is requested only by the explicit practice-table copy action.</summary>

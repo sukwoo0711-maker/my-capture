@@ -23,9 +23,10 @@ public sealed class PracticeJourneyProducerTests
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var app = (App)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false, false])!;
         try
         {
+            guide.Session.StartGroup(PracticeStep.A1);
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.C2);
             using var host = new InspectorContractHost();
             PracticeSignals.PreviewOpened(PracticeJourneyDriver.Record);
@@ -47,9 +48,10 @@ public sealed class PracticeJourneyProducerTests
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var app = (App)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, false, false, false])!;
         try
         {
+            guide.Session.StartGroup(PracticeStep.A1);
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.A3);
             using var first = new InspectorContractHost();
             using var second = new InspectorContractHost();

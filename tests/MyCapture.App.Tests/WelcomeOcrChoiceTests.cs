@@ -28,7 +28,8 @@ public sealed class WelcomeOcrChoiceTests
     {
         var settings = new AppSettings { Ocr = { Quality = quality, UpscaleFactor = upscale } };
         var window = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
-            ocrEnvironment: new WelcomeOcrTestEnvironment())
+            ocrEnvironment: new WelcomeOcrTestEnvironment(),
+            options: new WelcomeOptions { MonitorProvider = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary })
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
@@ -195,6 +196,7 @@ public sealed class WelcomeOcrChoiceTests
     public static IEnumerable<object[]> CloseCases =>
         from locale in new[] { "ko-KR", "en-US" }
         from outcome in Enum.GetValues<WelcomeOutcome>()
+        where outcome != WelcomeOutcome.FirstPinCompleted
         from selected in new[] { false, true }
         select new object[] { locale, (int)outcome, selected };
 
@@ -210,7 +212,8 @@ public sealed class WelcomeOcrChoiceTests
         bool legacy = outcome is WelcomeOutcome.TryCapture or WelcomeOutcome.DismissedForCapture;
         var settings = new AppSettings();
         var window = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
-            ocrEnvironment: new WelcomeOcrTestEnvironment())
+            ocrEnvironment: new WelcomeOcrTestEnvironment(),
+            options: new WelcomeOptions { MonitorProvider = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary })
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,

@@ -56,6 +56,7 @@ internal static class FirstRunPlan
         WelcomeOutcome.Closed => AfterWelcome.OpenLibrary,
         // The guide's third step already opened the library; finishing does not open it a second time.
         WelcomeOutcome.Completed => AfterWelcome.Nothing,
+        WelcomeOutcome.FirstPinCompleted => AfterWelcome.Nothing,
         WelcomeOutcome.TryCapture => AfterWelcome.StartCapture,
         WelcomeOutcome.OpenSettings => AfterWelcome.OpenSettings,
         _ => AfterWelcome.Nothing,
@@ -66,7 +67,7 @@ internal static class FirstRunPlan
     /// the capture overlay would close it at once.
     /// </summary>
     internal static bool AnnouncesReady(WelcomeOutcome outcome) =>
-        outcome is WelcomeOutcome.Closed or WelcomeOutcome.Completed or WelcomeOutcome.OpenSettings;
+        outcome is WelcomeOutcome.Closed or WelcomeOutcome.Completed or WelcomeOutcome.FirstPinCompleted or WelcomeOutcome.OpenSettings;
 
     /// <summary>
     /// Applies the welcome's start-at-sign-in choice through <paramref name="registration"/> (the

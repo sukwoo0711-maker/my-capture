@@ -30,7 +30,7 @@ public partial class App
         {
             _coreShortcutsQuestionPending = true;
             WelcomeWindow welcome = CreatePracticeWindow(replay: !_launchedFirstRun, consent: true,
-                coreShortcutsNotice: launch.CoreShortcutsNotice);
+                coreShortcutsNotice: launch.CoreShortcutsNotice, firstPinExperience: _launchedFirstRun);
             _coreShortcutsQuestion = welcome;
             CompleteLaunchPracticeWhenClosed(welcome, quietLaunch, openSettings);
             welcome.Closed += (_, _) =>

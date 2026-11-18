@@ -9,6 +9,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -21,7 +22,10 @@ public sealed class PracticeReviewFixEvidenceTests
 
     private static void Render()
     {
-        string root = DiagnosticOutputPaths.Create(Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-fixes"));
+        string? requested = Environment.GetEnvironmentVariable("MYCAPTURE_PRACTICE_EVIDENCE");
+        string root = DiagnosticOutputPaths.Create(string.IsNullOrWhiteSpace(requested)
+            ? Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-fixes")
+            : DiagnosticOutputPaths.Child(requested, "review-fixes"));
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_REVIEW_PHASE") ?? "after";
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         foreach (string dictionary in new[] { "Tokens", "Symbols", "Controls" })
@@ -34,7 +38,8 @@ public sealed class PracticeReviewFixEvidenceTests
                 using var culture = UiText.UseLanguage(language == "ko" ? "ko-KR" : "en-US");
                 UiText.Configure(language);
                 var guide = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor, options: new WelcomeOptions
-                { ReducedMotion = true, MediaFactory = () => new FakeTutorialMedia(), CopyPracticePicture = () => 42 })
+                { ReducedMotion = true, MediaFactory = () => new FakeTutorialMedia(), CopyPracticePicture = () => 42,
+                    MonitorProvider = MonitorEnumerator.GetPrimary })
                 { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
                 try
                 {
