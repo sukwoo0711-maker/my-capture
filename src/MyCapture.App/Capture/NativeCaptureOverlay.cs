@@ -585,7 +585,14 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
     private static IntPtr DispatchWindowMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)
     {
         if (!Owners.TryGetValue(hwnd, out NativeCaptureOverlay? owner)) return NativeSelectorInterop.DefWindowProc(hwnd, message, wParam, lParam);
-        try { return owner.WindowMessage(hwnd, message, wParam, lParam); }
+        try
+        {
+            IntPtr result = owner.WindowMessage(hwnd, message, wParam, lParam);
+            // A startup step still queued behind this input or paint runs on the next dispatcher turn
+            // instead of WPF's background timer tick (NativeSelectorStartup.QueueDrained).
+            owner._startup?.QueueDrained();
+            return result;
+        }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
             // Never unwind managed exceptions through user32. The coordinator receives the failure.

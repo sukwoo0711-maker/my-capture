@@ -98,5 +98,6 @@ internal static class NativeSelectorInterop
     [DllImport("gdi32.dll")] internal static extern bool LineTo(IntPtr dc, int x, int y);
     [DllImport("msimg32.dll", SetLastError = true)] internal static extern bool AlphaBlend(IntPtr dc, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint blend);
     [DllImport("dwmapi.dll")] internal static extern int DwmFlush();
+    [DllImport("user32.dll")] internal static extern uint GetQueueStatus(uint flags);
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }
