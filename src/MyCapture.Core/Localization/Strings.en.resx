@@ -4402,7 +4402,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Copy the picture</value>
   </data>
   <data name="Journey.A6.Body" xml:space="preserve">
-    <value>Select Copy and close at the top of the editor. The picture is copied and the editor closes.</value>
+    <value>Select Copy and close at the top right of the editor. The picture is copied and the editor closes.</value>
   </data>
   <data name="Journey.A6.Success" xml:space="preserve">
     <value>Picture copied.</value>
@@ -5763,4 +5763,22 @@ Install the model?</value></data>
   <data name="Pin_CopySelectedText" xml:space="preserve"><value>Copy selected text</value></data>
   <data name="Pin_CopyImageOnly" xml:space="preserve"><value>Copy image only</value></data>
   <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>Copy only the image shown now, without its text.</value></data>
+  <data name="FirstRun.WindowTitle" xml:space="preserve"><value>Get started</value></data>
+  <data name="FirstRun.PracticeWindowTitle" xml:space="preserve"><value>Practice</value></data>
+  <data name="FirstRun.PinTitle" xml:space="preserve"><value>Keep something in view</value></data>
+  <data name="FirstRun.PinBody" xml:space="preserve"><value>Copy text or an image, then press {0}. If you have nothing to copy, use the sample below.</value></data>
+  <data name="FirstRun.PinBodyNoKey" xml:space="preserve"><value>Copy text or an image, then choose ‘Pin copied content’. If you have nothing to copy, use the sample below.</value></data>
+  <data name="FirstRun.SampleText" xml:space="preserve"><value>Things to check today
+Keep this in view while working in another window.</value></data>
+  <data name="FirstRun.CopySample" xml:space="preserve"><value>Copy sample text</value></data>
+  <data name="FirstRun.SampleCopied" xml:space="preserve"><value>Sample text copied. You can now pin it.</value></data>
+  <data name="FirstRun.PinClipboard" xml:space="preserve"><value>Pin copied content</value></data>
+  <data name="FirstRun.PinnedTitle" xml:space="preserve"><value>Your pin is on screen</value></data>
+  <data name="FirstRun.PinnedBody" xml:space="preserve"><value>The pin stays when you close this window. Continue to the full practice to try capturing, editing and working with pins.</value></data>
+  <data name="FirstRun.SkippedTitle" xml:space="preserve"><value>First pin skipped</value></data>
+  <data name="FirstRun.SkippedBody" xml:space="preserve"><value>You can pin copied content whenever you need it. The full practice is also available from Help.</value></data>
+  <data name="FirstRun.FullPractice" xml:space="preserve"><value>Full practice</value></data>
+  <data name="FirstRun.Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="FirstRun.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="FirstRun.WatchExample" xml:space="preserve"><value>Watch example video</value></data>
 </root>

@@ -17,12 +17,16 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
     private readonly Border _poster = new();
     private readonly bool? _reducedMotion;
     private readonly double _textScale;
+    private readonly bool _startWithInstructions;
+    private bool _showVideo;
     private string? _feature;
     private bool _open, _disposed, _watching, _manual, _paused, _suspended;
     private readonly System.Windows.Threading.DispatcherTimer _repeat = new() { Interval = TimeSpan.FromSeconds(1) };
 
-    internal WelcomeTutorialPreview(WelcomeOptions options)
+    internal WelcomeTutorialPreview(WelcomeOptions options, bool startWithInstructions = false)
     {
+        _startWithInstructions = startWithInstructions;
+        _showVideo = !startWithInstructions;
         _reducedMotion = options.ReducedMotion;
         _textScale = double.IsFinite(options.TextScale) ? Math.Clamp(options.TextScale, 1, 3) : 1;
         _media = (options.MediaFactory ?? (() => new MediaElementTutorialMedia()))();
@@ -54,16 +58,48 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
     internal bool IsPaused => _paused;
     internal bool IsFallback => !_open;
     internal bool HasVideo => _open;
+    internal bool ShowingInstructions => !_showVideo;
     private bool ReducedMotion => _reducedMotion ?? !FluidMotion.AnimationsEnabled;
 
     internal void SelectFeature(string? feature)
     {
         CloseVideo();
         _feature = feature;
+        _showVideo = !_startWithInstructions;
         _manual = false; _paused = false;
         _poster.Child = null;
         _poster.Background = null;
         if (feature is null) return;
+        if (!_showVideo)
+        {
+            ShowInstructions(feature);
+            return;
+        }
+        LoadPoster(feature);
+        OpenVideo();
+    }
+
+    private void ShowInstructions(string feature)
+    {
+        _poster.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        var scenes = new StackPanel { Margin = new Thickness(16, 12, 16, 8) };
+        int index = 0;
+        foreach (string scene in TutorialCatalog.Get(feature).Steps)
+        {
+            var line = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap,
+                FontSize = TypeScale.Body * _textScale, FontWeight = FontWeights.Normal,
+                Margin = new Thickness(0, 4, 0, 4) }, scene.Length > 2 && char.IsDigit(scene[0]) && scene[1] == '.' ? scene : $"{++index}. {scene}");
+            line.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+            scenes.Children.Add(line);
+        }
+        _poster.Child = scenes;
+        AutomationProperties.SetName(this, TutorialCatalog.Get(feature).DisplayName);
+    }
+
+    private void LoadPoster(string feature)
+    {
+        _poster.Child = null;
+        _poster.Background = null;
         string path = Path.ChangeExtension(AssetPath!, ".jpg");
         if (File.Exists(path))
         {
@@ -94,12 +130,11 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
             _poster.Child = scenes;
         }
         AutomationProperties.SetName(this, UiText.Format("Tutorial.VideoName", TutorialCatalog.Get(feature).DisplayName));
-        OpenVideo();
     }
 
     private void OpenVideo()
     {
-        if (_disposed || _open || !IsLoaded || !IsVisible || _suspended || _paused || (ReducedMotion && !_manual) || AssetPath is not { } path || !File.Exists(path)) return;
+        if (_disposed || !_showVideo || _open || !IsLoaded || !IsVisible || _suspended || _paused || (ReducedMotion && !_manual) || AssetPath is not { } path || !File.Exists(path)) return;
         try
         {
             _open = true;
@@ -152,6 +187,11 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
 
     internal void Replay()
     {
+        if (!_showVideo && _feature is { } feature)
+        {
+            _showVideo = true;
+            LoadPoster(feature);
+        }
         _manual = true; _paused = false; _repeat.Stop();
         if (!_open) OpenVideo();
         else if (!_suspended)

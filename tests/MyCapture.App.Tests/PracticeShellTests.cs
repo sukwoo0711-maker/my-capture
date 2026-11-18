@@ -20,7 +20,7 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false])!;
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false, false])!;
         try
         {
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.B2);
@@ -49,6 +49,7 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         WelcomeWindow? guide = null;
+        app.PracticeMonitorProviderForTest = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary;
         try
         {
             var paths = AppPaths.CreateForRoot(root);
@@ -86,6 +87,7 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         WelcomeWindow? guide = null;
+        app.PracticeMonitorProviderForTest = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary;
         try
         {
             var paths = AppPaths.CreateForRoot(root);
@@ -151,7 +153,8 @@ public sealed class PracticeShellTests
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
-        var feature = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false])!;
+        app.PracticeMonitorProviderForTest = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary;
+        var feature = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true, false, false])!;
         WelcomeWindow? replay = null;
         try
         {
@@ -161,7 +164,9 @@ public sealed class PracticeShellTests
             Assert.NotSame(feature, replay);
             Assert.False(replay.IsFeaturePractice);
             Assert.True(replay.IsReplay);
-            Assert.Equal(WelcomeStep.Capture, replay.CurrentStep);
+            Assert.Equal(PracticeStep.Groups, replay.Session.Step);
+            Assert.Equal(15, replay.Session.Results.Count);
+            Assert.All(replay.Session.Results.Values, value => Assert.Equal(PracticeStepResult.Pending, value));
         }
         finally { replay?.Close(); feature.Close(); }
     });
@@ -175,12 +180,69 @@ public sealed class PracticeShellTests
         var guide = (WelcomeWindow)typeof(App).GetMethod("CreateOnboardingWindow", flags)!.Invoke(app, [true])!;
         try
         {
+            guide.Session.StartGroup(PracticeStep.A1);
             PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.A3);
             PracticeSignals.Publish(new(PracticeEventKind.CaptureSaved, guide.Session.Id, Guid.NewGuid(), Guid.NewGuid()));
             Assert.Equal(PracticeJourneyDriver.Record, guide.Session.CaptureId);
             Assert.Equal(PracticeStep.A3, guide.Session.Step);
         }
         finally { guide.Close(); }
+    });
+
+    [Fact]
+    public void CompletingTheFirstPinPersistsFirstRunWithoutApplyingUnseenStartupOrOcrChoices() => StaTestHost.Run(() =>
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        string root = OwnedTestDirectory.Create("first-pin-unseen-choices-");
+        var paths = AppPaths.CreateForRoot(root);
+        var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+        var startup = new RecordingStartup();
+        using ServiceProvider services = new ServiceCollection().AddSingleton(store)
+            .AddSingleton<IStartupRegistration>(startup).BuildServiceProvider();
+        var settings = new AppSettings
+        {
+            General = { IsFirstRun = true, LaunchAtLogin = false },
+            Ocr = { Quality = OcrQuality.Fast, UpscaleFactor = 1 },
+        };
+        var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
+        typeof(App).GetField("_settings", flags)!.SetValue(app, settings);
+        typeof(App).GetField("_services", flags)!.SetValue(app, services);
+        typeof(App).GetField("_launchedFirstRun", flags)!.SetValue(app, true);
+        typeof(App).GetField("_readyNotification", flags)!.SetValue(app, new ResidentReadyNotification());
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!
+            .Invoke(app, [false, false, false, false, true])!;
+        typeof(App).GetMethod("CompleteLaunchPracticeWhenClosed", flags)!.Invoke(app, [guide, true, false]);
+        try
+        {
+            Assert.True(guide.IsFirstPinExperience);
+            Assert.False(guide.PreferencesShown);
+            guide.StartAtSignInCheck.IsChecked = true;
+            guide.AccurateOcrCheck.IsChecked = true;
+            guide.FirstPin.BeginAttempt(42);
+            PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, ClipboardSequence: 42,
+                LogicalPinId: Guid.NewGuid(), WindowPinId: Guid.NewGuid()));
+            Assert.Equal(FirstPinState.Pinned, guide.FirstPin.State);
+            PracticeJourneyDriver.Click(guide.TryNowButton);
+            Assert.Equal(WelcomeOutcome.FirstPinCompleted, guide.Outcome);
+            Assert.False(settings.General.IsFirstRun);
+            Assert.False(settings.General.LaunchAtLogin);
+            Assert.Equal(OcrQuality.Fast, settings.Ocr.Quality);
+            Assert.Equal(1, settings.Ocr.UpscaleFactor);
+            AppSettings saved = store.Load();
+            Assert.False(saved.General.IsFirstRun);
+            Assert.False(saved.General.LaunchAtLogin);
+            Assert.Equal(OcrQuality.Fast, saved.Ocr.Quality);
+            Assert.Equal(1, saved.Ocr.UpscaleFactor);
+            Assert.Equal(0, startup.Requests);
+            Assert.Null(typeof(App).GetField("_onboardingWindow", flags)!.GetValue(app));
+            Assert.Equal(AfterWelcome.Nothing, FirstRunPlan.Next(guide.Outcome));
+        }
+        finally
+        {
+            typeof(App).GetField("_shutdownRequested", flags)!.SetValue(app, true);
+            guide.Close();
+            // The isolated fixture is retained under the mailbox-owned temporary directory.
+        }
     });
 
     [Fact]
@@ -216,5 +278,13 @@ public sealed class PracticeShellTests
         public bool IsEnabled() => false;
         public StartupApplyResult Apply(bool desiredEnabled) => StartupApplyResult.Ok(desiredEnabled);
         public bool ReconcileOnStartup(bool settingEnabled) => false;
+    }
+
+    private sealed class RecordingStartup : IStartupRegistration
+    {
+        internal int Requests { get; private set; }
+        public bool IsEnabled() => false;
+        public StartupApplyResult Apply(bool desiredEnabled) { Requests++; return StartupApplyResult.Ok(desiredEnabled); }
+        public bool ReconcileOnStartup(bool settingEnabled) { Requests++; return false; }
     }
 }

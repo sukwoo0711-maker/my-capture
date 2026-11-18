@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
@@ -22,7 +23,10 @@ public sealed class PracticeJourneyEvidenceTests
 
     private static void Render()
     {
-        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-impl"));
+        string? requested = Environment.GetEnvironmentVariable("MYCAPTURE_PRACTICE_EVIDENCE");
+        string root = string.IsNullOrWhiteSpace(requested)
+            ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-impl"))
+            : DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(requested, "journey"));
         Directory.CreateDirectory(root);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         foreach (string dictionary in new[] { "Tokens", "Symbols", "Controls" })

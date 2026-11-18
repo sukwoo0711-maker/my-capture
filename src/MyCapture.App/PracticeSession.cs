@@ -25,6 +25,10 @@ internal sealed class PracticeSession
     internal event Action? Changed;
 
     internal PracticeSession(bool pinOnly = false) => Step = pinOnly ? PracticeStep.B0 : PracticeStep.A1;
+    internal void ShowGroups()
+    {
+        if (!Ended) Navigate(PracticeStep.Groups);
+    }
     internal Guid BeginCapture()
     {
         if (Ended || CapturePending) return Guid.Empty;

@@ -4402,7 +4402,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>그림 복사</value>
   </data>
   <data name="Journey.A6.Body" xml:space="preserve">
-    <value>편집 창 위의 ‘복사 후 닫기’를 누릅니다. 그림이 복사되고 편집 창이 닫힙니다.</value>
+    <value>편집 창 오른쪽 위의 ‘복사하고 닫기’를 누릅니다. 그림이 복사되고 편집 창이 닫힙니다.</value>
   </data>
   <data name="Journey.A6.Success" xml:space="preserve">
     <value>그림을 복사했습니다.</value>
@@ -5763,4 +5763,22 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Pin_CopySelectedText" xml:space="preserve"><value>선택한 텍스트 복사</value></data>
   <data name="Pin_CopyImageOnly" xml:space="preserve"><value>이미지만 복사</value></data>
   <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>지금 보이는 이미지만 복사하고 텍스트는 복사하지 않습니다.</value></data>
+  <data name="FirstRun.WindowTitle" xml:space="preserve"><value>시작</value></data>
+  <data name="FirstRun.PracticeWindowTitle" xml:space="preserve"><value>사용 연습</value></data>
+  <data name="FirstRun.PinTitle" xml:space="preserve"><value>필요한 자료를 화면에 남깁니다</value></data>
+  <data name="FirstRun.PinBody" xml:space="preserve"><value>텍스트나 그림을 복사한 뒤 {0} 키를 누릅니다. 복사할 자료가 없다면 아래 예문을 사용합니다.</value></data>
+  <data name="FirstRun.PinBodyNoKey" xml:space="preserve"><value>텍스트나 그림을 복사한 뒤 ‘복사한 내용 핀’을 누릅니다. 복사할 자료가 없다면 아래 예문을 사용합니다.</value></data>
+  <data name="FirstRun.SampleText" xml:space="preserve"><value>오늘 확인할 내용
+화면에 남겨 두고 다른 창에서 작업합니다.</value></data>
+  <data name="FirstRun.CopySample" xml:space="preserve"><value>예문 복사</value></data>
+  <data name="FirstRun.SampleCopied" xml:space="preserve"><value>예문을 복사했습니다. 이제 핀으로 띄웁니다.</value></data>
+  <data name="FirstRun.PinClipboard" xml:space="preserve"><value>복사한 내용 핀</value></data>
+  <data name="FirstRun.PinnedTitle" xml:space="preserve"><value>핀을 화면에 남겼습니다</value></data>
+  <data name="FirstRun.PinnedBody" xml:space="preserve"><value>이 창을 닫아도 핀은 그대로 남습니다. 캡처·편집과 핀 조작은 전체 연습에서 이어서 살펴봅니다.</value></data>
+  <data name="FirstRun.SkippedTitle" xml:space="preserve"><value>첫 핀 건너뜀</value></data>
+  <data name="FirstRun.SkippedBody" xml:space="preserve"><value>필요할 때 복사한 자료를 핀으로 띄울 수 있습니다. 전체 연습은 도움말에서도 열 수 있습니다.</value></data>
+  <data name="FirstRun.FullPractice" xml:space="preserve"><value>전체 연습</value></data>
+  <data name="FirstRun.Skip" xml:space="preserve"><value>건너뛰기</value></data>
+  <data name="FirstRun.Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="FirstRun.WatchExample" xml:space="preserve"><value>예시 영상 보기</value></data>
 </root>

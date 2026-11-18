@@ -51,7 +51,7 @@ public sealed class FirstRunWelcomeTests
         var welcome = new WelcomeWindow(keys, AfterCaptureAction.Editor);
         try
         {
-            Assert.Equal("MyCapture 시작", welcome.Title);
+            Assert.Equal(UiText.Get("FirstRun.PracticeWindowTitle"), welcome.Title);
             Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text => text.Text == welcome.Title);
             // The first step names one task; the single-screen title it replaces is gone.
             Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "캡처 준비");
@@ -67,7 +67,7 @@ public sealed class FirstRunWelcomeTests
             });
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
-            Assert.Equal(10, buttons.Length);
+            Assert.Equal(12, buttons.Length);
             Assert.All(new[] { welcome.TryNowButton, welcome.SkipButton, welcome.ChangeShortcutButton, welcome.SkipStepButton, welcome.BackButton, welcome.ReplayButton, welcome.PauseButton }, button => Assert.Contains(button, buttons));
             Assert.False(welcome.ConflictShown);
             Assert.Equal("영역 캡처 시작", welcome.TryNowButton.Content);
@@ -135,7 +135,7 @@ public sealed class FirstRunWelcomeTests
             foreach (string key in paragraphs)
                 Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
                     text.Text == UiText.Get(key) || AutomationProperties.GetName(text) == UiText.Get(key));
-            Assert.Equal(10, Descendants(welcome).OfType<Button>().Count());
+            Assert.Equal(12, Descendants(welcome).OfType<Button>().Count());
             Assert.False(welcome.ConflictShown);
         }
         finally { welcome.Close(); }
@@ -175,7 +175,8 @@ public sealed class FirstRunWelcomeTests
 
         static void AssertStaysOpen(Action<WelcomeWindow> act)
         {
-            var window = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+            var window = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                options: new WelcomeOptions { MonitorProvider = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary })
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
@@ -195,7 +196,8 @@ public sealed class FirstRunWelcomeTests
 
         static WelcomeOutcome Run(Action<WelcomeWindow> leave)
         {
-            var window = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+            var window = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                options: new WelcomeOptions { MonitorProvider = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary })
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
