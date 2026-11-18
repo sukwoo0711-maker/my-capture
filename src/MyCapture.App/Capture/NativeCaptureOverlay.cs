@@ -616,6 +616,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 if (HandleElementWheel(unchecked((short)((wParam.ToInt64() >> 16) & 0xffff)))) return IntPtr.Zero;
                 break;
             case 0x0201: // WM_LBUTTONDOWN
+                KeyboardFocusCue.NotifyPointerInput();
                 BeginSelection(Pointer());
                 _ = NativeSelectorInterop.SetCapture(hwnd);
                 return IntPtr.Zero;
@@ -625,6 +626,7 @@ internal sealed partial class NativeCaptureOverlay : IDisposable
                 else RefreshHover();
                 return IntPtr.Zero;
             case 0x0204: // WM_RBUTTONDOWN
+                KeyboardFocusCue.NotifyPointerInput();
                 if (!DiscardFreeformStroke()) Close();
                 return IntPtr.Zero;
             case 0x0202:

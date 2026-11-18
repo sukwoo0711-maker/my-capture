@@ -62,7 +62,8 @@ public sealed partial class SettingsThemePreviewTests
                     if (root is not null) SaveBitmap(image, Path.Combine(root, name + "-" + suffix));
                 }
 
-                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                    options: new WelcomeOptions { MonitorProvider = () => MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary) })
                 {
                     WindowStartupLocation = WindowStartupLocation.Manual,
                     Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,

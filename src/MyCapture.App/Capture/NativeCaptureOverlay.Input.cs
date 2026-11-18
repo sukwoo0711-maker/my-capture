@@ -286,6 +286,7 @@ internal sealed partial class NativeCaptureOverlay
     internal bool HandleKey(Key key, ModifierKeys modifiers)
     {
         if (_closed) return false;
+        KeyboardFocusCue.NotifyKeyboardInput();
         if (key == Key.F1 && modifiers == ModifierKeys.None && !RecordingSelection)
         {
             ToggleKeyPanel();

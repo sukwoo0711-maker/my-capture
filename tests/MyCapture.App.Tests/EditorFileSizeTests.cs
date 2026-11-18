@@ -171,7 +171,8 @@ public sealed class EditorFileSizeTests
     {
         var image = EditorKeysTests.Solid(720, 300, 0x30);
         var region = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
-        var editor = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image)
+        var editor = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             Left = -4000, Top = -4000, Width = 1000, Height = 640,
             WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false,
@@ -184,7 +185,8 @@ public sealed class EditorFileSizeTests
     {
         string root = Path.Combine(AppContext.BaseDirectory, "file-size-in-memory");
         var recording = new RecordingResult(Path.Combine(root, "source.mp4"), 10_000, 30, 300, 640, 360);
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             Left = -4000, Top = -4000, Width = 920, Height = 680,
             WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false,

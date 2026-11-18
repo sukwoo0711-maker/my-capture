@@ -219,7 +219,8 @@ public sealed class EditorKeysTests
             ShowActivated = false, ShowInTaskbar = false,
         };
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             source.Show();
@@ -314,7 +315,8 @@ public sealed class EditorKeysTests
         {
             bitmap ??= Solid(640, 360, 0x30);
             var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
-            var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap, initialDocument: document)
+            var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap, initialDocument: document,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -4000, Top = -4000, Width = 1000, Height = 640,

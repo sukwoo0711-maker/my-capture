@@ -24,7 +24,7 @@ public static class GalleryCaptionPreview
         {
             if ((bool)e.NewValue)
             {
-                var content = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold };
+                var content = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { TextWrapping = TextWrapping.Wrap, });
                 content.SetBinding(TextBlock.TextProperty, new Binding(nameof(TextBlock.Text)) { Source = title });
                 var tip = new ToolTip
                 {

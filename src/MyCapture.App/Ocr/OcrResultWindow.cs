@@ -127,7 +127,7 @@ internal sealed partial class OcrResultWindow : Window
         // TSF formats every selected line when it measures the selection (TextStore.GetTextExt).
         // With the IME on, a 100k-character select-all took 5.8 s to lay out, so editing keeps
         // the IME for a caret or a small selection only (UpdateInputMethod).
-        _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
+        _textBox.SetResourceReference(Control.BackgroundProperty, "Input.Fill");
         _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
         AutomationProperties.SetHelpText(

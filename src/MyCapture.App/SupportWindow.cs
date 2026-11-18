@@ -185,19 +185,19 @@ internal sealed class SupportWindow : Window
         ApplyHeightLimits(monitor.WorkArea.Height / scale);
     }
 
-    private static TextBlock Label(string key) => new()
+    private static TextBlock Label(string key) => MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
     {
-        Text = UiText.Get(key), FontSize = TypeScale.Body, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6),
-    };
+        Text = UiText.Get(key), FontSize = TypeScale.Body, Margin = new Thickness(0, 0, 0, 6),
+    });
 
     private static TextBox CreateTextInput(string key, double height)
     {
         var box = new TextBox { Height = height, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = TypeScale.Body, Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(0, 0, 0, 16) };
-        box.SetResourceReference(BackgroundProperty, "Surface.Sunken");
+        box.SetResourceReference(BackgroundProperty, "Input.Fill");
         box.SetResourceReference(ForegroundProperty, "Text.Primary");
-        box.SetResourceReference(BorderBrushProperty, "Border.Control");
+        box.SetResourceReference(BorderBrushProperty, "Input.Border");
         box.SetResourceReference(TextBox.CaretBrushProperty, "Text.Primary");
         AutomationProperties.SetName(box, UiText.Get(key));
         return box;

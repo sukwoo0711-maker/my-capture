@@ -162,9 +162,11 @@ public sealed class KoreanWordWrapSweepTests
                 Window("onboarding-" + (step?.ToString().ToLowerInvariant() ?? "consent"), welcome);
             }
             Window("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample,
-                initialDocument: AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight)));
+                initialDocument: AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight),
+                pointerMonitor: monitor));
             Window("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png")));
-            Window("video", new VideoEditorWindow(recording, paths, logs, document));
+            Window("video", new VideoEditorWindow(recording, paths, logs, document,
+                pointerMonitor: monitor));
             const string source = "public void Capture()\r\n{\r\n    Save();\r\n}";
             BitmapSource code = ClipboardCodeRenderer.TryRender(source,
                 "<pre style=\"color:#d4d4d4;background-color:#1e1e1e\">public void Capture() { Save(); }</pre>")

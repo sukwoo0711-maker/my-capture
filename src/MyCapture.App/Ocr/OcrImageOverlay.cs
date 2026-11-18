@@ -132,7 +132,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
             drawing.DrawRectangle(null, new Pen(brush, 2.5), ViewRect(_regions[highlighted], fit));
         }
         DrawLabels(drawing, fit);
-        if (IsKeyboardFocused && _regions.Count > 0)
+        if (IsKeyboardFocused && KeyboardFocusCue.GetIsVisible(this) && _regions.Count > 0)
         {
             var focusPen = new Pen(brush, 2) { DashStyle = DashStyles.Dash };
             drawing.DrawRectangle(null, new Pen(halo, 4), ViewRect(_regions[_activeRegion], fit));

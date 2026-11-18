@@ -42,16 +42,17 @@ public sealed class ButtonAppearanceTests
                 Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(resources["Button.Fill"]).Color);
             else
             {
-                Assert.Equal(Color.FromRgb(0x25, 0x32, 0x3C), Assert.IsType<SolidColorBrush>(resources["Button.Fill"]).Color);
+                Assert.Equal(Color.FromRgb(0x24, 0x27, 0x2B), Assert.IsType<SolidColorBrush>(resources["Button.Fill"]).Color);
             }
         }
 
-        // A plain button is 32 DIP and draws its chrome edge to edge; the 44 and 36 DIP command
+        // A plain button is 36 DIP and draws its chrome edge to edge; the 44 and 36 DIP command
         // heights keep the chrome inset inside their hit target.
         foreach (string style in new[] { "Button.Secondary", "Button.Command", "Button.Ghost", "Button.Primary", "Button.Danger" })
         foreach (string tier in new[] { "Plain", "Standard", "Compact" })
         {
             var button = new Button { Content = "저장", Resources = resources, Style = (Style)resources[style], Width = 100 };
+            ButtonSizing.SetReservesShortcutLine(button, tier != "Plain");
             bool compact = tier == "Compact";
             if (tier == "Standard")
             {
@@ -64,7 +65,7 @@ public sealed class ButtonAppearanceTests
                 button.SetResourceReference(FrameworkElement.MinHeightProperty, "Size.HitTarget.Compact");
                 button.SetResourceReference(Control.PaddingProperty, "CommandButton.Padding.Compact");
             }
-            double height = tier switch { "Standard" => 44, "Compact" => 36, _ => 32 };
+            double height = tier switch { "Standard" => 44, "Compact" => 36, _ => 36 };
             double inset = contrast ? 0 : tier switch { "Standard" => 4, "Compact" => 2, _ => 0 };
             double focusGap = style == "Button.Primary" ? 2 : 1;
             button.ApplyTemplate();
@@ -100,8 +101,8 @@ public sealed class ButtonAppearanceTests
     {
         var gradient = Assert.IsType<LinearGradientBrush>(brush);
         bool light = AppThemeNames.IsLight(theme);
-        Color top = (Color)ColorConverter.ConvertFromString(light ? "#E2E6EC" : "#3A4853");
-        Color bottom = (Color)ColorConverter.ConvertFromString(light ? "#B8C0CB" : "#1E2830");
+        Color top = (Color)ColorConverter.ConvertFromString(light ? "#D7DCE2" : "#44494F");
+        Color bottom = (Color)ColorConverter.ConvertFromString(light ? "#ADB5BF" : "#17191C");
         Assert.Equal(new Point(0, 0), gradient.StartPoint);
         Assert.Equal(new Point(0, 1), gradient.EndPoint);
         Assert.Equal(new[] { 0d, 0.8, 1d }, gradient.GradientStops.Select(stop => stop.Offset));

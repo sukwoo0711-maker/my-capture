@@ -66,9 +66,13 @@
                                 <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
                                 <Setter TargetName="SelectionCheck" Property="Visibility" Value="Visible" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="SelectionFocus" Property="Visibility" Value="Visible" />
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.48" />
                             </Trigger>
@@ -261,7 +265,7 @@
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding FolderBadge}" Margin="4,0,0,0"
                            Foreground="{DynamicResource Text.Badge}" FontSize="{DynamicResource FontSize.Caption}"
-                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                           FontWeight="{DynamicResource FontWeight.ControlLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </Grid>
         </DataTemplate>
 
@@ -282,9 +286,13 @@
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                 </Trigger>
-                <Trigger Property="IsKeyboardFocused" Value="True">
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsKeyboardFocused" Value="True" />
+                        <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                    </MultiTrigger.Conditions>
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                </Trigger>
+                </MultiTrigger>
             </Style.Triggers>
         </Style>
 
@@ -351,9 +359,13 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                                <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                            </MultiTrigger.Conditions>
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                        </Trigger>
+                        </MultiTrigger>
                     </Style.Triggers>
                 </Style>
             </DataTemplate.Resources>
@@ -409,7 +421,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.ColumnSpan="2" Margin="0,0,8,2" VerticalAlignment="Center">
                             <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
-                                       Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Text.Primary}" FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                        FontSize="{DynamicResource FontSize.Body}" TextTrimming="CharacterEllipsis">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -779,9 +791,13 @@
                                 <Setter TargetName="DropRing" Property="StrokeDashArray" Value="{x:Null}" />
                                 <Setter TargetName="DropRing" Property="Opacity" Value="1" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -936,11 +952,15 @@
                                 <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1047,11 +1067,15 @@
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1136,11 +1160,15 @@
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1182,11 +1210,15 @@
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="Chevron" Property="themes:FluidMotion.RotateTo" Value="90" />
                                             </Trigger>
-                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <MultiTrigger>
+                                                <MultiTrigger.Conditions>
+                                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                                </MultiTrigger.Conditions>
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                                            </Trigger>
+                                            </MultiTrigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
@@ -1284,9 +1316,13 @@
                                 <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="0" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.48" />
                             </Trigger>
@@ -1407,7 +1443,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
                                     <Setter Property="Background" Value="Transparent" />
                                     <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="FontWeight" Value="{DynamicResource FontWeight.ControlLabel}" />
                                     <Setter Property="Padding" Value="6,2" />
                                     <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
                                     <Setter Property="Margin" Value="8,0,0,0" />
@@ -1439,10 +1475,14 @@
                                                     <Trigger Property="IsPressed" Value="True">
                                                         <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                     </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                    <MultiTrigger>
+                                                        <MultiTrigger.Conditions>
+                                                            <Condition Property="IsKeyboardFocused" Value="True" />
+                                                            <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                                        </MultiTrigger.Conditions>
                                                         <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                                         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                                                    </Trigger>
+                                                    </MultiTrigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Setter.Value>
@@ -1600,8 +1640,22 @@
                      over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
                      the focus colour at once while the search box inside has keyboard focus. -->
                 <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
+                      themes:ControlLanguage.Enabled="{DynamicResource ControlLanguage.Enabled}"
                       MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
                     <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
+                    <themes:InputFieldBorder x:Name="SearchInputChrome" IsHitTestVisible="False"
+                                            IsInputFocused="{Binding IsKeyboardFocusWithin, ElementName=SearchField}"
+                                            IsInputHovered="{Binding IsMouseOver, ElementName=SearchField}">
+                        <themes:InputFieldBorder.Style>
+                            <Style TargetType="themes:InputFieldBorder">
+                                <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="False">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </themes:InputFieldBorder.Style>
+                    </themes:InputFieldBorder>
                     <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" Background="Transparent" />
                     <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
                         <Border.Style>
@@ -1609,6 +1663,9 @@
                                 <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
                                 <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                                 <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
                                     <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                         <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
                                     </DataTrigger>
@@ -1627,6 +1684,9 @@
                             <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
                             <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                             <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
                                 <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                     <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                 </DataTrigger>
@@ -1653,7 +1713,17 @@
                              Padding="4,4" MinHeight="32" VerticalContentAlignment="Center"
                              ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
-                             TextChanged="OnSearchTextChanged" />
+                             TextChanged="OnSearchTextChanged">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Template" Value="{StaticResource TextBox.InputContentTemplate}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
                     <gallery:LibrarySearchPlaceholder x:Name="SearchPlaceholderText" Grid.Column="1" IsHitTestVisible="False"
                                FullText="{Binding SearchPlaceholder}" CompactText="{Binding CompactSearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
@@ -1720,7 +1790,7 @@
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="OcrCoverageHeadline"
                                Foreground="{DynamicResource Text.Primary}"
-                               FontWeight="SemiBold"
+                               FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                FontSize="{StaticResource FontSize.Body}" />
                     <TextBlock x:Name="OcrCoverageDetail"
                                Foreground="{DynamicResource Text.Secondary}"
@@ -2294,7 +2364,7 @@
             <DockPanel x:Name="LibraryNotice" Grid.Column="1" Margin="16,0,0,0" HorizontalAlignment="Right"
                        VerticalAlignment="Center" Visibility="Collapsed" LastChildFill="True">
                 <Button x:Name="LibraryNoticeAction" DockPanel.Dock="Right" Style="{StaticResource Button.GhostCompact}"
-                        Height="24" MinHeight="24" Padding="8,0" VerticalAlignment="Center" FontWeight="SemiBold" Margin="8,0,0,0"
+                        Height="24" MinHeight="24" Padding="8,0" VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}" Margin="8,0,0,0"
                         Click="OnNoticeActionClick" />
                 <TextBlock x:Name="LibraryNoticeText" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
                            VerticalAlignment="Center" Foreground="{DynamicResource Text.Secondary}"
@@ -2314,7 +2384,7 @@
                      bar by 10 DIP, which moved the list's bottom and the status text each time it came and went. -->
                 <Button x:Name="LibraryStatusAction" Style="{StaticResource Button.GhostCompact}"
                         Height="24" MinHeight="24" Padding="8,0"
-                        VerticalAlignment="Center" FontWeight="SemiBold" Click="OnStatusActionClick" />
+                        VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}" Click="OnStatusActionClick" />
             </StackPanel>
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <Button x:Name="ArchiveCancelButton" Content="{loc:Text Library.Action.Cancel}"
@@ -2341,7 +2411,7 @@
             <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="UpdateAvailableButton" Margin="12,0,0,0" Visibility="Collapsed"
                         Height="24" MinHeight="24" MaxWidth="188" Padding="8,0" Style="{StaticResource Button.GhostCompact}" FontSize="{StaticResource FontSize.Caption}"
-                        FontWeight="SemiBold" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
+                        FontWeight="{DynamicResource FontWeight.ControlLabel}" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
                 <Button x:Name="UpdateDismissButton" Margin="4,0,0,0" Visibility="Collapsed"
                         Content="{loc:Text Dialog.Close}" AutomationProperties.Name="{loc:Text Dialog.Close}"
                         Height="24" MinHeight="24" Padding="8,0" Style="{StaticResource Button.GhostCompact}"
@@ -2356,7 +2426,7 @@
                 <StackPanel Orientation="Horizontal">
                     <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                           Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
+                    <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                Foreground="{DynamicResource Text.Primary}" />
                 </StackPanel>
             </Border>

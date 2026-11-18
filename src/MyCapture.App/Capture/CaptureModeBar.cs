@@ -960,7 +960,9 @@ internal sealed class CaptureModeBar : Border
             else template.Triggers.Add(on);
         }
 
-        var focus = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
+        var focus = new MultiTrigger();
+        focus.Conditions.Add(new System.Windows.Condition(UIElement.IsKeyboardFocusedProperty, true));
+        focus.Conditions.Add(new System.Windows.Condition(KeyboardFocusCue.IsVisibleProperty, true));
         focus.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0, "FocusRing"));
         template.Triggers.Add(focus);
         var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };

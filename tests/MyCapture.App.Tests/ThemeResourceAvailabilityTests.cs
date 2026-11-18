@@ -138,7 +138,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
                     track.DecreaseRepeatButton.Command);
                 Assert.Same(orientation == Orientation.Vertical ? ScrollBar.PageDownCommand : ScrollBar.PageRightCommand,
                     track.IncreaseRepeatButton.Command);
-                Assert.Same(theme["Surface.Base"], bar.Background);
+                Assert.Equal(Colors.Transparent, Assert.IsType<SolidColorBrush>(bar.Background).Color);
             }
         });
     }
@@ -177,7 +177,9 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
             combo.Items.Add("최소 용량 · 480px / 5fps");
             combo.SelectedIndex = 1;
             combo.ApplyTemplate();
-            Assert.Same(theme["Surface.Overlay"], combo.Background);
+            Assert.Same(theme["Combo.Fill"], combo.Background);
+            Assert.Equal(Assert.IsType<SolidColorBrush>(theme["Button.Fill"]).Color,
+                Assert.IsType<SolidColorBrush>(combo.Background).Color);
             Assert.IsType<Popup>(combo.Template.FindName("PART_Popup", combo));
             ToggleButton toggle = Assert.IsType<ToggleButton>(combo.Template.FindName("DropDownToggle", combo));
             Assert.False(toggle.Focusable);
@@ -215,7 +217,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void RedActionsUseDarkInkWithAaContrastInEveryState()
+    public void RedActionsUseWhiteInkWithAaContrastInEveryState()
     {
         StaTestHost.Run(() =>
         {
@@ -223,8 +225,8 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
             Color ink = Assert.IsType<Color>(theme["Primitive.Ink"]);
             Color onAccent = BrushFor(theme, "Text.OnAccent").Color;
 
-            Assert.Equal(ink, onAccent);
-            Assert.NotEqual(Colors.White, onAccent);
+            Assert.NotEqual(ink, onAccent);
+            Assert.Equal(Colors.White, onAccent);
             AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Default", 4.5);
             AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Hover", 4.5);
             AssertContrastAtLeast(theme, "Text.OnAccent", "Accent.Pressed", 4.5);

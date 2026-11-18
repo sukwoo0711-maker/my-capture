@@ -54,6 +54,7 @@ internal sealed partial class VideoEditorWindow : Window
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
     private readonly HangulShortcutRelay _hangulRelay;
     private readonly RecordingResult _recording;
+    private readonly MonitorInfo? _initialMonitorOverride;
     private readonly AppPaths _paths;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<VideoEditorWindow> _log;
@@ -216,9 +217,11 @@ internal sealed partial class VideoEditorWindow : Window
         ILoggerFactory loggerFactory,
         VideoEditDocument? editDocument = null,
         IVideoPreviewEngine? previewEngine = null,
-        Action? playMedia = null)
+        Action? playMedia = null,
+        MonitorInfo? pointerMonitor = null)
     {
         _recording = recording ?? throw new ArgumentNullException(nameof(recording));
+        _initialMonitorOverride = pointerMonitor;
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _log = loggerFactory.CreateLogger<VideoEditorWindow>();
@@ -256,7 +259,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         Width = Math.Max(920, recording.Width + 120);
         Height = Math.Max(680, recording.Height + 260);
-        FitInitialSizeToMonitor(MonitorEnumerator.GetFromCursor());
+        FitInitialSizeToMonitor(pointerMonitor ?? MonitorEnumerator.GetFromCursor());
         SourceInitialized += OnSourceInitialized;
 
         AutomationProperties.SetName(this, UiText.Get("VideoEditorUx_WindowName"));
@@ -383,15 +386,14 @@ internal sealed partial class VideoEditorWindow : Window
         };
         _statusLabel.SetBinding(ToolTipProperty, new Binding(nameof(TextBlock.Text)) { Source = _statusLabel });
         AutomationProperties.SetLiveSetting(_statusLabel, AutomationLiveSetting.Polite);
-        _loadingLabel = new TextBlock
+        _loadingLabel = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
         {
             Text = UiText.Get("Text_831103D5C64B"),
             Foreground = TryBrush("Text.Primary", Colors.White),
             FontSize = TypeScale.BodyLarge,
-            FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-        };
+        });
         AutomationProperties.SetLiveSetting(_loadingLabel, AutomationLiveSetting.Polite);
         _loadingOverlay = new Border
         {
@@ -2519,7 +2521,8 @@ internal sealed partial class VideoEditorWindow : Window
             region,
             frame,
             title: UiText.Get("Text_2A0C70A93334"),
-            privacyRedactionService: PrivacyRedactionService)
+            privacyRedactionService: PrivacyRedactionService,
+            pointerMonitor: _initialMonitorOverride)
         {
             FrameStillImage = VideoFrameStillImage.Capture(frameDocument, layerTimeMs),
         };

@@ -128,7 +128,10 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Null(mixed.IsChecked);
                     var mark = Assert.IsType<System.Windows.Shapes.Path>(mixed.Template.FindName("Check", mixed));
                     Assert.Equal(0, mark.Data.Bounds.Height);
-                    CheckBenchmarkContrast(mark.Stroke, (Brush)application.FindResource("Surface.Selected"), $"{theme}: mixed tag", failures);
+                    var checkedLayer = Assert.IsType<Border>(mixed.Template.FindName("CheckedLayer", mixed));
+                    Assert.Same(mark, checkedLayer.Child);
+                    Assert.Same(application.FindResource("Check.CheckedFill"), checkedLayer.Background);
+                    CheckBenchmarkContrast(mark.Stroke, checkedLayer.Background, $"{theme}: mixed tag", failures);
                     mixed.IsChecked = true;
                     Assert.True(mark.Data.Bounds.Height > 0);
                     mixed.IsChecked = null;

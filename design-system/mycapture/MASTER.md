@@ -16,40 +16,41 @@ theme except high contrast a deep red primary fill with white ink: fill `#C9352C
 pressed `#B32E26`, ink `#FFFFFF` (5.2:1, and hover and pressed only darken). The brighter brand red
 `#E0453C` stays on what marks the brand or a live recording over other apps: the pin outline and the
 recording frame, dot and cue. Old `violet` settings are read as red. Focus and selection use neutral outlines; the capture selector's chosen mode is its one accent-filled toolbar button, and its magnifier rings the centre pixel in the accent.
-The accent rows in the token table below are the `Tokens.xaml` startup defaults that this runtime palette
-replaces, not the colours users see. The six themes are Midnight, Glass,
+The startup brushes in `Tokens.xaml` resolve through `PaletteColorExtension` to the canonical
+`ThemeCatalog` palette, so startup and live theme changes share the same action and surface values. The six themes are Midnight, Glass,
 Workspace, Daylight, GlassLight and HighContrast; System follows Windows. Windows high contrast takes
 precedence and uses the user's system colours.
 
 ## Token layers and baseline values
 
 Primitive → Semantic → Component. Primitive colours (`Primitive.*`) feed role brushes, which feed control
-dimensions and styles. The active neutral ramp is `Primitive.Warm*`: 980/950/900/850 are `#080C12`/`#0B0F17`/
-`#101722`/`#151E2B`; 600/550 are `#6A7B94`/`#56677F`. Legacy primitive names remain compatibility aliases.
-Semantic roles are what UI code uses: `Surface.*` is a four-step depth ladder (Canvas, Base, Raised, Overlay),
+dimensions and styles. The neutral graphite ramp is Canvas `#111214`, Base `#191B1E`, Raised `#24272B`, Floating
+`#30343A`. `ThemeCatalog` owns semantic colour values. `Primitive.Warm*`, `Primitive.Graphite*` and
+`Primitive.Slate*` remain compatibility resources; new components consume semantic names.
+Semantic roles are what UI code uses: `Surface.*` is a four-step depth ladder (Canvas, Base, Raised, Floating),
 `Text.*` carries hierarchy, `State.*` marks warning, success and danger (timeline layers included; warning
 and success words take `Text.Warning`/`Text.Success`, which reach 4.5:1 on the surfaces that carry them,
 while glyphs, fills and outlines keep `State.*`), and
 `Accent.*` belongs to the approved consumers that `AccentUsagePolicyTests` lists. Component values are the
 `Size.*`, `Space.*`, `Radius.*`, `Focus.*` and `Motion.*` tokens plus the control styles in `Controls.xaml`.
-The table lists the resolved `Tokens.xaml` defaults before runtime palette overrides; sizes are DIP.
+The table lists the resolved dark startup resources from `ThemeCatalog`; sizes are DIP.
 
 <!-- tokens:begin -->
 | Token | Value |
 | --- | --- |
-| Accent.Default | #E0453C |
-| Accent.Hover | #F35B4D |
-| Accent.Pressed | #DA433A |
-| Text.OnAccent | #0A0818 |
+| Accent.Default | #C9352C |
+| Accent.Hover | #BD3129 |
+| Accent.Pressed | #B32E26 |
+| Text.OnAccent | #FFFFFF |
 | Text.Primary | #FFFFFF |
-| Text.Secondary | #C9D1DD |
-| Text.Muted | #9AA5B5 |
+| Text.Secondary | #C9CDD4 |
+| Text.Muted | #A0A6AF |
 | Text.Warning | #F5B942 |
 | Text.Success | #45D6A2 |
-| Surface.Canvas | #080C12 |
-| Surface.Base | #0B0F17 |
-| Surface.Raised | #101722 |
-| Surface.Overlay | #151E2B |
+| Surface.Canvas | #111214 |
+| Surface.Base | #191B1E |
+| Surface.Raised | #24272B |
+| Surface.Overlay | #30343A |
 | State.Warning | #F5B942 |
 | State.Success | #45D6A2 |
 | State.Danger | #FF6B74 |
@@ -81,6 +82,29 @@ The table lists the resolved `Tokens.xaml` defaults before runtime palette overr
 | FontSize.Subtitle | 20 |
 | FontSize.Title | 28 |
 | FontSize.Display | 28 |
+| Surface.Floating | #30343A |
+| Surface.Sunken | #111214 |
+| Surface.Hover | #2B2E34 |
+| Surface.Pressed | #32353A |
+| Surface.Selected | #393C42 |
+| Fill.Button | #24272B |
+| Stroke.ButtonTop | #44494F |
+| Stroke.ButtonBottom | #17191C |
+| Fill.Input | #0DFFFFFF |
+| Fill.InputHover | #14FFFFFF |
+| Fill.InputActive | #111214 |
+| Stroke.InputEdge | #8CFFFFFF |
+| Stroke.CheckEdge | #8CFFFFFF |
+| Stroke.Selected | #A0A6AF |
+| Fill.ScrollThumb | #4DFFFFFF |
+| Fill.ScrollThumbHover | #80FFFFFF |
+| Fill.ScrollThumbPressed | #A6FFFFFF |
+| Border.Subtle | #38F6F8FC |
+| Border.Control | #858B94 |
+| Border.Strong | #A0A6AF |
+| Radius.Control | 6 |
+| Radius.Floating | 8 |
+| Radius.Content | 12 |
 <!-- tokens:end -->
 
 ## Typography
@@ -147,6 +171,160 @@ Reviews must not reverse these decisions: editor Ctrl+C copies and closes; Alt r
 pin hover-bar labels all show or all hide; there are no pin boards. Prefer the smallest change to existing
 UI over new overlays or badges. Follow Windows conventions: Explorer menu order, Properties last, and an
 icon click opens what that icon shows.
+
+## 6.0 foundation
+
+Phases 1–5 consume this contract. They may compose existing controls in their assigned screens, add
+area-local styles derived from the shared styles, and add evidence scenes in their own partial test
+files. They must not redefine global colours, type sizes, control geometry, easing or state templates.
+Change a foundation role only through this shared contract and its contrast, resource and focus tests.
+`ThemeCatalog` owns colours, `FoundationMetrics` owns shared dimensions, `TypeScale` owns type sizes,
+and `Tokens.xaml` exposes their resource names. `ThemeService` derives component aliases on theme changes;
+`WorkspaceTheme` delegates to the same palettes. Captured pixels and document typography are outside
+these roles and retain their original colours, coordinates and dimensions.
+
+### Surfaces and colour roles
+
+All four chrome surfaces are opaque, including the legacy Glass/GlassLight settings. This contract
+does not change the system backdrop. Midnight, Glass and the dark Workspace use the dark column;
+Daylight, GlassLight and the gallery Workspace use the light column. System resolves the user's
+Windows preference; new installations continue to store System. The Windows contrast pair uses
+system roles in either light-on-dark or dark-on-light configurations, never a derived brand tint.
+
+| Role | Dark | Light | Windows high contrast | Use |
+| --- | --- | --- | --- | --- |
+| Surface.Canvas | #111214 | #E4E7EB | Window | The work area behind the original; never recolour the original itself. |
+| Surface.Base | #191B1E | #EDF0F3 | Window | The main window plane and persistent chrome. |
+| Surface.Raised | #24272B | #F7F8FA | Window | A subordinate control group that needs a distinct fill. |
+| Surface.Floating | #30343A | #FFFFFF | Window | Result cards, popup menus, tooltips and detached floating chrome. |
+| Surface.Overlay | Surface.Floating | Surface.Floating | ButtonFace | Compatibility name; new compositions use the four canonical roles. |
+| Surface.Sunken | Surface.Canvas | Surface.Canvas | Window | Recessed inputs and existing inset content wells. |
+| Surface.Hover | #2B2E34 | #DEE2E7 | Window | Pointer feedback; high contrast also exposes Border.Hover. |
+| Surface.Pressed | #32353A | #D0D5DC | Window | A held press, separate from selection. |
+| Surface.Selected | #393C42 | #C5CAD1 | Window | Neutral current-item wash. |
+| Text.Primary | #FFFFFF | #101318 | WindowText | Main reading and commands. |
+| Text.Secondary | #C9CDD4 | #343B46 | WindowText | Supporting labels. |
+| Text.Muted | #A0A6AF | #4D5663 | WindowText | Metadata; still at least 4.5:1. |
+| Text.Disabled | #7A8290 | #747C89 | GrayText | Disabled controls only. |
+| Text.Warning / Text.Success | #F5B942 / #45D6A2 | #885E0C / #167451 | WindowText | Status words, separate from State.* glyph colours. |
+| Accent.Default / Hover / Pressed | #C9352C / #BD3129 / #B32E26 | Same | Highlight | The primary action; the selector's existing approved current-mode exception remains. |
+| Text.OnAccent | #FFFFFF | #FFFFFF | HighlightText | Ink on the action fill. |
+| Border.Focus | Text.Primary | Text.Primary | WindowText | Keyboard-only focus, independent of selection. |
+| Border.Control | #858B94 | #7B828C | ButtonText | An accessible boundary when a complete outline identifies the control. |
+| Border.Strong | #A0A6AF | #626B78 | Highlight | A stronger boundary; never weaker than Border.Control. |
+| Border.Subtle | #38F6F8FC | #20080E16 | WindowText | Decorative separators; not the identifying edge of an input. |
+| Stroke.Selected | #A0A6AF | #626B78 | WindowText | The one-DIP neutral selected edge; at least 3:1 on its surroundings. |
+| Fill.Button | Surface.Raised | #FFFFFF | ButtonFace | Shared command face. |
+| Stroke.ButtonTop / Bottom | #44494F / #17191C | #D7DCE2 / #ADB5BF | ButtonText | The existing command-edge gradient, not a material/backdrop. |
+| Fill.Input / InputHover / InputActive | #0DFFFFFF / #14FFFFFF / Surface.Sunken | #FFFFFF / #F9FAFC / #FFFFFF | Window | Input rest, pointer and active fills. |
+| Stroke.InputEdge / Stroke.CheckEdge | #8CFFFFFF | #80080E16 | ButtonText | Input bottom edge and unchecked check-box outline. |
+| Fill.ScrollThumb / Hover / Pressed | #4DFFFFFF / #80FFFFFF / #A6FFFFFF | #47080E16 / #73080E16 / #99080E16 | Highlight / WindowText / WindowText | Scroll-thumb states. |
+
+WCAG relative-luminance measurements for Canvas → Base → Raised → Floating are 1.0860 / 1.1506 /
+1.1985 in dark and 1.0845 / 1.0764 / 1.0626 in light. The distinction comes from the fills rather than
+adding panel outlines. Primary text on Base is 17.2576:1 dark and 16.2705:1 light. Muted text's
+lowest neutral-surface contrast is 4.5120:1 dark and 4.5078:1 light (Surface.Selected). The existing
+primary-text 7:1, ordinary-text 4.5:1 and identifying-edge 3:1 thresholds remain unchanged. White ink
+on crimson remains the approved 5.2:1 action pairing; it is distinct from the primary-text threshold.
+
+Selection uses `Selection.Stroke` → Stroke.Selected and `Selection.Thickness` = 1 DIP. Keyboard focus
+uses `Focus.RingThickness` / `Focus.RingWidth` = 2 DIP and `KeyboardFocusCue`; pointer input does not leave
+a keyboard ring. In contrast themes selection keeps its existing 2-DIP geometry. Preserve the
+library's approved 2-DIP crimson selection and filled check, colour-chip outlines, original-content
+boundaries, crop handles and timeline category colours. `Pin.Frame` is the existing contrast-adjusted
+BrandRed role; `Recording.Live` remains #E0453C. `Accent.Subtle` aliases Surface.Selected; `Accent.Cool`,
+`Accent.Foreground`, `Accent.Indicator`, `Border.Accent` and `Border.SelectedTool` use neutral Text.Primary.
+`Accent.Gradient` is a flat compatibility alias to Accent.Default. `Surface.Badge` / `Surface.BadgeStrong`
+use Surface.Raised with `Text.Badge` = Text.Primary; this defines existing consumers, not new badges.
+`Text.SelectionBackground` / `Text.SelectionForeground` preserve the opaque paired text-selection colours
+(Highlight / HighlightText in Windows contrast themes).
+
+### Type, spacing and shape
+
+Regular is the default. Use SemiBold only for a title, current item or primary action, plus the
+existing high-contrast control emphasis. The type resource and style names are stable:
+
+| DIP | Size resources | Shared text styles | Purpose |
+| --- | --- | --- | --- |
+| 11 | FontSize.Micro | Text.Micro | Latin keys and compact numeric metadata; never Korean running text. |
+| 12 | FontSize.Caption | Text.Caption, Text.MutedBlock, Text.Mono | Supporting text and metadata. |
+| 14 | FontSize.Control, FontSize.Body | Text.Control, Text.Body | Commands, values and normal reading. |
+| 16 | FontSize.BodyLarge | Text.BodyLarge | Group-level reading and emphasized values. |
+| 20 | FontSize.Subtitle | Text.Subtitle, Text.Section | A window-internal or group title. |
+| 28 | FontSize.Title, FontSize.Display | Text.Title, Text.Display | The rare large title; not ordinary controls. |
+
+`Font.Ui`, `Font.Display` and `Font.Mono` retain the font chains above. `FontWeight.Regular` is Normal;
+`FontWeight.Emphasis` is SemiBold. `FontWeight.ControlLabel` and `Button.FontWeight` are Normal except for
+the preserved contrast-theme emphasis. `ControlLabelTypography` binds local chrome to that role;
+it never changes source text or user document typography.
+
+`Space.Xs` / `Sm` / `Md` / `Lg` / `Xl` / `Xxl` are 4 / 8 / 12 / 16 / 24 / 32 DIP, respectively.
+`Padding.Control` is 12,8,12,8; `Padding.Panel` and `Padding.Card` are 16; `Padding.Toolbar` is 8.
+`Size.HitTarget` is 36 and `Size.HitTarget.Compact` is 32. `Size.IconGlyph` is 16. Keep the existing
+`Size.RailButton` = 44 and command-button hit-target exceptions where the current screen uses them.
+`Space.Hero` = 40 remains for existing large-title compositions.
+
+`Radius.Control` = 6 is the control radius (`Radius.Sm` compatibility alias); `Radius.Floating` = 8 is
+the floating-group radius (`Radius.Md`); `Radius.Content` = 12 is the large-content-group radius
+(`Radius.Lg`). Inner areas are not wrapped in additional rounded boxes. `Radius.Xl` = 16 and
+`Radius.Pill` = 999 remain compatibility resources for their existing consumers. The small check
+mark box keeps `Check.Radius` = 4 (5 in contrast mode); `Combo.Radius` uses Radius.Control. Source
+image edges and precision handles keep their existing geometry.
+
+### Shared controls and aliases
+
+The implicit styles cover Window, Button, ToggleButton, TextBox, CheckBox, RadioButton, TabControl,
+TabItem, ListBox, ListBoxItem, Popup, ProgressBar, ToolTip, ContextMenu, MenuItem, Separator,
+ComboBoxItem, ComboBox, Slider and ScrollBar. Use their native keyboard, selection and automation
+contracts. `ThemedDialog` composes the same button/input tokens; `Window.Standard` owns shared window
+chrome, and `StandardWindowTheme.Apply` applies it to code-created derived windows.
+
+| Family | Named styles/templates and use |
+| --- | --- |
+| Buttons | Button.Primary (one main action), Button.Secondary (ordinary command), Button.Ghost (quiet command), Button.Danger (destructive command), Button.Compact, Button.GhostCompact, Button.Command, Button.Command.Compact, Button.InputField, Button.Icon, Button.Icon.Compact, Button.Tutorial. |
+| Toggles and disclosures | ToggleButton.Tool, ToggleButton.Disclosure, ToggleButton.CheckedLayer, Expander.Options; ThemeService creates Expander.OptionalStyle while preserving legacy contrast metrics. |
+| Text inputs | TextBox.InputContentTemplate, TextBox.ControlLanguageTemplate; InputFieldBorder draws the bottom identifying edge independently of the keyboard-focus overlay. |
+| Tabs and lists | Tab.Help plus implicit TabItem, ListBoxItem and ComboBoxItem styles use the shared neutral selection roles. |
+| State layers | StateLayer, StateLayer.Hover, StateLayer.Pressed, StateLayer.Selected, StatePart.Normal and StatePart.SettlingGlyph are template parts, not independently styled screen panels. |
+| Groups | Card, Card.Sunken, Card.Accent; Rail.Panel, Rail.ToolButton; Inspector.Panel, Inspector.SectionLabel, Inspector.Guidance; StatusBar.Panel, StatusBar.Text; StatusChip, StatusChip.Success, StatusChip.Warning, StatusChip.Text. Reuse existing groups without adding new overlays or badges. |
+| Sliders | Slider.TrackButton, Slider.TrackButton.Vertical, Slider.Thumb, Slider.Thumb.Vertical, Slider.HorizontalTemplate, Slider.VerticalTemplate. Keep values and pointer geometry immediate. |
+| Scroll bars | ScrollBar.PageButton, ScrollBar.Thumb, ScrollBar.ControlLanguageThumb, ScrollBar.ControlLanguageTemplate; keep native track orientation, commands and hit targets. |
+| Icons | Icon.Symbol, Icon.Symbol.Primary, Icon.Symbol.Muted, Icon.Symbol.Accent, Icon.Symbol.OnAccent, Icon.Symbol.Danger, Icon.Symbol.Filled; Icon.Glyph, Icon.Glyph.Primary, Icon.Glyph.Muted, Icon.Glyph.Accent, Icon.Glyph.OnAccent, Icon.Glyph.Danger, Icon.Glyph.Filled remain compatibility names. Brand.AppIcon uses Brand.Mark / Brand.Mark16 without tinting their artwork. |
+| Menus and separators | The implicit MenuItem and ContextMenu styles plus MenuItem.SeparatorStyleKey share spacing, surfaces and keyboard behaviour. Properties stays last in Explorer-order menus. |
+
+Component aliases are part of the contract. `Input.Fill` / `Input.Border` map to Fill.Input /
+Border.Subtle (Surface.Sunken / Border.Control in contrast mode). `Check.Fill`, `Check.Edge`,
+`Check.HoverFill`, `Check.HoverEdge`, `Check.CheckedFill`, `Check.CheckedEdge`, `Check.Mark`, `Radio.Mark`,
+`Check.CheckedThickness` and `Check.MarkMargin` keep mark/fill/edge pairing. A normal checked box is
+Text.Primary-filled with Base-colour ink; contrast keeps the original outlined geometry.
+`Toggle.CheckedFill`, `Toggle.CheckedStroke`, `Toggle.CheckedThickness`, `Toggle.CheckedForeground` and
+`Toggle.CheckedFocusStroke` separate the selected fill, one-DIP edge, text and keyboard focus.
+`Combo.Fill`, `Combo.Edge`, `Combo.FocusEdge`, `Combo.HoverFill`, `Combo.HoverEdge`, `Combo.PressedFill`
+and `Combo.Chevron` follow shared button/state roles; `Scroll.Lane` stays clear outside contrast mode.
+`ControlLanguage.Enabled` selects these normal templates while preserving contrast behaviour.
+
+`Button.Fill` / `Button.BorderBrush` use the shared face and edge tokens. `Button.ChromeInset` and
+`Button.ChromeInset.Compact` are 0,4,0,4 / 0,2,0,2; `Button.FocusInset` and its .Compact variant are
+1,5,1,5 / 1,3,1,3; `Button.PrimaryFocusInset` and its .Compact variant are 2,6,2,6 / 2,4,2,4.
+Contrast themes keep the existing uninset face and corresponding 1/2-DIP focus insets. `Button.Height`
+and Size.HitTarget both resolve `FoundationMetrics.ControlHeight` through `x:Static`;
+`Button.DisabledOpacity` retains 0.46. `CommandButton.Height.Standard` / `CommandButton.Height.Compact`
+retain 44 / 36 and `CommandButton.FontSize` / `CommandButton.IconSize` retain Body / 16. The existing
+`CommandButton.Padding.Standard`, `CommandButton.Padding.StandardIconOnly`, `CommandButton.Padding.Compact`, `CommandButton.Padding.CompactIconOnly` and
+`CommandButton.IconLabelGap` preserve the established hit-area/content relationship.
+`Border.DecorativeThickness` / `Border.ToolThickness` are zero normally and one in contrast mode.
+`Border.Hover` is clear normally and Highlight in contrast. `Shadow.Floating` / `Shadow.Card` belong only
+to actual floating groups and become invisible effects in contrast mode. Do not add shadows to
+inner panels to simulate a hierarchy already expressed by the four surface fills.
+
+### Motion
+
+`Motion.Fast` = 83 ms, `Motion.Normal` = 167 ms, `Motion.Deliberate` = 250 ms. Reuse
+`Motion.Ease.Standard` (Cubic EaseOut) and `Motion.Ease.SoftLanding` (Quadratic EaseOut) through
+`FluidMotion`, retaining cancellation and reduced-animation behaviour. Animate chrome opacity or
+transforms only. Captured-content position, zoom, selection coordinates, timeline handles and Alt
+mnemonic captions update immediately; never animate them. The established countdown and hover-guide
+exceptions in the motion section above remain local exceptions, not permission for new ones.
 
 ## How this file stays true
 

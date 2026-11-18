@@ -101,6 +101,7 @@ public sealed class VideoEditorSaveShortcutTests
         // The window is never shown; the missing source is never opened or recorded.
         string root = Path.Combine(AppContext.BaseDirectory, "video-shortcut-fixture", Guid.NewGuid().ToString("N"));
         return new VideoEditorWindow(new RecordingResult(Path.Combine(root, "not-opened.mp4"), 10000, 30, 300, 640, 360),
-            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
     }
 }

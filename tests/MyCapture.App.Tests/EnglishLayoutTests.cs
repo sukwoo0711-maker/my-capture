@@ -50,7 +50,8 @@ public sealed class EnglishLayoutTests(ITestOutputHelper output)
         var recording = new RecordingResult(Path.Combine(root, "layout-only.mp4"), 2000, 30, 60, 320, 240);
         var document = VideoEditDocument.CreateFor(320, 240, 2000);
         document.TextOverlays.Add(new TimedTextOverlay { Text = "Readable source timing", StartMs = 300, EndMs = 2000 });
-        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document);
+        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             LoadWindowTheme(window);
@@ -304,27 +305,8 @@ public sealed class EnglishLayoutTests(ITestOutputHelper output)
 
     private static void LoadWindowTheme(Window window)
     {
-        // Compiled Controls BAML prefetches StaticResource values at Source load time.
-        // App.xaml supplies them through Application.Resources; attaching dictionaries
-        // to a standalone Window afterwards cannot repair an already captured UnsetValue.
-        // Parse the exact embedded product markup together, in the production order,
-        // so these multi-STA tests retain real templates without a global Application.
-        XElement? combined = null;
-        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(EnglishLayoutTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            XElement dictionary = XDocument.Load(source).Root!;
-            combined ??= new XElement(dictionary.Name);
-            foreach (XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-            {
-                string value = declaration.Value;
-                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal) && !value.Contains(";assembly=", StringComparison.Ordinal))
-                    value += ";assembly=MyCapture";
-                combined.SetAttributeValue(declaration.Name, value);
-            }
-            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
-        }
-        window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+        // Use compiled product templates so custom named parts keep their namescope.
+        window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
     }
 
     private static IEnumerable<Drawing> DrawingLeaves(Drawing drawing)

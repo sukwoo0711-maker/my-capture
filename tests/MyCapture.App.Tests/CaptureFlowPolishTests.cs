@@ -250,6 +250,9 @@ public sealed partial class CaptureFlowPolishTests
             MenuItem plain = rows[0];
             MenuItem branch = rows.First(row => row.HasItems);
             LayOut(menu);
+            // This appearance fixture already supplies the focus-within state directly. Give it
+            // the matching keyboard modality; real pointer/Tab transitions are covered separately.
+            KeyboardFocusCue.NotifyKeyboardInput(menu);
             var focusWithin = (DependencyPropertyKey)typeof(UIElement)
                 .GetField("IsKeyboardFocusWithinPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
             MethodInfo highlight = typeof(MenuItem).GetProperty(nameof(MenuItem.IsHighlighted))!.GetSetMethod(nonPublic: true)!;

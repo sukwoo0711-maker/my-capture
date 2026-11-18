@@ -183,7 +183,7 @@ internal sealed class ShortcutHelpWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         // Semibold like a tab row, whose text takes the selected tab's weight.
-        var title = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold }, label);
+        var title = KoreanWordWrap.Show(MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { TextWrapping = TextWrapping.Wrap, }), label);
         var tag = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) }, category);
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

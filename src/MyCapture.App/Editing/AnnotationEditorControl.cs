@@ -3306,11 +3306,10 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private static TextBlock SectionLabel(string text)
     {
-        var label = new TextBlock
+        var label = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
         {
-            Text = text, FontSize = TypeScale.Caption, FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 4),
-        };
+            Text = text, FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 0, 4),
+        });
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         return label;
     }

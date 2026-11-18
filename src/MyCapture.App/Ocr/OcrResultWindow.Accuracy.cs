@@ -43,11 +43,21 @@ internal sealed partial class OcrResultWindow
     {
         _accuracyHeading = heading;
         _accuracyCommands = commands;
-        ConfirmReplaceEditedText = () => MessageBox.Show(this,
-            UiText.Get("Ocr_ReplaceEditedText"), Title, MessageBoxButton.YesNo,
-            MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+        ConfirmReplaceEditedText = () =>
+        {
+            // Keep the operating-system dialog under either contrast palette.
+            MessageBoxResult result = TryFindResource("ControlLanguage.Enabled") is false
+                ? MessageBox.Show(this, UiText.Get("Ocr_ReplaceEditedText"), Title,
+                    MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No)
+                : ThemedDialog.Present(this, CreateReplacementConfirmation(), MessageBoxImage.Question);
+            return result == MessageBoxResult.Yes;
+        };
         ContentRendered += (_, _) => CompleteAccuracyPresentation();
     }
+
+    internal ThemedDialog CreateReplacementConfirmation() =>
+        new(UiText.Get("Ocr_ReplaceEditedText"), Title, MessageBoxButton.YesNo,
+            MessageBoxResult.No, cancelResult: MessageBoxResult.No);
 
     // The presenter is created at app startup. Neither its hidden window nor the first
     // visible frame needs the accuracy UI, model verification or Windows cost query.

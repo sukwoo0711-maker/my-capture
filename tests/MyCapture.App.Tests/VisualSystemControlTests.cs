@@ -81,20 +81,19 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
             {
                 Border selected = Part<Border>(control, part);
                 Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(selected.Background));
-                Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(selected.BorderBrush));
-                Assert.Equal(new Thickness(2), selected.BorderThickness);
+                Assert.Equal(ColorOf(resources, "Selection.Stroke"), ColorOf(selected.BorderBrush));
+                Assert.Equal(new Thickness(1), selected.BorderThickness);
                 Assert.Equal(1d, selected.Opacity);
             }
         }
 
-        // An on toggle is the selection ink fill with selection-ink content, with no edge. The
-        // 2-DIP primary-text edge read as the focus ring (2026-11-06 aesthetic review), and the
-        // owner chose the ink fill over the neutral selected fill (2026-11-07, V8).
+        // Normal toggles use a quiet neutral fill and a one-DIP edge; contrast themes
+        // retain the system selection pair. Keyboard focus has its separate two-DIP ring.
         Border toggleOn = Part<Border>(sheet.Toggle, "CheckedLayer");
         Assert.Null(toggleOn.Child);
-        Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(toggleOn.Background));
-        Assert.Equal(new Thickness(0), toggleOn.BorderThickness);
-        Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(sheet.Toggle.Foreground));
+        Assert.Equal(ColorOf(resources, contrast ? "Text.SelectionBackground" : "Surface.Selected"), ColorOf(toggleOn.Background));
+        Assert.Equal(new Thickness(contrast ? 0 : 1), toggleOn.BorderThickness);
+        Assert.Equal(ColorOf(resources, contrast ? "Text.SelectionForeground" : "Text.Primary"), ColorOf(sheet.Toggle.Foreground));
         Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(sheet.Toggle.Foreground)), ToThemeColor(ColorOf(toggleOn.Background))) >= 4.5,
             $"{theme}/{scale}: on-toggle text must read on its fill");
         Assert.Equal(1d, toggleOn.Opacity);
@@ -158,9 +157,11 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
         Border selected = Part<Border>(item, "SelectedLayer");
         Border highlight = Part<Border>(item, "HoverLayer");
         Border focus = Part<Border>(menu, "FocusRing");
+        Border itemFocus = Part<Border>(item, "FocusRing");
         Assert.Equal(1d, selected.Opacity);
         Assert.Equal(0d, highlight.Opacity);
         Assert.Equal(0d, focus.Opacity);
+        Assert.Equal(0d, itemFocus.Opacity);
 
         // The fixture's Tag predicate drives the shipped IsHighlighted and keyboard-focus
         // setters, while neither control receives native input or opens a popup.
@@ -170,11 +171,13 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
         Assert.Equal(1d, selected.Opacity);
         Assert.Equal(1d, highlight.Opacity);
         Assert.Equal(1d, focus.Opacity);
-        foreach (Border outline in new[] { selected, highlight, focus })
-        {
-            Assert.Equal(new Thickness(2), outline.BorderThickness);
-            Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(outline.BorderBrush));
-        }
+        Thickness selectionWidth = new(theme == AppTheme.HighContrast ? 2 : 1);
+        Assert.Equal(selectionWidth, selected.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Selection.Stroke"), ColorOf(selected.BorderBrush));
+        Assert.Equal(selectionWidth, highlight.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Border.Control"), ColorOf(highlight.BorderBrush));
+        Assert.Equal(new Thickness(2), focus.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Border.Focus"), ColorOf(focus.BorderBrush));
 
         Grid itemLayers = Assert.IsType<Grid>(VisualTreeHelper.GetParent(selected));
         Assert.True(itemLayers.Children.IndexOf(selected) > itemLayers.Children.IndexOf(highlight),
@@ -184,19 +187,35 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
         Assert.True(menuLayers.Children.IndexOf(focus) > menuLayers.Children.IndexOf(Part<Border>(menu, "PressedLayer")));
 
         BitmapSource image = Render(root, scale);
-        Point edge = item.TranslatePoint(new Point(100, 1.5), root);
+        Point edge = item.TranslatePoint(new Point(100, 0.5), root);
         var pixel = new byte[4];
         image.CopyPixels(new Int32Rect((int)(edge.X * scale), (int)(edge.Y * scale), 1, 1), pixel, 4, 0);
-        Assert.Equal(ColorOf(resources, "Text.Primary"), Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]));
+        ThemeColor hoverEdge = ThemeContrast.Composite(ToThemeColor(ColorOf(resources, "Border.Control")),
+            ToThemeColor(ColorOf(resources, "Surface.Base")));
+        ThemeColor selectedEdge = ThemeContrast.Composite(ToThemeColor(ColorOf(resources, "Selection.Stroke")), hoverEdge);
+        Assert.Equal(Color.FromArgb(selectedEdge.A, selectedEdge.R, selectedEdge.G, selectedEdge.B),
+            Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]));
+        item.ToolTip = "True";
+        Layout(root);
+        Assert.Equal(1d, itemFocus.Opacity);
+        Assert.Equal(new Thickness(2), itemFocus.BorderThickness);
+        Assert.Equal(ColorOf(resources, "Border.Focus"), ColorOf(itemFocus.BorderBrush));
+        Assert.True(itemLayers.Children.IndexOf(itemFocus) > itemLayers.Children.IndexOf(selected));
+        Assert.True(itemLayers.Children.IndexOf(itemFocus) > itemLayers.Children.IndexOf(highlight));
+        BitmapSource focusedImage = Render(root, scale);
+        focusedImage.CopyPixels(new Int32Rect((int)(edge.X * scale), (int)(edge.Y * scale), 1, 1), pixel, 4, 0);
+        Assert.Equal(ColorOf(resources, "Border.Focus"), Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]));
         Assert.False(menu.IsSubmenuOpen);
         Assert.Null(PresentationSource.FromVisual(root));
 
         item.Tag = null;
+        item.ToolTip = null;
         menu.Tag = null;
         Layout(root);
         Assert.Equal(1d, selected.Opacity);
         Assert.Equal(0d, highlight.Opacity);
         Assert.Equal(0d, focus.Opacity);
+        Assert.Equal(0d, itemFocus.Opacity);
     });
 
     private sealed record Sheet(Border Root, TextBlock Title, TextBlock Subtitle, TextBlock Body,
@@ -222,9 +241,9 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
             Layout(root);
             Border layer = Part<Border>(toggle, "CheckedLayer");
             Assert.Equal(1d, layer.Opacity);
-            Assert.Equal(new Thickness(0), layer.BorderThickness);
-            Assert.Equal(ColorOf(resources, "Text.SelectionBackground"), ColorOf(layer.Background));
-            Assert.Equal(ColorOf(resources, "Text.SelectionForeground"), ColorOf(toggle.Foreground));
+            Assert.Equal(new Thickness(systemContrast ? 0 : 1), layer.BorderThickness);
+            Assert.Equal(ColorOf(resources, systemContrast ? "Text.SelectionBackground" : "Surface.Selected"), ColorOf(layer.Background));
+            Assert.Equal(ColorOf(resources, systemContrast ? "Text.SelectionForeground" : "Text.Primary"), ColorOf(toggle.Foreground));
             if (systemContrast)
             {
                 Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.Highlight], ColorOf(layer.Background));
@@ -294,7 +313,8 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
 
             foreach ((ToggleButton control, string fillKey, string ringKey) in new[]
             {
-                (toggle, "Text.SelectionBackground", "Text.SelectionForeground"),
+                (toggle, palette == "high-contrast" || system is not null ? "Text.SelectionBackground" : "Surface.Selected",
+                    palette == "high-contrast" || system is not null ? "Text.SelectionForeground" : "Border.Focus"),
                 (disclosure, "Surface.Selected", "Border.Focus"),
             })
             {
@@ -410,13 +430,40 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
             combined.Add(dictionary.Elements());
         }
 
+        // Changing an xmlns declaration does not rename LINQ-to-XML's expanded names.
+        // Without this, custom template children serialize back into the unqualified CLR
+        // namespace, so loose WPF XAML omits them from the template's named-child table.
+        foreach (XElement element in combined.Descendants())
+        {
+            string elementNamespace = element.Name.NamespaceName;
+            if (IsLocalNamespace(elementNamespace))
+                element.Name = XName.Get(element.Name.LocalName, elementNamespace + ";assembly=MyCapture");
+            foreach (XAttribute attribute in element.Attributes().Where(attribute =>
+                         !attribute.IsNamespaceDeclaration && IsLocalNamespace(attribute.Name.NamespaceName)).ToArray())
+            {
+                element.SetAttributeValue(XName.Get(attribute.Name.LocalName,
+                    attribute.Name.NamespaceName + ";assembly=MyCapture"), attribute.Value);
+                attribute.Remove();
+            }
+        }
+
         // Substitute only input-state predicates in this isolated fixture. All shipped
         // highlight/focus setters and resource bindings run unchanged, without native input.
         foreach (XElement element in combined.Descendants().Where(element =>
                      element.Name.LocalName is "Trigger" or "Condition" &&
-                     (string?)element.Attribute("Property") is "IsKeyboardFocused" or "IsKeyboardFocusWithin" or "IsHighlighted"))
-            element.SetAttributeValue("Property", "Tag");
+                     (string?)element.Attribute("Property") is "IsKeyboardFocused" or "IsKeyboardFocusWithin" or "IsHighlighted" or "themes:KeyboardFocusCue.IsVisible"))
+        {
+            // Keep combo hover and keyboard focus independent, so the selection raster
+            // is tested with focus hidden before the separate keyboard-ring assertion.
+            bool comboFocus = (string?)element.Attribute("Property") != "IsHighlighted"
+                && element.Ancestors(p + "Style").Any(style => (string?)style.Attribute("TargetType") == "ComboBoxItem");
+            element.SetAttributeValue("Property", comboFocus ? "ToolTip" : "Tag");
+        }
         return (ResourceDictionary)XamlReader.Parse(combined.ToString());
+
+        static bool IsLocalNamespace(string value) =>
+            value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
+            && !value.Contains(";assembly=", StringComparison.Ordinal);
     }
 
     private static void ApplyBaseline(ResourceDictionary resources, string directory, AppTheme theme)

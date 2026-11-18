@@ -31,7 +31,7 @@
         <Style x:Key="Settings.Label" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontWeight" Value="{DynamicResource FontWeight.ControlLabel}" />
             <Setter Property="Margin" Value="0,0,0,2" />
         </Style>
 
@@ -96,8 +96,14 @@
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />
                             </Trigger>
@@ -116,6 +122,9 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
+                <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                    <Setter Property="Template" Value="{StaticResource TextBox.ControlLanguageTemplate}" />
+                </Trigger>
                 <Trigger Property="Validation.HasError" Value="True">
                     <Setter Property="BorderBrush" Value="{DynamicResource State.Danger}" />
                     <Setter Property="ToolTip"
@@ -207,6 +216,7 @@
              PasswordBox copies Padding onto its content host, so the host takes no margin. -->
         <Style x:Key="Settings.PasswordBox" TargetType="PasswordBox">
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
             <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
@@ -246,8 +256,14 @@
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />
                             </Trigger>
@@ -255,6 +271,25 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="PasswordBox">
+                                <themes:InputFieldBorder x:Name="Chrome"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    IsInputFocused="{Binding IsKeyboardFocused, RelativeSource={RelativeSource TemplatedParent}}"
+                                    IsInputHovered="{Binding IsMouseOver, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                </themes:InputFieldBorder>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Collapsible group for rarely used options. The header is a themed toggle with a
@@ -322,10 +357,14 @@
                                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Hover}" />
                                                 <Setter TargetName="Chevron" Property="Stroke" Value="{DynamicResource Text.Primary}" />
                                             </Trigger>
-                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <MultiTrigger>
+                                                <MultiTrigger.Conditions>
+                                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                                </MultiTrigger.Conditions>
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                                            </Trigger>
+                                            </MultiTrigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
@@ -431,10 +470,14 @@
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <!-- Focus changes only the border colour, never the thickness. -->
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="SelectedLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -457,7 +500,7 @@
                             <Border Style="{StaticResource Card}" Padding="10">
                                 <DockPanel>
                                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                                    <Border x:Name="SettingsSearchField">
+                                    <themes:InputFieldBorder x:Name="SettingsSearchField">
                                         <Border.Style>
                                             <Style TargetType="Border" BasedOn="{StaticResource Card.Sunken}">
                                                 <Setter Property="Padding" Value="3" />
@@ -485,7 +528,17 @@
                                                      BorderThickness="0" Padding="4,4" MinHeight="32"
                                                      AutomationProperties.Name="{loc:Text Settings_Search}"
                                                      AutomationProperties.HelpText="{loc:Text Settings_SearchHint}"
-                                                     ToolTip="{loc:Text Settings_SearchHint}" TextChanged="OnSettingsSearchChanged" />
+                                                     ToolTip="{loc:Text Settings_SearchHint}" TextChanged="OnSettingsSearchChanged">
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                                                <Setter Property="Template" Value="{StaticResource TextBox.InputContentTemplate}" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
                                             <TextBlock x:Name="SettingsSearchPlaceholder" Grid.Column="1"
                                                        Text="{loc:Text EditorText_SettingsSearchPlaceholder}"
                                                        Foreground="{DynamicResource Text.Muted}" Margin="6,0"
@@ -503,7 +556,7 @@
                                                 </TextBlock.Style>
                                             </TextBlock>
                                         </Grid>
-                                    </Border>
+                                    </themes:InputFieldBorder>
                                     <TextBlock x:Name="SettingsSearchEmpty" Text="{loc:Text Settings_SearchEmpty}"
                                                Style="{StaticResource Settings.Description}" Visibility="Collapsed" Margin="0,8,0,0" />
                                 </StackPanel>

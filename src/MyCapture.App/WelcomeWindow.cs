@@ -155,7 +155,7 @@ internal sealed class WelcomeWindow : Window
         _progress.TextTrimming = TextTrimming.CharacterEllipsis;
         _progress.VerticalAlignment = VerticalAlignment.Center;
         ConfigureText(_status, TypeScale.BodyLarge);
-        _status.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(_status);
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         _statusRow.Children.Add(_status);
@@ -177,7 +177,7 @@ internal sealed class WelcomeWindow : Window
         _keyDisplay.Margin = new Thickness(0, 0, 0, 14);
 
         ConfigureText(_hint, TypeScale.BodyLarge);
-        _hint.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(_hint);
         AutomationProperties.SetLiveSetting(_hint, AutomationLiveSetting.Polite);
         _notice = new Border
         {
@@ -917,10 +917,12 @@ internal sealed class WelcomeWindow : Window
             hover.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "HoverLayer"));
             var pressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
             pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "PressedLayer"));
-            var focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
+            var focus = new MultiTrigger();
+            focus.Conditions.Add(new System.Windows.Condition(IsKeyboardFocusedProperty, true));
+            focus.Conditions.Add(new System.Windows.Condition(KeyboardFocusCue.IsVisibleProperty, true));
             focus.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("Border.Focus"), "Chrome"));
             focus.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(2), "Chrome"));
-            foreach (Trigger trigger in new[] { hover, pressed, focus }) template.Triggers.Add(trigger);
+            foreach (TriggerBase trigger in new TriggerBase[] { hover, pressed, focus }) template.Triggers.Add(trigger);
             button.Template = template;
             playback.Children.Add(button);
         }
@@ -993,7 +995,7 @@ internal sealed class WelcomeWindow : Window
             int end = display.IndexOf(close, index + 1);
             if (end < 0) continue;
             _instruction.Inlines.Add(new Run(display[start..(index + 1)]));
-            var name = new Run(display[(index + 1)..end]) { FontWeight = FontWeights.SemiBold };
+            var name = ControlLabelTypography.Apply(new Run(display[(index + 1)..end]));
             name.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
             _instruction.Inlines.Add(name);
             start = end; index = end;
@@ -1319,7 +1321,7 @@ internal sealed class WelcomeWindow : Window
         layout.Children.Add(grid);
 
         TextBlock location = WrappedLabel(UiText.Get("Onboarding.TrayLocation"), TypeScale.Body);
-        location.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(location);
         layout.Children.Add(location);
         TextBlock actions = WrappedLabel(UiText.Get("Onboard_TrayTipActions"), TypeScale.Body);
         actions.Margin = new Thickness(0, 4, 0, 0);

@@ -244,7 +244,8 @@ public sealed class VideoEditorUxTrimTests
             ShowActivated = false, ShowInTaskbar = false,
         };
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             source.Show();
@@ -368,7 +369,8 @@ public sealed class VideoEditorUxTrimTests
         // A layout-only recording: the media never opens, so the editor is made ready with the
         // same CompleteOpen path the open-timeout fallback uses.
         var recording = new RecordingResult(Path.Combine(root, "layout-only.mp4"), durationMs, 30, (int)(durationMs / 1000 * 30), 640, 360);
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
@@ -416,23 +418,8 @@ public sealed class VideoEditorUxTrimTests
 
     internal static void LoadTheme(Window window)
     {
-        System.Xml.Linq.XElement? combined = null;
-        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(VideoEditorUxTrimTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            System.Xml.Linq.XElement dictionary = System.Xml.Linq.XDocument.Load(source).Root!;
-            combined ??= new System.Xml.Linq.XElement(dictionary.Name);
-            foreach (System.Xml.Linq.XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-            {
-                string value = declaration.Value;
-                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal) && !value.Contains(";assembly=", StringComparison.Ordinal))
-                    value += ";assembly=MyCapture";
-                combined.SetAttributeValue(declaration.Name, value);
-            }
-            foreach (System.Xml.Linq.XElement entry in dictionary.Elements()) combined.Add(new System.Xml.Linq.XElement(entry));
-        }
-        window.Resources.MergedDictionaries.Add((ResourceDictionary)System.Windows.Markup.XamlReader.Parse(
-            combined!.ToString(System.Xml.Linq.SaveOptions.DisableFormatting)));
+        // Use the product's compiled templates so custom named parts keep their namescope.
+        window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
     }
 
     private static void AssertRange(double expectedIn, double expectedOut, double actualIn, double actualOut)

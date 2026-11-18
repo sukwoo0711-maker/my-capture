@@ -116,8 +116,10 @@ public sealed partial class SettingsThemePreviewTests
         Drain(window);
         var toggle = Assert.IsType<ToggleButton>(expander.Template.FindName("HeaderToggle", expander));
         var ring = Assert.IsType<Border>(toggle.Template.FindName("FocusRing", toggle));
-        Button shared = Descendants(window).OfType<HotkeyRecorder>().First(recorder => recorder.IsVisible)
-            .Children.OfType<StackPanel>().First().Children.OfType<Button>().First();
+        // The recorder now owns input chrome. Compare disclosure geometry with the shared
+        // standard button that this assertion is intended to track.
+        var shared = new Button { Resources = window.Resources, Style = (Style)window.FindResource("Button.Secondary") };
+        shared.ApplyTemplate();
         var sharedRing = Assert.IsType<Border>(shared.Template.FindName("FocusRing", shared));
 
         Assert.Equal(sharedRing.Margin, ring.Margin);
@@ -126,19 +128,31 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(sharedRing.CornerRadius, ring.CornerRadius);
         AssertSameColour(sharedRing.BorderBrush, ring.BorderBrush);
         Assert.False(ring.IsHitTestVisible);
+        KeyboardFocusCue.NotifyPointerInput(toggle);
         Assert.Equal(0, ring.Opacity);
-        Setter shown = toggle.Template.Triggers.OfType<Trigger>()
-            .Single(trigger => trigger.Property == UIElement.IsKeyboardFocusedProperty)
-            .Setters.OfType<Setter>().Single(setter => setter.TargetName == "FocusRing");
+        MultiTrigger focus = toggle.Template.Triggers.OfType<MultiTrigger>()
+            .Single(trigger => trigger.Conditions.OfType<Condition>()
+                .Any(condition => condition.Property == UIElement.IsKeyboardFocusedProperty));
+        Assert.Equal(2, focus.Conditions.Count);
+        Assert.Contains(focus.Conditions.OfType<Condition>(), condition =>
+            condition.Property == UIElement.IsKeyboardFocusedProperty && Equals(condition.Value, true));
+        Assert.Contains(focus.Conditions.OfType<Condition>(), condition =>
+            condition.Property == KeyboardFocusCue.IsVisibleProperty && Equals(condition.Value, true));
+        Setter shown = focus.Setters.OfType<Setter>().Single(setter => setter.TargetName == "FocusRing");
         Assert.Equal(UIElement.OpacityProperty, shown.Property);
         Assert.Equal(1d, Convert.ToDouble(shown.Value, System.Globalization.CultureInfo.InvariantCulture));
 
         // Keyboard focus shows the ring. A header that cannot take focus fails here instead of passing unchecked.
+        KeyboardFocusCue.NotifyKeyboardInput(toggle);
         Assert.True(toggle.Focus(), $"{locale}: the section header did not take keyboard focus.");
         Assert.True(toggle.IsKeyboardFocused, $"{locale}: the section header is not keyboard focused.");
         Drain(window);
         Assert.Equal(1, ring.Opacity);
         SaveAlignmentEvidence(window, $"section-header-focus-{locale}", BoundsIn(toggle, window));
+        KeyboardFocusCue.NotifyPointerInput(toggle);
+        Drain(window);
+        Assert.True(toggle.IsKeyboardFocused, $"{locale}: pointer input unexpectedly moved keyboard focus.");
+        Assert.Equal(0, ring.Opacity);
     }
 
     private static void VerifyAboutSections(SettingsWindow window, TabControl tabs, string locale)

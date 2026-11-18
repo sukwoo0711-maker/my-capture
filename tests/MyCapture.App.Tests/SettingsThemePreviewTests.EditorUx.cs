@@ -59,7 +59,8 @@ public sealed partial class SettingsThemePreviewTests
     {
         BitmapSource bitmap = EditorEvidenceBackground(720, 300);
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
-        var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap)
+        var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 1180, Height = 560,

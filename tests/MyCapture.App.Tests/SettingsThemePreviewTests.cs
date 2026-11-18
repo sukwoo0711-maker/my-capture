@@ -161,7 +161,7 @@ public sealed partial class SettingsThemePreviewTests
             {
                 Assert.Equal("Synthetic settings save failure", message);
                 saveFailureWarnings++;
-            })
+            }, defaultCapturesRoot: () => AppPaths.CreateForRoot(root).CapturesRoot)
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, Width = 940, Height = 700,
@@ -308,7 +308,10 @@ public sealed partial class SettingsThemePreviewTests
         AssertBrush(page.Background, colors["Surface.Raised"]);
         var selector = Assert.IsType<ComboBox>(window.FindName("ThemeSelector"));
         var chrome = Assert.IsType<Border>(selector.Template.FindName("ComboChrome", selector));
-        AssertBrush(chrome.Background, colors["Surface.Overlay"]);
+        if (!(bool)window.FindResource("ControlLanguage.Enabled"))
+            AssertBrush(chrome.Background, colors["Surface.Overlay"]);
+        else
+            Assert.Equal(((SolidColorBrush)window.FindResource("Button.Fill")).Color, ((SolidColorBrush)chrome.Background).Color);
         AssertBrush(selector.Foreground, colors["Text.Primary"]);
         Style labelStyle = Assert.IsType<Style>(window.FindResource("Settings.Label"));
         Style descriptionStyle = Assert.IsType<Style>(window.FindResource("Settings.Description"));

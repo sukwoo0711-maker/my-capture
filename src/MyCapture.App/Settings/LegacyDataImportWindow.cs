@@ -81,7 +81,7 @@ internal sealed class LegacyDataImportWindow : Window
         var panel = new StackPanel();
         panel.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, Title));
         panel.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 16) }, UiText.Get("LegacyImport.Description")));
-        panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.Source"), FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { Text = UiText.Get("LegacyImport.Source"), }));
         _source = new TextBlock { Text = sourceRoot, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8) };
         panel.Children.Add(_source);
         _choose = MakeButton(UiText.Get("LegacyImport.ChooseFolder"), "Button.Secondary");

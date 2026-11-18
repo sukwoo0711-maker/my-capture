@@ -31,7 +31,8 @@ internal sealed class ThemedDialog : Window
     /// <param name="commands">Follow-up commands shown after the recovery action.</param>
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, string? cancelLabel = null)
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, string? cancelLabel = null,
+        MessageBoxResult? cancelResult = null)
     {
         Title = MyCapture.Core.Platform.AppIdentity.WindowLabel;
         Width = 500;
@@ -63,6 +64,7 @@ internal sealed class ThemedDialog : Window
             var expander = new Expander { Header = detailsHeading, IsExpanded = false, Content = content, Margin = new Thickness(0, 0, 0, 16) };
             AutomationProperties.SetName(expander, UiText.Get("Dialog.Details"));
             expander.SetResourceReference(ForegroundProperty, "Text.Primary");
+            expander.SetResourceReference(StyleProperty, "Expander.OptionalStyle");
             panel.Children.Add(expander);
         }
         // A helper command that could not finish says so here, above the buttons.
@@ -97,7 +99,7 @@ internal sealed class ThemedDialog : Window
                 _ => UiText.Get(choice.Key),
             };
             Button button = MakeButton(label, choice.Result,
-                isDefault, choice.Result is MessageBoxResult.Cancel || choices.Length == 1, filled: isDefault && !destructive);
+                isDefault, choice.Result == cancelResult || choice.Result is MessageBoxResult.Cancel || choices.Length == 1, filled: isDefault && !destructive);
             if (destructive && choice.Result == MessageBoxResult.OK && !isDefault) button.SetResourceReference(StyleProperty, "Button.Danger");
             actions.Children.Add(button);
         }

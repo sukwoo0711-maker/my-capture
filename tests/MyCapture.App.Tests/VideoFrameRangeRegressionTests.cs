@@ -679,7 +679,8 @@ public sealed class VideoFrameRangeRegressionTests
 
     private static VideoEditorWindow NewEditor(RecordingResult recording, string root, VideoEditDocument? document = null)
     {
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document);
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         // Initialise the same duration/timeline state as MediaOpened without presenting a
         // video or invoking calibration: these tests exercise decoded pixels and edit commits.
         typeof(VideoEditorWindow).GetMethod("CompleteOpen", Private)!.Invoke(editor, [recording.DurationMs, true]);

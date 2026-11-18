@@ -36,12 +36,12 @@ public sealed class FeatureTutorialTests
             Button replay = buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay")));
             Button close = buttons.Single(button => Equals(button.Content, UiText.Get("Dialog.Close")));
             Assert.Contains(window.SetShortcutButton, buttons);
-            // A compact bordered button is never taller than the 32-DIP plain button.
+            // Compact in-content buttons remain 32 DIP; the standard close action is 36 DIP.
             Assert.Equal(32, window.SetShortcutButton.ActualHeight);
             Assert.Equal(32, play.ActualHeight);
             Assert.Equal(play.ActualHeight, replay.ActualHeight);
             Assert.Equal(play.TranslatePoint(default, root).Y, replay.TranslatePoint(default, root).Y);
-            Assert.Equal(32, close.ActualHeight);
+            Assert.Equal(36, close.ActualHeight);
         }
         finally
         {

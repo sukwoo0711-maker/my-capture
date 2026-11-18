@@ -187,13 +187,12 @@ internal sealed partial class PinWindow : Window, IPinAnchor
         // The bottom message wraps inside narrow pins (a zoom readout stays on one line: ShowZoomReadout). It takes
         // the pointer only to pause its countdown and to offer a close button for a failure; dragging through it
         // still moves the pin.
-        _feedbackText = new TextBlock
+        _feedbackText = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
         {
             FontSize = TypeScale.Caption,
-            FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
-        };
+        });
         _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         var dismissGlyph = new SymbolIcon
         {

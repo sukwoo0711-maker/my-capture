@@ -255,6 +255,11 @@ public partial class App : Application
         ThemeService.ApplyFromSettings(_settings.General);
 
         _tray = _services.GetRequiredService<TrayIconService>();
+        _tray.InputOriginChanged = keyboard =>
+        {
+            if (keyboard) KeyboardFocusCue.NotifyKeyboardInput();
+            else KeyboardFocusCue.NotifyPointerInput();
+        };
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
         HotkeyRecorder.CanRegister = chord => _hotkeys.CanRegister(chord);
         _overlay = _services.GetRequiredService<CaptureOverlayCoordinator>();
@@ -607,6 +612,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        KeyboardFocusCue.NotifyKeyboardInput();
         CancelIdleMemoryReclamation();
         if (_storeInstallationPending || _preparingExit)
         {

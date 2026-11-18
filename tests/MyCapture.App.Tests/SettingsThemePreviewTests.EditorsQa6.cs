@@ -74,7 +74,8 @@ public sealed partial class SettingsThemePreviewTests
     {
         BitmapSource bitmap = Qa6Background(720, 300);
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
-        var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap)
+        var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = width, Height = height,
@@ -158,7 +159,8 @@ public sealed partial class SettingsThemePreviewTests
             Text = language == "ko-KR" ? "텍스트 표시 구간 · 드래그로 조절" : "Timed text · drag to adjust", StartMs = 300, EndMs = 2200,
         });
         var editor = new MyCapture.App.Recording.VideoEditorWindow(recording, MyCapture.Core.Storage.AppPaths.CreateForRoot(root),
-            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance, document)
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance, document,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
             ShowActivated = false, ShowInTaskbar = false,

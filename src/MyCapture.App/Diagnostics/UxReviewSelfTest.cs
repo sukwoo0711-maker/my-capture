@@ -38,7 +38,7 @@ using MyCapture.Platform.Recording;
 namespace MyCapture.App.Diagnostics;
 
 /// <summary>Isolated real-WPF review fixtures; never loads the user's queue or settings.</summary>
-internal static class UxReviewSelfTest
+internal static partial class UxReviewSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-ux-review";
 
@@ -57,6 +57,7 @@ internal static class UxReviewSelfTest
         System.Diagnostics.Trace.TraceInformation("UX review output: {0}", output.FullName);
         try
         {
+            UxReviewOutputDirectory.WriteReceipt(output);
             return RunGenerated(output.FullName, compareBaseline);
         }
         catch (Exception ex)
@@ -95,6 +96,8 @@ internal static class UxReviewSelfTest
         report.AppendLine($"UTC: {DateTimeOffset.UtcNow:O}");
         report.AppendLine("Fixtures only. No screen capture, user queue, OS settings, registry, or clipboard writes.");
         IReadOnlyList<MonitorInfo> monitors = MonitorEnumerator.GetAll();
+        MonitorInfo fixtureMonitor = monitors.FirstOrDefault(monitor => monitor.IsPrimary) ?? monitors[0];
+        using var fixtureKeyboard = new ReceiptKeyboardRouter(_ => new ReviewHotkeyRegistrar());
         foreach (MonitorInfo monitor in monitors)
             report.AppendLine($"Monitor: {monitor.DeviceName}; physical={monitor.Bounds}; DPI={monitor.Dpi}; primary={monitor.IsPrimary}");
         bool mixed = monitors.Count > 1 && monitors.Select(monitor => monitor.Dpi).Distinct().Count() > 1;
@@ -175,17 +178,24 @@ internal static class UxReviewSelfTest
             windows.Add(("settings", new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance,
                 settingsStore: null)));
+            var generalSettings = new SettingsWindow(() => settings,
+                _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance);
+            generalSettings.CategoryTabs.SelectedItem = generalSettings.FindName("GeneralTab");
+            windows.Add(("settings-general", generalSettings));
+            windows.Add(("controls", CreateControlLanguageFixture()));
             var hotkeySettings = new SettingsWindow(() => settings,
                 _ => new SettingsApplyResult(true, true, true, false, []), NullLogger.Instance);
             hotkeySettings.CategoryTabs.SelectedItem = hotkeySettings.CategoryTabs.Items.OfType<TabItem>()
                 .Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
             windows.Add(("hotkeys", hotkeySettings));
             windows.Add(("quick-access", new QuickAccessWindow(sample, () => { receiptCopies++; return Task.FromResult(true); }, () => { },
-                () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("fixture.png")) { IsKept = true }));
+                () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("fixture.png"),
+                targetMonitor: fixtureMonitor, keyboardRouter: fixtureKeyboard) { IsKept = true }));
             windows.Add(("error", new ThemedDialog(UiText.Get("Dialog.Storage"), UiText.Get("Dialog.AppFailure"),
                 MessageBoxButton.OK, MessageBoxResult.OK, "Synthetic diagnostic details — 0x80070070")));
             windows.Add(("shortcuts", new ShortcutHelpWindow()));
-            windows.Add(("onboarding", new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)));
+            windows.Add(("onboarding", new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                options: new WelcomeOptions { MonitorProvider = () => fixtureMonitor })));
             var region = new RectD(0, 0, sample.PixelWidth, sample.PixelHeight);
             var annotations = MyCapture.Core.Annotations.AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight);
             var annotationController = new AnnotationEditorController(annotations, new MyCapture.Core.Undo.UndoStack());
@@ -196,18 +206,20 @@ internal static class UxReviewSelfTest
             annotationController.PointerDown(new PointD(72, 160)); annotationController.PointerMove(new PointD(248, 160)); annotationController.PointerUp(new PointD(248, 160));
             annotationController.ApplyStrokeColor(ColorRgba.FromRgb(124, 108, 255));
             annotationController.AddStepNumber(new PointD(370, 200));
-            windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample, initialDocument: annotations)));
+            windows.Add(("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, region, null, 0), region, sample,
+                initialDocument: annotations, pointerMonitor: fixtureMonitor)));
             windows.Add(("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png"))));
             RecordingResult recording = CreateFixtureVideo(Path.Combine(paths.DataRoot, "synthetic.mp4"), sample);
             var document = VideoEditDocument.CreateFor(recording.Width, recording.Height, recording.DurationMs);
             document.TextOverlays.Add(new TimedTextOverlay { Text = "텍스트 표시 구간 · 드래그로 조절", StartMs = 300, EndMs = 2200 });
-            var videoFixture = new VideoEditorWindow(recording, paths, logs, document);
+            var videoFixture = new VideoEditorWindow(recording, paths, logs, document, pointerMonitor: fixtureMonitor);
             windows.Add(("video", videoFixture));
             const string source = "public void Capture()\r\n{\r\n\tSave();\r\n}";
             BitmapSource code = ClipboardCodeRenderer.TryRender(source,
                 "<div style=\"color: #d4d4d4; background-color: #1e1e1e; white-space: pre;\"><div><span style=\"color: #569cd6;\">public void</span> Capture()</div><div>{</div><div>    Save();</div><div>}</div></div>")
                 ?? ClipboardTextRenderer.Render(source, false);
-            var pin = new PinWindow(PinContent.FromText(code, source, false), new PinViewState(code.PixelWidth, code.PixelHeight, 1, 1, 0.1), 40, 40, () => settings.Pin)
+            var pinInput = new ReviewPinInput();
+            var pin = new PinWindow(PinContent.FromText(code, source, false), new PinViewState(code.PixelWidth, code.PixelHeight, 1, 1, 0.1), 40, 40, () => settings.Pin, pinInput)
             {
                 Title = "MyCapture UX Pin fixture",
                 ShowInTaskbar = true,
@@ -218,7 +230,7 @@ internal static class UxReviewSelfTest
             pin.PreviewMouseLeftButtonDown += (_, args) =>
             {
                 Point local = args.GetPosition(pin);
-                var cursor = WindowStyleFacade.GetCursorPosition();
+                var cursor = pinInput.CursorPosition;
                 File.AppendAllText(inputLog, $"{DateTimeOffset.UtcNow:O} POINTER DOWN local=[{local.X:0.##},{local.Y:0.##}]; cursor=[{cursor.X},{cursor.Y}]\n");
             };
             pin.LocationChanged += (_, _) =>
@@ -336,8 +348,9 @@ internal static class UxReviewSelfTest
                     foreach (AppTheme reviewTheme in renderThemes)
                     {
                         ThemeService.Apply(reviewTheme);
+                        if (name == "controls") Keyboard.ClearFocus();
                         Pump(TimeSpan.FromMilliseconds(80));
-                        string themeLabel = AppThemeNames.ToSetting(reviewTheme);
+                        string themeLabel = reviewTheme.ToString().ToLowerInvariant();
                         foreach (bool compact in new[] { false, true })
                         {
                             bool fixedCard = name is "pin-code" or "image-export" or "quick-access" or "error" or "onboarding";
@@ -411,6 +424,18 @@ internal static class UxReviewSelfTest
                                 }
                             }
                             WriteLayoutInventory(window, Path.Combine(outputDirectory, label + "-layout.json"));
+                            if (name == "controls" && !compact)
+                            {
+                                WriteControlMeasurements(window, Path.Combine(outputDirectory, $"control-measurements-{themeLabel}.json"));
+                                TextBox input = Descendants(window).OfType<TextBox>().Single(box => box.Name == "ReviewFocusedInput");
+                                window.Activate();
+                                bool focused = input.Focus();
+                                Pump(TimeSpan.FromMilliseconds(80));
+                                report.AppendLine($"Control input [{themeLabel}] focused={focused && input.IsKeyboardFocused}");
+                                if (!focused || !input.IsKeyboardFocused) failures++;
+                                Render(window, Path.Combine(outputDirectory, $"controls-focused-{themeLabel}-96dpi.png"), 96);
+                                Keyboard.ClearFocus();
+                            }
                             report.AppendLine($"Rendered {label}: {window.ActualWidth:0}x{window.ActualHeight:0} DIP; native scale={VisualTreeHelper.GetDpi(window).DpiScaleX:0.##}");
                         }
 

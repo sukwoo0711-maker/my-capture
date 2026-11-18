@@ -88,7 +88,8 @@ public sealed partial class SettingsThemePreviewTests
                 foreach (string locale in new[] { "ko-KR", "en-US" })
                 {
                     using var scope = UiText.UseLanguage(locale);
-                    var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+                    var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                        options: new WelcomeOptions { MonitorProvider = () => new MonitorInfo("small", new RectD(0, 0, 1920, 768), new RectD(0, 0, 1920, 720), 192, true) })
                     {
                         WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
                         ShowActivated = false, ShowInTaskbar = false,
@@ -192,7 +193,8 @@ public sealed partial class SettingsThemePreviewTests
                 }
                 finally { settings.CloseForExit(); }
 
-                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor);
+                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                    options: new WelcomeOptions { MonitorProvider = () => MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary) });
                 Prepare(welcome);
                 try { welcome.Show(); Drain(welcome); SaveSettingsCopyImage(welcome, "welcome"); }
                 finally { welcome.Close(); }

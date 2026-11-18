@@ -518,9 +518,13 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 </Popup>
             </Grid>
             <ControlTemplate.Triggers>
-                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsKeyboardFocusWithin" Value="True" />
+                        <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                    </MultiTrigger.Conditions>
                     <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                </Trigger>
+                </MultiTrigger>
                 <Trigger Property="IsHighlighted" Value="True">
                     <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                 </Trigger>

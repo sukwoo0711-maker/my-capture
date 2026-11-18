@@ -494,8 +494,8 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotEmpty(buttons);
         foreach (Button button in buttons)
         {
-            // Library commands have no shortcut line, so they take the 32-DIP plain button height.
-            Assert.Equal(32, button.ActualHeight, 1);
+            // Library commands have no shortcut line, so they take the 36-DIP plain button height.
+            Assert.Equal(36, button.ActualHeight, 1);
             Assert.Equal(button.Name == "CaptureOptionsButton" ? new Thickness(5, 0, 5, 0) : new Thickness(10, 4, 10, 4), button.Padding);
         }
     }

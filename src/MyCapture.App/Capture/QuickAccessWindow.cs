@@ -265,11 +265,10 @@ internal sealed partial class QuickAccessWindow : Window
         {
             Content = Glyph("Icon.Pause"), Focusable = false, ToolTip = UiText.Get("QuickAccess.KeepName"),
         };
-        // Off, the icon keeps Glyph's Text.Primary like the card's other commands; on, it takes the
-        // selection ink, since the on-state fill is Text.SelectionBackground, the colour of Text.Primary.
+        // The selected ink follows the control layer; contrast themes retain their inverted ink.
         var keepIcon = (SymbolIcon)_keep.Content;
         RoutedEventHandler keepInk = (_, _) => keepIcon.SetResourceReference(SymbolIcon.StrokeProperty,
-            _keep.IsChecked == true ? "Text.SelectionForeground" : "Text.Primary");
+            _keep.IsChecked == true ? "Toggle.CheckedForeground" : "Text.Primary");
         _keep.Checked += keepInk;
         _keep.Unchecked += keepInk;
         CommandButtonPresentation.Apply(_keep, compact: true);
@@ -393,6 +392,7 @@ internal sealed partial class QuickAccessWindow : Window
         _keyboardTargets.Remove(close);
         _keyboardTargets.Add(close);
         // The countdown is neutral; colour is kept for the result it reports.
+        ControlLanguage.SetPreserveProgressPalette(_remaining, true);
         _remaining.SetResourceReference(BackgroundProperty, "Surface.Hover");
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _progressReveal.Tick += (_, _) => RevealProgress();

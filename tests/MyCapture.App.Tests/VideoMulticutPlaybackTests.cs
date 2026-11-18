@@ -179,7 +179,8 @@ public sealed class VideoMulticutPlaybackTests
             document.RemovedRanges.Add(new(2000, 4000));
             int playCalls = 0;
             editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
-                document, previewEngine: engine, playMedia: () => playCalls++);
+                document, previewEngine: engine, playMedia: () => playCalls++,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             Invoke(editor, "CompleteOpen", 10000d, true);
             action(editor, engine, () => playCalls);
         }

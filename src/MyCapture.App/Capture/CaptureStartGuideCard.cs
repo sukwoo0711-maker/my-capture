@@ -121,16 +121,15 @@ internal sealed class CaptureStartGuideCard : Border
 
     private static TextBlock Caption()
     {
-        var caption = new TextBlock
+        var caption = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
         {
             FontSize = TypeScale.Caption,
-            FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 8, 0, 0),
             MaxWidth = PictureWidth,
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        });
         caption.SetResourceReference(TextBlock.ForegroundProperty, CaptureModeBar.TextKey);
         return caption;
     }

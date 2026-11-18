@@ -164,6 +164,7 @@ internal sealed class VideoExportDialog : Window
         advancedHeader.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         var advanced = new Expander { Header = advancedHeader, Content = advancedBody, IsExpanded = false, Margin = new Thickness(0, 10, 0, 0) };
         advanced.SetResourceReference(ForegroundProperty, "Text.Primary");
+        advanced.SetResourceReference(StyleProperty, "Expander.OptionalStyle");
         AutomationProperties.SetName(advanced, UiText.Get("MediaExport_Advanced"));
         _mp4.Children.Add(advanced);
         _settings.Children.Add(_mp4);

@@ -236,7 +236,7 @@ internal sealed class TimedTextOverlayDialog : Window
 
     private static TextBlock Label(string text, int row)
     {
-        var label = new TextBlock { Text = text, FontWeight = FontWeights.SemiBold };
+        var label = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { Text = text, });
         Grid.SetRow(label, row);
         return label;
     }

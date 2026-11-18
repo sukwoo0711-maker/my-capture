@@ -28,7 +28,8 @@ public sealed class VideoEditorInputRegressionTests
         using var culture = UiText.UseLanguage(language);
         string root = OwnedTestDirectory.Create("mc-video-load-text-");
         var editor = new VideoEditorWindow(new RecordingResult(System.IO.Path.Combine(root, "not-opened.mp4"), 10000, 30, 300, 640, 360),
-            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             TextBlock label = Field<TextBlock>(editor, "_loadingLabel");
