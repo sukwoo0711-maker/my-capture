@@ -254,7 +254,7 @@ internal sealed class OcrTranslationPanel : Grid
         {
             var warning = new TextBlock { Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap };
             warning.SetResourceReference(TextBlock.ForegroundProperty, "Text.Warning");
-            warning.Text = string.Join("\n", ReviewNotes(result.Translation));
+            KoreanWordWrap.Show(warning, string.Join("\n", ReviewNotes(result.Translation)));
             texts.Children.Add(warning);
         }
         row.Children.Add(texts);
