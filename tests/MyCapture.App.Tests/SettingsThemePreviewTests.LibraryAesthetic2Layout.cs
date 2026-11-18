@@ -79,8 +79,8 @@ public sealed partial class SettingsThemePreviewTests
                 () => Descendants(window).OfType<TreeViewItem>().FirstOrDefault(item => item.IsSelected), item => item is not null, "selected folder");
             AssertSelectedFolderRowShowsWashAndPillOnly(folder, label);
 
-            // English at 150 % text beside the details pane at the minimum width: the compact bar does not
-            // fit, the sort box gives back width, and the choice it shows ends in an ellipsis inside the box.
+            // At 150 % text beside the details pane the selected actions replace sort; clearing restores
+            // a browsing row with enough room for each full choice.
             f.ViewModel.NavigateTo(CaptureFolderScope.All);
             WaitForAestheticCards(window, 1);
             window.Resources["FontSize.Body"] = 14d * 1.5;
@@ -91,8 +91,11 @@ public sealed partial class SettingsThemePreviewTests
             f.ViewModel.Select(f.Records[0].Id);
             f.ViewModel.Select(f.Records[2].Id, control: true);
             SettleGalleryLayout(window);
+            Assert.False(((ComboBox)window.FindName("SortBox")).IsVisible);
+            f.ViewModel.ClearSelection();
+            SettleGalleryLayout(window);
             AssertSortChoicesEndInsideTheBox(window, label + ", 150 % text beside the details pane at 980 DIP",
-                expectEllipsis: CultureIsEnglish());
+                expectEllipsis: false);
 
             Assert.True(folderHeadings.Length == 0,
                 $"{label}: the folder view repeats its location as a heading ({string.Join(", ", folderHeadings)})");
@@ -262,6 +265,7 @@ public sealed partial class SettingsThemePreviewTests
             SettleGalleryLayout(window);
         }
         if (expectEllipsis) Assert.True(cut, $"{label}: no choice was cut, so the ellipsis was not exercised");
+        else Assert.False(cut, $"{label}: browsing choices must fit after the selection actions leave the row");
     }
 
     /// <summary>

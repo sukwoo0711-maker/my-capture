@@ -96,6 +96,15 @@ public sealed partial class GalleryViewModel
     public bool IsVideosView => _scope.IsAll && _filter == GalleryFilter.Videos;
     public bool IsKeptView => _scope.IsAll && _filter == GalleryFilter.Pinned;
 
+    /// <summary>The current browsing scope, independent of selection and search results.</summary>
+    public string BrowseScopeText => LocationHeading() ?? _selectedTag ?? UiText.Get(_filter switch
+    {
+        GalleryFilter.Images => "LibraryUx_NavImages",
+        GalleryFilter.Videos => "LibraryUx_NavVideos",
+        GalleryFilter.Pinned => "LibraryUx_NavKept",
+        _ => "LibraryUx_NavAll",
+    });
+
     public string AllItemsAccessibleName => NavName("LibraryUx_NavAll", AllItemsCount);
     public string ImagesAccessibleName => NavName("LibraryUx_NavImages", ImageCount);
     public string VideosAccessibleName => NavName("LibraryUx_NavVideos", VideoCount);
@@ -233,7 +242,7 @@ public sealed partial class GalleryViewModel
 
     private static readonly string[] NavigationProperties =
     [
-        nameof(AllItemsCount), nameof(ImageCount), nameof(VideoCount), nameof(KeptCount),
+        nameof(AllItemsCount), nameof(ImageCount), nameof(VideoCount), nameof(KeptCount), nameof(BrowseScopeText),
         nameof(IsAllItemsView), nameof(IsImagesView), nameof(IsVideosView), nameof(IsKeptView),
         nameof(AllItemsAccessibleName), nameof(ImagesAccessibleName), nameof(VideosAccessibleName),
         nameof(KeptAccessibleName), nameof(FolderSectionToolTip), nameof(ShowLocationHeader), nameof(ShowSaveHere),

@@ -40,7 +40,6 @@ public sealed partial class SettingsThemePreviewTests
                 content.DataContext = fixture.ViewModel;
                 var host = new Border { Resources = window.Resources, Width = 1500, Height = 900, Child = content };
                 LayoutLibraryVideo(host);
-                Button button = (Button)window.FindName("CreatePdfSelectedButton");
                 MenuItem more = (MenuItem)window.FindName("ContactSheetMenu");
                 Button moreButton = (Button)window.FindName("MoreCommandsButton");
                 ContextMenu moreMenu = moreButton.ContextMenu;
@@ -69,27 +68,23 @@ public sealed partial class SettingsThemePreviewTests
                 GalleryItemViewModel outside = fixture.ViewModel.FindTile(fixture.Records[3].Id)!;
 
                 Assert.False(fixture.ViewModel.CanCreatePdfSelected);
-                Assert.False(button.IsEnabled);
                 Assert.False(more.IsEnabled);
                 fixture.ViewModel.Select(video.Id);
                 Prepare(video);
                 Assert.False(card.IsEnabled);
-                Assert.False(button.IsEnabled);
                 Assert.False(more.IsEnabled);
 
                 fixture.ViewModel.Select(second.Id);
                 fixture.ViewModel.Select(image.Id, control: true);
                 Prepare(image);
                 CaptureRecord[] expected = [image.Record, second.Record];
-                Assert.Equal(expected, window.ContactSheetTargets(button));
                 Assert.Equal(expected, window.ContactSheetTargets(more));
                 Assert.Equal(expected, window.ContactSheetTargets(card));
-                Assert.True(button.IsEnabled && more.IsEnabled && card.IsEnabled);
+                Assert.True(more.IsEnabled && card.IsEnabled);
 
                 // A menu outside the selection must never export unrelated selected records.
                 Prepare(outside);
                 Assert.Equal(new[] { outside.Record }, window.ContactSheetTargets(card));
-                Assert.Equal(expected, window.ContactSheetTargets(button));
                 Assert.Equal(expected, window.ContactSheetTargets(more));
                 Prepare(video);
                 Assert.Equal(new[] { video.Record }, window.ContactSheetTargets(card));
@@ -100,8 +95,8 @@ public sealed partial class SettingsThemePreviewTests
                 Prepare(video);
                 Assert.Equal(new[] { image.Record, second.Record, video.Record }, window.ContactSheetTargets(card));
                 Assert.True(card.IsEnabled);
-                Assert.True(button.IsEnabled && more.IsEnabled);
-                Assert.Equal(UiText.Get("ContactSheet.Action"), AutomationProperties.GetName(button));
+                Assert.True(more.IsEnabled);
+                Assert.Equal(UiText.Get("ContactSheet.Action"), AutomationProperties.GetName(more));
                 Assert.Equal(UiText.Get("ContactSheet.Action"), more.Header);
                 Assert.Equal(UiText.Get("ContactSheet.Action"), card.Header);
                 Assert.Equal("MediaInfo", ((MenuItem)menu.Items[menu.Items.Count - 1]).Tag);
@@ -138,18 +133,19 @@ public sealed partial class SettingsThemePreviewTests
                     LayoutLibraryVideo(host);
                     window.FitContentToolbar();
                     LayoutLibraryVideo(host);
-                    var button = (Button)window.FindName("CreatePdfSelectedButton");
-                    var text = (TextBlock)window.FindName("CreatePdfSelectedLabel");
+                    var more = (MenuItem)window.FindName("ContactSheetMenu");
+                    var menuButton = (Button)window.FindName("MoreCommandsButton");
                     var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
                     var sort = (FrameworkElement)window.FindName("SortCommands");
-                    Assert.Equal(UiText.Get("ContactSheet.Action"), AutomationProperties.GetName(button));
-                    Assert.Equal(UiText.Get("ContactSheet.Action"), button.ToolTip);
-                    Assert.Equal(window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled
-                        ? Visibility.Visible : Visibility.Collapsed, text.Visibility);
-                    Assert.True(button.TranslatePoint(new Point(button.ActualWidth, 0), bar).X
-                        <= sort.TranslatePoint(new Point(), bar).X + 0.5);
+                    Assert.Equal(UiText.Get("ContactSheet.Action"), AutomationProperties.GetName(more));
+                    Assert.Equal(UiText.Get("ContactSheet.Action"), more.ToolTip);
+                    Assert.Equal(UiText.Get("ContactSheet.Action"), more.Header);
+                    Assert.Contains(more, menuButton.ContextMenu.Items.Cast<object>());
+                    Assert.IsType<SymbolIcon>(more.Icon);
+                    Assert.Null(window.FindName("CreatePdfSelectedButton"));
+                    Assert.True(menuButton.TranslatePoint(new Point(menuButton.ActualWidth, 0), bar).X <= bar.ActualWidth + 0.5);
+                    Assert.True(sort.TranslatePoint(new Point(), bar).X >= 0);
                     Assert.InRange(bar.ActualHeight, 43.5, 44.5);
-                    if (width == window.MinWidth) Assert.NotEqual(GalleryWindow.ToolbarDensity.Labelled, window.ContentToolbarDensity);
                 }
                 Assert.False(window.IsVisible);
             }

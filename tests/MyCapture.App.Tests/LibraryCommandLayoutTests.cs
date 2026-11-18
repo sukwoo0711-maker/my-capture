@@ -70,10 +70,23 @@ public sealed class LibraryCommandLayoutTests
         Assert.Equal(SplitButtonPart.Options, ButtonSizing.GetSplitPart(captureOptions));
         Assert.Equal(Bounds(capture, root).Right, Bounds(captureOptions, root).Left, 1);
         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_4F5AF20FAA6E"));
-        Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
-        Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
-        Button pdf = Named<Button>(commands, "CreatePdfSelectedButton");
-        SymbolIcon pdfIcon = Assert.Single(Descendants(pdf).OfType<SymbolIcon>());
+        Assert.Equal(Visibility.Collapsed, Named<StackPanel>(commands, "SelectionCommands").Visibility);
+        Assert.Equal(Visibility.Visible, Named<TextBlock>(commands, "BrowseScopeLabel").Visibility);
+        Assert.Equal(model.BrowseScopeText, KoreanWordWrap.Strip(Named<TextBlock>(commands, "BrowseScopeLabel").Text));
+        Assert.Equal(model.BrowseScopeText, System.Windows.Automation.AutomationProperties.GetName(Named<TextBlock>(commands, "BrowseScopeLabel")));
+        Button more = Named<Button>(commands, "MoreCommandsButton");
+        ContextMenu menu = more.ContextMenu;
+        menu.PlacementTarget = more;
+        menu.Resources = resources;
+        menu.Measure(new Size(640, 640));
+        menu.Arrange(new Rect(menu.DesiredSize));
+        menu.UpdateLayout();
+        Layout(root);
+        Assert.Same(model, menu.DataContext);
+        MenuItem keep = menu.Items.OfType<MenuItem>().Single(item => item.Name == "KeepSelectedButton");
+        MenuItem pdf = menu.Items.OfType<MenuItem>().Single(item => item.Name == "ContactSheetMenu");
+        Assert.False(keep.IsEnabled);
+        SymbolIcon pdfIcon = Assert.IsType<SymbolIcon>(pdf.Icon);
         Assert.NotEmpty(Assert.IsType<PathGeometry>(pdfIcon.Data).Figures);
         Assert.False(pdf.IsEnabled);
         ComboBox sort = Named<ComboBox>(commands, "SortBox");
@@ -82,11 +95,21 @@ public sealed class LibraryCommandLayoutTests
         sort.SelectedIndex = 2;
 
         search.Text = "review";
-        model.HasSelection = true;
+        model.SelectionCount = 1;
         Layout(root);
+        Assert.True(Named<Button>(commands, "FloatSelectedButton").IsEnabled);
+        Assert.True(Named<Button>(commands, "CopySelectedButton").IsEnabled);
+        Assert.True(Named<Button>(commands, "EditSelectedButton").IsEnabled);
+        Assert.Equal(commandsBefore, Bounds(commands, root));
+        Assert.Equal(listBefore, Bounds(list, root));
+        model.SelectionCount = 2;
+        Layout(root);
+        Assert.False(Named<Button>(commands, "FloatSelectedButton").IsEnabled);
+        Assert.False(Named<Button>(commands, "CopySelectedButton").IsEnabled);
+        Assert.False(Named<Button>(commands, "EditSelectedButton").IsEnabled);
 
         Assert.Equal(Visibility.Visible, Named<StackPanel>(header, "CaptureCommands").Visibility);
-        Assert.True(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        Assert.True(keep.IsEnabled);
         Assert.True(pdf.IsEnabled);
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.Equal(captureBefore, Bounds(capture, root));
@@ -98,7 +121,8 @@ public sealed class LibraryCommandLayoutTests
         Assert.Equal(2, model.SortIndex);
         Assert.True(capture.Focusable && capture.IsTabStop && search.Focusable && search.IsTabStop);
         Assert.True(Named<Button>(commands, "ClearSelectionButton").IsTabStop);
-        Button more = Named<Button>(commands, "MoreCommandsButton");
+        Assert.Equal(Visibility.Collapsed, sort.Visibility);
+        Assert.Equal(Visibility.Collapsed, Named<TextBlock>(commands, "BrowseScopeLabel").Visibility);
         Assert.True(more.IsTabStop);
         Assert.Equal(Visibility.Visible, more.Visibility);
         Assert.True(more.ActualWidth >= 24 && more.ActualHeight >= 24);
@@ -107,10 +131,13 @@ public sealed class LibraryCommandLayoutTests
             && moreBounds.Top >= 0 && moreBounds.Bottom <= commands.ActualHeight + .5,
             $"More commands escaped the content toolbar: {moreBounds} in {commands.RenderSize}");
 
-        model.HasSelection = false;
+        model.SelectionCount = 0;
         Layout(root);
-        Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        Assert.False(keep.IsEnabled);
         Assert.False(pdf.IsEnabled);
+        Assert.Equal(Visibility.Visible, sort.Visibility);
+        Assert.Equal(Visibility.Visible, Named<TextBlock>(commands, "BrowseScopeLabel").Visibility);
+        Assert.Equal(Visibility.Collapsed, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.Equal(2, sort.SelectedIndex);
         Assert.Equal("review", search.Text);
         Assert.Equal(listBefore, Bounds(list, root));
@@ -291,20 +318,24 @@ public sealed class LibraryCommandLayoutTests
 
     public sealed class CommandsModel : INotifyPropertyChanged
     {
-        private bool _hasSelection;
-        public bool HasSelection
+        private int _selectionCount;
+        public int SelectionCount
         {
-            get => _hasSelection;
+            get => _selectionCount;
             set
             {
-                _hasSelection = value;
-                PropertyChanged?.Invoke(this, new(nameof(HasSelection)));
-                PropertyChanged?.Invoke(this, new(nameof(CanCreatePdfSelected)));
+                _selectionCount = value;
+                foreach (string name in new[] { nameof(HasSelection), nameof(HasSingleSelection), nameof(CanReduceSelected), nameof(CanCreatePdfSelected), nameof(SelectionText) })
+                    PropertyChanged?.Invoke(this, new(name));
             }
         }
+        public bool HasSelection { get => SelectionCount > 0; set => SelectionCount = value ? 2 : 0; }
+        public bool HasSingleSelection => SelectionCount == 1;
+        public bool CanReduceSelected => HasSingleSelection;
+        public string BrowseScopeText => UiText.Get("LibraryUx_NavAll");
         public bool CanCreatePdfSelected => HasSelection;
         public bool CanCompareSelected => false;
-        public string SelectionText => UiText.Format("LibrarySelection_Count", 2);
+        public string SelectionText => UiText.Format("LibrarySelection_Count", SelectionCount);
         public string SearchPlaceholder => "Search captures";
         public string CompactSearchPlaceholder => "Search";
         public string SearchToolTip => "Search";

@@ -1592,18 +1592,18 @@
         </Grid.RowDefinitions>
 
         <Border x:Name="LibraryGlobalCommandSurface" Grid.Row="0" Padding="8,0" Margin="0,0,0,8"
-                Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,0,1">
+                Background="{DynamicResource Surface.Base}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,0,1">
             <Grid x:Name="LibraryCommandBar" Height="48"
                   AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" KeyboardNavigation.TabIndex="1">
                     <!-- Keep labelled capture commands available in every selection state. -->
                     <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
-                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0,0,0"
+                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Secondary}" Margin="3,0,0,0"
                                 VerticalAlignment="Center"
                                 themes:ButtonSizing.SplitPart="Main"
                                 AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
@@ -1614,7 +1614,7 @@
                                 <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Primary}" Margin="0,0,3,0"
+                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Secondary}" Margin="0,0,3,0"
                                 MinWidth="28" Padding="5,0" VerticalAlignment="Center"
                                 themes:ButtonSizing.SplitPart="Options"
                                 ToolTip="{loc:Text CaptureEntry.MoreOptions}"
@@ -1639,9 +1639,9 @@
                 <!-- An input boundary, not a decorative card line: it takes the control outline, hands it
                      over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
                      the focus colour at once while the search box inside has keyboard focus. -->
-                <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
+                <Grid x:Name="SearchField" Grid.Column="0" Margin="0,0,12,0" KeyboardNavigation.TabIndex="0"
                       themes:ControlLanguage.Enabled="{DynamicResource ControlLanguage.Enabled}"
-                      MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                      VerticalAlignment="Center" HorizontalAlignment="Stretch">
                     <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
                     <themes:InputFieldBorder x:Name="SearchInputChrome" IsHitTestVisible="False"
                                             IsInputFocused="{Binding IsKeyboardFocusWithin, ElementName=SearchField}"
@@ -2057,14 +2057,29 @@
                      the command labels collapse to icons (then the count and sort narrow) instead of wrapping to a second row,
                      and its overflow menu retains every secondary command. -->
                 <Grid x:Name="LibraryContentCommandBar" Margin="0,0,0,8"
-                      Background="{DynamicResource Surface.Raised}"
+                      Background="{DynamicResource Surface.Base}"
                       AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
                     <Grid.RowDefinitions><RowDefinition Height="44" /></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="BrowseScopeLabel" themes:KoreanWordWrap.Text="{Binding BrowseScopeText}" Margin="12,0,8,0"
+                               AutomationProperties.Name="{Binding BrowseScopeText}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding BrowseScopeText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center" MinHeight="44"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}"
                                 AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}">
                         <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
                                 IsEnabled="{Binding HasSelection}" ToolTip="{loc:Text LibraryUx_ClearSelectionHint}"
@@ -2072,24 +2087,7 @@
                             <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         </Button>
                         <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" Width="96" TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
-                        <!-- Open actions precede copy and organizing; labels collapse when space is limited. -->
-                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
-                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="PreviewSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}"
-                                AutomationProperties.Name="{loc:Text LibraryUx_Preview}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="PreviewSelectedLabel" Text="{loc:Text LibraryUx_Preview}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
+                                   VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="{DynamicResource FontWeight.Regular}" AutomationProperties.LiveSetting="Polite" />
                         <Button x:Name="FloatSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}" Click="OnFloatClick"
                                 ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}">
@@ -2111,26 +2109,28 @@
                                 <TextBlock x:Name="CopySelectedLabel" Text="{loc:Text QuickAccess.Copy}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="CreatePdfSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding CanCreatePdfSelected}" Click="OnContactSheetClick"
-                                ToolTip="{loc:Text ContactSheet.Action}" AutomationProperties.Name="{loc:Text ContactSheet.Action}">
+                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
+                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
                             <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Pdf}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="CreatePdfSelectedLabel" Text="{loc:Text ContactSheet.Action}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="KeepSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" ToolTip="{loc:Text LibraryUx_KeepHint}"
-                                AutomationProperties.Name="{loc:Text LibraryUx_Keep}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="KeepSelectedLabel" Text="{loc:Text LibraryUx_Keep}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                     <StackPanel x:Name="SortCommands" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="SortBox" Width="112" Margin="8,0,4,0" SelectedIndex="{Binding SortIndex, Mode=TwoWay}"
                               AutomationProperties.Name="{loc:Text Folder410.Sort}">
+                        <ComboBox.Style>
+                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
                         <!-- The box is as wide as its longest choice, except when even the compact bar does not
                              fit (FitContentToolbar); only then does the shown choice end in an ellipsis. The
                              choices carry the template, because the box shows a ComboBoxItem's own template. -->
@@ -2154,6 +2154,9 @@
                                 <MenuItem x:Name="FloatSelectedMenu" Header="{loc:Text Gallery.Float}" InputGestureText="P"
                                           IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}"
                                           AutomationProperties.Name="{loc:Text Gallery.Float}" Click="OnFloatClick" />
+                                <MenuItem x:Name="PreviewSelectedButton" Header="{loc:Text LibraryUx_Preview}" InputGestureText="Space"
+                                          IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick"
+                                          ToolTip="{loc:Text LibraryUx_PreviewHint}" AutomationProperties.Name="{loc:Text LibraryUx_Preview}" />
                                 <MenuItem x:Name="CompareSelectedMenu" Header="{loc:Text Gallery.Compare}" IsEnabled="{Binding CanCompareSelected}" Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                                           CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <Separator />
@@ -2166,8 +2169,19 @@
                                 <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick" />
                                 <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
                                           IsEnabled="{Binding CanCreatePdfSelected}" AutomationProperties.Name="{loc:Text ContactSheet.Action}"
-                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                          ToolTip="{loc:Text ContactSheet.Action}"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                                    <MenuItem.Icon>
+                                        <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Pdf}" Style="{StaticResource Icon.Symbol}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
+                                <MenuItem x:Name="KeepSelectedButton" IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" InputGestureText="K"
+                                          ToolTip="{loc:Text LibraryUx_KeepHint}" AutomationProperties.Name="{loc:Text LibraryUx_Keep}">
+                                    <MenuItem.Header>
+                                        <TextBlock x:Name="KeepSelectedLabel" Text="{loc:Text LibraryUx_Keep}" />
+                                    </MenuItem.Header>
+                                </MenuItem>
                                 <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
                                           InputGestureText="M" />
                                 <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"

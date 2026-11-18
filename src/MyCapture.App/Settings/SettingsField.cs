@@ -4,8 +4,8 @@ using System.Windows.Controls;
 namespace MyCapture.App.Settings;
 
 /// <summary>
-/// One short value in the settings window, laid out as a single row: label, input, then its
-/// range or unit. A longer explanation goes on the line below.
+/// One settings row: a shared label column, a value, then an optional range or unit.
+/// A longer explanation wraps below the value without disturbing the next row's columns.
 /// </summary>
 /// <remarks>
 /// <see cref="HeaderedContentControl.Header"/> is the label and the content is the input, which

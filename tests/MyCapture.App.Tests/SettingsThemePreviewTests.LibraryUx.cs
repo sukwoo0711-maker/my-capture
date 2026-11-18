@@ -157,18 +157,19 @@ public sealed partial class SettingsThemePreviewTests
             var contentCommandBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
             Assert.Equal(48, commandBar.ActualHeight, 1);
             Button capture = VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018"));
-            Assert.Same(window.FindResource("Button.Primary"), capture.Style);
+            Assert.Same(window.FindResource("Button.Secondary"), capture.Style);
             Assert.Equal(UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_2C20ADDA2018").Trim(), window.ReadHotkeys().Capture.ToString()), Assert.IsType<string>(capture.ToolTip));
             var search = (TextBox)window.FindName("SearchBox");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
                      { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderPaneButton"),
-                       (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton") })
+                       (FrameworkElement)window.FindName("BrowseScopeLabel"), (FrameworkElement)window.FindName("MoreCommandsButton") })
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
             AssertDefaultSearchPlaceholder(window, label);
             AssertSameRow(commandBar, capture, search);
-            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton"));
+            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("BrowseScopeLabel"), (FrameworkElement)window.FindName("MoreCommandsButton"));
+            Assert.False(((Button)window.FindName("EditSelectedButton")).IsVisible);
             AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton"));
             AssertLibraryCommandHeights(commandBar);
             AssertLibraryCommandHeights(contentCommandBar);
@@ -239,7 +240,8 @@ public sealed partial class SettingsThemePreviewTests
             Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
                 && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();
             var captureOptions = (Button)window.FindName("CaptureOptionsButton");
-            Assert.Equal(new[] { capture, captureOptions }, primaryActions);
+            Assert.Empty(primaryActions);
+            Assert.Same(window.FindResource("Button.Secondary"), captureOptions.Style);
             Assert.Same(window.FindName("CaptureCommands"), capture.Parent);
             Assert.Same(capture.Parent, captureOptions.Parent);
             Assert.Equal(SplitButtonPart.Main, ButtonSizing.GetSplitPart(capture));
@@ -253,7 +255,8 @@ public sealed partial class SettingsThemePreviewTests
             clear.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, clear));
             SettleGalleryLayout(window);
             Assert.False(vm.HasSelection);
-            Assert.True(selection.IsVisible);
+            Assert.False(selection.IsVisible);
+            Assert.True(((TextBlock)window.FindName("BrowseScopeLabel")).IsVisible);
             Assert.False(((Button)window.FindName("EditSelectedButton")).IsEnabled);
             // Escape from a capture clears the selection the same way.
             vm.Select(f.Records[0].Id);

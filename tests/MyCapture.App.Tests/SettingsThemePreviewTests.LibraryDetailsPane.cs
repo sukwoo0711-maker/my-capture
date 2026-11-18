@@ -194,6 +194,7 @@ public sealed partial class SettingsThemePreviewTests
                         SettleGalleryLayout(window);
                         Assert.True(window.IsDetailsPaneOpen);
                         var count = Assert.IsType<TextBlock>(window.FindName("SelectionCountLabel"));
+                        var sort = Assert.IsType<ComboBox>(window.FindName("SortBox"));
                         var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
                         foreach (bool selected in new[] { false, true })
                         {
@@ -222,11 +223,17 @@ public sealed partial class SettingsThemePreviewTests
                             }
                             Assert.Equal(44, bar.ActualHeight, 1);
                             AssertNotTrimmed(count, stage);
-                            AssertSortChoicesFit(window, stage);
+                            Assert.Equal(!selected, sort.IsVisible);
+                            if (!selected) AssertSortChoicesFit(window, stage);
                             foreach (Button button in ((Panel)window.FindName("SelectionCommands")).Children.OfType<Button>().Where(button => button.IsVisible))
                                 AssertInsideClient(button, bar, stage);
                             SaveLibraryDetailsPaneEvidence(window, "after", $"toolbar-{language}-{(selected ? "selected" : "none")}-min");
                         }
+                        vm.ClearSelection();
+                        SettleGalleryLayout(window);
+                        Assert.True(sort.IsVisible);
+                        Assert.Equal(44, bar.ActualHeight, 1);
+                        AssertSortChoicesFit(window, language + ", after clearing selection");
                     }
                     finally { fixture.Window.CloseForExit(); }
                 }

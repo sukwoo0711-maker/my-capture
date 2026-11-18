@@ -33,7 +33,7 @@ public sealed partial class SettingsThemePreviewTests
                         window.Show();
                         SettleGalleryLayout(window);
                         var label = Assert.IsType<TextBlock>(window.FindName("KeepSelectedLabel"));
-                        var button = Assert.IsType<Button>(window.FindName("KeepSelectedButton"));
+                        var button = Assert.IsType<MenuItem>(window.FindName("KeepSelectedButton"));
                         var archive = Assert.IsType<MenuItem>(window.FindName("ArchiveOverflowMenu"));
                         var move = Assert.IsType<MenuItem>(window.FindName("MoveOverflowMenu"));
                         string keep = UiText.Get("LibraryUx_Keep");

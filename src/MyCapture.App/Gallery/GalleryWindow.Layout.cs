@@ -113,7 +113,8 @@ internal sealed partial class GalleryWindow
         InvalidateToolbarMeasure(SortCommands);
         SelectionCommands.Measure(probe);
         SortCommands.Measure(probe);
-        return SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width;
+        return (SelectionCommands.Visibility == Visibility.Visible ? SelectionCommands.DesiredSize.Width : 0)
+            + SortCommands.DesiredSize.Width;
     }
 
     private static void InvalidateToolbarMeasure(DependencyObject element)
@@ -127,9 +128,9 @@ internal sealed partial class GalleryWindow
     {
         _toolbarDensity = density;
         Visibility label = density == ToolbarDensity.Labelled ? Visibility.Visible : Visibility.Collapsed;
-        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, CreatePdfSelectedLabel, KeepSelectedLabel })
+        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel })
             text.Visibility = label;
-        // A sixth command still fits beside the details pane at the minimum window width.
+        // Three direct actions stay within the same row beside the details pane.
         // Keep each command's hit target; only trim the gaps and the ellipsized count.
         foreach (Button button in SelectionCommands.Children.OfType<Button>())
         {
@@ -173,6 +174,7 @@ internal sealed partial class GalleryWindow
 
     private void InitializeCommandBarLayout()
     {
+        MoreCommandsButton.ContextMenu.PlacementTarget = MoreCommandsButton;
         LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
         Loaded += (_, _) => FitSelectionCommands();
         DpiChanged += (_, _) => FitContentToolbar();

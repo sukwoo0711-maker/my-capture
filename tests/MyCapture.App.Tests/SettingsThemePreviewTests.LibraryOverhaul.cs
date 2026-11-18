@@ -357,9 +357,10 @@ public sealed partial class SettingsThemePreviewTests
 
                 // Keys that start in the content toolbar belong to its controls.
                 var toolbar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
-                var preview = (Button)window.FindName("PreviewSelectedButton");
-                Assert.False(PressLibraryKey(preview, Key.Delete).Handled);
-                Assert.False(PressLibraryKey(preview, Key.P).Handled);
+                var edit = (Button)window.FindName("EditSelectedButton");
+                Assert.True(toolbar.IsAncestorOf(edit));
+                Assert.False(PressLibraryKey(edit, Key.Delete).Handled);
+                Assert.False(PressLibraryKey(edit, Key.P).Handled);
                 Assert.Empty(commands);
                 Assert.Empty(deletes);
                 // The same keys from a card do run.

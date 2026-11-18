@@ -298,14 +298,16 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(theme, ThemeService.Current);
         IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme));
 
-        // Glass uses the native Mica backdrop, so Window.Background is deliberately
-        // transparent. Assert the actual visible page and selector chrome instead of
-        // only checking resource entries that might no longer be bound to the UI.
+        // The settings content is a flat plane over the opaque window Base. Check the
+        // actual content host and selector chrome, not only the resource dictionary.
         var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
         var selectedContent = Assert.IsType<ContentPresenter>(tabs.Template.FindName("PART_SelectedContentHost", tabs));
         var searchLayer = Assert.IsType<System.Windows.Documents.AdornerDecorator>(VisualTreeHelper.GetParent(selectedContent));
         var page = Assert.IsType<Border>(VisualTreeHelper.GetParent(searchLayer));
-        AssertBrush(page.Background, colors["Surface.Raised"]);
+        Assert.Same(tabs.Template.FindName("SettingsContentPlane", tabs), page);
+        Assert.Null(page.Background);
+        Assert.Equal(new Thickness(0), page.BorderThickness);
+        Assert.Equal(new CornerRadius(0), page.CornerRadius);
         var selector = Assert.IsType<ComboBox>(window.FindName("ThemeSelector"));
         var chrome = Assert.IsType<Border>(selector.Template.FindName("ComboChrome", selector));
         if (!(bool)window.FindResource("ControlLanguage.Enabled"))

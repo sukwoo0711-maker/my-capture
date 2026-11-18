@@ -64,7 +64,7 @@ public sealed partial class SettingsThemePreviewTests
             window.Show();
             Drain(window);
             TextBlock message = Assert.IsType<TextBlock>(recorder.Children[1]);
-            Button record = Assert.IsType<Button>(Assert.IsType<StackPanel>(recorder.Children[0]).Children[0]);
+        Button record = Assert.IsType<Button>(Assert.IsType<WrapPanel>(recorder.Children[0]).Children[0]);
             Brush idle = record.BorderBrush;
             Assert.Equal(Visibility.Collapsed, message.Visibility);
 
