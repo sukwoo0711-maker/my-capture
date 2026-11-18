@@ -923,13 +923,15 @@ internal sealed partial class WelcomeWindow : Window
         _captionRow.SizeChanged += (_, args) => _successChip.MaxWidth = Math.Max(0, args.NewSize.Width * .62);
     }
 
+    private const string ReplayGeometry = "M4.25,9.75 A6,6 0 1 0 6.1,5.4 M5.75,2.75 L5.75,6.5 L9.5,6.5";
+
     private void ConfigurePreviewControls()
     {
         var playback = new StackPanel { Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 4, 8, 8) };
         foreach (var (button, key, geometry) in new[]
         {
-            (ReplayButton, "Journey.Replay", "M4.25,9.75 A6,6 0 1 0 6.1,5.4 M5.75,2.75 L5.75,6.5 L9.5,6.5"),
+            (ReplayButton, "Journey.Replay", ReplayGeometry),
             (PauseButton, "Journey.Pause", "M7,4 L7,16 M13,4 L13,16"),
         })
         {

@@ -134,5 +134,17 @@ internal sealed partial class WelcomeWindow
         string name = UiText.Get(_preview.ShowingInstructions ? "FirstRun.WatchExample" : "Journey.Replay");
         ReplayButton.ToolTip = name;
         AutomationProperties.SetName(ReplayButton, name);
+        // Below the written steps the video is an offer, so it is named; over a playing video it is a compact control.
+        if (_preview.ShowingInstructions)
+        {
+            var label = new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center };
+            label.SetResourceReference(MarginProperty, "CommandButton.IconLabelGap");
+            ReplayButton.Content = new StackPanel { Orientation = Orientation.Horizontal,
+                Children = { SymbolIcon.Create(Geometry.Parse(ReplayGeometry), 16), label } };
+        }
+        else if (ReplayButton.Content is not SymbolIcon)
+        {
+            ReplayButton.Content = SymbolIcon.Create(Geometry.Parse(ReplayGeometry), 16);
+        }
     }
 }
