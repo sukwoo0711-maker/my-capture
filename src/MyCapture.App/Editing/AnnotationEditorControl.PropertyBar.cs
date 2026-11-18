@@ -176,9 +176,10 @@ internal sealed partial class AnnotationEditorControl
         var flyout = new Border
         {
             Child = content, Padding = new Thickness(12), Width = 232,
-            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
         };
-        flyout.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        flyout.SetResourceReference(Border.CornerRadiusProperty, "Radius.Floating");
+        flyout.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         flyout.SetResourceReference(Border.BorderBrushProperty, "Border.Control");
         KeyboardNavigation.SetTabNavigation(flyout, KeyboardNavigationMode.Cycle);
         flyout.PreviewKeyDown += (_, e) =>

@@ -135,17 +135,12 @@ internal sealed partial class OcrResultWindow : Window
 
         var textFrame = new Border
         {
+            Name = "OcrWorkspace",
             Margin = new Thickness(24, 2, 24, 4),
-            Padding = new Thickness(1),
-            Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
-            BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12),
             ClipToBounds = true,
             Child = BuildAdvancedWorkspace(),
         };
-        textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
-        textFrame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         Grid.SetRow(textFrame, 1);
         root.Children.Add(textFrame);
 

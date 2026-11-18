@@ -33,9 +33,9 @@ namespace MyCapture.App.Editing;
 /// </para>
 /// <para>
 /// Layout: a top command bar on the same surface as the title bar (Undo/Redo, Crop and
-/// Quick Redact on the left; Save to file, Copy, Done and Cancel on the right), a left rail
+/// Quick Redact on the left; Save to file, Copy and close, Pin and More on the right), a left rail
 /// of drawing tools grouped by intent, a central image-only viewport, a contextual
-/// wrapping property bar above the viewport, and a bottom status line that
+/// fixed-height property row above the viewport, and a bottom status line that
 /// reports results. Crop is a mode: while it is active the command bar becomes
 /// rotate / ratio / auto trim / Apply / Cancel. Rotation is also available beside Crop in
 /// the everyday command bar. There is no horizontal toolbar scrolling; compact commands retain their icon and
@@ -315,8 +315,13 @@ internal sealed partial class AnnotationEditorControl : Grid
             SyncLiveTextInk();
             RefreshPointerFeedback();
         };
-        PreviewKeyDown += (_, _) => RefreshPointerModifiers();
+        PreviewKeyDown += (_, _) =>
+        {
+            CompleteWorkspaceEntrance();
+            RefreshPointerModifiers();
+        };
         PreviewKeyUp += (_, _) => RefreshPointerModifiers();
+        PreviewMouseDown += (_, _) => CompleteWorkspaceEntrance();
         _viewport.LostMouseCapture += (_, e) =>
         {
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
@@ -341,6 +346,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         Unloaded += (_, _) =>
         {
+            CompleteWorkspaceEntrance();
             DetachPointerWindow();
             HidePointerPreview();
             UnloadSourceFileSize();
@@ -540,6 +546,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool HandleKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
+        // Opening never delays a keyboard command or dims its newly revealed Alt captions.
+        CompleteWorkspaceEntrance();
         // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
         // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
         // Handling the key here, in the preview stage, also keeps it from the IME: WPF passes an
@@ -1559,6 +1567,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         double em = box.FontSize;
         box.MinWidth = chrome + em;
         box.MinHeight = em + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
+        // The committed rectangle includes the outline's margin below its last line.
+        // TextBox's automatic height measures only the glyph lines, which can put its
+        // bottom frame over that final row. Keep the frame outside the same rectangle;
+        // UpdateLiveTextViewport still caps long captions at the visible canvas height.
+        box.Height = target.Height + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -2103,7 +2116,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // body
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
-        UIElement commandBar = BuildCommandBar();
+        UIElement commandBar = _workspaceCommandBar = BuildCommandBar();
         Grid.SetRow(commandBar, 0);
         Children.Add(commandBar);
 
@@ -2111,7 +2124,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         Grid.SetRow(body, 1);
         Children.Add(body);
 
-        UIElement statusBar = BuildStatusBar();
+        UIElement statusBar = _workspaceStatusBar = BuildStatusBar();
         Grid.SetRow(statusBar, 2);
         Children.Add(statusBar);
         AttachColorFlyoutLayer();
@@ -2146,6 +2159,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildEditCommands()
     {
         var left = CommandRow();
+        left.Name = "AnnotationEditCommands";
         _undoButton = IconTextButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             using var update = BatchInspectorUpdate();
@@ -2182,7 +2196,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _redactButton = IconTextButton(
             UiText.Get("Text_E395E2567985"),
             UiText.Get("Text_A31A72A338DD"),
-            "Icon.Lock", FallbackLock,
+            "Phase2.PrivacyMask", () => PrivacyMaskGeometry,
             () => _ = ApplyPrivacyRedactionsAsync());
         ToolTipService.SetShowOnDisabled(_redactButton, true);
         RefreshRedactAvailability();
@@ -2200,6 +2214,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_copyTextButton);
 
         var right = CommandRow();
+        right.Name = "AnnotationResultCommands";
         Button save = BuildSaveOverflowMenu();
         Button done = IconTextButton(
             UiText.Get("EditorFlow_CopyAndClose"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
@@ -2222,6 +2237,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _pinButton.Loaded += (_, _) => RefreshPinShortcut();
         IsKeyboardFocusWithinChanged += (_, _) => RefreshPinShortcut();
         right.Children.Add(_pinButton);
+        right.Children.Add(BuildResultMoreMenu());
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
             (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
@@ -2235,7 +2251,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
-        // last where it could be taken for a tool (the T on the tool rail) or is not self-evident (the padlock).
+        // last where it could be taken for a tool (the T on the tool rail) or needs its purpose named.
         CommandButtonPresentation.CollapseOrder(crop, 2);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
@@ -2410,13 +2426,6 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
-        // The command opens a dialog, so its name ends with an ellipsis as in the library; the
-        // dialog's own title (ExportReduction_Title) has none.
-        var reduceExport = new MenuItem { Header = UiText.Get("Library.ExportImage") };
-        AutomationName(reduceExport, UiText.Get("Library.ExportImage"));
-        reduceExport.Click += (_, _) => Commit(EditorCommitAction.SaveAs, reduceExport: true);
-        menu.Items.Add(reduceExport);
-
         var content = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -2466,7 +2475,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         grid.SetResourceReference(Panel.BackgroundProperty, "Surface.Base");
-        UIElement toolRail = BuildToolRail();
+        UIElement toolRail = _workspaceToolRail = BuildToolRail();
         Grid.SetColumn(toolRail, 0);
         Grid.SetRowSpan(toolRail, 2);
         grid.Children.Add(toolRail);
@@ -2513,6 +2522,9 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var panel = new Border { Name = "AnnotationToolRail", Child = groups };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
+        panel.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
+        panel.BorderThickness = new Thickness(0);
+        panel.CornerRadius = new CornerRadius(0);
         // Tighter than the shared rail padding: six groups must still fit the 460 DIP minimum height.
         panel.Padding = new Thickness(6, 4, 6, 4);
         // A wrapped command row reduces the available rail height. Keep every tool's
@@ -2570,30 +2582,21 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private Border BuildViewport()
     {
-        _viewport.SetResourceReference(Panel.BackgroundProperty, "Surface.Sunken");
+        _viewport.SetResourceReference(Panel.BackgroundProperty, "Surface.Canvas");
         _viewport.Children.Add(_surface);
         _overlayCanvas.IsHitTestVisible = true;
         _overlayCanvas.Background = null;
         _viewport.Children.Add(_overlayCanvas);
 
-        Border frame = ThemedBorder(new Border
+        var frame = new Border
         {
-            Background = Brush("Surface.Sunken", Colors.Black),
-            BorderBrush = Brush("Border.Subtle", Colors.DimGray),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Margin = new Thickness(12),
+            Name = "AnnotationCanvasWorkspace",
             ClipToBounds = true,
             Child = _viewport,
-        }, "Surface.Sunken");
-        // A Border does not clip its child to its rounded corners, and the canvas paints its
-        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in). The corners
-        // are drawn over the canvas, above everything in it, instead of clipping the canvas to
-        // the outline's inside edge: WPF draws a rounded clip through an intermediate surface as
-        // large as the canvas (about 30 MB for a 4K editor). The frame sits on the body's surface.
-        var corners = new CanvasFrameCorners(frame, "Surface.Base");
-        Panel.SetZIndex(corners, int.MaxValue);
-        _viewport.Children.Add(corners);
+        };
+        // The source already owns its precise pixel edge and inset. A second rounded frame
+        // and inset only boxed the work area in; the canvas now reaches the quiet chrome.
+        frame.SetResourceReference(Border.BackgroundProperty, "Surface.Canvas");
         return frame;
     }
 
@@ -2645,7 +2648,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             Name = "AnnotationPropertyBarHost",
             Height = 48,
-            BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(8, 4, 0, 4),
             Child = new ScrollViewer
             {
@@ -2658,8 +2660,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             },
             SnapsToDevicePixels = true,
         };
-        border.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-        border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        border.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         AutomationProperties.SetAutomationId(border, "AnnotationPropertyBarHost");
         return border;
     }
@@ -3148,7 +3149,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 0, 0),
         };
-        dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Muted");
         Grid.SetColumn(dimensions, 2);
         grid.Children.Add(dimensions);
 
@@ -3168,19 +3169,16 @@ internal sealed partial class AnnotationEditorControl : Grid
         _retryCopyButton.Click += (_, _) => Commit(EditorCommitAction.CopyToClipboard);
         commands.Children.Add(_retryCopyButton);
         commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true));
-        commands.Children.Add(BuildMediaInfoButton(compact: true));
         Grid.SetColumn(commands, 3);
         grid.Children.Add(commands);
 
         return ThemedBorder(new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
-            BorderBrush = Brush("Border.Subtle", Colors.Gray),
-            BorderThickness = new Thickness(0, 1, 0, 0),
+            Name = "AnnotationStatusBarHost",
             Padding = new Thickness(12, 6, 12, 7),
             Child = grid,
             SnapsToDevicePixels = true,
-        }, "Surface.Raised");
+        }, "Surface.Base");
     }
 
     // ---- Tool rail / command helpers -----------------------------------------------
