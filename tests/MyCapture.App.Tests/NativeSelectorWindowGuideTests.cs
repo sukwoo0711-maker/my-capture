@@ -57,6 +57,43 @@ public sealed class NativeSelectorWindowGuideTests
         Assert.Equal(width, chrome.GuideWidthForTest);
     });
 
+    // The retained chrome keeps the hint's words between selectors: the next bind sets them before any
+    // window is shown, and the same guide again keeps the same key caps instead of rebuilding them.
+    [Fact]
+    public void ReusedChromeShowsTheNextSelectorsGuideAndKeepsKeyCapsOfTheSameGuide() => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("en-US");
+        PointD pointer = new(80, 80);
+        string windowGuide = UiText.Get("CaptureGuide2_ClickWindow") + "  ·  " + UiText.Get("CaptureGuide2_DragCapture")
+            + "  ·  " + UiText.Get("CaptureGuide2_Esc");
+        string regionGuide = UiText.Get("CaptureGuide2_DragCapture") + "  ·  " + UiText.Get("CaptureGuide2_Esc");
+        using NativeCaptureOverlay first = Owner(() => pointer, magnifier: true, detectWindows: true);
+        using NativeCaptureOverlay second = Owner(() => pointer, magnifier: true, detectWindows: true);
+        using NativeCaptureOverlay region = Owner(() => pointer, magnifier: true, detectWindows: false);
+        using var chrome = new NativeSelectorChrome(first, true, false);
+        chrome.Update(pointer, first.DisplayedRegionForTest);
+        Assert.Equal(windowGuide, chrome.GuideTextForTest);
+        Border[] caps = chrome.HintForTest.KeycapBordersForTest.ToArray();
+        Assert.NotEmpty(caps);
+        double width = chrome.GuideWidthForTest;
+
+        chrome.Detach();
+        chrome.Bind(second, requireExclusion: false);
+        Assert.All(chrome.Windows, window => Assert.False(window.IsVisible));
+        Assert.Equal(windowGuide, chrome.GuideTextForTest);
+        Assert.Equal(caps, chrome.HintForTest.KeycapBordersForTest);
+        Assert.Equal(width, chrome.GuideWidthForTest);
+        Assert.Equal(width, chrome.LogicalSizeForTest(chrome.GuideWindowForTest!).Width);
+
+        chrome.Detach();
+        chrome.Bind(region, requireExclusion: false);
+        Assert.All(chrome.Windows, window => Assert.False(window.IsVisible));
+        Assert.Equal(regionGuide, chrome.GuideTextForTest);
+        Assert.Equal(MeasureGuideWidth(chrome, DefaultGuide), chrome.GuideWidthForTest);
+        Assert.Equal(chrome.GuideWidthForTest, chrome.LogicalSizeForTest(chrome.GuideWindowForTest!).Width);
+        chrome.Detach();
+    });
+
     [Fact]
     public void RegionAndScrollGuidesKeepTheUsualChip() => StaTestHost.Run(() =>
     {

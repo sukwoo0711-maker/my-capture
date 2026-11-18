@@ -1065,7 +1065,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         Array.Clear(_sample);
         if (_magnifier is { } magnifier) magnifier.WritePixels(new Int32Rect(0, 0, magnifier.PixelWidth, magnifier.PixelHeight), _sample, 15 * 4, 0);
         if (_size is { } size) size.Text = string.Empty;
-        if (_hint is { } hint && hint.Show(_defaultGuide)) _guideLayoutDirty = true;
+        // The hint keeps its words. The next bind sets them in Update before any chrome window is
+        // shown, and a selector with the same guide as the last one then rebuilds no key caps.
     }
 
     public void Dispose()
