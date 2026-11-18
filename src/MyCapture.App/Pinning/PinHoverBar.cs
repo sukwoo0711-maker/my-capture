@@ -135,11 +135,12 @@ internal sealed class PinHoverBar : Window
         {
             Child = row,
             Padding = new Thickness(3),
-            CornerRadius = new CornerRadius(AllowsTransparency ? 8 : 0),
+            CornerRadius = AllowsTransparency ? FoundationMetrics.FloatingCornerRadius : new CornerRadius(0),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0),
         };
         _surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
+        if (AllowsTransparency) _surface.SetResourceReference(Border.CornerRadiusProperty, "Radius.Floating");
         _surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         _surface.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         Content = _surface;

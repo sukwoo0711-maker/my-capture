@@ -27,19 +27,19 @@ public sealed class QuickAccessContextMenuTests
         QuickAccessWindow card = CreateCard();
         try
         {
-            MenuItem[] actions = card.CardMenu.Items.OfType<MenuItem>().Take(5).ToArray();
-            Assert.Equal(QuickAccessWindow.ActionOrder, actions.Select(item => (string)item.Tag));
+            MenuItem[] actions = card.CardMenu.Items.OfType<MenuItem>().Take(6).ToArray();
+            Assert.Equal(QuickAccessWindow.MenuActionOrder, actions.Select(item => (string)item.Tag));
             for (int index = 0; index < actions.Length; index++)
             {
-                string action = QuickAccessWindow.ActionOrder[index];
-                Assert.Equal(AutomationProperties.GetName(card.ActionButtonsForTest[index]), actions[index].Header);
-                Assert.Equal(ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint, actions[index].InputGestureText);
+                string action = QuickAccessWindow.MenuActionOrder[index];
+                Assert.Equal(UiText.Get("QuickAccess." + action), actions[index].Header);
+                Assert.Equal(action == "Library" ? string.Empty : ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint, actions[index].InputGestureText);
                 Assert.Equal(actions[index].Header, AutomationProperties.GetName(actions[index]));
                 Assert.Equal(actions[index].InputGestureText, AutomationProperties.GetAcceleratorKey(actions[index]));
             }
-            Assert.IsType<Separator>(card.CardMenu.Items[5]);
-            Assert.Equal("OpenWith", Assert.IsAssignableFrom<MenuItem>(card.CardMenu.Items[6]).Tag);
-            Assert.Equal(7, card.CardMenu.Items.Count);
+            Assert.IsType<Separator>(card.CardMenu.Items[6]);
+            Assert.Equal("OpenWith", Assert.IsAssignableFrom<MenuItem>(card.CardMenu.Items[7]).Tag);
+            Assert.Equal(8, card.CardMenu.Items.Count);
         }
         finally { card.Close(); }
     });
@@ -61,8 +61,14 @@ public sealed class QuickAccessContextMenuTests
                 if (useMenu)
                     card.CardMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, action))
                         .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                else card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf(action)]
+                else if (QuickAccessWindow.ActionOrder.Contains(action))
+                    card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf(action)]
                         .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                else
+                {
+                    ShortcutDefinition shortcut = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action);
+                    Assert.True(card.HandleShortcut(shortcut.Key, shortcut.Modifiers));
+                }
                 Assert.Equal([action], called);
             }
             finally { card.Close(); }
@@ -139,7 +145,7 @@ public sealed class QuickAccessContextMenuTests
             Assert.True(card.HandleKeyDown(args, modifiers));
             OpenWithTestSupport.PumpUntil(() => card.CardMenu.IsOpen);
             Assert.Equal(0, source.Queries);
-            var openWith = (MenuItem)card.CardMenu.Items[6];
+            var openWith = (MenuItem)card.CardMenu.Items[7];
             Assert.True(openWith.Focusable);
             Assert.True(openWith.Focus());
             var right = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(openWith), Environment.TickCount, Key.Right)
@@ -226,7 +232,7 @@ public sealed class QuickAccessContextMenuTests
         card.OpenWithSource = source;
         try
         {
-            var item = (MenuItem)card.CardMenu.Items[6];
+            var item = (MenuItem)card.CardMenu.Items[7];
             item.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent, item));
             ((MenuItem)item.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             await OpenWithTestSupport.WaitUntilAsync(() => card.StatusForTest.Kind == FeedbackKind.ActionRequired);
@@ -251,7 +257,7 @@ public sealed class QuickAccessContextMenuTests
         var source = new OpenWithTestSource(1); card.OpenWithSource = source;
         try
         {
-            var item = (MenuItem)card.CardMenu.Items[6];
+            var item = (MenuItem)card.CardMenu.Items[7];
             item.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent, item));
             ((MenuItem)item.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Assert.Equal(UiText.Get("OpenWith.Preparing"), card.StatusForTest.Text);
@@ -275,7 +281,7 @@ public sealed class QuickAccessContextMenuTests
         card.OpenWithSource = source;
         try
         {
-            var item = (MenuItem)card.CardMenu.Items[6];
+            var item = (MenuItem)card.CardMenu.Items[7];
             item.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent, item));
             Assert.IsType<MenuItem>(Assert.Single(item.Items)).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             await OpenWithTestSupport.WaitUntilAsync(() => source.Set.Disposed);
@@ -305,7 +311,7 @@ public sealed class QuickAccessContextMenuTests
             card.CardMenu.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             card.CardMenu.Arrange(new Rect(card.CardMenu.DesiredSize));
             card.CardMenu.UpdateLayout();
-            var item = (MenuItem)card.CardMenu.Items[6];
+            var item = (MenuItem)card.CardMenu.Items[7];
             item.ApplyTemplate();
             var popup = Assert.IsType<Popup>(item.Template.FindName("PART_Popup", item));
             Assert.False(popup.AllowsTransparency);
@@ -404,7 +410,7 @@ public sealed class QuickAccessContextMenuTests
 
     private static MenuItem AssertOpenWithStyle(Application application, QuickAccessWindow card)
     {
-        var item = Assert.IsAssignableFrom<MenuItem>(card.CardMenu.Items[6]);
+        var item = Assert.IsAssignableFrom<MenuItem>(card.CardMenu.Items[7]);
         var style = Assert.IsType<Style>(application.FindResource(typeof(MenuItem)));
         Assert.True(ReferenceEquals(style, item.Style),
             "Open with must resolve the application's MenuItem style before its popup is created.");

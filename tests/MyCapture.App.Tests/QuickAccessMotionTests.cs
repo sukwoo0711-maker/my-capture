@@ -240,7 +240,7 @@ public sealed class QuickAccessMotionTests
         try
         {
             SymbolIcon glyph = card.StatusGlyphForTest;
-            Button copyButton = card.ActionButtonsForTest[4];
+            Button copyButton = card.ActionButtonsForTest[2];
             SymbolIcon icon = ActionIcon(copyButton);
             Geometry copyIcon = icon.Data!;
             Brush restText = card.StatusForegroundForTest;
@@ -282,7 +282,8 @@ public sealed class QuickAccessMotionTests
         QuickAccessWindow card = Shown(router);
         try
         {
-            SymbolIcon icon = ActionIcon(card.ActionButtonsForTest[2]);
+            MenuItem save = card.CardMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Save"));
+            SymbolIcon icon = Assert.Single(Assert.IsType<Grid>(save.Icon).Children.OfType<SymbolIcon>());
             Brush restText = card.StatusForegroundForTest;
             card.ShortcutActions["Save"]();
             await Settle();
@@ -355,6 +356,11 @@ public sealed class QuickAccessMotionTests
 
     private static void Click(QuickAccessWindow card, string automationId)
     {
+        if (automationId == "QuickAccess.Library")
+        {
+            card.LibraryMenuItemForTest.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            return;
+        }
         Button button = QuickAccessDetachedFixture.Descendants(card).OfType<Button>()
             .Single(candidate => AutomationProperties.GetAutomationId(candidate) == automationId);
         button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));

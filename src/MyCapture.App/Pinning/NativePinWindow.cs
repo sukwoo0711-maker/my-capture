@@ -1310,8 +1310,8 @@ internal sealed class NativePinWindow : IDisposable, INativeMotionTarget
             // As PinWindow.OnLandingRendering: two landing outlines in a row, or a one-second accent.
             double elapsed = Elapsed(_findStarted);
             bool animated = FluidMotion.AnimationsEnabled;
-            accent = animated ? PinLandingDecoration.Render(elapsed % PinLandingDecoration.OutlineEndMs).BorderAccentAmount : 1;
-            if (elapsed >= (animated ? PinLandingDecoration.OutlineEndMs * 2 : 1000))
+            accent = animated ? PinLandingDecoration.FindCueAccent(elapsed % PinLandingDecoration.FindCueCycleMs) : 1;
+            if (elapsed >= (animated ? PinLandingDecoration.FindCueCycleMs * 2 : 1000))
             {
                 _findStarted = 0; accent = 0;
                 _baseColor = ResolveBaseColor();

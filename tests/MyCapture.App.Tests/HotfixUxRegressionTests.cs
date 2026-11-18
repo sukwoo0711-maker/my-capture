@@ -88,7 +88,7 @@ public sealed class HotfixUxRegressionTests
             Assert.False(card.IsActive);
             Assert.Same(before, Keyboard.FocusedElement);
             Assert.NotEqual(0, GetWindowLongPtrW(new WindowInteropHelper(card).Handle, -20).ToInt64() & 0x08000000L);
-            Assert.Equal(5, card.ActionButtonsForTest.Count);
+            Assert.Equal(3, card.ActionButtonsForTest.Count);
             Assert.All(card.ActionButtonsForTest, button => Assert.False(button.Focusable));
             Assert.False(card.KeepToggleForTest.Focusable);
             card.Advance(TimeSpan.FromSeconds(9), false);
@@ -232,16 +232,19 @@ public sealed class HotfixUxRegressionTests
         {
             foreach (string action in new[] { "Copy", "Pin", "Save" })
             {
-                Button button = HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action);
-                Assert.Equal(UiText.Get("QuickAccess." + action), AutomationProperties.GetName(button));
+                Control control = action == "Save" ? HotfixUxSelfTest.CardControl<MenuItem>(card, "QuickAccess." + action)
+                    : HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action);
+                Assert.Equal(UiText.Get("QuickAccess." + action), AutomationProperties.GetName(control));
                 Assert.Equal(ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint,
-                    AutomationProperties.GetAcceleratorKey(button));
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AutomationProperties.GetAcceleratorKey(control));
+                control.RaiseEvent(new RoutedEventArgs(control is MenuItem ? MenuItem.ClickEvent : Button.ClickEvent));
             }
             Assert.Equal((1, 1, 1, 0, 0, 0), (copied, pinned, saved, edited, library, closed));
             foreach (string action in new[] { "Edit", "CopyText", "Library" })
                 Assert.Equal(UiText.Get("QuickAccess." + action),
-                    AutomationProperties.GetName(HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action)));
+                    AutomationProperties.GetName(action == "Edit"
+                        ? HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action)
+                        : HotfixUxSelfTest.CardControl<MenuItem>(card, "QuickAccess." + action)));
             Assert.False(card.IsVisible);
         }
         finally { card.Close(); }

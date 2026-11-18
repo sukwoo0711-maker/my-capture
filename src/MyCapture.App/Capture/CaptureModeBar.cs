@@ -159,7 +159,7 @@ internal sealed class CaptureModeBar : Border
     private readonly Button _help;
     private readonly Button _cancel;
     private readonly TextBlock _captureLabel;
-    private readonly FrameworkElement _textSeparator;
+    private readonly FrameworkElement _optionsSeparator;
     private readonly FrameworkElement _kindSwitch;
     private readonly FrameworkElement _kindSeparator;
     private readonly FrameworkElement _recordingKindIndicator;
@@ -213,8 +213,11 @@ internal sealed class CaptureModeBar : Border
         kinds.Children.Add(_captureKind);
         kinds.Children.Add(_recordKind);
         AutomationProperties.SetName(kinds, UiText.Get("Onboard_BarKindName"));
-        _kindSwitch = kinds;
-        _kindSeparator = Divider();
+        // Kind is a paired switch; modes remain individual choices on the bar's main plane.
+        var kindSurface = new Border { Child = kinds, CornerRadius = new CornerRadius(ButtonRadius) };
+        kindSurface.SetResourceReference(BackgroundProperty, HoverKey);
+        _kindSwitch = kindSurface;
+        _kindSeparator = Divider(12);
         _recordingKindIndicator = ButtonContent(_recordKind, RecordIcon, null);
         _recordingKindIndicator.Width = 32;
         _recordingKindIndicator.Margin = new Thickness(0, 0, 4, 0);
@@ -268,13 +271,13 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(_help, UiText.Get("CaptureGuide2_Help"));
         AutomationProperties.SetName(_cancel, UiText.Get("CaptureGuide2_Cancel"));
 
-        _textSeparator = Divider();
+        _optionsSeparator = Divider(8);
         _items = new WrapPanel { Orientation = Orientation.Horizontal };
         KeyboardNavigation.SetDirectionalNavigation(_items, KeyboardNavigationMode.Cycle);
         foreach (UIElement item in new UIElement[]
                  {
-                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _freeform, _fullScreen, _scroll, _delay,
-                     _ratio, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
+                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _freeform, _fullScreen, _scroll,
+                     _text, _color, _optionsSeparator, _delay, _ratio, Divider(4), _more, _help, _cancel,
                  })
             _items.Children.Add(item);
         Child = _items;
@@ -361,7 +364,8 @@ internal sealed class CaptureModeBar : Border
         _window.Visibility = detectWindows && !recording ? Visibility.Visible : Visibility.Collapsed;
         _text.Visibility = textAvailable && !recording ? Visibility.Visible : Visibility.Collapsed;
         _color.Visibility = colorAvailable && !recording ? Visibility.Visible : Visibility.Collapsed;
-        _textSeparator.Visibility = (textAvailable || colorAvailable) && !recording ? Visibility.Visible : Visibility.Collapsed;
+        _optionsSeparator.Visibility = ratioAvailable || (otherActions && !recording)
+            ? Visibility.Visible : Visibility.Collapsed;
         Visibility others = otherActions && !recording ? Visibility.Visible : Visibility.Collapsed;
         _kindSwitch.Visibility = _kindSeparator.Visibility = otherActions ? Visibility.Visible : Visibility.Collapsed;
         _more.Visibility = others;
@@ -381,12 +385,15 @@ internal sealed class CaptureModeBar : Border
         double chromeWidth = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
         double fullWidth = chromeWidth;
         bool secondaryActions = _otherActions && !_recording;
+        bool hasOptions = _ratio.Visibility == Visibility.Visible || secondaryActions;
         double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         for (int i = 0; i < _items.Children.Count; i++)
         {
             var item = (FrameworkElement)_items.Children[i];
             bool secondary = ReferenceEquals(item, _scroll) || ReferenceEquals(item, _delay);
-            if (secondary ? !secondaryActions : item.Visibility == Visibility.Collapsed) continue;
+            bool shown = ReferenceEquals(item, _optionsSeparator) ? hasOptions
+                : secondary ? secondaryActions : item.Visibility != Visibility.Collapsed;
+            if (!shown) continue;
             fullWidth += ReferenceEquals(item, _kindSwitch)
                 ? LaidOutWidth(_captureKind, dpi) + LaidOutWidth(_recordKind, dpi)
                 : LaidOutWidth(item, dpi);
@@ -396,9 +403,14 @@ internal sealed class CaptureModeBar : Border
         Visibility visibility = secondaryActions && !_compactActions ? Visibility.Visible : Visibility.Collapsed;
         if (_scroll.Visibility != visibility) _scroll.Visibility = visibility;
         if (_delay.Visibility != visibility) _delay.Visibility = visibility;
+        bool optionsShown = _ratio.Visibility == Visibility.Visible || visibility == Visibility.Visible;
+        _optionsSeparator.Visibility = optionsShown ? Visibility.Visible : Visibility.Collapsed;
         double contentWidth = fullWidth - chromeWidth;
         if (_compactActions)
+        {
             contentWidth -= LaidOutWidth(_scroll, dpi) + LaidOutWidth(_delay, dpi);
+            if (!optionsShown && hasOptions) contentWidth -= LaidOutWidth(_optionsSeparator, dpi);
+        }
         // Keep the wrapping boundary on the layout pixel grid, rounded up. At 150% a natural
         // 527-DIP row otherwise rounds down to 526 2/3 during arrange and wraps its last target
         // below the height measured for one row. Narrower displays still wrap within the bar.
@@ -877,14 +889,14 @@ internal sealed class CaptureModeBar : Border
         return panel;
     }
 
-    private static FrameworkElement Divider()
+    private static FrameworkElement Divider(double space)
     {
         // Half the button's height: centred, it starts 8 DIPs down, a whole pixel at 125, 150 and 175 %.
         var line = new Rectangle
         {
             Width = 1,
             Height = ButtonSize / 2,
-            Margin = new Thickness(4, 0, 4, 0),
+            Margin = new Thickness(space, 0, space, 0),
             Opacity = 0.45,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,

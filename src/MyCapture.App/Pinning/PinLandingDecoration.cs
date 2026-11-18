@@ -12,21 +12,31 @@ namespace MyCapture.App.Pinning;
 /// <summary>A short, passive, capture-excluded landing ornament above a newly opened pin.</summary>
 internal sealed class PinLandingDecoration : Window
 {
-    internal const double LandingMs = 150;
+    internal static readonly double LandingMs = FluidMotion.FastDuration.TimeSpan.TotalMilliseconds;
 
-    // A game-style hit stop: the contact frame holds this long, then the ring, shadow,
-    // glow and outline resume where they stopped. The content never moves.
-    internal const double HitStopMs = 40;
-
-    // The authored motion ends, before the hit stop is added.
-    private const double MotionEndMs = 560;
-    private const double OutlineMotionEndMs = 570;
+    // The existing ornament settles once, then releases across the normal interval.
+    // It shares the foundation's easing; the captured content never moves or scales.
+    internal const double HitStopMs = 0;
 
     /// <summary>Elapsed time at which the ornament closes.</summary>
-    internal const double DurationMs = MotionEndMs + HitStopMs;
+    internal static readonly double DurationMs = FluidMotion.DeliberateDuration.TimeSpan.TotalMilliseconds;
 
     /// <summary>Elapsed time at which the pin outline is back to its resting colour.</summary>
-    internal const double OutlineEndMs = OutlineMotionEndMs + HitStopMs;
+    internal static readonly double OutlineEndMs = DurationMs;
+
+    // Finding an existing pin is a separate, two-pulse attention cue. Keep its established
+    // cadence when shortening the decoration used only for a newly opened pin.
+    internal const double FindCueCycleMs = 610;
+
+    internal static double FindCueAccent(double ms)
+    {
+        if (ms < 150 || ms >= FindCueCycleMs) return 0;
+        double authored = Math.Max(150, ms - 40);
+        return Math.Exp(-(authored - 150) / 130);
+    }
+
+    private static readonly System.Windows.Media.Animation.IEasingFunction ArrivalEasing = FreezeEasing(FluidMotion.StandardEasing);
+    private static readonly System.Windows.Media.Animation.IEasingFunction ReleaseEasing = FreezeEasing(FluidMotion.SoftLandingEasing);
 
     internal const double MarginDip = 64;
     internal const double CornerSizeDip = 120;
@@ -241,56 +251,41 @@ internal sealed class PinLandingDecoration : Window
     internal static PinLandingFrame Render(double ms)
     {
         double t = MotionTime(double.IsNaN(ms) ? 0 : Math.Max(0, ms));
-        bool complete = t >= MotionEndMs;
-        double p = Bezier(Segment(t, 0, LandingMs), .5, 0, .9, .5);
-        double d = Math.Max(0, t - LandingMs);
-        double press = d <= 45 ? OutQuad(d / 45) : 1 - Bezier(Segment(d, 45, 175), .3, 1.6, .6, 1);
-        double fade = 1 - Segment(t, 420, MotionEndMs);
-        double r = OutCubic(Segment(d, 0, 260));
-        double lift = 1 - p;
+        bool complete = t >= DurationMs;
+        double arrival = ArrivalEasing.Ease(Segment(t, 0, LandingMs));
+        double release = ReleaseEasing.Ease(Segment(t, LandingMs, DurationMs));
+        double remaining = complete ? 0 : 1 - release;
+        double lift = 1 - arrival;
         return new PinLandingFrame(
-            -15 * lift, -17 * lift, -30 * lift,
-            t < LandingMs ? 1.35 - (.35 * p) : 1 - (.14 * press),
-            complete ? 0 : Math.Min(Segment(t, 0, 60), fade),
-            .4 + (2.3 * r),
-            !complete && t >= LandingMs && d <= 260 ? .7 * (1 - OutQuad(d / 260)) : 0,
-            t < LandingMs ? Lerp(3, 22, lift) : Lerp(3, 6, r),
-            t < LandingMs ? Lerp(8, 36, lift) : Lerp(8, 16, r),
-            complete ? 0 : (t < LandingMs ? Lerp(.42, .5, lift) * Segment(t, 0, 83) : Lerp(.44, .32, r)) * fade,
-            !complete && t >= LandingMs ? .38 * Math.Exp(-d / 140) * fade : 0,
-            t >= LandingMs && t < OutlineMotionEndMs ? Math.Exp(-d / 130) : 0,
+            -6 * lift, -8 * lift, -12 * lift,
+            1 + (.08 * lift),
+            arrival * remaining,
+            .7 + (.8 * release),
+            t >= LandingMs ? .22 * remaining : 0,
+            Lerp(2, 6, lift),
+            Lerp(8, 14, lift),
+            .22 * arrival * remaining,
+            t >= LandingMs ? .1 * remaining : 0,
+            arrival * remaining,
             complete);
     }
 
     /// <summary>
-    /// The authored motion time for an elapsed time: unchanged until contact, held on the contact
-    /// frame for <see cref="HitStopMs"/>, then the same curve <see cref="HitStopMs"/> later.
+    /// The elapsed time is also the authored motion time; there is no pause at contact.
     /// </summary>
-    internal static double MotionTime(double ms) => ms < LandingMs ? ms : Math.Max(LandingMs, ms - HitStopMs);
+    internal static double MotionTime(double ms) => ms;
 
     private static double Segment(double t, double from, double to) => Math.Clamp((t - from) / (to - from), 0, 1);
-    private static double OutQuad(double t) => 1 - ((1 - t) * (1 - t));
-    private static double OutCubic(double t) => 1 - Math.Pow(1 - t, 3);
     private static double Lerp(double from, double to, double p) => from + ((to - from) * p);
 
-    // Solve x(u)=progress before evaluating y(u); unlike KeySpline this permits the
-    // authored y=1.6 overshoot during the small compression/rebound after landing.
-    private static double Bezier(double progress, double x1, double y1, double x2, double y2)
+    private static System.Windows.Media.Animation.IEasingFunction FreezeEasing(System.Windows.Media.Animation.IEasingFunction easing)
     {
-        if (progress <= 0 || progress >= 1) return progress;
-        double low = 0;
-        double high = 1;
-        for (int i = 0; i < 24; i++)
-        {
-            double mid = (low + high) / 2;
-            if (Cubic(mid, x1, x2) < progress) low = mid;
-            else high = mid;
-        }
-        return Cubic((low + high) / 2, y1, y2);
+        if (easing is not Freezable resource) return easing;
+        // Cache immutable curves once; Render is also used by pins on another dispatcher.
+        Freezable copy = resource.CloneCurrentValue();
+        copy.Freeze();
+        return (System.Windows.Media.Animation.IEasingFunction)copy;
     }
-
-    private static double Cubic(double t, double first, double second) =>
-        (3 * (1 - t) * (1 - t) * t * first) + (3 * (1 - t) * t * t * second) + (t * t * t);
 
     private sealed class LandingSurface : FrameworkElement
     {

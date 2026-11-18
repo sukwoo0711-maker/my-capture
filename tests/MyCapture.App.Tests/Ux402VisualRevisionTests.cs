@@ -27,14 +27,21 @@ public sealed class Ux402VisualRevisionTests
         try
         {
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
-            Assert.Equal(5, actions.Count);
-            foreach (var (button, expected) in actions.Zip(new[] { edit, pin, save, copyText, copy }))
+            Assert.Equal(3, actions.Count);
+            foreach (var (button, expected) in actions.Zip(new[] { pin, edit, copy }))
             {
                 Assert.Equal(expected, button.ToolTip);
                 Assert.Equal(expected[..expected.LastIndexOf("  ", StringComparison.Ordinal)], new ButtonAutomationPeer(button).GetName());
                 Assert.Equal(expected[^1].ToString(), AutomationProperties.GetAcceleratorKey(button));
                 Assert.InRange(ToolTipService.GetInitialShowDelay(button), 0, 150);
                 Assert.Equal(0, ToolTipService.GetBetweenShowDelay(button));
+            }
+            foreach (var (action, expected) in new[] { ("Save", save), ("CopyText", copyText) })
+            {
+                MenuItem item = card.CardMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, action));
+                Assert.Equal(expected[..expected.LastIndexOf("  ", StringComparison.Ordinal)], new MenuItemAutomationPeer(item).GetName());
+                Assert.Equal(expected[^1].ToString(), item.InputGestureText);
+                Assert.Equal(item.InputGestureText, AutomationProperties.GetAcceleratorKey(item));
             }
             ToggleButton toggle = card.KeepToggleForTest;
             Assert.Equal(keep, toggle.ToolTip);
