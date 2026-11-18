@@ -299,9 +299,19 @@ Border.Subtle (Surface.Sunken / Border.Control in contrast mode). `Check.Fill`, 
 Text.Primary-filled with Base-colour ink; contrast keeps the original outlined geometry.
 `Toggle.CheckedFill`, `Toggle.CheckedStroke`, `Toggle.CheckedThickness`, `Toggle.CheckedForeground` and
 `Toggle.CheckedFocusStroke` separate the selected fill, one-DIP edge, text and keyboard focus.
+Segmented choices and `Tab.Help` place the current item on Surface.Floating above a Surface.Sunken
+track, with Stroke.Selected at one DIP and FontWeight.Emphasis; other labels use FontWeight.Regular.
+The face-to-track contrast is at least 1.2:1 and the selected edge at least 3:1 in dark and light.
+Windows contrast preserves each control's system roles: toggles use Highlight / HighlightText
+without an extra edge; tabs use Window with WindowText ink and a two-DIP WindowText edge. Keyboard
+focus stays separate: HighlightText on a selected toggle and WindowText on a tab.
 `Combo.Fill`, `Combo.Edge`, `Combo.FocusEdge`, `Combo.HoverFill`, `Combo.HoverEdge`, `Combo.PressedFill`
 and `Combo.Chevron` follow shared button/state roles; `Scroll.Lane` stays clear outside contrast mode.
 `ControlLanguage.Enabled` selects these normal templates while preserving contrast behaviour.
+Scroll bars use the same growing grip in every palette: three DIP at rest, six on hover or drag,
+with at least 1.5:1 rest-grip contrast against the lane. Contrast palettes keep the system-owned
+Highlight / WindowText / WindowText grip colours and Window lane. Native track commands, the
+16-DIP lane and minimum 24-DIP thumb length stay independent of the painted grip width.
 
 `Button.Fill` / `Button.BorderBrush` use the shared face and edge tokens. `Button.ChromeInset` and
 `Button.ChromeInset.Compact` are 0,4,0,4 / 0,2,0,2; `Button.FocusInset` and its .Compact variant are

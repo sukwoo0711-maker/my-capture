@@ -81,20 +81,19 @@ public sealed class ControlLanguageAppearanceTests
         Assert.Equal(Orientation.Vertical, track.Orientation);
         Assert.Same(ScrollBar.PageUpCommand, track.DecreaseRepeatButton.Command);
         Assert.Same(ScrollBar.PageDownCommand, track.IncreaseRepeatButton.Command);
+        Assert.Equal(16d, Part<Border>(bar, "Lane").ActualWidth);
+        var grip = Part<ScrollThumbChrome>(track.Thumb, "Grip");
+        Assert.Equal(3d, grip.GripWidth);
+        Assert.Equal(ColorOf(resources, "Fill.ScrollThumb"), grip.GripColor);
+        Assert.True(track.Thumb.ActualHeight >= 24);
         if (legacy)
         {
             Assert.Equal(ColorOf(resources, "Surface.Base"), ColorOf(bar.Background));
-            Assert.IsType<Border>(track.Thumb.Template.FindName("Grip", track.Thumb));
             Assert.NotNull(input.Template.FindName("FocusRing", input));
         }
         else
         {
             Assert.Equal(Colors.Transparent, ColorOf(bar.Background));
-            Assert.Equal(16d, Part<Border>(bar, "Lane").ActualWidth);
-            var grip = Part<ScrollThumbChrome>(track.Thumb, "Grip");
-            Assert.Equal(3d, grip.GripWidth);
-            Assert.Equal(ColorOf(resources, "Fill.ScrollThumb"), grip.GripColor);
-            Assert.True(track.Thumb.ActualHeight >= 24);
             Assert.Equal(0d, Part<Border>(input, "FocusRing").Opacity);
             var edge = Part<InputEdge>(input, "BottomEdge");
             Assert.Equal(1d, edge.Thickness);

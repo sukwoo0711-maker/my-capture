@@ -80,7 +80,7 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
             })
             {
                 Border selected = Part<Border>(control, part);
-                Assert.Equal(ColorOf(resources, "Surface.Selected"), ColorOf(selected.Background));
+                Assert.Equal(ColorOf(resources, control == sheet.SelectedTab ? "Surface.Floating" : "Surface.Selected"), ColorOf(selected.Background));
                 Assert.Equal(ColorOf(resources, "Selection.Stroke"), ColorOf(selected.BorderBrush));
                 Assert.Equal(new Thickness(1), selected.BorderThickness);
                 Assert.Equal(1d, selected.Opacity);
@@ -91,7 +91,7 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
         // retain the system selection pair. Keyboard focus has its separate two-DIP ring.
         Border toggleOn = Part<Border>(sheet.Toggle, "CheckedLayer");
         Assert.Null(toggleOn.Child);
-        Assert.Equal(ColorOf(resources, contrast ? "Text.SelectionBackground" : "Surface.Selected"), ColorOf(toggleOn.Background));
+        Assert.Equal(ColorOf(resources, contrast ? "Text.SelectionBackground" : "Surface.Floating"), ColorOf(toggleOn.Background));
         Assert.Equal(new Thickness(contrast ? 0 : 1), toggleOn.BorderThickness);
         Assert.Equal(ColorOf(resources, contrast ? "Text.SelectionForeground" : "Text.Primary"), ColorOf(sheet.Toggle.Foreground));
         Assert.True(ThemeContrast.Ratio(ToThemeColor(ColorOf(sheet.Toggle.Foreground)), ToThemeColor(ColorOf(toggleOn.Background))) >= 4.5,
@@ -242,7 +242,7 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
             Border layer = Part<Border>(toggle, "CheckedLayer");
             Assert.Equal(1d, layer.Opacity);
             Assert.Equal(new Thickness(systemContrast ? 0 : 1), layer.BorderThickness);
-            Assert.Equal(ColorOf(resources, systemContrast ? "Text.SelectionBackground" : "Surface.Selected"), ColorOf(layer.Background));
+            Assert.Equal(ColorOf(resources, systemContrast ? "Text.SelectionBackground" : "Surface.Floating"), ColorOf(layer.Background));
             Assert.Equal(ColorOf(resources, systemContrast ? "Text.SelectionForeground" : "Text.Primary"), ColorOf(toggle.Foreground));
             if (systemContrast)
             {
@@ -313,7 +313,7 @@ public sealed class VisualSystemControlTests(ITestOutputHelper output)
 
             foreach ((ToggleButton control, string fillKey, string ringKey) in new[]
             {
-                (toggle, palette == "high-contrast" || system is not null ? "Text.SelectionBackground" : "Surface.Selected",
+                (toggle, palette == "high-contrast" || system is not null ? "Text.SelectionBackground" : "Surface.Floating",
                     palette == "high-contrast" || system is not null ? "Text.SelectionForeground" : "Border.Focus"),
                 (disclosure, "Surface.Selected", "Border.Focus"),
             })

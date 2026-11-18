@@ -112,11 +112,18 @@ public sealed class ScrollThumbChrome : FrameworkElement
     public ScrollThumbChrome()
     {
         IsHitTestVisible = false;
+        Loaded += (_, _) => SetState(animate: false);
         Unloaded += (_, _) => SetState(animate: false);
     }
 
-    private static void OnStateChanged(DependencyObject owner, DependencyPropertyChangedEventArgs args) =>
-        ((ScrollThumbChrome)owner).SetState(animate: ((ScrollThumbChrome)owner).IsVisible);
+    private static void OnStateChanged(DependencyObject owner, DependencyPropertyChangedEventArgs args)
+    {
+        var chrome = (ScrollThumbChrome)owner;
+        // A newly resolved palette is already the current appearance, not a transition from
+        // the transparent dependency-property default. Only pointer interaction animates.
+        bool interaction = args.Property == ExpandedProperty || args.Property == PressedProperty;
+        chrome.SetState(animate: interaction && chrome.IsLoaded && chrome.IsVisible);
+    }
 
     private void SetState(bool animate)
     {
@@ -127,9 +134,11 @@ public sealed class ScrollThumbChrome : FrameworkElement
         Color color = brush is SolidColorBrush solid ? solid.Color : Colors.Transparent;
         BeginAnimation(GripWidthProperty, null);
         BeginAnimation(GripColorProperty, null);
-        SetCurrentValue(GripWidthProperty, width);
-        SetCurrentValue(GripColorProperty, color);
-        if (!animate || !FluidMotion.AnimationsEnabled) return;
+        // These are owned animation outputs. Commit a local base value so FillBehavior.Stop
+        // returns to this state instead of the transparent/three-DIP metadata defaults.
+        SetValue(GripWidthProperty, width);
+        SetValue(GripColorProperty, color);
+        if (!animate || !FluidMotion.AnimationsEnabled || (fromWidth == width && fromColor == color)) return;
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         BeginAnimation(GripWidthProperty, new DoubleAnimation(fromWidth, width, FluidMotion.NormalDuration)
         { EasingFunction = ease, FillBehavior = FillBehavior.Stop }, HandoffBehavior.SnapshotAndReplace);

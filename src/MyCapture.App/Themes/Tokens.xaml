@@ -183,7 +183,7 @@
     <SolidColorBrush x:Key="Radio.Mark" Color="{themes:PaletteColor Surface.Base}" />
     <SolidColorBrush x:Key="Selection.Stroke" Color="{themes:PaletteColor Stroke.Selected}" />
     <Thickness x:Key="Selection.Thickness">1</Thickness>
-    <SolidColorBrush x:Key="Toggle.CheckedFill" Color="{themes:PaletteColor Surface.Selected}" />
+    <SolidColorBrush x:Key="Toggle.CheckedFill" Color="{themes:PaletteColor Surface.Floating}" />
     <SolidColorBrush x:Key="Toggle.CheckedStroke" Color="{themes:PaletteColor Stroke.Selected}" />
     <Thickness x:Key="Toggle.CheckedThickness">1</Thickness>
     <SolidColorBrush x:Key="Toggle.CheckedForeground" Color="{themes:PaletteColor Text.Primary}" />

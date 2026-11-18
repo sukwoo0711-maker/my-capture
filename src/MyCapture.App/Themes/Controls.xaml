@@ -563,7 +563,7 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!-- Normal palettes use the selected surface and a thin outline; contrast palettes retain
+    <!-- Normal palettes raise the current choice with a floating face and thin outline; contrast palettes retain
          their original Highlight / HighlightText pair. The outline distinguishes on and off. -->
     <!-- ============================================================= -->
     <!-- A hotkey recorder is an input face with button activation and unchanged measuring. -->
@@ -607,7 +607,7 @@
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.ControlLabel}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
         <Setter Property="Template">
@@ -646,6 +646,7 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Toggle.CheckedForeground}" />
+                            <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Emphasis}" />
                         </Trigger>
                         <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -1062,19 +1063,21 @@
          bottom border by the margin's width. -->
     <Style x:Key="Tab.Help" TargetType="{x:Type TabItem}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="Padding" Value="12,9" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
                     <Grid Margin="0,0,6,4">
-                        <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}"
+                        <Border x:Name="TabBorder" Background="{DynamicResource Surface.Sunken}"
                                 BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
                                 CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{DynamicResource Border.ToolThickness}" CornerRadius="{DynamicResource Radius.Control}" />
-                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Selection.Stroke}" BorderThickness="{DynamicResource Selection.Thickness}" CornerRadius="{DynamicResource Radius.Control}" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" Background="{DynamicResource Surface.Floating}"
+                                BorderBrush="{DynamicResource Selection.Stroke}" BorderThickness="{DynamicResource Selection.Thickness}"
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
@@ -1088,7 +1091,7 @@
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Emphasis}" />
                         </Trigger>
                         <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -2007,7 +2010,7 @@
         </Style.Triggers>
     </Style>
     <ControlTemplate x:Key="ScrollBar.ControlLanguageTemplate" TargetType="ScrollBar">
-        <Border x:Name="Lane" Background="Transparent" Width="16" HorizontalAlignment="Right">
+        <Border x:Name="Lane" Background="{TemplateBinding Background}" Width="16" HorizontalAlignment="Right">
             <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
                 <Track.Resources>
                     <!-- Native Track takes half this system metric as its minimum thumb length. -->
@@ -2031,40 +2034,11 @@
     </ControlTemplate>
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="{DynamicResource Scroll.Lane}" />
-        <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
         <Setter Property="Width" Value="16" />
         <Setter Property="Focusable" Value="False" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ScrollBar">
-                    <Border Background="{TemplateBinding Background}">
-                        <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}"
-                               IsDirectionReversed="True">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton x:Name="Decrease" Style="{StaticResource ScrollBar.PageButton}"
-                                              Command="ScrollBar.PageUpCommand" />
-                            </Track.DecreaseRepeatButton>
-                            <Track.Thumb>
-                                <Thumb Style="{StaticResource ScrollBar.Thumb}" />
-                            </Track.Thumb>
-                            <Track.IncreaseRepeatButton>
-                                <RepeatButton x:Name="Increase" Style="{StaticResource ScrollBar.PageButton}"
-                                              Command="ScrollBar.PageDownCommand" />
-                            </Track.IncreaseRepeatButton>
-                        </Track>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="Orientation" Value="Horizontal">
-                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
-                            <Setter TargetName="Decrease" Property="Command" Value="ScrollBar.PageLeftCommand" />
-                            <Setter TargetName="Increase" Property="Command" Value="ScrollBar.PageRightCommand" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+        <!-- All palettes share the native track and growing grip; contrast colours stay system-owned. -->
+        <Setter Property="Template" Value="{StaticResource ScrollBar.ControlLanguageTemplate}" />
         <Style.Triggers>
-            <Trigger Property="themes:ControlLanguage.Enabled" Value="True"><Setter Property="Template" Value="{StaticResource ScrollBar.ControlLanguageTemplate}" /></Trigger>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto" />
                 <Setter Property="Height" Value="16" />

@@ -279,7 +279,7 @@ internal static class ThemeService
             : Color.FromRgb(surface.R, surface.G, surface.B));
         Alias("Selection.Stroke", legacy ? "Text.Primary" : "Stroke.Selected");
         resources["Selection.Thickness"] = new Thickness(legacy ? 2 : 1);
-        Alias("Toggle.CheckedFill", legacy ? "Text.SelectionBackground" : "Surface.Selected");
+        Alias("Toggle.CheckedFill", legacy ? "Text.SelectionBackground" : "Surface.Floating");
         resources["Toggle.CheckedStroke"] = legacy ? ClearBrush : resources["Stroke.Selected"];
         resources["Toggle.CheckedThickness"] = new Thickness(legacy ? 0 : 1);
         Alias("Toggle.CheckedForeground", legacy ? "Text.SelectionForeground" : "Text.Primary");
