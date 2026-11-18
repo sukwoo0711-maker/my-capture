@@ -112,7 +112,8 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             using ILoggerFactory lf = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning));
             var initialEdits = VideoEditDocument.CreateFor(rec.Width, rec.Height, rec.DurationMs);
             initialEdits.TextOverlays.Add(new TimedTextOverlay { Text = "visible timeline caption", StartMs = 0, EndMs = rec.DurationMs });
-            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf, initialEdits);
+            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), lf, initialEdits,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             // Reuse production sizing tokens without creating a process-global WPF Application
             // in this isolated STA test. Default WPF buttons are smaller than the actual app.
             var theme = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml") };
@@ -356,7 +357,8 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
             var image = System.Windows.Media.Imaging.BitmapSource.Create(320, 240, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, 320 * 4);
             RecordingResult rec = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(dir, "fixture.mp4"), image);
             VideoExportDialog? hosted = null;
-            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance)
+            var editor = new VideoEditorWindow(rec, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 ExportDialogHostForTest = dialog => hosted = dialog,
                 WindowStartupLocation = WindowStartupLocation.Manual,

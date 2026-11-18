@@ -95,7 +95,8 @@ public sealed class VideoEditingTimeContractTests
         try
         {
             var recording = new RecordingResult(System.IO.Path.Combine(root, "clip.mp4"), 10000, 30, 300, 320, 240);
-            var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             try
             {
                 TwoLineTimeline timeline = editor.TimelineForTest;

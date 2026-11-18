@@ -276,7 +276,8 @@ public sealed class EditorUxTests
             ShowActivated = false, ShowInTaskbar = false,
         };
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         FieldInfo ready = typeof(VideoEditorWindow).GetField("_mediaReady", BindingFlags.Instance | BindingFlags.NonPublic)!;
         try
         {

@@ -50,7 +50,8 @@ public sealed class VideoFrameEditRangeTests
             StudioRangeVideoEffect.HardwareShaderAvailable = () => true;
             string clip = RangePatternClip.Encode(Path.Combine(root, "source.mp4"), width, height, fullRange);
             var recording = new RecordingResult(clip, 1000, 30, 30, width, height);
-            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual,
                 ShowActivated = false, ShowInTaskbar = false,
@@ -139,7 +140,8 @@ public sealed class VideoFrameEditRangeTests
             string clip = Path.Combine(root, "indices.mp4");
             FrameIndexClip.Encode(clip, 320, 180, 30, FrameIndexClip.Constant(30, 30));
             editor = new VideoEditorWindow(new RecordingResult(clip, 1000, 30, 30, 320, 180),
-                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             // Deliberately no presented video at all. Requests must work without its visual,
             // and select the requested frame rather than the playhead (which is still zero).
             foreach (double time in new[] { 100.0, 500.0, 900.0 })
@@ -174,7 +176,8 @@ public sealed class VideoFrameEditRangeTests
             });
             document.TextOverlays.Add(new TimedTextOverlay { StartMs = 400, EndMs = 600, Text = "timed" });
             editor = new VideoEditorWindow(new RecordingResult(clip, 1000, 30, 30, 320, 180),
-                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document);
+                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             var live = (VideoEditDocument)typeof(VideoEditorWindow).GetField("_editDocument", Private)!.GetValue(editor)!;
             Task<BitmapSource?> task = editor.DecodeFrameForEditAsync(500);
             live.FrameEditLayers.Clear();

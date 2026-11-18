@@ -34,6 +34,8 @@ internal sealed class RecordingSelector
     internal bool OffersOtherActions => _native?.OffersOtherActions ?? _wpf!.OffersOtherActions;
     internal System.Drawing.Size? PresetSize => _native is { } native ? native.PresetSize : _wpf!.PresetSize;
     internal CaptureModeBar ModeBar => _native?.ModeBar ?? Assert.IsType<CaptureOverlayView>(_wpf!.Content).ModeBarForTest!;
+    internal bool ShowsMagnifier => _native?.MagnifierShown ?? (bool)typeof(CaptureOverlayView)
+        .GetField("_showMagnifier", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Assert.IsType<CaptureOverlayView>(_wpf!.Content))!;
 
     internal void SubscribeClosed(Action closed)
     {

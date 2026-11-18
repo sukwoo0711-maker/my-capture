@@ -69,7 +69,8 @@ public sealed class VideoEditorFrameStepTests
             editor = new VideoEditorWindow(
                 new RecordingResult(clip, containerMs, fps, 38, 320, 180),
                 AppPaths.CreateForRoot(dir),
-                NullLoggerFactory.Instance)
+                NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, Width = 1000, Height = 700,
@@ -141,7 +142,8 @@ public sealed class VideoEditorFrameStepTests
             editor = new VideoEditorWindow(
                 new RecordingResult(clip, containerMs, fps, timestamps.Count, 320, 180),
                 AppPaths.CreateForRoot(dir),
-                NullLoggerFactory.Instance)
+                NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, Width = 1000, Height = 700,

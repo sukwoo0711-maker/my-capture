@@ -21,18 +21,24 @@ public sealed class NativeSelectorFocusTests
     private static readonly RectD Bounds = new(0, 0, CaptureCueEvidenceTests.ShownWidth, 720);
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void TabVisitsTheBarInBothDirectionsThenReturnsToBackground(bool reverse) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void TabVisitsTheBarInBothDirectionsThenReturnsToBackground(bool reverse, bool otherActions) => StaTestHost.Run(() =>
     {
-        using var owner = Owner();
+        using var owner = Owner(otherActions);
         try
         {
             Show(owner);
             NativeSelectorChrome chrome = owner.Chrome!;
             CaptureModeBar bar = owner.ModeBar;
-            ButtonBase[] order = [bar.CaptureButton, bar.WindowButton, bar.FreeformButton, bar.FullScreenButton,
-                bar.RatioButton, bar.TextButton, bar.ColorButton, bar.HelpButton, bar.CancelButton];
+            ButtonBase[] order = otherActions
+                ? [bar.CaptureKindButton, bar.RecordKindButton, bar.CaptureButton, bar.WindowButton, bar.FreeformButton,
+                    bar.FullScreenButton, bar.ScrollButton, bar.TextButton, bar.ColorButton, bar.DelayButton,
+                    bar.RatioButton, bar.MoreButton, bar.HelpButton, bar.CancelButton]
+                : [bar.CaptureButton, bar.WindowButton, bar.FreeformButton, bar.FullScreenButton,
+                    bar.TextButton, bar.ColorButton, bar.RatioButton, bar.HelpButton, bar.CancelButton];
             if (reverse) Array.Reverse(order);
             Assert.True(chrome.Windows.Count >= 5, "The passive key panel and magnifier must be present during the focus walk.");
             AssertBackgroundFocus(owner);
@@ -131,7 +137,7 @@ public sealed class NativeSelectorFocusTests
             Show(owner);
             CaptureModeBar bar = owner.ModeBar;
             owner.HandleKey(Key.Tab, ModifierKeys.None);
-            for (int i = 0; i < 5; i++) owner.Chrome!.NavigateTab(false);
+            for (int i = 0; i < 4; i++) owner.Chrome!.NavigateTab(false);
             AssertBarFocus(bar.TextButton);
             Press(bar.TextButton, Key.Enter);
             Assert.Equal(CaptureSelectorMode.Text, owner.Mode);
@@ -180,7 +186,7 @@ public sealed class NativeSelectorFocusTests
         PumpUntil(() => owner.IsChromeReady && owner.KeyPanelForTest is { Visibility: Visibility.Visible });
     }
 
-    private static NativeCaptureOverlay Owner()
+    private static NativeCaptureOverlay Owner(bool otherActions = false)
     {
         NativeSelectorChromeCache.Trim();
         int width = (int)Bounds.Width, height = (int)Bounds.Height;
@@ -192,6 +198,7 @@ public sealed class NativeSelectorFocusTests
             ReadCursor = () => new PointD(700, 120),
             ReadMonitors = () => [new MonitorInfo("test", Bounds, Bounds, 96, true)],
             DetectWindows = true,
+            OffersOtherActions = otherActions,
             TextCaptureAvailable = true,
             CopyColorText = _ => Task.FromResult(true),
             ShowKeyPanel = true,

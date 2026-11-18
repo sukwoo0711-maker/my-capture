@@ -65,7 +65,8 @@ public sealed partial class SettingsThemePreviewTests
             saved = candidate;
             ThemeService.ApplyFromSettings(saved.General.Theme);
             return new SettingsApplyResult(true, true, true, false, []);
-        }, NullLogger.Instance, () => store, message => Assert.Fail(message))
+        }, NullLogger.Instance, () => store, message => Assert.Fail(message),
+            defaultCapturesRoot: () => paths.CapturesRoot)
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 940, Height = 700,

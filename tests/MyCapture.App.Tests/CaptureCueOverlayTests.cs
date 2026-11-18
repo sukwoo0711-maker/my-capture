@@ -155,9 +155,9 @@ public sealed class CaptureCueOverlayTests
             {
                 CaptureModeBar bar = view.ModeBarForTest!;
                 var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
-                Assert.Equal(new[] { "F", "S", "D", "R", "T", "C", "Esc" }, captions.Select(text => text.Text));
+                Assert.Equal(new[] { "F", "S", "T", "C", "D", "R", "Esc" }, captions.Select(text => text.Text));
                 Size restingSize = bar.RenderSize;
-                FrameworkElement[] commands = [bar.FreeformButton, bar.ScrollButton, bar.DelayButton, bar.RatioButton, bar.TextButton, bar.ColorButton, bar.CancelButton];
+                FrameworkElement[] commands = [bar.FreeformButton, bar.ScrollButton, bar.TextButton, bar.ColorButton, bar.DelayButton, bar.RatioButton, bar.CancelButton];
                 Size[] restingCommands = commands.Select(command => command.RenderSize).ToArray();
                 foreach (bool revealed in new[] { false, true, false })
                 {
@@ -167,17 +167,15 @@ public sealed class CaptureCueOverlayTests
                     AssertAllCommandFaces(bar, revealed);
                     Assert.All(captions, caption => ShortcutMotionTestScope.AssertState(caption, revealed));
                     string[] visibleText = captions.Where(text => text.Opacity > 0).Select(text => text.Text).ToArray();
-                    if (revealed) Assert.Equal(new[] { "F", "S", "D", "R", "T", "C", "Esc" }, visibleText);
+                    if (revealed) Assert.Equal(new[] { "F", "S", "T", "C", "D", "R", "Esc" }, visibleText);
                     else Assert.Empty(visibleText);
                     Assert.Equal(restingSize, bar.RenderSize);
                     Assert.Equal(restingCommands, commands.Select(command => command.RenderSize));
-                    Assert.All(commands, command => Assert.Equal(36, command.ActualHeight));
+                    Assert.All(commands, command => Assert.Equal(CaptureModeBar.ButtonSize, command.ActualHeight));
                     if (!revealed) continue;
                     for (int index = 0; index < captions.Length; index++)
                     {
-                        Rect bounds = captions[index].TransformToAncestor(commands[index]).TransformBounds(new Rect(captions[index].RenderSize));
-                        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= commands[index].ActualWidth + 0.5
-                            && bounds.Bottom <= commands[index].ActualHeight + 0.5, $"Shortcut caption leaves its button: {bounds}");
+                        AssertCaptionInsideItsButton(bar, commands[index], captions[index]);
                     }
                 }
                 Assert.Equal($"{UiText.Get("CaptureGuide2_Text")}\n{UiText.Get("CaptureGuide2_TextHelp")} (T)", (string)bar.TextButton.ToolTip);
@@ -227,8 +225,8 @@ public sealed class CaptureCueOverlayTests
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
             var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
-            FrameworkElement[] commands = [bar.FreeformButton, bar.ScrollButton, bar.DelayButton, bar.RatioButton, bar.TextButton, bar.ColorButton, bar.CancelButton];
-            Assert.Equal(new[] { "F", "S", "D", "R", "T", "C", "Esc" }, captions.Select(caption => caption.Text));
+            FrameworkElement[] commands = [bar.FreeformButton, bar.ScrollButton, bar.TextButton, bar.ColorButton, bar.DelayButton, bar.RatioButton, bar.CancelButton];
+            Assert.Equal(new[] { "F", "S", "T", "C", "D", "R", "Esc" }, captions.Select(caption => caption.Text));
             Size initialSize = bar.RenderSize;
             Size[] commandSizes = commands.Select(command => command.RenderSize).ToArray();
             foreach (bool alwaysShow in new[] { false, true, false })
@@ -244,13 +242,11 @@ public sealed class CaptureCueOverlayTests
                     Assert.All(captions, caption => ShortcutMotionTestScope.AssertState(caption, alwaysShow || alt));
                     Assert.Equal(initialSize, bar.RenderSize);
                     Assert.Equal(commandSizes, commands.Select(command => command.RenderSize));
-                    Assert.All(commands, command => Assert.Equal(36, command.ActualHeight));
+                    Assert.All(commands, command => Assert.Equal(CaptureModeBar.ButtonSize, command.ActualHeight));
                     if (!alwaysShow && !alt) continue;
                     for (int index = 0; index < captions.Length; index++)
                     {
-                        Rect bounds = captions[index].TransformToAncestor(commands[index]).TransformBounds(new Rect(captions[index].RenderSize));
-                        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= commands[index].ActualWidth + 0.5
-                            && bounds.Bottom <= commands[index].ActualHeight + 0.5, $"Shortcut caption leaves its button: {bounds}");
+                        AssertCaptionInsideItsButton(bar, commands[index], captions[index]);
                     }
                 }
             }
@@ -262,6 +258,21 @@ public sealed class CaptureCueOverlayTests
             ShortcutPresentation.Refresh();
         }
     });
+
+    // The shared command face is 34 DIPs tall (icon and shortcut rows) and the bar's buttons 32: the
+    // face overhangs its button by one DIP above and below, into the bar's padding, where nothing
+    // clips it. A caption stays in its button's column and inside the bar's edge.
+    private static void AssertCaptionInsideItsButton(CaptureModeBar bar, FrameworkElement command, FrameworkElement caption)
+    {
+        double overhang = (CommandButtonPresentation.IconSize + CommandButtonPresentation.HintHeight - CaptureModeBar.ButtonSize) / 2;
+        Assert.Equal(1, overhang);
+        Rect bounds = caption.TransformToAncestor(command).TransformBounds(new Rect(caption.RenderSize));
+        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -overhang - 0.5 && bounds.Right <= command.ActualWidth + 0.5
+            && bounds.Bottom <= command.ActualHeight + overhang + 0.5, $"Shortcut caption leaves its button: {bounds}");
+        Rect inBar = caption.TransformToAncestor(bar).TransformBounds(new Rect(caption.RenderSize));
+        Assert.True(inBar.Top >= bar.BorderThickness.Top - 0.5 && inBar.Bottom <= bar.ActualHeight - bar.BorderThickness.Bottom + 0.5,
+            $"Shortcut caption leaves the bar: {inBar} in {bar.ActualHeight}");
+    }
 
     private static void AssertAllCommandFaces(CaptureModeBar bar, bool revealed)
     {

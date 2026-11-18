@@ -763,7 +763,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnMoreCommandsClick(object sender, RoutedEventArgs e)
     {
-        ContactSheetMenu.IsEnabled = _viewModel.HasSelection;
+        ContactSheetMenu.SetCurrentValue(IsEnabledProperty, _viewModel.CanCreatePdfSelected);
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.PlacementTarget = button;

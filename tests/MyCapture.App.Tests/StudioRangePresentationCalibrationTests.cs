@@ -107,7 +107,8 @@ public sealed class StudioRangePresentationCalibrationTests
                 string missing = Path.Combine(root, "not-opened.mp4");
                 gallery = new GalleryVideoPlayerWindow { Left = -10000, Top = -10000 };
                 editor = new VideoEditorWindow(new RecordingResult(missing, 1000, 30, 30, 640, 360),
-                    AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+                    AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                    pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
                 Assert.Null(editor.MediaForTest.Effect);
                 Assert.False(calibration.IsStarted);
                 gallery.Show();

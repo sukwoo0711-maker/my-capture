@@ -24,10 +24,10 @@ public sealed class PinFrameColorTests
         [AppTheme.Midnight, AppTheme.Glass, AppTheme.Workspace, AppTheme.Daylight, AppTheme.GlassLight];
 
     [Theory]
-    [InlineData(AppTheme.Glass, AppAccent.Red, 0xE2, 0x4F, 0x47)]
-    [InlineData(AppTheme.Glass, AppAccent.Violet, 0xE2, 0x4F, 0x47)]
-    [InlineData(AppTheme.GlassLight, AppAccent.Red, 0xCA, 0x3E, 0x36)]
-    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0xCA, 0x3E, 0x36)]
+    [InlineData(AppTheme.Glass, AppAccent.Red, 0xE0, 0x47, 0x3E)]
+    [InlineData(AppTheme.Glass, AppAccent.Violet, 0xE0, 0x47, 0x3E)]
+    [InlineData(AppTheme.GlassLight, AppAccent.Red, 0xD7, 0x42, 0x3A)]
+    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0xD7, 0x42, 0x3A)]
     public void OutlineRestsInAQuietAccentAndTurnsOpaqueWhenEmphasized(AppTheme theme, AppAccent accent, byte r, byte g, byte b) =>
         StaTestHost.Run(() =>
         {
@@ -55,6 +55,12 @@ public sealed class PinFrameColorTests
             Assert.NotEqual(ToColor(palette["Overlay.SelectionBorder"]), emphasized);
             Assert.Equal(ToColor(palette["Text.Primary"]), ToColor(palette["Overlay.SelectionBorder"]));
             Assert.True(emphasized.R > emphasized.G && emphasized.R > emphasized.B);
+            foreach (string key in new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
+                         "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed" })
+            {
+                double contrast = ThemeContrast.Ratio(palette["Pin.Frame"], palette[key]);
+                Assert.True(contrast >= 3, $"{theme}: pin outline against {key} is {contrast:F3}:1.");
+            }
         }
     });
 
@@ -97,8 +103,8 @@ public sealed class PinFrameColorTests
     [Fact]
     public void MissingTokensFallBackToTheDefaultPalette()
     {
-        Assert.Equal(Color.FromRgb(0xE2, 0x4F, 0x47), PinFrameColor.FallbackAccent);
-        Assert.Equal(Color.FromArgb(0x99, 0xE2, 0x4F, 0x47), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
+        Assert.Equal(Color.FromRgb(0xE0, 0x47, 0x3E), PinFrameColor.FallbackAccent);
+        Assert.Equal(Color.FromArgb(0x99, 0xE0, 0x47, 0x3E), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent, PinFrameColor.Resolve(null, null, contrast: false, emphasized: true));
         Assert.Equal(PinFrameColor.FallbackNeutral, PinFrameColor.Resolve(null, null, contrast: true, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent,

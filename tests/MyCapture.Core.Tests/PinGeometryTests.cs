@@ -200,6 +200,37 @@ public sealed class PinGeometryTests
     }
 
     [Fact]
+    public void MinShortSide_IsWhereTheEdgeZonesStopShrinkingAndLeavesTheGrabMarginBetweenThem()
+    {
+        Assert.Equal(40, PinGeometry.MinShortSideDip, 6);
+        Assert.Equal(PinResize.HitZoneDip, PinGeometry.MinShortSideDip * PinResize.MaxHitZoneFraction, 6);
+        // Both edges keep their full zone and the middle keeps 24 DIP to move the pin by.
+        Assert.Equal(24, PinGeometry.MinShortSideDip - (2 * PinResize.HitZoneDip), 6);
+    }
+
+    [Theory]
+    [InlineData(400, 300, 40.0 / 300)]
+    [InlineData(1920, 64, 40.0 / 64)]
+    [InlineData(64, 1920, 40.0 / 64)]
+    [InlineData(4000, 4000, PinGeometry.MinZoom)]
+    [InlineData(400, 40, 1.0)]
+    [InlineData(400, 24, 1.0)]
+    [InlineData(0, 300, PinGeometry.MinZoom)]
+    [InlineData(double.NaN, 300, PinGeometry.MinZoom)]
+    public void MinimumZoom_KeepsTheShortSideAtLeastFortyDipButNeverEnlargesTheImage(double width, double height, double expected) =>
+        Assert.Equal(expected, PinGeometry.MinimumZoom(width, height), 9);
+
+    [Fact]
+    public void ClampZoomForAnImage_RaisesOnlyTheLowerBound()
+    {
+        Assert.Equal(40.0 / 300, PinGeometry.ClampZoom(0.01, 400, 300), 9);
+        Assert.Equal(0.5, PinGeometry.ClampZoom(0.5, 400, 300), 9);
+        Assert.Equal(PinGeometry.MaxZoom, PinGeometry.ClampZoom(100, 400, 300), 9);
+        // A short strip: 40 DIP tall at the least, whatever its length.
+        Assert.Equal(40, 64 * PinGeometry.ClampZoom(0.1, 1920, 64), 9);
+    }
+
+    [Fact]
     public void ClampOpacity_NeverFullyInvisible()
     {
         Assert.Equal(PinGeometry.MinOpacity, PinGeometry.ClampOpacity(0.0), 6);

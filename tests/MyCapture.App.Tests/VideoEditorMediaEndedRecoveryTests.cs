@@ -277,7 +277,8 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             new RecordingResult(clip, containerMs, Fps, Frames, 320, 240),
             AppPaths.CreateForRoot(dir),
             NullLoggerFactory.Instance,
-            playMedia: playMedia)
+            playMedia: playMedia,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 1000, Height = 700,

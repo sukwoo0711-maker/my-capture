@@ -20,15 +20,22 @@ internal sealed partial class QuickAccessWindow
     private void InitializeCardMenu(bool excludeFromCapture)
     {
         ContextMenu menu = _cardMenu = excludeFromCapture ? CaptureWindowExclusion.CreateContextMenu() : new ContextMenu();
-        foreach (string action in ActionOrder)
+        foreach (string action in MenuActionOrder)
         {
             var item = new MenuItem
             {
                 Tag = action, Header = UiText.Get($"QuickAccess.{action}"),
-                InputGestureText = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint,
+                InputGestureText = action == "Library" ? string.Empty : ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint,
             };
+            AutomationProperties.SetAutomationId(item, "QuickAccess." + action);
             AutomationProperties.SetName(item, UiText.Get($"QuickAccess.{action}"));
             AutomationProperties.SetAcceleratorKey(item, item.InputGestureText);
+            var iconCell = new Grid();
+            SymbolIcon icon = Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action);
+            icon.SetBinding(SymbolIcon.StrokeProperty,
+                new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = item });
+            iconCell.Children.Add(icon);
+            item.Icon = iconCell;
             item.Click += (_, _) => _actions[action]();
             menu.Items.Add(item);
         }
@@ -69,7 +76,7 @@ internal sealed partial class QuickAccessWindow
             item.Focusable = keyboard;
             item.IsEnabled = _captureActions is not null && !_running.Contains(action);
         }
-        menu.PlacementTarget = _surface;
+        menu.PlacementTarget = placement == PlacementMode.Bottom ? _moreButton : _surface;
         menu.Placement = placement;
         menu.IsOpen = true;
     }

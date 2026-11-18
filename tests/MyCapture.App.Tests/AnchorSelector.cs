@@ -111,7 +111,14 @@ internal sealed class AnchorSelector : IDisposable
         if (_wpf is not null) _wpf.FlushFeedbackForTest();
         else
         {
-            _chrome ??= new NativeSelectorChrome(_native!, false, false);
+            if (_chrome is null)
+            {
+                // Windows 11's frame on every runner: the read-out's corners come from DWM.
+                bool? previous = NativeSelectorChrome.DwmRoundingOverrideForTest;
+                NativeSelectorChrome.DwmRoundingOverrideForTest = true;
+                try { _chrome = new NativeSelectorChrome(_native!, false, false); }
+                finally { NativeSelectorChrome.DwmRoundingOverrideForTest = previous; }
+            }
             _chrome.Update(_pointer(), _native!.SelectionRectangle);
         }
     }
@@ -145,25 +152,49 @@ internal sealed class AnchorSelector : IDisposable
                 BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_wpf)!;
         var visual = new DrawingVisual();
         using DrawingContext dc = visual.RenderOpen();
-        if (field == "_anchorVisual") dc.DrawDrawing(_chrome!.AnchorDrawingForTest);
+        if (field == "_anchorVisual") dc.DrawDrawing(ProjectAnchor());
         else if (field == "_selectionVisual") dc.DrawDrawing(ProjectReadout());
         else throw new ArgumentOutOfRangeException(nameof(field));
         return visual;
     }
 
+    // The read-out's window is the chip: its flat surface fills the window, and DWM gives the
+    // window its corners (Windows 11). Project the actual surface into overlay DIPs with the radius
+    // DWM draws for the corner preference the window asked for.
     private GeometryDrawing ProjectReadout()
     {
         GeometryDrawing source = Assert.Single(Leaves(_chrome!.ReadoutDrawingForTest).OfType<GeometryDrawing>(),
-            drawing => drawing.Geometry is RectangleGeometry { RadiusX: > 0 });
+            drawing => drawing.Brush is not null && drawing.Geometry is RectangleGeometry);
         var rectangle = Assert.IsType<RectangleGeometry>(source.Geometry);
+        Window window = _chrome.Windows[1];
+        Assert.Equal(DwmCornerPreference.RoundSmall, _chrome.CornersForTest(window));
+        Assert.True(_chrome.IsRoundedForTest(window));
+        double radius = DwmWindowAttributes.CornerRadius(DwmCornerPreference.RoundSmall);
         RectD physical = _chrome.SizeChipBoundsForTest;
-        // The Border's actual local geometry is the evidence. Only translate it from its bounded
-        // HWND into overlay DIPs; neither the expected chip bounds nor a radius constant is used.
         Rect local = rectangle.Rect;
         var global = new Rect(local.Left + (physical.Left - _bounds.Left) / _scale,
             local.Top + (physical.Top - _bounds.Top) / _scale, local.Width, local.Height);
-        return new GeometryDrawing(source.Brush, source.Pen,
-            new RectangleGeometry(global, rectangle.RadiusX, rectangle.RadiusY));
+        return new GeometryDrawing(source.Brush, null, new RectangleGeometry(global, radius, radius));
+    }
+
+    // The start-point chip strokes its one-pixel edge along the inside of its bounds; its outer
+    // silhouette, the shape that meets the desktop, is the stroke's outer edge.
+    private DrawingGroup ProjectAnchor()
+    {
+        var silhouette = new DrawingGroup();
+        foreach (GeometryDrawing drawing in Leaves(_chrome!.AnchorDrawingForTest).OfType<GeometryDrawing>())
+        {
+            if (drawing.Geometry is not RectangleGeometry { RadiusX: > 0 } rectangle || drawing.Pen is not { } pen) continue;
+            double half = pen.Thickness / 2;
+            Rect outer = Rect.Inflate(rectangle.Rect, half, half);
+            // The chip's edges are whole physical pixels: snap away the half-pixel arithmetic.
+            outer = new Rect(new Point(Snap(outer.Left), Snap(outer.Top)), new Point(Snap(outer.Right), Snap(outer.Bottom)));
+            silhouette.Children.Add(new GeometryDrawing(drawing.Brush, null,
+                new RectangleGeometry(outer, Math.Round(rectangle.RadiusX + half, 9), Math.Round(rectangle.RadiusY + half, 9))));
+        }
+        return silhouette;
+
+        double Snap(double value) => Math.Round(value * _scale) / _scale;
     }
 
     private static IEnumerable<Drawing> Leaves(Drawing? drawing) => drawing switch

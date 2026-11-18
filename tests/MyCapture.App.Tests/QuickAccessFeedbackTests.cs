@@ -25,7 +25,7 @@ public sealed class QuickAccessFeedbackTests : KoreanCaptionTest
         try
         {
             Button copyButton = ActionButton(card, "QuickAccess.Copy");
-            Button saveButton = ActionButton(card, "QuickAccess.Save");
+            MenuItem saveButton = card.CardMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Save"));
             card.ShortcutActions["Copy"]();
             Assert.False(copyButton.IsEnabled);
             Assert.True(saveButton.IsEnabled);
@@ -234,8 +234,8 @@ public sealed class QuickAccessFeedbackTests : KoreanCaptionTest
         QuickAccessWindow card = Card(copyText: () => recognition.Task);
         try
         {
-            Assert.Equal(["Edit", "Pin", "Save", "CopyText", "Copy"], QuickAccessWindow.ActionOrder);
-            Button text = card.ActionButtonsForTest[3];
+            Assert.Equal(["Pin", "Edit", "Copy"], QuickAccessWindow.ActionOrder);
+            MenuItem text = card.CardMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "CopyText"));
             Assert.Equal("텍스트 복사", AutomationProperties.GetName(text));
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(text));
 

@@ -28,18 +28,143 @@ public sealed class PinHoverBarTests
     private const double KoBudget = 342, KoSourceBudget = 408, EnBudget = 355, EnSourceBudget = 421;
 
     [Fact]
-    public void BarSitsInsideALargePinAndAboveOrBelowASmallOne()
+    public void BarSitsAboveEveryPinThenBelowAndInsideOnlyWithoutRoomOnEitherSide()
     {
         var work = new RectD(0, 0, 1920, 1040);
-        // Large pin: inside its top-right corner, one gap from both edges.
-        Assert.Equal(new RectD(1000 + 600 - 6 - 200, 300 + 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 200, 36, work, 1));
-        // Small pin: just above it, right-aligned, so the bar never hides the image.
+        // Large pin: just above it like a small one, right-aligned, so the bar never covers the content.
+        Assert.Equal(new RectD(1000 + 600 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 200, 36, work, 1));
+        // Small pin: the same.
         Assert.Equal(new RectD(1000 + 120 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 120, 90), 200, 36, work, 1));
-        // A small pin at the top of the work area takes the bar below it.
+        // A pin at the top of the work area takes the bar below it, large or small.
         Assert.Equal(new RectD(100 + 120 - 200, 10 + 90 + 6, 200, 36), PinHoverBar.Place(new RectD(100, 10, 120, 90), 200, 36, work, 1));
+        Assert.Equal(new RectD(1000 + 600 - 200, 0 + 700 + 6, 200, 36), PinHoverBar.Place(new RectD(1000, 0, 600, 700), 200, 36, work, 1));
         // Kept on the work area, and the gap follows the display scale.
         Assert.Equal(new RectD(0, 300 + 9, 200, 36), PinHoverBar.Place(new RectD(-50, 0, 150, 300), 200, 36, work, 1.5));
+        Assert.Equal(new RectD(1000 + 600 - 400, 300 - 72 - 12, 400, 72), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 400, 72, work, 2));
+        // A pin past the right edge keeps the bar above it, pulled back onto the work area.
+        Assert.Equal(new RectD(1920 - 200, 400 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1700, 400, 600, 300), 200, 36, work, 1));
     }
+
+    [Fact]
+    public void ABarWithoutRoomAboveOrBelowGoesInsideTheVisibleTopRightCorner()
+    {
+        var work = new RectD(0, 0, 1920, 1040);
+        // A pin as tall as the work area: one gap inside its top-right corner.
+        Assert.Equal(new RectD(1920 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(0, 0, 1920, 1040), 200, 36, work, 1));
+        Assert.Equal(new RectD(1100 - 6 - 200, 20 + 6, 200, 36), PinHoverBar.Place(new RectD(500, 20, 600, 1000), 200, 36, work, 1));
+        // A pin taller than the work area and partly off it: the corner that can be seen, not the one off screen.
+        Assert.Equal(new RectD(1100 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(500, -200, 600, 1300), 200, 36, work, 1));
+        Assert.Equal(new RectD(1920 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(1500, -200, 900, 1300), 200, 36, work, 1));
+        // The gap follows the display scale inside too.
+        Assert.Equal(new RectD(1920 - 12 - 400, 0 + 12, 400, 72), PinHoverBar.Place(new RectD(0, 0, 1920, 1040), 400, 72, work, 2));
+    }
+
+    [Fact]
+    public void BarStaysOnThePinsOwnMonitorWorkAreaWhereverThatMonitorSits()
+    {
+        // A monitor to the left of the primary one (negative coordinates) and one above it.
+        var left = new RectD(-1920, 0, 1920, 1040);
+        Assert.Equal(new RectD(-1000 + 600 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(-1000, 300, 600, 400), 200, 36, left, 1));
+        Assert.Equal(new RectD(-1000 + 600 - 200, 20 + 400 + 6, 200, 36), PinHoverBar.Place(new RectD(-1000, 20, 600, 400), 200, 36, left, 1));
+        var above = new RectD(0, -1440, 2560, 1400);
+        RectD placed = PinHoverBar.Place(new RectD(100, -1440, 2560, 1400), 300, 54, above, 1.5);
+        Assert.Equal(new RectD(2560 - 9 - 300, -1440 + 9, 300, 54), placed);
+        // Never on the next monitor: the whole bar lies inside the pin's work area in every case above.
+        Assert.True(placed.Left >= above.Left && placed.Right <= above.Right && placed.Top >= above.Top && placed.Bottom <= above.Bottom);
+    }
+
+    [Fact]
+    public void ThePinMovesItsBarWherePlaceSaysOnTheWorkAreaOfItsMonitor() => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        PinWindow pin = Pin(out _, 600, 400);
+        try
+        {
+            pin.Show();
+            RectD anchor = pin.AnchorBounds;
+            foreach ((string side, RectD work) in new[]
+            {
+                ("above", anchor.Inflate(200)),
+                ("below", new RectD(anchor.Left - 200, anchor.Top, anchor.Width + 400, anchor.Height + 200)),
+                ("inside", anchor),
+            })
+            {
+                pin.ReadWorkArea = _ => work;
+                Enter(pin);
+                PinHoverBar bar = pin.HoverBarForTest!;
+                Assert.True(NativePinWindowInterop.GetWindowRect(new System.Windows.Interop.WindowInteropHelper(bar).Handle, out var rect));
+                var placed = new RectD(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                RectD expected = PinHoverBar.Place(anchor, placed.Width, placed.Height, work, pin.AnchorScale);
+                // Within a pixel: the pin measures the bar in DIP, the window rectangle is whole pixels.
+                Assert.InRange(Math.Abs(placed.Left - expected.Left), 0, 1);
+                Assert.InRange(Math.Abs(placed.Top - expected.Top), 0, 1);
+                // Outside the content above or below; inside only when the work area leaves no room for either.
+                if (side == "above") Assert.True(placed.Bottom <= anchor.Top, $"{side}: {placed} over {anchor}");
+                if (side == "below") Assert.True(placed.Top >= anchor.Bottom, $"{side}: {placed} over {anchor}");
+                if (side == "inside") Assert.True(placed.Top > anchor.Top && placed.Right < anchor.Right, $"{side}: {placed} in {anchor}");
+                Leave(pin);
+                pin.ForceHoverBarHideForTest();
+            }
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Fact]
+    public void PointerCrossingTheGapToTheBarKeepsItAndLeavingTheBarHidesItAfterTheGrace() => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        PinWindow pin = Pin(out _);
+        try
+        {
+            // The gap is a few pixels; the grace is long enough to cross it at any ordinary pointer speed.
+            Assert.Equal(6, PinHoverBar.EdgeGap);
+            Assert.Equal(TimeSpan.FromMilliseconds(300), PinWindow.HoverBarHideDelay);
+            pin.Show();
+            Enter(pin);
+            PinHoverBar bar = pin.HoverBarForTest!;
+            Assert.Equal(PinWindow.HoverBarHideDelay, pin.HoverBarHideIntervalForTest);
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+
+            // Leaving the pin for the gap starts the grace; the bar is still there.
+            Leave(pin);
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+            // Reaching the bar cancels it.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+            // Back over the pin through the gap: the bar stays.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            Enter(pin);
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+
+            // Leaving the bar for somewhere else hides it when the grace runs out.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            pin.ForceHoverBarHideForTest();
+            Assert.False(pin.IsHoverBarShown);
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
 
     [Fact]
     public void HoverShowsTheCaptureExcludedBarAndLeavingOrClickThroughHidesIt() => StaTestHost.Run(() =>

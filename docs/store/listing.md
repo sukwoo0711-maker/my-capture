@@ -108,6 +108,24 @@ MyCapture는 윈도우용 무료 화면 캡처(캡쳐)·화면 고정·이미지
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
+### 이 버전의 새로운 기능 (6.0.0)
+
+입력 한도는 1,500자입니다. Store의 5.5.0에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
+
+- 캡처 결과 카드의 주 단추가 핀이 되고, 핀·편집·복사를 나란히 둡니다. 라이브러리와 저장은 더보기 메뉴로 옮겼습니다.
+- 카드 미리 보기가 캡처의 원래 비율을 지키고, 닫기 단추가 그림을 가리지 않습니다.
+- 캡처 선택 화면의 강조 테두리가 창 사이를 부드럽게 따라가고, 캡처될 내용 바깥에 그려집니다.
+- 선택 화면 도구 막대를 종류·캡처 방식·옵션의 세 묶음으로 나누고, 입력을 받기까지의 시간을 줄였습니다.
+- 스크롤 캡처 도중에도 Esc로 취소할 수 있습니다.
+- 핀이 뜰 때 내용이 처음부터 제자리에 보이고, 핀 막대는 큰 핀에서도 핀 바깥에 둡니다.
+- 편집기 캔버스의 테두리를 없애고, 결과 명령을 저장·복사하고 닫기·핀·더보기 순서로 정리했습니다.
+- 라이브러리는 검색을 먼저 두고, 항목을 고르면 핀·복사·편집이 나옵니다.
+- 설정 창을 평면으로 바꾸고 이름·값·설명 열로 맞췄습니다.
+- 동영상 편집기의 세부 항목과 GIF 내보내기를 결과를 먼저 보는 순서로 바꿨습니다.
+- 첫 실행에서 복사한 자료를 F3으로 실제 핀으로 띄워 봅니다. 전체 연습은 주제를 골라 시작합니다.
+- 밝은 테마를 어두운 테마와 같은 기준으로 다듬고, 모든 화면의 글자·간격·단추 크기를 맞췄습니다.
+- 편집기·핀·라이브러리의 메모리 사용량을 줄였습니다.
+
 ### 이 버전의 새로운 기능 (5.5.0)
 
 입력 한도는 1,500자입니다. Store의 5.4.1에서 바뀐 내용을 담았습니다. 아래 항목을 Store에 입력합니다.
@@ -276,6 +294,24 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
+
+### What's new in this version (6.0.0)
+
+Limit: 1,500 characters. Covers changes since the Store version, 5.5.0. Enter the lines below in the Store.
+
+- The capture card's main button is now Pin, with Pin, Edit and Copy side by side. Library and Save moved to the More menu.
+- The card preview keeps the capture's proportions, and the close button no longer covers the picture.
+- On the capture selector, the highlight glides between windows and is drawn outside what will be captured.
+- The selector toolbar is grouped into kind, capture mode and options, and the selector accepts input sooner.
+- Cancel a scrolling capture with Esc while it runs.
+- A new pin appears in place at once, and the pin bar stays outside even large pins.
+- The editor canvas has no frame, and the result commands read Save, Copy and close, Pin, More.
+- The library puts search first, and selecting items shows Pin, Copy and Edit.
+- Settings use a flat layout with aligned label, value and description columns.
+- The video editor details and GIF export now show the result first.
+- On first run, pin something you copied with F3. The full practice starts by picking a topic.
+- The light theme gets the same finish as the dark theme, with one set of text, spacing and button sizes across every window.
+- The editor, pins and the library use less memory.
 
 ### What's new in this version (5.5.0)
 

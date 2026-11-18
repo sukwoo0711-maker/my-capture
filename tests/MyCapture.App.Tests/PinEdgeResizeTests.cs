@@ -58,7 +58,8 @@ public sealed class PinEdgeResizeTests
             Assert.Equal(pin.State.WidthDip, pin.Width);
             Assert.Equal(pin.State.HeightDip, pin.Height);
             Assert.True(pin.IsLiveZoomingForTest);
-            Assert.Equal($"{pin.State.Zoom * 100:0}%", pin.FeedbackForTest.Text);
+            Assert.Equal(PinWindow.ZoomReadout(pin.State.Zoom, pin.State.ImageWidthDip, pin.State.ImageHeightDip,
+                VisualTreeHelper.GetDpi(pin).DpiScaleX), pin.FeedbackForTest.Text);
             Assert.False(pin.IsHoverBarShown);
             var after = pin.PhysicalBounds;
             double ax = x < 0 ? 1 : x > 0 ? 0 : 0.5;

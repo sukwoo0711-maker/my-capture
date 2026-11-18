@@ -127,7 +127,8 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
         var recording = new RecordingResult(clip, durationMs, 30, 30, 640, 360);
         var document = VideoEditDocument.CreateFor(640, 360, durationMs);
         document.TextOverlays.Add(caption);
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document)
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = width, Height = height,

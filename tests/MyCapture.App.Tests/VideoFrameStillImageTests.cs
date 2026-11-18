@@ -86,7 +86,8 @@ public sealed class VideoFrameStillImageTests(ITestOutputHelper output)
             VideoEditDocument document = VideoDocument();
             BitmapSource input = FrameWithEarlierLayer();
             video = new VideoEditorWindow(new RecordingResult(Path.Combine(root, "unused.mp4"), 1000, 30, 30, Width, Height),
-                paths, NullLoggerFactory.Instance, document);
+                paths, NullLoggerFactory.Instance, document,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             typeof(VideoEditorWindow).GetField("_durationMs", Private)!.SetValue(video, 1000.0);
             video.FrameImageCommitHandlerFactory = () => (FrameImageCommitSession)typeof(App)
                 .GetMethod("CreateRecordedFrameCommitHandler", Private)!.Invoke(app, null)!;
@@ -172,7 +173,8 @@ public sealed class VideoFrameStillImageTests(ITestOutputHelper output)
         {
             BitmapSource input = FrameWithEarlierLayer();
             video = new VideoEditorWindow(new RecordingResult(Path.Combine(root, "unused.mp4"), 1000, 30, 30, Width, Height),
-                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             editor = video.CreateFrameEditor(input, time, VideoDocument());
             Task<DraftSnapshot?> task = editor.CaptureDraftSnapshotAsync();
             Wait(() => task.IsCompleted);
@@ -252,7 +254,8 @@ public sealed class VideoFrameStillImageTests(ITestOutputHelper output)
             typeof(App).GetField("_commit", Private)!.SetValue(app, commit);
             BitmapSource input = FrameWithEarlierLayer();
             video = new VideoEditorWindow(new RecordingResult(Path.Combine(root, "unused.mp4"), 1000, 30, 30, Width, Height),
-                paths, NullLoggerFactory.Instance, VideoDocument());
+                paths, NullLoggerFactory.Instance, VideoDocument(),
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             typeof(VideoEditorWindow).GetField("_durationMs", Private)!.SetValue(video, 1000.0);
             video.FrameImageCommitHandlerFactory = () => (FrameImageCommitSession)typeof(App)
                 .GetMethod("CreateRecordedFrameCommitHandler", Private)!.Invoke(app, null)!;

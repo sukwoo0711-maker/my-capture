@@ -255,6 +255,11 @@ public partial class App : Application
         ThemeService.ApplyFromSettings(_settings.General);
 
         _tray = _services.GetRequiredService<TrayIconService>();
+        _tray.InputOriginChanged = keyboard =>
+        {
+            if (keyboard) KeyboardFocusCue.NotifyKeyboardInput();
+            else KeyboardFocusCue.NotifyPointerInput();
+        };
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
         HotkeyRecorder.CanRegister = chord => _hotkeys.CanRegister(chord);
         _overlay = _services.GetRequiredService<CaptureOverlayCoordinator>();
@@ -530,6 +535,7 @@ public partial class App : Application
         };
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
+        _recorder.ShowMagnifier = () => _settings!.Capture.ShowMagnifier;
         _recorder.CaptureSelectionRequested = HandleCaptureRequested;
         _recorder.SessionEnded += (_, _) =>
         {
@@ -606,6 +612,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        KeyboardFocusCue.NotifyKeyboardInput();
         CancelIdleMemoryReclamation();
         if (_storeInstallationPending || _preparingExit)
         {
@@ -1063,23 +1070,37 @@ public partial class App : Application
         // dispatcher instead of waiting behind a synchronous capture loop.
         if (_scrollCancellation is not null)
         {
-            try
-            {
-                _scrollCancellation.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-            _tray?.ShowBalloon(
-                UiText.Get("Text_6EB131FB1810"),
-                UiText.Get("Text_F018AA1A2813"),
-                TrayBalloonKind.Information,
-                playSound: false);
+            CancelScrollingCapture();
             return;
         }
 
         // The selector opens in scroll mode; its click names the window (RunScrollingCaptureAsync).
         StartSelector(CaptureSelectorMode.Scroll, 0);
+    }
+
+    /// <summary>
+    /// Stops the running scroll loop after its current frame, for the tray command and Esc. Never opens
+    /// the selector: an Esc that arrives after the loop ended does nothing.
+    /// </summary>
+    private void CancelScrollingCapture()
+    {
+        if (_scrollCancellation is not { } running)
+        {
+            return;
+        }
+
+        try
+        {
+            running.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        _tray?.ShowBalloon(
+            UiText.Get("Text_6EB131FB1810"),
+            UiText.Get("Text_F018AA1A2813"),
+            TrayBalloonKind.Information,
+            playSound: false);
     }
 
     /// <summary>Runs the scroll → capture → stitch loop on the window at <paramref name="point"/>, picked in the selector.</summary>
@@ -1105,15 +1126,19 @@ public partial class App : Application
         _scrollCancellation = cancellation;
         _tray?.SetScrollingCaptureActive(true);
         _tray?.SetState(TrayIconState.Busy);
-        _tray?.ShowBalloon(
-            UiText.Get("Text_6182AA2DFF8D"),
-            UiText.Get("Text_82B423E5AFB8"),
-            TrayBalloonKind.Information,
-            playSound: false);
 
+        ScrollCaptureEscape? escape = null;
         CaptureOutcome outcome;
         try
         {
+            // The scrolled window keeps the foreground: Esc is claimed for this loop only and released
+            // in the finally below. When another program owns Esc, the notice names only the tray.
+            escape = ScrollCaptureEscape.TryClaim(_services?.GetService<NativeMessageWindow>(), CancelScrollingCapture);
+            _tray?.ShowBalloon(
+                UiText.Get("Text_6182AA2DFF8D"),
+                UiText.Get(escape is null ? "Text_82B423E5AFB8" : "ScrollCapture_CancelHintEsc"),
+                TrayBalloonKind.Information,
+                playSound: false);
             outcome = await _advancedCapture.CaptureScrollingAsync(
                 window.Handle,
                 window.ScrollBounds,
@@ -1128,6 +1153,7 @@ public partial class App : Application
         }
         finally
         {
+            escape?.Dispose();
             CancellationTokenSource? current = Interlocked.CompareExchange(ref _scrollCancellation, null, cancellation);
             if (ReferenceEquals(current, cancellation))
             {

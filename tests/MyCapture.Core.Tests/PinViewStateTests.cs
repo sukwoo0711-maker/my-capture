@@ -1,4 +1,5 @@
 using MyCapture.Core.Pin;
+using MyCapture.Core.Primitives;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -90,6 +91,48 @@ public sealed class PinViewStateTests
     {
         var state = NewState(step: 0);
         Assert.Equal(1.1, state.ApplyZoomStep(1), 6);
+    }
+
+    [Fact]
+    public void ZoomingOutStopsWhereTheShortSideReachesTheMinimum()
+    {
+        var state = NewState();
+        Assert.Equal(PinGeometry.MinimumZoom(400, 300), state.MinimumZoom, 9);
+        state.ApplyZoomStep(-100);
+        Assert.Equal(PinGeometry.MinShortSideDip, state.HeightDip, 6);
+        Assert.Equal(state.MinimumZoom, state.UserMinimumZoom, 9);
+        // An image already smaller than the minimum stays at 1:1 and can still be enlarged.
+        var small = new PinViewState(200, 24, 1, 1, 0.1);
+        Assert.Equal(1.0, small.ApplyZoomStep(-3), 9);
+        Assert.Equal(1.1, small.ApplyZoomStep(1), 9);
+    }
+
+    [Fact]
+    public void ALongStripFittedBelowTheFloorKeepsItsFitAndUserZoomNeverGoesSmaller()
+    {
+        // 3000 × 40 DIP on a 1920 × 1040 DIP work area: the fit is 64%, a 25.6 DIP short side.
+        double fit = PinGeometry.InitialZoom(3000, 40, 1920, 1040);
+        Assert.Equal(0.64, fit, 9);
+        var state = new PinViewState(3000, 40, fit, 1, 0.1);
+        Assert.Equal(1.0, state.MinimumZoom, 9);
+        Assert.Equal(fit, state.Zoom, 9);
+        Assert.Equal(fit, state.UserMinimumZoom, 9);
+        Assert.InRange(state.WidthDip, 0, 1920);
+        Assert.Equal(fit, state.ApplyZoomStep(-1), 9);
+        Assert.Equal(0.704, state.ApplyZoomStep(1), 9);
+        Assert.Equal(fit, state.ApplyZoomStep(-3), 9);
+        Assert.Equal(1.0, state.ApplyZoomStep(5), 9);
+        Assert.Equal(fit, state.ApplyZoomStep(-100), 9);
+
+        // A user edge drag stops at the same place; a later fit to the work area may go lower still.
+        var start = new RectD(0, 0, state.WidthDip, state.HeightDip);
+        Assert.Equal(fit, PinResize.Calculate(start, fit, PinResizeEdge.Right, -10000, 0,
+            minimumZoom: state.UserMinimumZoom).Zoom, 9);
+        Assert.Equal(0.5, state.SetZoom(0.5), 9);
+        Assert.Equal(0.5, state.ApplyZoomStep(-1), 9);
+        Assert.Equal(PinGeometry.MinZoom, state.SetZoom(0.01), 9);
+        // Construction (a restored session) keeps a zoom below the floor too.
+        Assert.Equal(0.5, new PinViewState(3000, 40, 0.5, 1, 0.1).UserMinimumZoom, 9);
     }
 }
 

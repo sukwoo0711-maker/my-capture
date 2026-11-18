@@ -48,6 +48,7 @@ public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
             Assert.Equal(beforeValue ? ToggleState.On : ToggleState.Off, provider.ToggleState);
             string before = controller.Document.ToJson();
             int undoCount = controller.Undo.UndoCount;
+            MyCapture.App.Themes.KeyboardFocusCue.NotifyKeyboardInput(host.Window);
             Assert.True(toggle.Focus());
             host.Settle();
             Border focusRing = Assert.IsType<Border>(toggle.Template.FindName("FocusRing", toggle));
@@ -225,8 +226,8 @@ public sealed class EditorCompactInspectorControlTests(ITestOutputHelper output)
         static System.Windows.Media.Color Of(object brush) => Assert.IsType<System.Windows.Media.SolidColorBrush>(brush).Color;
         System.Windows.Media.Color fill = Of(Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle)).Background);
         System.Windows.Media.Color ink = Of(toggle.Foreground);
-        Assert.Equal(Of(toggle.FindResource("Text.SelectionBackground")), fill);
-        Assert.Equal(Of(toggle.FindResource("Text.SelectionForeground")), ink);
+        Assert.Equal(Of(toggle.FindResource("Toggle.CheckedFill")), fill);
+        Assert.Equal(Of(toggle.FindResource("Toggle.CheckedForeground")), ink);
         var glyph = Assert.IsAssignableFrom<DependencyObject>(toggle.Content);
         int parts = 0;
         foreach (DependencyObject part in Descendants(glyph).Prepend(glyph))

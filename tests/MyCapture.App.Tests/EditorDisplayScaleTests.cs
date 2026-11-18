@@ -540,7 +540,8 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
                 double expected = Math.Min(1 / dpi.DpiScaleX,
                     Math.Min((surface.ActualWidth - 32) / width, (surface.ActualHeight - 32) / height));
                 Assert.Equal(expected, surface.DipPerPixel, 10);
-                Assert.Equal(876.0 / width, surface.DipPerPixel);
+                // Removing the outer 12-DIP margin and 1-DIP border on each side adds 26 DIP.
+                Assert.Equal(902.0 / width, surface.DipPerPixel);
                 AssertInsets(surface.FrameRectDip, surface.RenderSize);
                 output.WriteLine($"native limit 1044x788: requested monitor={monitorWidth}x{monitorHeight}; " +
                     $"capture={width}x{height}; window={window.Width}x{window.Height}; " +

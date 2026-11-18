@@ -49,7 +49,9 @@ public sealed partial class SettingsThemePreviewTests
                         application.Resources["Surface.Selected"] = selectedBrush;
                         SettleGalleryLayout(window);
                         Color selected = ((SolidColorBrush)selectedBrush).Color;
-                        Assert.Equal(selected, ((SolidColorBrush)checkboxFill.Background).Color);
+                        bool legacy = !(bool)application.Resources["ControlLanguage.Enabled"];
+                        Color checkedFill = legacy ? selected : ((SolidColorBrush)application.Resources["Text.Primary"]).Color;
+                        Assert.Equal(checkedFill, ((SolidColorBrush)checkboxFill.Background).Color);
                         Assert.Equal(selected, ((SolidColorBrush)toolFill.Background).Color);
                         var glyph = (System.Windows.Shapes.Path)check.Template.FindName("Check", check);
                         Assert.True(glyph.IsVisible);

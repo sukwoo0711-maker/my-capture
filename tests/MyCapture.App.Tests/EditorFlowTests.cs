@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -278,18 +280,82 @@ public sealed class EditorFlowTests
         Assert.Contains(Descendants(save).OfType<TextBlock>(), text => text.Text == "파일로 저장");
         Assert.Equal("이미지를 파일로 저장", save.ToolTip);
         // The menu command that opens the export dialog ends with an ellipsis; the dialog's title does not.
-        MenuItem export = save.ContextMenu!.Items.OfType<MenuItem>().Last();
+        Button more = Command(host.Editor, "EditorFlowMore");
+        Assert.Equal(new[] { UiText.Get("Text_DFC084A111D0"), UiText.Get("Text_A81F975C401F") },
+            save.ContextMenu!.Items.OfType<MenuItem>().Select(item => item.Header));
+        MenuItem export = more.ContextMenu!.Items.OfType<MenuItem>().First();
         Assert.Equal("이미지 내보내기…", export.Header);
         Assert.Equal("이미지 내보내기…", AutomationProperties.GetName(export));
         Assert.Equal("이미지 내보내기", UiText.Get("ExportReduction_Title"));
         Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C / Ctrl+Enter)", Command(host.Editor, "EditorFlowDone").ToolTip);
         Assert.Equal("복사하고 닫기", AutomationProperties.GetName(Command(host.Editor, "EditorFlowDone")));
 
-        // Finishing commands in WinUI order: the action, then the way out.
+        // The result group exposes saving, finishing, pinning and subordinate results in that order.
         string[] order = Descendants(host.Editor).OfType<Button>()
             .Select(AutomationProperties.GetAutomationId)
-            .Where(id => id is "EditorFlowSaveToFile" or "EditorFlowCopy" or "EditorFlowDone" or "EditorFlowCancel").ToArray();
-        Assert.Equal(new[] { "EditorFlowSaveToFile", "EditorFlowDone" }, order);
+            .Where(id => id is "EditorFlowSaveToFile" or "EditorFlowCopy" or "EditorFlowDone" or "EditorFlowCancel" or "EditorFlowPin" or "EditorFlowMore").ToArray();
+        Assert.Equal(new[] { "EditorFlowSaveToFile", "EditorFlowDone", "EditorFlowPin", "EditorFlowMore" }, order);
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void KeyboardOpensMoreAndAutomationExportKeepsItsReductionRoute(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using EditorWindowHost host = EditorWindowHost.Create();
+        var requests = new List<AnnotationEditingResult>();
+        // Observe the real editor handoff without opening a file dialog or touching the clipboard.
+        host.Window.CommitRequested = result => { requests.Add(result); return Task.FromResult(false); };
+        Button pin = Command(host.Editor, "EditorFlowPin");
+        Button more = Command(host.Editor, "EditorFlowMore");
+        ContextMenu menu = more.ContextMenu!;
+        int opened = 0, moreClicks = 0, exportClicks = 0;
+        menu.Opened += (_, _) => opened++;
+        more.Click += (_, _) => moreClicks++;
+        try
+        {
+            Drain(host.Editor);
+            Assert.True(pin.Focus());
+            Assert.True(pin.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)));
+            Assert.Same(more, Keyboard.FocusedElement);
+            Assert.True(Press(more, Key.Enter, ime: false));
+            Drain(host.Editor);
+            Assert.True(menu.IsOpen);
+            Assert.Same(more, menu.PlacementTarget);
+            Assert.Equal(PlacementMode.Bottom, menu.Placement);
+            MenuItem export = Assert.IsType<MenuItem>(menu.Items[0]);
+            Assert.Equal(UiText.Get("Library.ExportImage"), export.Header);
+            export.Click += (_, _) => exportClicks++;
+            // Invoke the shown item's accessibility command: keyboard disclosure above
+            // is real, while this offscreen popup does not require native HWND focus.
+            var peer = Assert.IsType<MenuItemAutomationPeer>(UIElementAutomationPeer.CreatePeerForElement(export));
+            Assert.IsAssignableFrom<IInvokeProvider>(peer.GetPattern(PatternInterface.Invoke)).Invoke();
+            Drain(host.Editor);
+            AnnotationEditingResult reduced = Assert.Single(requests);
+            Assert.Equal(EditorCommitAction.SaveAs, reduced.Action);
+            Assert.True(reduced.ReduceExport);
+            Assert.Equal(640, reduced.SelectedBitmap.PixelWidth);
+            Assert.Equal(360, reduced.SelectedBitmap.PixelHeight);
+            Assert.True(host.Window.IsVisible);
+            Assert.False(host.Window.WasCommitted);
+            // Native popup focus, automatic dismissal and Escape dismissal require
+            // desktop verification; this offscreen fixture proves disclosure and routing.
+            Assert.Equal(1, opened);
+            Assert.Equal(1, moreClicks);
+            Assert.Equal(1, exportClicks);
+
+            // The neighbouring ordinary Save as command retains its distinct, unreduced route.
+            MenuItem saveAs = Command(host.Editor, "EditorFlowSaveToFile").ContextMenu!.Items
+                .OfType<MenuItem>().Single(item => Equals(item.Header, UiText.Get("Text_A81F975C401F")));
+            saveAs.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Drain(host.Editor);
+            Assert.Equal(2, requests.Count);
+            Assert.Equal(EditorCommitAction.SaveAs, requests[1].Action);
+            Assert.False(requests[1].ReduceExport);
+            Assert.True(host.Window.IsVisible);
+        }
+        finally { menu.IsOpen = false; }
     });
 
     // ---- Crop mode --------------------------------------------------------------------

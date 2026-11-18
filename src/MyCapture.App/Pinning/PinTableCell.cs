@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Pinning;
 
@@ -183,6 +184,7 @@ internal sealed class PinTableCell : FrameworkElement
         };
         // The current cell (the one with keyboard focus) draws its focus ring.
         cell.IsKeyboardFocusWithinChanged += (_, _) => InvalidateVisual();
+        KeyboardFocusCue.AddVisibilityChangedHandler(cell, (_, _) => InvalidateVisual());
     }
 
     protected override Size MeasureOverride(Size availableSize) => new(0, 0);
@@ -334,7 +336,8 @@ internal sealed class PinTableCell : FrameworkElement
         if (lastColumn) drawing.DrawLine(border, new Point(right, topEdge), new Point(right, bottomEdge));
         if (lastRow) drawing.DrawLine(borderY, new Point(leftEdge, bottom), new Point(rightEdge, bottom));
 
-        if (_cell.IsKeyboardFocusWithin) DrawFocusRing(drawing, ink, origin, x, y, right, bottom, width, height, lastColumn, lastRow, sx, sy);
+        if (_cell.IsKeyboardFocusWithin && KeyboardFocusCue.GetIsVisible(_cell))
+            DrawFocusRing(drawing, ink, origin, x, y, right, bottom, width, height, lastColumn, lastRow, sx, sy);
     }
 
     // The current cell (the one with keyboard focus, which the arrows and Shift+arrows move) is

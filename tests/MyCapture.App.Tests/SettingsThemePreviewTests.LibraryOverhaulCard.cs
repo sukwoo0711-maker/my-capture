@@ -308,7 +308,7 @@ public sealed partial class SettingsThemePreviewTests
                         var rows = (ListBox)window.FindName("RowsList");
                         var client = (FrameworkElement)window.Content;
                         double originalClientWidth = client.Width;
-                        string[] names = ["EditSelectedButton", "PreviewSelectedButton", "FloatSelectedButton", "CopySelectedButton", "CreatePdfSelectedButton", "KeepSelectedButton"];
+                        string[] names = ["FloatSelectedButton", "CopySelectedButton", "EditSelectedButton"];
                         // The first width is the window's minimum, below which the window cannot be sized.
                         foreach (double width in new[] { window.MinWidth, 1100d, 1280d, 1500d })
                         foreach (bool details in new[] { true, false })
@@ -337,29 +337,34 @@ public sealed partial class SettingsThemePreviewTests
                                     if (double.IsNaN(top)) top = rowsTop;
                                     else if (Math.Abs(top - rowsTop) > 0.5) failures.Add($"{label}: the list moved from {top} to {rowsTop} with {selected} selected");
                                     if (Math.Abs(bar.ActualHeight - 44) > 0.5) failures.Add($"{label}: the toolbar is {bar.ActualHeight} tall");
+                                    if (window.ContentToolbarShortfall > 0.5) failures.Add($"{label}/{selected}: the toolbar overflows by {window.ContentToolbarShortfall:0.#} DIP");
                                     var buttons = names.Select(name => (Button)window.FindName(name)).ToArray();
                                     // The decided order, left to right.
-                                    double[] lefts = buttons.Select(button => button.TranslatePoint(new Point(), bar).X).ToArray();
+                                    double[] lefts = buttons.Where(button => button.IsVisible).Select(button => button.TranslatePoint(new Point(), bar).X).ToArray();
                                     if (!lefts.SequenceEqual(lefts.Order())) failures.Add($"{label}: the commands are out of order {string.Join(",", lefts)}");
                                     var sort = (FrameworkElement)window.FindName("SortBox");
                                     var more = (FrameworkElement)window.FindName("MoreCommandsButton");
-                                    foreach (FrameworkElement part in buttons.Cast<FrameworkElement>().Append(sort).Append(more).Append((FrameworkElement)window.FindName("SelectionCountLabel")))
+                                    foreach (FrameworkElement part in buttons.Cast<FrameworkElement>().Append(sort).Append(more).Append((FrameworkElement)window.FindName("SelectionCountLabel")).Append((FrameworkElement)window.FindName("BrowseScopeLabel")).Where(part => part.IsVisible))
                                     {
                                         Rect bounds = new(part.TranslatePoint(new Point(), bar), part.RenderSize);
                                         if (bounds.Right > bar.ActualWidth + 0.5 || bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Bottom > bar.ActualHeight + 0.5)
                                             failures.Add($"{label}/{selected}: {part.Name} {bounds} leaves the toolbar {bar.RenderSize} (density {window.ContentToolbarDensity})");
                                     }
-                                    if (more.TranslatePoint(new Point(), bar).X < sort.TranslatePoint(new Point(), bar).X + sort.ActualWidth - 0.5)
+                                    if (sort.IsVisible && more.TranslatePoint(new Point(), bar).X < sort.TranslatePoint(new Point(), bar).X + sort.ActualWidth - 0.5)
                                         failures.Add($"{label}: the sort box overlaps More");
-                                    if (buttons.Any(button => button.TranslatePoint(new Point(button.ActualWidth, 0), bar).X > sort.TranslatePoint(new Point(), bar).X + 0.5))
-                                        failures.Add($"{label}/{selected}: a selection command overlaps the sort box (density {window.ContentToolbarDensity})");
+                                    if (buttons.Where(button => button.IsVisible).Any(button => button.TranslatePoint(new Point(button.ActualWidth, 0), bar).X > more.TranslatePoint(new Point(), bar).X + 0.5))
+                                        failures.Add($"{label}/{selected}: a selection command overlaps More (density {window.ContentToolbarDensity})");
                                     // Names and tooltips stay whatever is shown.
                                     foreach (Button button in buttons)
                                         if (string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(button)) || button.ToolTip is null)
                                             failures.Add($"{label}: {button.Name} lost its name or tooltip");
                                     densities.Add($"{window.ContentToolbarDensity}");
-                                    bool labelled = window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled;
+                                    bool labelled = selected != 0 && window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled;
                                     if (((FrameworkElement)window.FindName("EditSelectedLabel")).IsVisible != labelled) failures.Add($"{label}: labels and density disagree");
+                                    if (buttons.Any(button => button.IsVisible != (selected != 0))) failures.Add($"{label}: direct actions disagree with selection state");
+                                    if (sort.IsVisible != (selected == 0)) failures.Add($"{label}: sort disagrees with browsing state");
+                                    foreach (string secondary in new[] { "PreviewSelectedButton", "KeepSelectedButton", "ContactSheetMenu" })
+                                        if (!((Button)more).ContextMenu.Items.Contains(window.FindName(secondary))) failures.Add($"{label}: {secondary} is missing from More");
                                 }
                             }
                             // Check the actual narrow desktop first, then retain the wide-layout coverage
@@ -393,8 +398,9 @@ public sealed partial class SettingsThemePreviewTests
                 application.Shutdown();
             }
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures.Distinct().Take(30)));
-            // The matrix really exercised the collapse: labels at ample widths, icons (and the compact bar) where narrow.
-            Assert.True(densities.Count >= 2 && densities.Contains("Labelled"), string.Join(",", densities));
+            // Three direct actions can keep their labels throughout this matrix. Fit, stable height and
+            // accessible command geometry are the contract; a second density is no longer required.
+            Assert.Contains("Labelled", densities);
         });
 
     [Fact]

@@ -81,7 +81,8 @@ public sealed class Ux402InteractionTests
     {
         using var motion = new ShortcutMotionTestScope();
         var image = Image(); var region = new RectD(0, 0, 640, 360);
-        var window = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image) { Width = width, Height = height, ShowActivated = false };
+        var window = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary)) { WindowStartupLocation = WindowStartupLocation.Manual, Width = width, Height = height, ShowActivated = false };
         try
         {
             window.Show(); window.UpdateLayout();
@@ -118,7 +119,8 @@ public sealed class Ux402InteractionTests
         var card = new QuickAccessWindow(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
         var ocr = new OcrResultWindow();
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MyCapture-ux402-commands-" + Guid.NewGuid().ToString("N"))), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "MyCapture-ux402-commands-" + Guid.NewGuid().ToString("N"))), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             var handlers = new Dictionary<ShortcutScope, IReadOnlyDictionary<string, Action>>
@@ -152,8 +154,10 @@ public sealed class Ux402InteractionTests
             {
                 var surface = new SolidColorBrush(color);
                 var text = new SolidColorBrush(color == Colors.Black ? Colors.White : Colors.Black);
+                var input = new SolidColorBrush(color == Colors.Black ? Colors.DimGray : Colors.Gainsboro);
                 window.Resources["Surface.Base"] = surface;
                 window.Resources["Surface.Sunken"] = surface;
+                window.Resources["Input.Fill"] = input;
                 window.Resources["Text.Primary"] = text;
                 window.Resources["Text.Secondary"] = text;
                 var root = Assert.IsType<Grid>(window.Content);
@@ -162,7 +166,7 @@ public sealed class Ux402InteractionTests
                 Assert.All(root.Children.OfType<Border>(), border => Assert.Same(surface, border.Background));
                 var heading = Assert.IsType<StackPanel>(Assert.IsType<Border>(root.Children[0]).Child);
                 Assert.All(heading.Children.OfType<TextBlock>(), block => Assert.Same(text, block.Foreground));
-                Assert.Same(surface, Descendants(root).OfType<TextBox>().Single().Background);
+                Assert.Same(input, Descendants(root).OfType<TextBox>().Single().Background);
             }
         }
         finally { window.CloseForExit(); }
@@ -181,7 +185,8 @@ public sealed class Ux402InteractionTests
         string sibling = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(paths.CapturesRoot, stageName), ".mp4");
         string invalidName = ValidatedFilePaths.FileWithinRoot(root, System.IO.Path.Combine(directory, ".render-invalid.mp4"), ".mp4");
         foreach (string path in new[] { source, stage, outside, sibling, invalidName }) System.IO.File.WriteAllText(path, "synthetic fixture");
-        var window = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360), paths, NullLoggerFactory.Instance)
+        var window = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360), paths, NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             { RenderStagingPathFactory = () => stage };
         var cleanup = typeof(VideoEditorWindow).GetMethod("DeletePrivateRenderStage", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         try

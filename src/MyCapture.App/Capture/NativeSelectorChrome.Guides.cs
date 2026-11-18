@@ -18,6 +18,7 @@ internal sealed partial class NativeSelectorChrome
     private Window? _keyPanelWindow, _startGuideWindow;
     private CaptureStartGuideCard? _startGuideCard;
     private bool _keyPanelReady, _keyPanelContentPrepared;
+    private bool? _keyPanelRounded;
     private Rect? _staticReadoutBounds;
     internal FrameworkElement? KeyPanel => _keyPanelController?.Active;
     internal IEnumerable<CaptureKeyPanel> KeyPanels => _keyPanelController?.Panels ?? [];
@@ -44,9 +45,9 @@ internal sealed partial class NativeSelectorChrome
         _keyPanelController?.Update();
     }
 
-    private Window CreateDeferred(FrameworkElement content)
+    private Window CreateDeferred(FrameworkElement content, DwmCornerPreference? corners = null, Action<bool>? frame = null)
     {
-        Window window = Create(content, 1, 1, interactive: false);
+        Window window = Create(content, 1, 1, interactive: false, corners, frame);
         _deferredWindows.Add(window);
         new WindowInteropHelper(window).Owner = _owner!.Handle;
         bool excluded = CaptureWindowExclusion.TryApply(window);
@@ -124,6 +125,21 @@ internal sealed partial class NativeSelectorChrome
         PlaceGuideWindow(_startGuideWindow!, _startGuideCard, placed, scale);
     }
 
+    /// <summary>
+    /// A key panel fills its own window: square, since the window has the corners. DWM draws the
+    /// edge of a rounded window, so the panel's own edge goes and its padding keeps the panel's size.
+    /// </summary>
+    private void FitFrame(CaptureKeyPanel panel)
+    {
+        if (_keyPanelRounded is not { } rounded) return;
+        panel.CornerRadius = new CornerRadius(0);
+        double edge = rounded ? 0 : 1;
+        Thickness padding = panel.Padding;
+        double grow = panel.BorderThickness.Left - edge;
+        panel.BorderThickness = new Thickness(edge);
+        panel.Padding = new Thickness(padding.Left + grow, padding.Top + grow, padding.Right + grow, padding.Bottom + grow);
+    }
+
     private void ResetGuides()
     {
         _keyPanelReady = _keyPanelContentPrepared = false;
@@ -170,8 +186,10 @@ internal sealed partial class NativeSelectorChrome
             if (chrome._keyPanelCanvas is null)
             {
                 chrome._keyPanelCanvas = new Canvas { IsHitTestVisible = false, Focusable = false };
-                chrome._keyPanelWindow = chrome.CreateDeferred(chrome._keyPanelCanvas);
+                chrome._keyPanelWindow = chrome.CreateDeferred(chrome._keyPanelCanvas, DwmCornerPreference.Round,
+                    rounded => chrome._keyPanelRounded = rounded);
             }
+            chrome.FitFrame(panel);
             chrome._keyPanelCanvas.Children.Add(panel);
         }
         public void Remove(CaptureKeyPanel panel) => chrome._keyPanelCanvas?.Children.Remove(panel);

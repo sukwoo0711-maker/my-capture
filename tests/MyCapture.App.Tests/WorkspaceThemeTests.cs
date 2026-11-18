@@ -73,22 +73,22 @@ public sealed class WorkspaceThemeTests
             var galleryBrush = Assert.IsType<SolidColorBrush>(gallery["Surface.Base"]);
             var editorBrush = Assert.IsType<SolidColorBrush>(editor["Surface.Base"]);
             Assert.NotSame(galleryBrush, editorBrush);
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#edf3f2"), galleryBrush.Color);
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#141b22"), editorBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#edf0f3"), galleryBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#191b1e"), editorBrush.Color);
             var card = new Border { Resources = gallery, Style = (Style)gallery["Card"] };
             card.Measure(new Size(240, 200));
             var cardBrush = Assert.IsType<SolidColorBrush>(card.Background);
-            Assert.Equal(Colors.White, cardBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#f7f8fa"), cardBrush.Color);
             // Palette brushes are frozen and swapped on a theme change, never recoloured in
             // place (ThemeBrushes); the sealed style follows through its resource reference.
             Assert.True(cardBrush.IsFrozen);
             WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.HighContrast);
             Assert.Equal(Colors.Black, Brush(gallery, "Surface.Base").Color);
             Assert.Equal(Color.FromRgb(0x12, 0x12, 0x12), Assert.IsType<SolidColorBrush>(card.Background).Color);
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#edf3f2"), galleryBrush.Color);
-            Assert.Equal(Colors.White, cardBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#edf0f3"), galleryBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#f7f8fa"), cardBrush.Color);
             Assert.Same(editorBrush, editor["Surface.Base"]);
-            Assert.Equal((Color)ColorConverter.ConvertFromString("#141b22"), editorBrush.Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#191b1e"), editorBrush.Color);
             Assert.Equal(0.52, ((Brush)gallery["Overlay.Dimmer"]).Opacity, 2);
             WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Daylight);
             Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Base"].R, Brush(gallery, "Surface.Base").Color.R);
@@ -96,7 +96,7 @@ public sealed class WorkspaceThemeTests
             Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Base"].R, Brush(gallery, "Surface.Base").Color.R);
             Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Base"].A, Brush(gallery, "Surface.Base").Color.A);
             WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Workspace);
-            Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(card.Background).Color);
+            Assert.Equal((Color)ColorConverter.ConvertFromString("#f7f8fa"), Assert.IsType<SolidColorBrush>(card.Background).Color);
         });
     }
 

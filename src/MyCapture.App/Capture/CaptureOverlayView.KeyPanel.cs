@@ -103,7 +103,7 @@ internal sealed partial class CaptureOverlayView
     internal IReadOnlyList<MonitorInfo> DeferredGuideMonitors => _monitors ??= ReadMonitors();
     internal double DeferredGuideDipPerPixelX => DipPerPixelX;
     internal double DeferredGuideDipPerPixelY => DipPerPixelY;
-    internal Rect? DeferredGuideHighlight => (FreeformStrokeBounds ?? _selection ?? _shownHover) is { } highlighted ? ToDipRect(highlighted) : null;
+    internal Rect? DeferredGuideHighlight => (FreeformStrokeBounds ?? _selection ?? _hoverGlide.Shown) is { } highlighted ? ToDipRect(highlighted) : null;
     internal Rect? DeferredGuideHoverTab => _targetTab;
     internal Rect DeferredGuideMagnifier => _magnifierVisual.ContentBounds;
     internal Rect? DeferredGuideReadout => _dimensionLabelBounds ?? _targetTab;

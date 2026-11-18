@@ -360,7 +360,8 @@ internal sealed class PinTextSelectionView : Grid
         if (_scrollBarPalette is { } current && current.Palette == palette && ReferenceEquals(current.Basis, basis)) return;
         var style = new Style(typeof(ScrollBar), basis);
         var colors = ThemeCatalog.ColorsFor(palette);
-        foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary" })
+        foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary",
+            "Fill.ScrollThumb", "Fill.ScrollThumbHover", "Fill.ScrollThumbPressed" })
         {
             ThemeColor color = colors[key];
             var brush = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));

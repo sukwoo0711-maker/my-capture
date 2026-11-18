@@ -42,15 +42,21 @@ public sealed partial class AccentColorThemeTests
             foreach (Control control in new Control[] { tool, check })
             {
                 Border selected = Part<Border>(control, "CheckedLayer");
-                Assert.Equal(new Thickness(2), selected.BorderThickness);
-                Assert.Equal(BrushColor((Brush)resources["Text.Primary"]), BrushColor(selected.BorderBrush));
-                Assert.Equal(BrushColor((Brush)resources["Surface.Selected"]), BrushColor(selected.Background));
+                bool legacy = theme == AppTheme.HighContrast;
+                bool checkbox = control is CheckBox;
+                Assert.Equal(new Thickness(legacy ? 2 : checkbox ? 0 : 1), selected.BorderThickness);
+                Assert.Equal(BrushColor((Brush)resources[legacy || checkbox ? "Text.Primary" : "Stroke.Selected"]), BrushColor(selected.BorderBrush));
+                Assert.Equal(BrushColor((Brush)resources[legacy || !checkbox ? "Surface.Selected" : "Text.Primary"]), BrushColor(selected.Background));
                 Brush ink = control is CheckBox ? Part<System.Windows.Shapes.Path>(control, "Check").Stroke : control.Foreground;
                 Assert.True(ThemeContrast.Ratio(BrushColor(ink), BrushColor(selected.Background)) >= 4.5);
                 if (theme == AppTheme.HighContrast) continue;
                 foreach (Color backdrop in new[] { Colors.Black, Colors.White })
-                    AssertContrast(selected.BorderBrush, ThemeContrast.Composite(BrushColor(root.Background), ToThemeColor(backdrop)),
-                        $"{theme}/{role}/{control.GetType().Name} selection edge");
+                {
+                    ThemeColor surface = ThemeContrast.Composite(BrushColor(root.Background), ToThemeColor(backdrop));
+                    // Filled checks and selected control edges retain the non-text contrast requirement.
+                    if (checkbox) AssertContrast(selected.Background, surface, $"{theme}/{role}/CheckBox filled box");
+                    else AssertContrast(selected.BorderBrush, surface, $"{theme}/{role}/{control.GetType().Name} selection edge");
+                }
             }
             ApplyPalette(resources, theme, role, AppAccent.Violet);
             Layout(root);
@@ -169,8 +175,9 @@ public sealed partial class AccentColorThemeTests
         // predicate in this isolated fixture so the shipped focus setters run without taking
         // keyboard focus from another worker. Keep their resource expressions untouched.
         XElement tab = combined.Elements(p + "Style").Single(e => (string?)e.Attribute(x + "Key") == "Tab.Help");
-        XElement focus = tab.Descendants(p + "Trigger").Single(e => (string?)e.Attribute("Property") == "IsKeyboardFocused");
-        focus.SetAttributeValue("Property", "Tag");
+        foreach (XElement focus in tab.Descendants().Where(e => e.Name.LocalName is "Trigger" or "Condition" &&
+                     (string?)e.Attribute("Property") is "IsKeyboardFocused" or "themes:KeyboardFocusCue.IsVisible"))
+            focus.SetAttributeValue("Property", "Tag");
         return (ResourceDictionary)XamlReader.Parse(combined.ToString());
     }
 

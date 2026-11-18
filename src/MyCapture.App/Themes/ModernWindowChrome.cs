@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -24,16 +23,6 @@ internal readonly record struct WindowChromePlan(bool DarkMode, int? CaptionColo
 /// </summary>
 public static class ModernWindowChrome
 {
-    private const int DwmwaUseImmersiveDarkMode = 20;
-    private const int DwmwaLegacyUseImmersiveDarkMode = 19;
-    private const int DwmwaBorderColor = 34;
-    private const int DwmwaCaptionColor = 35;
-    private const int DwmwaTextColor = 36;
-    private const int DwmwaWindowCornerPreference = 33;
-    private const int DwmwaSystemBackdropType = 38;
-    private const int DwmsbtNone = 1;
-    private const int DwmWcpRound = 2;
-    private const int DwmColorDefault = unchecked((int)0xFFFFFFFF);
     private const int WmSysColorChange = 0x0015;
 
     // WPF clears every HWND to opaque black before drawing the window background (the
@@ -99,7 +88,7 @@ public static class ModernWindowChrome
         _ => true,
     };
 
-    internal static int ToColorRef(ThemeColor color) => color.R | (color.G << 8) | (color.B << 16);
+    internal static int ToColorRef(ThemeColor color) => DwmWindowAttributes.ToColorRef(color.R, color.G, color.B);
 
     /// <summary>
     /// Pure decision for a window's native caption: dark caption buttons for dark palettes, and
@@ -250,36 +239,31 @@ public static class ModernWindowChrome
         int dark = plan.DarkMode ? 1 : 0;
         // Attribute 20 is the documented DWMWA_USE_IMMERSIVE_DARK_MODE value; 19 is the
         // pre-release value some DWM builds still answer, kept as a silent fallback.
-        if (DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int)) != 0)
+        if (!DwmWindowAttributes.Set(handle, DwmWindowAttributes.UseImmersiveDarkMode, dark))
         {
-            _ = DwmSetWindowAttribute(handle, DwmwaLegacyUseImmersiveDarkMode, ref dark, sizeof(int));
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.LegacyUseImmersiveDarkMode, dark);
         }
 
         // The client is opaque, so no system backdrop or extended frame can show through it.
-        int build = Environment.OSVersion.Version.Build;
+        int build = DwmWindowAttributes.Build;
         if (WindowsFeatureSupport.HasSystemBackdrop(build))
         {
-            int backdrop = DwmsbtNone;
-            _ = DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.SystemBackdropType, DwmWindowAttributes.BackdropNone);
         }
-        Margins margins = default;
-        _ = DwmExtendFrameIntoClientArea(handle, ref margins);
+        DwmWindowAttributes.Margins margins = default;
+        _ = DwmWindowAttributes.DwmExtendFrameIntoClientArea(handle, ref margins);
 
         // High Contrast hands the caption back to the user's system palette.
         if (WindowsFeatureSupport.HasDwmCaptionColors(build))
         {
-            int border = plan.BorderColor ?? DwmColorDefault;
-            int caption = plan.CaptionColor ?? DwmColorDefault;
-            int text = plan.TextColor ?? DwmColorDefault;
-            _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
-            _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
-            _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.BorderColor, plan.BorderColor ?? DwmWindowAttributes.ColorDefault);
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.CaptionColor, plan.CaptionColor ?? DwmWindowAttributes.ColorDefault);
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.TextColor, plan.TextColor ?? DwmWindowAttributes.ColorDefault);
         }
 
         if (WindowsFeatureSupport.HasRoundedWindowCorners(build))
         {
-            int rounded = DwmWcpRound;
-            _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));
+            _ = DwmWindowAttributes.Set(handle, DwmWindowAttributes.WindowCornerPreference, (int)DwmCornerPreference.Round);
         }
     }
 
@@ -292,23 +276,4 @@ public static class ModernWindowChrome
 
         return IntPtr.Zero;
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Margins
-    {
-        public int cxLeftWidth;
-        public int cxRightWidth;
-        public int cyTopHeight;
-        public int cyBottomHeight;
-    }
-
-    [DllImport("dwmapi.dll", PreserveSig = true)]
-    private static extern int DwmSetWindowAttribute(
-        IntPtr hwnd,
-        int attribute,
-        ref int attributeValue,
-        int attributeSize);
-
-    [DllImport("dwmapi.dll", PreserveSig = true)]
-    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
 }

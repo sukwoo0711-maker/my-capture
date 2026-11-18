@@ -215,7 +215,7 @@ public sealed partial class SettingsThemePreviewTests
                     applied.Add(candidate);
                     return new SettingsApplyResult(true, true, true, false, []);
                 }, NullLogger.Instance, () => store, _ => { })
-                { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+                { WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
                 try
                 {
                     window.Show(); Drain(window);
@@ -275,7 +275,7 @@ public sealed partial class SettingsThemePreviewTests
                 applies++;
                 return new SettingsApplyResult(false, false, false, false, []);
             }, NullLogger.Instance, () => store, _ => { })
-            { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+            { WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
             try
             {
                 window.Show(); Drain(window);

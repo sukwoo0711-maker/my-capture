@@ -65,7 +65,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                     Visibility[] names = buttons.SelectMany(PrimaryLabels).Select(label => label.Visibility).ToArray();
                     if (restingNames is not null) Assert.Equal(restingNames, names);
                     else restingNames = names;
-                    Assert.Equal(crop ? 0 : 4, buttons.Count(button => (bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)));
+                    Assert.Equal(crop ? 0 : 5, buttons.Count(button => (bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)));
                     foreach (Button button in buttons)
                     {
                         Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
@@ -117,7 +117,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     [InlineData("en-US", false)]
     [InlineData("ko-KR", true)]
     [InlineData("en-US", true)]
-    public void FooterCaptureAndInfoRemainLabelledAtMinimumWidthInBothModes(string language, bool withSource) => StaTestHost.Run(() =>
+    public void FooterCaptureRemainsLabelledAndInfoMovesToMoreAtMinimumWidthInBothModes(string language, bool withSource) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var motion = new ShortcutMotionTestScope();
@@ -143,7 +143,14 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             Grid footer = Descendants(editor).OfType<Grid>().Single(grid => grid.Name == "AnnotationStatusBar");
             Button capture = Descendants(footer).OfType<Button>().Single(button => button.Name == "NewCapture");
             Button options = Descendants(footer).OfType<Button>().Single(button => button.Name == "CaptureOptions");
-            Button info = Descendants(footer).OfType<Button>().Single(button => button.Name == "MediaInfo");
+            Assert.DoesNotContain(Descendants(footer).OfType<Button>(), button => button.Name == "MediaInfo");
+            Button more = Descendants(editor).OfType<Button>()
+                .Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowMore");
+            MenuItem info = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(),
+                item => Equals(item.Header, UiText.Get("MediaInfo.Title")));
+            Assert.Same(info, more.ContextMenu.Items[^1]);
+            Assert.Equal(UiText.Get("MediaInfo.Title"), AutomationProperties.GetName(info));
+            Assert.True(info.IsEnabled && info.Focusable);
             foreach (bool crop in new[] { false, true })
             {
                 if (crop) Assert.True(editor.HandleShortcut(System.Windows.Input.Key.X, System.Windows.Input.ModifierKeys.None));
@@ -151,16 +158,15 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                 {
                     ShortcutPresentation.SetAltRevealed(window, reveal);
                     window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
-                    Assert.Same(capture.Style, info.Style);
                     Assert.Equal(36, capture.ActualHeight);
-                    Assert.Equal(36, info.ActualHeight);
                     Assert.Equal(36, options.ActualHeight);
                     Assert.True(options.IsVisible && options.IsEnabled && options.Focusable && options.IsTabStop);
                     Assert.Equal(UiText.Get("CaptureEntry.MoreOptions"), AutomationProperties.GetName(options));
                     Rect captureBounds = capture.TransformToAncestor(footer).TransformBounds(new Rect(capture.RenderSize));
                     Rect optionsBounds = options.TransformToAncestor(footer).TransformBounds(new Rect(options.RenderSize));
                     Assert.InRange(optionsBounds.Left - captureBounds.Right, 0, .5);
-                    foreach ((Button button, string key) in new[] { (capture, "CaptureEntry.NewCapture"), (info, "MediaInfo.Title") })
+                    Assert.Equal(!crop, more.IsVisible);
+                    foreach ((Button button, string key) in new[] { (capture, "CaptureEntry.NewCapture") })
                     {
                         Assert.True(button.IsVisible && button.IsEnabled && button.Focusable && button.IsTabStop);
                         Assert.Equal(UiText.Get(key), AutomationProperties.GetName(button));
@@ -185,11 +191,60 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
+    [InlineData("ko-KR", 680)]
+    [InlineData("en-US", 680)]
+    [InlineData("ko-KR", 1000)]
+    [InlineData("en-US", 1000)]
+    public void EditingAndResultsOccupySeparateSidesWithOneDecisiveCopyAction(string language, double width) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var motion = new ShortcutMotionTestScope();
+        using var preference = new HintPreference(() => false);
+        using EditorWindowHost host = EditorWindowHost.Create(beforeShow: UseShippedTheme);
+        host.Window.Width = width;
+        foreach (bool alt in new[] { false, true, false })
+        {
+            ShortcutPresentation.SetAltRevealed(host.Window, alt);
+            host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
+            var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
+            var editing = Assert.IsType<StackPanel>(bar.Children[0]);
+            var results = Assert.IsType<StackPanel>(bar.Children[1]);
+            Assert.Equal("AnnotationEditCommands", editing.Name);
+            Assert.Equal("AnnotationResultCommands", results.Name);
+            Button[] editingButtons = editing.Children.OfType<Button>().ToArray();
+            Assert.Contains(Field<Button>(host.Editor, "_undoButton"), editingButtons);
+            Assert.Contains(Field<Button>(host.Editor, "_redoButton"), editingButtons);
+            Assert.Contains(Field<Button>(host.Editor, "_redactButton"), editingButtons);
+            Assert.Contains(Field<Button>(host.Editor, "_copyTextButton"), editingButtons);
+            Assert.Contains(editingButtons, button => AutomationProperties.GetAutomationId(button) == "Capture410Crop");
+            Assert.Equal(new[] { "EditorFlowSaveToFile", "EditorFlowDone", "EditorFlowPin", "EditorFlowMore" },
+                results.Children.OfType<Button>().Select(AutomationProperties.GetAutomationId));
+            Button done = results.Children.OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowDone");
+            Assert.Same(host.Window.FindResource("Button.Primary"), done.Style);
+            Assert.Equal("Ctrl+C", AutomationProperties.GetAcceleratorKey(done));
+            Assert.All(PrimaryLabels(done), label => Assert.True(label.IsVisible));
+            Assert.All(editingButtons.Concat(results.Children.OfType<Button>()).Where(button => button != done),
+                button => Assert.NotSame(done.Style, button.Style));
+            Rect left = editing.TransformToAncestor(bar).TransformBounds(new Rect(editing.RenderSize));
+            Rect right = results.TransformToAncestor(bar).TransformBounds(new Rect(results.RenderSize));
+            Assert.Equal(left.Top, right.Top, 2);
+            Assert.True(left.Right + CommandGroupsPanel.GroupGap <= right.Left + 0.5);
+            Assert.InRange(right.Right, bar.ActualWidth - 0.5, bar.ActualWidth + 0.5);
+            Assert.All(results.Children.OfType<Button>(), button =>
+            {
+                Assert.True(button.IsEnabled && button.Focusable && button.IsTabStop);
+                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+            });
+        }
+    });
+
+    [Theory]
     // Measured with the editing commands as borderless tool buttons (no 1-DIP outline) and both output
     // commands (save to file, pin) as bordered secondary buttons, in the shipped UI font (the bundled
     // Pretendard) and its Ideal text formatting. The pin's outline adds 2 DIP while its name shows.
-    [InlineData("ko-KR", new[] { 857, 816, 769, 704, 682, 605 })]
-    [InlineData("en-US", new[] { 869, 833, 797, 735, 706, 625 })]
+    // The result group's always-icon More command adds its measured 42 DIP at every stage.
+    [InlineData("ko-KR", new[] { 899, 858, 811, 746, 724, 647 })]
+    [InlineData("en-US", new[] { 911, 875, 839, 777, 748, 667 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var dpiContext = TestDpiContext.At96Dpi();
@@ -218,6 +273,13 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         Assert.Equal(["Capture410Crop"], ordered.Take(1).Select(AutomationProperties.GetAutomationId));
         Assert.Equal("EditorFlowSaveToFile", AutomationProperties.GetAutomationId(ordered[^1]));
         Assert.Equal(5, ordered.Length);
+        Assert.Equal(new[]
+        {
+            Descendants(bar).OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "Capture410Crop"),
+            Field<Button>(host.Editor, "_redactButton"), Field<Button>(host.Editor, "_copyTextButton"),
+            Field<Button>(host.Editor, "_pinButton"),
+            Descendants(bar).OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "EditorFlowSaveToFile"),
+        }, ordered);
         // How many names a width hides, or null when the bar cannot hold Alt's widths on one row.
         int? Hidden(int width)
         {

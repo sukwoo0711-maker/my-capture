@@ -431,7 +431,7 @@ public sealed class ShortcutCaptionTests(ITestOutputHelper output)
             Border host = QuickAccessDetachedFixture.Layout(card);
             Assert.False(card.CanActivateByHotkey);
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
-            Assert.Equal(5, actions.Count);
+            Assert.Equal(3, actions.Count);
             // The detached layout needs the same Loaded hook that attaches raw accelerator captions in a real window.
             foreach (Button button in actions)
                 button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, button));
@@ -446,7 +446,7 @@ public sealed class ShortcutCaptionTests(ITestOutputHelper output)
                 {
                     // Each action names itself under its icon, and Alt captions never change its height.
                     Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(button), button.ActualHeight, 2);
-                    Assert.True(button.ActualHeight > 36);
+                    Assert.True(button.ActualHeight >= 36);
                     string key = AutomationProperties.GetAcceleratorKey(button);
                     Assert.False(string.IsNullOrWhiteSpace(key));
                     Assert.Equal(AutomationProperties.GetName(button) + "  " + key, button.ToolTip);

@@ -38,7 +38,7 @@ public sealed class PinZoomMotionTests
             // The meaning changes now: state, practice signal, readout.
             Assert.Equal(1.1, pin.State.Zoom, 9);
             Assert.Single(zooms);
-            Assert.Equal("110%", pin.FeedbackTextForTest);
+            Assert.Equal($"110% · {Px(pin, 176)} × {Px(pin, 110)} px", pin.FeedbackTextForTest);
             Assert.True(pin.IsZoomMoving);
             // The first step is on the screen in the input's own turn, short of the target.
             int width = Width(pin.PhysicalBounds);
@@ -142,7 +142,7 @@ public sealed class PinZoomMotionTests
 
             Assert.True(pin.HandleKey(Key.D0, ModifierKeys.None));
             Assert.Equal(1, pin.State.Zoom, 9);
-            Assert.Equal("100%", pin.FeedbackTextForTest);
+            Assert.Equal($"100% · {Px(pin, 160)} × {Px(pin, 100)} px", pin.FeedbackTextForTest);
             Finish(pin, ref now);
             Assert.Equal(Px(pin, 160), Width(pin.PhysicalBounds));
             Assert.Equal(Center(before).X, Center(pin.PhysicalBounds).X, 1.0);

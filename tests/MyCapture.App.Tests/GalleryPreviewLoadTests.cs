@@ -52,7 +52,7 @@ public sealed class GalleryPreviewLoadTests
                 window.UpdateLayout();
                 var decoder = new GatedDecoder(window.DecodePreviewForTest);
                 window.DecodePreviewForTest = decoder.Decode;
-                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+                var previewButton = (MenuItem)window.FindName("PreviewSelectedButton");
                 int uiThread = Environment.CurrentManagedThreadId;
 
                 // The click returns while the pool decodes, and the preview shows the file's pixels.
@@ -153,7 +153,7 @@ public sealed class GalleryPreviewLoadTests
                 window.UpdateLayout();
                 var decoder = new GatedDecoder(window.DecodePreviewForTest);
                 window.DecodePreviewForTest = decoder.Decode;
-                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+                var previewButton = (MenuItem)window.FindName("PreviewSelectedButton");
                 GalleryItemViewModel image = fixture.Model.FindTile(fixture.Wide.Id)!;
                 GalleryItemViewModel video = fixture.Model.FindTile(fixture.Video.Id)!;
                 var player = new FakeVideoPlayer();
@@ -345,7 +345,7 @@ public sealed class GalleryPreviewLoadTests
                 window.DecodeCopyForTest = copyDecoder.Decode;
                 var copied = new List<BitmapSource>();
                 window.WriteCopyForTest = data => { lock (copied) copied.Add((BitmapSource)data.GetData(DataFormats.Bitmap)); };
-                var previewButton = (Button)window.FindName("PreviewSelectedButton");
+                var previewButton = (MenuItem)window.FindName("PreviewSelectedButton");
 
                 // A UI Automation client reaches WPF through Send-priority calls (ElementUtil.Invoke), and while it
                 // reads the library one is nearly always waiting. Work at a lower priority then waits until the
@@ -443,11 +443,11 @@ public sealed class GalleryPreviewLoadTests
             .Invoke(window, [menuItem, new RoutedEventArgs(MenuItem.ClickEvent)]);
     }
 
-    private static void Request(GalleryWindow window, GalleryViewModel model, Button previewButton, CaptureRecord record)
+    private static void Request(GalleryWindow window, GalleryViewModel model, MenuItem previewButton, CaptureRecord record)
     {
         model.Select(record.Id);
         var timer = Stopwatch.StartNew();
-        previewButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        previewButton.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         // The click only queues the request; a gated decode would otherwise hang it here.
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"The preview click took {timer.ElapsedMilliseconds} ms.");
         Assert.True(window.IsLoadingPreviewForTest);

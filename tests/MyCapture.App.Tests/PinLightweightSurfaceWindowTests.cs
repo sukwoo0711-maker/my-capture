@@ -61,10 +61,13 @@ public sealed class PinLightweightSurfaceWindowTests
             Post(native.Handle, 0x0100, 0xBB); // OemPlus
             PinNativeSpeedTestWait.Until(() => pin.State.Zoom > 1);
             PinNativeSpeedTestWait.Until(() => pin.FeedbackWindowForTest is { IsVisible: true });
-            Assert.Equal($"{pin.State.Zoom * 100:0}%", FeedbackText(pin));
+            Assert.Equal(PinWindow.ZoomReadout(pin.State.Zoom, 160, 100, native.DpiScale), FeedbackText(pin));
+            Assert.StartsWith($"{pin.State.Zoom * 100:0}% · ", FeedbackText(pin), StringComparison.Ordinal);
             Post(native.Handle, 0x0100, 0x30); // 0
             PinNativeSpeedTestWait.Until(() => Math.Abs(pin.State.Zoom - 1) < 1e-9);
-            PinNativeSpeedTestWait.Until(() => FeedbackText(pin) == "100%");
+            string reset = $"100% · {Math.Round(160 * native.DpiScale, MidpointRounding.AwayFromZero)} × "
+                + $"{Math.Round(100 * native.DpiScale, MidpointRounding.AwayFromZero)} px";
+            PinNativeSpeedTestWait.Until(() => FeedbackText(pin) == reset);
             Assert.True(pin.IsNativeHosted);
             Assert.False(pin.IsHostSwitchPending);
         }
@@ -84,7 +87,7 @@ public sealed class PinLightweightSurfaceWindowTests
             Assert.True(PostMessageW(native.Handle, 0x020A, new IntPtr(120 << 16), new IntPtr(centre)));
             PinNativeSpeedTestWait.Until(() => pin.FeedbackWindowForTest is { IsVisible: true });
             PinFeedbackSurface surface = pin.FeedbackWindowForTest!;
-            Assert.Equal($"{pin.State.Zoom * 100:0}%", FeedbackText(pin));
+            Assert.Equal(PinWindow.ZoomReadout(pin.State.Zoom, 160, 100, native.DpiScale), FeedbackText(pin));
             // The message window is the pin's own: owned by the native window and shown in captures.
             Assert.Equal(native.Handle, NativePinWindowInterop.GetWindow(new WindowInteropHelper(surface).Handle, 4));
             Assert.False(CaptureWindowExclusion.WasApplied(surface));

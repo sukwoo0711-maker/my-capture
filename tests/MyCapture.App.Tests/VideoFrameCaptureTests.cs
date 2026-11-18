@@ -465,8 +465,10 @@ public sealed class VideoFrameCaptureTests
         }
         internal VideoEditorWindow Editor(VideoFrameCaptureService? service = null, IVideoPreviewEngine? previewEngine = null)
         {
-            var editor = new VideoEditorWindow(new RecordingResult(SourcePath, 300, 10, 3, 1280, 720), Paths, NullLoggerFactory.Instance, previewEngine: previewEngine)
+            var editor = new VideoEditorWindow(new RecordingResult(SourcePath, 300, 10, 3, 1280, 720), Paths, NullLoggerFactory.Instance, previewEngine: previewEngine,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
+                WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, ShowActivated = false,
                 FrameCaptureService = service ?? Service, FrameSourceVideoId = Source.Id, FrameSourceRevision = 7, ShowFrameInLibrary = _ => { },
             };

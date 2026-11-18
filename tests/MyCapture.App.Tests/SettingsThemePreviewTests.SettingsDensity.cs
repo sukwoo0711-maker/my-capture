@@ -260,10 +260,21 @@ public sealed partial class SettingsThemePreviewTests
         foreach (PasswordBox box in Descendants(page).OfType<PasswordBox>().Where(box => box.IsVisible))
             Assert.True(box.ActualHeight is >= 32 and <= 34, $"{where}: the token box is {box.ActualHeight:0.#} high.");
 
-        // Within a page, every one-row field starts its input at the same x.
-        double[] inputLefts = Descendants(page).OfType<SettingsField>().Where(field => field.IsVisible)
+        // Labels and values stay aligned even when a longer description wraps below the value.
+        SettingsField[] fields = Descendants(page).OfType<SettingsField>().Where(field => field.IsVisible).ToArray();
+        double[] inputLefts = fields
             .Select(field => BoundsIn((FrameworkElement)field.Content, page).Left).Distinct().ToArray();
         Assert.True(inputLefts.Length <= 1 || inputLefts.Max() - inputLefts.Min() < 0.5, $"{where}: inputs start at {string.Join(", ", inputLefts)}.");
+        foreach (SettingsField field in fields.Where(field => field.Note is not null))
+        {
+            var note = Assert.IsType<ContentPresenter>(field.Template.FindName("FieldNote", field));
+            var value = (FrameworkElement)field.Content;
+            Assert.Equal(BoundsIn(value, page).Left, BoundsIn(note, page).Left, 0.5);
+            Assert.True(BoundsIn(note, page).Top >= BoundsIn(value, page).Bottom, $"{where}: description overlaps its value.");
+            Assert.All(Descendants(note).OfType<TextBlock>()
+                .Where(text => ReferenceEquals(text.Style, field.FindResource("Settings.Description"))),
+                text => Assert.Equal(TextWrapping.Wrap, text.TextWrapping));
+        }
     }
 
     /// <summary>The audit's case: at the minimum size all six editor defaults are visible at once.</summary>

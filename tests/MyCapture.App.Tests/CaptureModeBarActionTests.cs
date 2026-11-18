@@ -50,13 +50,14 @@ public sealed class CaptureModeBarActionTests(ITestOutputHelper output)
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
             // Without an owner for the commands, neither the switch nor the menu is offered.
-            Assert.Equal(Visibility.Collapsed, bar.RecordKindButton.Parent is FrameworkElement kinds ? kinds.Visibility : Visibility.Visible);
+            Border kinds = Assert.IsType<Border>(Assert.IsType<StackPanel>(bar.RecordKindButton.Parent).Parent);
+            Assert.Equal(Visibility.Collapsed, kinds.Visibility);
             Assert.Equal(Visibility.Collapsed, bar.MoreButton.Visibility);
             bar.RecordKindButton.IsChecked = true;
             Assert.Empty(requests);
 
             view.OffersOtherActions = true;
-            Assert.Equal(Visibility.Visible, ((FrameworkElement)bar.RecordKindButton.Parent).Visibility);
+            Assert.Equal(Visibility.Visible, kinds.Visibility);
             Assert.Equal(Visibility.Visible, bar.MoreButton.Visibility);
             Assert.True(bar.CaptureKindButton.IsChecked);
             Assert.Equal("녹화", AutomationProperties.GetName(bar.RecordKindButton));

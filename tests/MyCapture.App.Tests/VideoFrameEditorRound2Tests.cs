@@ -282,7 +282,8 @@ public sealed class VideoFrameEditorRound2Tests
                 File.WriteAllBytes(Path.Combine(Root, record.Id + ".png"), ImageCodec.EncodePng(bitmap));
                 queue.Add(record); return Task.FromResult(record);
             });
-            Editor = new VideoEditorWindow(new RecordingResult(sourcePath, 2000, 10, 20, 640, 360), paths, NullLoggerFactory.Instance, document)
+            Editor = new VideoEditorWindow(new RecordingResult(sourcePath, 2000, 10, 20, 640, 360), paths, NullLoggerFactory.Instance, document,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
                 Width = 920, Height = 680, ShowActivated = false, Topmost = false,

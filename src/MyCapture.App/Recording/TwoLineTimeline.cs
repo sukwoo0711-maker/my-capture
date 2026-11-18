@@ -323,6 +323,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         PreviewKeyDown += OnPreviewKeyDown;
         // The keyboard-selected handle shows a focus ring only while the timeline has focus.
         IsKeyboardFocusWithinChanged += (_, _) => InvalidateRange();
+        KeyboardFocusCue.AddVisibilityChangedHandler(this, (_, _) => InvalidateRange());
         IsEnabledChanged += (_, _) => Opacity = IsEnabled ? 1.0 : 0.5;
         TimelineVisuals.ObservePalette(this, () => { RefreshPalette(); InvalidateAll(); });
         Loaded += OnLoaded;
@@ -2026,7 +2027,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     }
 
     private bool ShowsFocusOn(TrimHandle handle) =>
-        _activeTrimHandle == handle && _handleArmed && (IsKeyboardFocusWithin || IsTrimDragging);
+        _activeTrimHandle == handle && _handleArmed
+            && ((IsKeyboardFocusWithin && KeyboardFocusCue.GetIsVisible(this)) || IsTrimDragging);
 
     private readonly record struct ChipLayout(Rect In, Rect Out, FormattedText InText, FormattedText OutText);
 

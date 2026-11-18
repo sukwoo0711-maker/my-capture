@@ -132,8 +132,8 @@ public sealed class ThemeCatalogTests
             ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Base"]);
         Assert.True(AppThemeNames.UsesBackdrop(AppTheme.Glass));
         Assert.True(AppThemeNames.IsLight(AppTheme.GlassLight));
-        Assert.True(ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Raised"].A < 0xFF);
-        Assert.True(ThemeCatalog.ColorsFor(AppTheme.GlassLight)["Surface.Raised"].A < 0xFF);
+        Assert.Equal(byte.MaxValue, ThemeCatalog.ColorsFor(AppTheme.Glass)["Surface.Raised"].A);
+        Assert.Equal(byte.MaxValue, ThemeCatalog.ColorsFor(AppTheme.GlassLight)["Surface.Raised"].A);
     }
 }
 

@@ -363,17 +363,23 @@ public sealed class PracticeMotionTests
         using var fixture = new Fixture(reducedMotion: true);
         WelcomeWindow guide = fixture.Guide;
         Assert.True(guide.PreviewShown);
+        Assert.Equal(UiText.Get("FirstRun.WatchExample"), AutomationProperties.GetName(guide.ReplayButton));
+        Assert.Equal(Visibility.Collapsed, guide.PauseButton.Visibility);
+        PracticeJourneyDriver.Click(guide.ReplayButton);
+        Drain(guide);
+        Assert.Equal(Visibility.Visible, guide.PauseButton.Visibility);
         foreach ((Button button, string key) in new[] { (guide.ReplayButton, "Journey.Replay"), (guide.PauseButton, "Journey.Pause") })
         {
             Assert.True(guide.PreviewFrame.IsAncestorOf(button));
             Assert.Equal(UiText.Get(key), AutomationProperties.GetName(button));
             Assert.Equal(UiText.Get(key), button.ToolTip);
             Assert.IsNotType<string>(button.Content);
-            Assert.Equal(30, button.Width);
-            Assert.Equal(30, button.Height);
+            Assert.Same(guide.FindResource("Button.Ghost"), button.Style);
+            Assert.Equal(36, button.MinWidth);
+            Assert.Equal(36, button.MinHeight);
             DpiScale dpi = VisualTreeHelper.GetDpi(button);
-            Assert.Equal(Math.Round(30 * dpi.DpiScaleX), button.ActualWidth * dpi.DpiScaleX, 6);
-            Assert.Equal(Math.Round(30 * dpi.DpiScaleY), button.ActualHeight * dpi.DpiScaleY, 6);
+            Assert.Equal(Math.Round(36 * dpi.DpiScaleX), button.ActualWidth * dpi.DpiScaleX, 6);
+            Assert.Equal(Math.Round((double)guide.FindResource("Button.Height") * dpi.DpiScaleY), button.ActualHeight * dpi.DpiScaleY, 6);
             Rect bounds = button.TransformToAncestor(guide.PreviewFrame).TransformBounds(new Rect(button.RenderSize));
             Assert.InRange(bounds.Left, 0, guide.PreviewFrame.ActualWidth);
             Assert.InRange(bounds.Right, 0, guide.PreviewFrame.ActualWidth);
@@ -395,6 +401,9 @@ public sealed class PracticeMotionTests
         Assert.InRange(pause.Left - replay.Right, 3, 5);
         Assert.InRange(guide.PreviewFrame.ActualWidth - pause.Right, 7, 10);
         Assert.InRange(guide.PreviewFrame.ActualHeight - pause.Bottom, 7, 10);
+        WelcomeTutorialPreview preview = Assert.Single(FirstRunWelcomeTests.Descendants(guide).OfType<WelcomeTutorialPreview>());
+        Rect material = preview.TransformToAncestor(guide.PreviewFrame).TransformBounds(new Rect(preview.RenderSize));
+        Assert.True(material.Bottom <= replay.Top);
     });
 
     [Fact]
@@ -492,7 +501,13 @@ public sealed class PracticeMotionTests
                 && Guide.TransitionOverlay is null && ContentAtRest(Guide) && AtRest(Guide.SuccessChip)
                 && Guide.ProgressFills.All(AtRest), "Initial layout must be idle before the gesture.");
             Assert.Equal(640, Guide.ActualWidth);
-            Assert.Equal(720, Guide.ActualHeight);
+            if (consent)
+            {
+                Assert.Equal(SizeToContent.Height, Guide.SizeToContent);
+                Assert.Equal(0, Guide.MinHeight);
+                Assert.True(Guide.ActualHeight < WelcomeWindow.DefaultHeight);
+            }
+            else Assert.Equal(720, Guide.ActualHeight);
         }
 
         public void Dispose()

@@ -170,7 +170,8 @@ public sealed class VideoDurationAccuracyTests : KoreanCaptionTest
 
     private static VideoEditorWindow OpenEditor(RecordingResult recording, string root)
     {
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000,

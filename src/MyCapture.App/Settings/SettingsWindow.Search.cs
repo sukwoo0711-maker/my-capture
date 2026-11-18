@@ -118,6 +118,12 @@ internal sealed partial class SettingsWindow
         {
             if (field.Hint is string hint) yield return hint;
             if (field.Note is string note) yield return note;
+            if (field.Note is FrameworkElement noteElement)
+            {
+                foreach (string text in SearchText(noteElement)) yield return text;
+                foreach (FrameworkElement child in LogicalDescendants(noteElement).OfType<FrameworkElement>())
+                    foreach (string text in SearchText(child)) yield return text;
+            }
         }
     }
 

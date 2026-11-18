@@ -330,7 +330,7 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         view.ReadCursor = () => pointer;
         view.ReadClock = () => now;
         view.SimulatedPointerInside = true;
-        // Both under a quarter of the screen, so the highlight glides from one to the other.
+        // Two separate windows: the highlight glides from one to the other.
         var notes = Notes with { ScreenBounds = new RectD(120, 90, 440, 420) };
         var browser = Browser with { ScreenBounds = new RectD(760, 200, 400, 400) };
         view.WindowCandidates = [browser, notes, Taskbar, Shell];
@@ -940,10 +940,12 @@ public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
         // readout still reaches into that corner. The actual chip must win over the selection.
         pointer = new PointD(native.ScreenBounds.Width - 12 - panelWidth - 80, 600);
         native.Chrome!.Update(pointer, native.SelectionRectangle);
-        // The DIB stamp's 190 x 36 readout starts 20 physical pixels below/right of this pointer. The retained
-        // size chip sits at the selection's corner like the WPF selector, so read its actual bounds.
-        // The selection crowds the left corner; its soft preference must never cover the chip.
-        Rect readout = dib ? new(pointer.X + 20, 620, 190, 36) : RetainedChipBounds(native);
+        // The DIB stamp's readout starts 20 physical pixels below/right of this pointer, as wide as
+        // its text; the retained size chip sits at the selection's corner like the WPF selector. Read
+        // each one's actual bounds. The selection crowds the left corner; its soft preference must
+        // never cover the chip.
+        Rect readout = dib ? Assert.IsType<Rect>(native.Chrome!.StaticReadoutBoundsForTest) : RetainedChipBounds(native);
+        if (dib) Assert.True(Math.Abs(readout.Left - (pointer.X + 20)) <= 0.5 && readout.Top == 620, $"Stamp at {readout}");
         Rect panel = Assert.IsType<Rect>(native.KeyPanelBoundsForTest);
         Assert.False(panel.IntersectsWith(readout));
     });

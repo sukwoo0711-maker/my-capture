@@ -3,7 +3,7 @@
 
   Direction (design-system/mycapture/MASTER.md):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
-    * The default accent is pin red (violet is the alternative), with dark ink on its fills.
+    * The fixed crimson action ramp uses white ink; selection and focus remain neutral.
     * Selection and keyboard focus use neutral outlines; the 2-DIP focus ring is an overlay.
     * Bundled Pretendard and the TypeScale ramp define UI text; content sizes stay separate.
     * ThemeService resolves per-theme accent contrast and Windows high-contrast system colours.
@@ -20,19 +20,19 @@
                     xmlns:themes="clr-namespace:MyCapture.App.Themes">
 
     <!-- ============================================================= -->
-    <!-- Primitive colour ramp: precision graphite and cool neutrals   -->
+    <!-- Primitive compatibility ramp: neutral graphite   -->
     <!-- ============================================================= -->
-    <Color x:Key="Primitive.Warm980">#FF080C12</Color> <!-- canvas / deepest -->
-    <Color x:Key="Primitive.Warm950">#FF0B0F17</Color> <!-- app base -->
-    <Color x:Key="Primitive.Warm900">#FF101722</Color> <!-- raised rail / inspector -->
-    <Color x:Key="Primitive.Warm850">#FF151E2B</Color> <!-- controls / overlay -->
-    <Color x:Key="Primitive.Warm800">#FF1B2636</Color> <!-- hover / floating -->
-    <Color x:Key="Primitive.Warm700">#FF243246</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Warm600">#FF6A7B94</Color> <!-- strong boundary: hover, floating -->
-    <Color x:Key="Primitive.Warm550">#FF56677F</Color> <!-- control boundary -->
+    <Color x:Key="Primitive.Warm980">#FF111214</Color> <!-- canvas / deepest -->
+    <Color x:Key="Primitive.Warm950">#FF191B1E</Color> <!-- app base -->
+    <Color x:Key="Primitive.Warm900">#FF24272B</Color> <!-- raised rail / inspector -->
+    <Color x:Key="Primitive.Warm850">#FF30343A</Color> <!-- controls / overlay -->
+    <Color x:Key="Primitive.Warm800">#FF2B2E34</Color> <!-- hover / floating -->
+    <Color x:Key="Primitive.Warm700">#FF32353A</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Warm600">#FFA0A6AF</Color> <!-- strong boundary: hover, floating -->
+    <Color x:Key="Primitive.Warm550">#FF858B94</Color> <!-- control boundary -->
     <Color x:Key="Primitive.Warm500">#FF2B3A50</Color> <!-- subtle divider -->
-    <Color x:Key="Primitive.Warm400">#FF9AA5B5</Color> <!-- muted text -->
-    <Color x:Key="Primitive.Warm300">#FFC9D1DD</Color> <!-- secondary text -->
+    <Color x:Key="Primitive.Warm400">#FFA0A6AF</Color> <!-- muted text -->
+    <Color x:Key="Primitive.Warm300">#FFC9CDD4</Color> <!-- secondary text -->
     <Color x:Key="Primitive.Warm100">#FFFFFFFF</Color> <!-- primary text -->
     <Color x:Key="Primitive.White">#FFFFFFFF</Color>
 
@@ -51,26 +51,26 @@
     <Color x:Key="Primitive.Red400">#FFFF8A91</Color>
 
     <!-- Canonical and legacy primitive aliases. -->
-    <Color x:Key="Primitive.Graphite980">#FF080C12</Color>
-    <Color x:Key="Primitive.Graphite950">#FF0B0F17</Color>
-    <Color x:Key="Primitive.Graphite900">#FF101722</Color>
-    <Color x:Key="Primitive.Graphite850">#FF151E2B</Color>
-    <Color x:Key="Primitive.Graphite800">#FF1B2636</Color>
-    <Color x:Key="Primitive.Graphite700">#FF243246</Color>
-    <Color x:Key="Primitive.Graphite600">#FF6A7B94</Color>
+    <Color x:Key="Primitive.Graphite980">#FF111214</Color>
+    <Color x:Key="Primitive.Graphite950">#FF191B1E</Color>
+    <Color x:Key="Primitive.Graphite900">#FF24272B</Color>
+    <Color x:Key="Primitive.Graphite850">#FF30343A</Color>
+    <Color x:Key="Primitive.Graphite800">#FF2B2E34</Color>
+    <Color x:Key="Primitive.Graphite700">#FF32353A</Color>
+    <Color x:Key="Primitive.Graphite600">#FFA0A6AF</Color>
     <Color x:Key="Primitive.Graphite500">#FF2B3A50</Color>
-    <Color x:Key="Primitive.Graphite400">#FF8E9CAF</Color>
-    <Color x:Key="Primitive.Graphite300">#FFC6D0DF</Color>
+    <Color x:Key="Primitive.Graphite400">#FFA0A6AF</Color>
+    <Color x:Key="Primitive.Graphite300">#FFC9CDD4</Color>
     <Color x:Key="Primitive.Graphite100">#FFF6F8FC</Color>
 
-    <Color x:Key="Primitive.Slate950">#FF080C12</Color>
-    <Color x:Key="Primitive.Slate900">#FF0B0F17</Color>
-    <Color x:Key="Primitive.Slate850">#FF101722</Color>
-    <Color x:Key="Primitive.Slate800">#FF151E2B</Color>
+    <Color x:Key="Primitive.Slate950">#FF111214</Color>
+    <Color x:Key="Primitive.Slate900">#FF191B1E</Color>
+    <Color x:Key="Primitive.Slate850">#FF24272B</Color>
+    <Color x:Key="Primitive.Slate800">#FF30343A</Color>
     <Color x:Key="Primitive.Slate700">#FF2B3A50</Color>
-    <Color x:Key="Primitive.Slate600">#FF6A7B94</Color>
-    <Color x:Key="Primitive.Slate400">#FF8E9CAF</Color>
-    <Color x:Key="Primitive.Slate300">#FFC6D0DF</Color>
+    <Color x:Key="Primitive.Slate600">#FFA0A6AF</Color>
+    <Color x:Key="Primitive.Slate400">#FFA0A6AF</Color>
+    <Color x:Key="Primitive.Slate300">#FFC9CDD4</Color>
     <Color x:Key="Primitive.Slate100">#FFF6F8FC</Color>
 
     <Color x:Key="Primitive.Blue300">#FF9789FF</Color>
@@ -86,59 +86,60 @@
     <Color x:Key="Primitive.Emerald500">#FF45D6A2</Color>
 
     <!-- ============================================================= -->
+    <!-- PaletteColor resolves startup colours from ThemeCatalog; live replacement uses the same keys. -->
     <!-- Semantic surfaces                                             -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Surface.Canvas" Color="{StaticResource Primitive.Warm980}" />
-    <SolidColorBrush x:Key="Surface.Base" Color="{StaticResource Primitive.Warm950}" />
-    <SolidColorBrush x:Key="Surface.Raised" Color="{StaticResource Primitive.Warm900}" />
-    <SolidColorBrush x:Key="Surface.Overlay" Color="{StaticResource Primitive.Warm850}" />
-    <SolidColorBrush x:Key="Surface.Floating" Color="#F2151E2B" />
-    <SolidColorBrush x:Key="Surface.Sunken" Color="{StaticResource Primitive.Warm980}" />
-    <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Warm800}" />
-    <SolidColorBrush x:Key="Surface.Selected" Color="#FF353B47" />
-    <SolidColorBrush x:Key="Surface.Pressed" Color="{StaticResource Primitive.Warm700}" />
-    <SolidColorBrush x:Key="Surface.Scrim" Color="#C2080C12" />
+    <SolidColorBrush x:Key="Surface.Canvas" Color="{themes:PaletteColor Surface.Canvas}" />
+    <SolidColorBrush x:Key="Surface.Base" Color="{themes:PaletteColor Surface.Base}" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="{themes:PaletteColor Surface.Raised}" />
+    <SolidColorBrush x:Key="Surface.Overlay" Color="{themes:PaletteColor Surface.Overlay}" />
+    <SolidColorBrush x:Key="Surface.Floating" Color="{themes:PaletteColor Surface.Floating}" />
+    <SolidColorBrush x:Key="Surface.Sunken" Color="{themes:PaletteColor Surface.Sunken}" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="{themes:PaletteColor Surface.Hover}" />
+    <SolidColorBrush x:Key="Surface.Selected" Color="{themes:PaletteColor Surface.Selected}" />
+    <SolidColorBrush x:Key="Surface.Pressed" Color="{themes:PaletteColor Surface.Pressed}" />
+    <SolidColorBrush x:Key="Surface.Scrim" Color="{themes:PaletteColor Surface.Scrim}" />
     <SolidColorBrush x:Key="Crop.Scrim" Color="#99080C12" />
     <SolidColorBrush x:Key="Crop.Frame" Color="White" />
     <SolidColorBrush x:Key="Crop.FrameShadow" Color="Black" />
-    <SolidColorBrush x:Key="Surface.Badge" Color="{StaticResource Primitive.Warm900}" />
-    <SolidColorBrush x:Key="Surface.BadgeStrong" Color="{StaticResource Primitive.Warm900}" />
+    <SolidColorBrush x:Key="Surface.Badge" Color="{themes:PaletteColor Surface.Badge}" />
+    <SolidColorBrush x:Key="Surface.BadgeStrong" Color="{themes:PaletteColor Surface.BadgeStrong}" />
 
     <!-- ============================================================= -->
     <!-- Semantic text: AA body pairings on intended warm surfaces     -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Warm300}" />
-    <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
+    <SolidColorBrush x:Key="Text.Primary" Color="{themes:PaletteColor Text.Primary}" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="{themes:PaletteColor Text.Secondary}" />
+    <SolidColorBrush x:Key="Text.Muted" Color="{themes:PaletteColor Text.Muted}" />
     <!-- Warning and success words; State.Warning/State.Success stay for glyphs, fills and outlines. -->
-    <SolidColorBrush x:Key="Text.Warning" Color="{StaticResource Primitive.Orange400}" />
-    <SolidColorBrush x:Key="Text.Success" Color="{StaticResource Primitive.Emerald400}" />
+    <SolidColorBrush x:Key="Text.Warning" Color="{themes:PaletteColor Text.Warning}" />
+    <SolidColorBrush x:Key="Text.Success" Color="{themes:PaletteColor Text.Success}" />
     <SolidColorBrush x:Key="Text.Disabled" Color="#FF7A8290" />
-    <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.Ink}" />
-    <SolidColorBrush x:Key="Text.Badge" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Text.SelectionBackground" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Text.SelectionForeground" Color="{StaticResource Primitive.Warm950}" />
+    <SolidColorBrush x:Key="Text.OnAccent" Color="{themes:PaletteColor Text.OnAccent}" />
+    <SolidColorBrush x:Key="Text.Badge" Color="{themes:PaletteColor Text.Badge}" />
+    <SolidColorBrush x:Key="Text.SelectionBackground" Color="{themes:PaletteColor Text.SelectionBackground}" />
+    <SolidColorBrush x:Key="Text.SelectionForeground" Color="{themes:PaletteColor Text.SelectionForeground}" />
 
     <!-- ============================================================= -->
     <!-- Accent and state                                              -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
+    <SolidColorBrush x:Key="Accent.Default" Color="{themes:PaletteColor Accent.Default}" />
     <!-- Bare text, glyphs and selection edges use the neutral primary text role. -->
-    <SolidColorBrush x:Key="Accent.Foreground" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Accent.Indicator" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Border.SelectedTool" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Yellow300}" />
-    <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Yellow600}" />
-    <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />
-    <SolidColorBrush x:Key="Accent.Cool" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Accent.Foreground" Color="{themes:PaletteColor Text.Primary}" />
+    <SolidColorBrush x:Key="Accent.Indicator" Color="{themes:PaletteColor Accent.Indicator}" />
+    <SolidColorBrush x:Key="Border.SelectedTool" Color="{themes:PaletteColor Text.Primary}" />
+    <SolidColorBrush x:Key="Accent.Hover" Color="{themes:PaletteColor Accent.Hover}" />
+    <SolidColorBrush x:Key="Accent.Pressed" Color="{themes:PaletteColor Accent.Pressed}" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="{themes:PaletteColor Accent.Subtle}" />
+    <SolidColorBrush x:Key="Accent.Cool" Color="{themes:PaletteColor Accent.Cool}" />
 
     <!-- Compatibility alias: deliberately flat, never a GradientBrush. -->
-    <SolidColorBrush x:Key="Accent.Gradient" Color="{StaticResource Primitive.Yellow400}" />
+    <SolidColorBrush x:Key="Accent.Gradient" Color="{themes:PaletteColor Accent.Gradient}" />
 
-    <SolidColorBrush x:Key="State.Warning" Color="{StaticResource Primitive.Orange400}" />
-    <SolidColorBrush x:Key="State.Success" Color="{StaticResource Primitive.Emerald400}" />
-    <SolidColorBrush x:Key="State.Danger" Color="{StaticResource Primitive.Red500}" />
-    <SolidColorBrush x:Key="State.DangerHover" Color="{StaticResource Primitive.Red400}" />
+    <SolidColorBrush x:Key="State.Warning" Color="{themes:PaletteColor State.Warning}" />
+    <SolidColorBrush x:Key="State.Success" Color="{themes:PaletteColor State.Success}" />
+    <SolidColorBrush x:Key="State.Danger" Color="{themes:PaletteColor State.Danger}" />
+    <SolidColorBrush x:Key="State.DangerHover" Color="{themes:PaletteColor State.DangerHover}" />
 
     <!-- ============================================================= -->
     <!-- Borders and focus                                             -->
@@ -149,18 +150,69 @@
     <!--   Hover    outline a hover layer adds; transparent except under -->
     <!--            Windows contrast themes, where hover cannot recolour.-->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Border.Subtle" Color="{StaticResource Primitive.Warm500}" />
-    <SolidColorBrush x:Key="Border.Control" Color="{StaticResource Primitive.Warm550}" />
-    <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="{themes:PaletteColor Border.Subtle}" />
+    <!-- Control language: semantic inks, then component aliases for unchanged contrast themes. -->
+    <SolidColorBrush x:Key="Fill.Button" Color="{themes:PaletteColor Fill.Button}" />
+    <SolidColorBrush x:Key="Stroke.ButtonTop" Color="{themes:PaletteColor Stroke.ButtonTop}" />
+    <SolidColorBrush x:Key="Stroke.ButtonBottom" Color="{themes:PaletteColor Stroke.ButtonBottom}" />
+    <SolidColorBrush x:Key="Fill.Input" Color="{themes:PaletteColor Fill.Input}" />
+    <SolidColorBrush x:Key="Fill.InputHover" Color="{themes:PaletteColor Fill.InputHover}" />
+    <SolidColorBrush x:Key="Fill.InputActive" Color="{themes:PaletteColor Fill.InputActive}" />
+    <SolidColorBrush x:Key="Stroke.InputEdge" Color="{themes:PaletteColor Stroke.InputEdge}" />
+    <SolidColorBrush x:Key="Stroke.CheckEdge" Color="{themes:PaletteColor Stroke.CheckEdge}" />
+    <SolidColorBrush x:Key="Stroke.Selected" Color="{themes:PaletteColor Stroke.Selected}" />
+    <SolidColorBrush x:Key="Fill.ScrollThumb" Color="{themes:PaletteColor Fill.ScrollThumb}" />
+    <SolidColorBrush x:Key="Fill.ScrollThumbHover" Color="{themes:PaletteColor Fill.ScrollThumbHover}" />
+    <SolidColorBrush x:Key="Fill.ScrollThumbPressed" Color="{themes:PaletteColor Fill.ScrollThumbPressed}" />
+    <sys:Boolean x:Key="ControlLanguage.Enabled">True</sys:Boolean>
+    <FontWeight x:Key="FontWeight.Regular">Normal</FontWeight>
+    <FontWeight x:Key="FontWeight.Emphasis">SemiBold</FontWeight>
+    <FontWeight x:Key="FontWeight.ControlLabel">Normal</FontWeight>
+    <SolidColorBrush x:Key="Input.Fill" Color="{themes:PaletteColor Fill.Input}" />
+    <SolidColorBrush x:Key="Input.Border" Color="{themes:PaletteColor Border.Subtle}" />
+    <SolidColorBrush x:Key="Check.Fill" Color="Transparent" />
+    <SolidColorBrush x:Key="Check.Edge" Color="{themes:PaletteColor Stroke.CheckEdge}" />
+    <SolidColorBrush x:Key="Check.HoverFill" Color="{themes:PaletteColor Surface.Hover}" />
+    <SolidColorBrush x:Key="Check.HoverEdge" Color="Transparent" />
+    <SolidColorBrush x:Key="Check.CheckedFill" Color="{themes:PaletteColor Text.Primary}" />
+    <SolidColorBrush x:Key="Check.CheckedEdge" Color="{themes:PaletteColor Text.Primary}" />
+    <Thickness x:Key="Check.CheckedThickness">0</Thickness>
+    <CornerRadius x:Key="Check.Radius">4</CornerRadius>
+    <Thickness x:Key="Check.MarkMargin">2</Thickness>
+    <SolidColorBrush x:Key="Check.Mark" Color="{themes:PaletteColor Surface.Base}" />
+    <SolidColorBrush x:Key="Radio.Mark" Color="{themes:PaletteColor Surface.Base}" />
+    <SolidColorBrush x:Key="Selection.Stroke" Color="{themes:PaletteColor Stroke.Selected}" />
+    <Thickness x:Key="Selection.Thickness">1</Thickness>
+    <SolidColorBrush x:Key="Toggle.CheckedFill" Color="{themes:PaletteColor Surface.Floating}" />
+    <SolidColorBrush x:Key="Toggle.CheckedStroke" Color="{themes:PaletteColor Stroke.Selected}" />
+    <Thickness x:Key="Toggle.CheckedThickness">1</Thickness>
+    <SolidColorBrush x:Key="Toggle.CheckedForeground" Color="{themes:PaletteColor Text.Primary}" />
+    <SolidColorBrush x:Key="Toggle.CheckedFocusStroke" Color="{themes:PaletteColor Border.Focus}" />
+    <SolidColorBrush x:Key="Combo.Fill" Color="{themes:PaletteColor Fill.Button}" />
+    <LinearGradientBrush x:Key="Combo.Edge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0" /><GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0.8" /><GradientStop Color="{themes:PaletteColor Stroke.ButtonBottom}" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Combo.FocusEdge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0" /><GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0.8" /><GradientStop Color="{themes:PaletteColor Stroke.ButtonBottom}" Offset="1" />
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Combo.HoverEdge" Color="Transparent" />
+    <SolidColorBrush x:Key="Combo.HoverFill" Color="{themes:PaletteColor Surface.Hover}" />
+    <SolidColorBrush x:Key="Combo.PressedFill" Color="{themes:PaletteColor Surface.Pressed}" />
+    <SolidColorBrush x:Key="Combo.Chevron" Color="{themes:PaletteColor Text.Secondary}" />
+    <x:Static x:Key="Combo.Radius" Member="themes:FoundationMetrics.ControlCornerRadius" />
+    <SolidColorBrush x:Key="Scroll.Lane" Color="Transparent" />
+
+    <SolidColorBrush x:Key="Border.Control" Color="{themes:PaletteColor Border.Control}" />
+    <SolidColorBrush x:Key="Border.Strong" Color="{themes:PaletteColor Border.Strong}" />
     <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
-    <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Border.Focus" Color="{themes:PaletteColor Border.Focus}" />
     <!-- A 44/36-DIP command button draws its chrome inset inside its hit target (Controls.xaml
          Height triggers); a plain 32-DIP button draws edge to edge. -->
-    <SolidColorBrush x:Key="Button.Fill" Color="#25323C" />
+    <SolidColorBrush x:Key="Button.Fill" Color="{themes:PaletteColor Fill.Button}" />
     <LinearGradientBrush x:Key="Button.BorderBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#3A4853" Offset="0" />
-        <GradientStop Color="#3A4853" Offset="0.8" />
-        <GradientStop Color="#1E2830" Offset="1" />
+        <GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0" />
+        <GradientStop Color="{themes:PaletteColor Stroke.ButtonTop}" Offset="0.8" />
+        <GradientStop Color="{themes:PaletteColor Stroke.ButtonBottom}" Offset="1" />
     </LinearGradientBrush>
     <FontWeight x:Key="Button.FontWeight">Normal</FontWeight>
     <Thickness x:Key="Button.ChromeInset">0,4,0,4</Thickness>
@@ -169,21 +221,21 @@
     <Thickness x:Key="Button.FocusInset.Compact">1,3,1,3</Thickness>
     <Thickness x:Key="Button.PrimaryFocusInset">2,6,2,6</Thickness>
     <Thickness x:Key="Button.PrimaryFocusInset.Compact">2,4,2,4</Thickness>
-    <SolidColorBrush x:Key="Pin.Frame" Color="#E24F47" />
+    <SolidColorBrush x:Key="Pin.Frame" Color="{themes:PaletteColor Pin.Frame}" />
     <!-- The one recording red: region frame, compact bar dot and the region selector's cue.
          Status words stay State.Danger, which keeps text contrast on the floating bar. -->
-    <SolidColorBrush x:Key="Recording.Live" Color="#E0453C" />
+    <SolidColorBrush x:Key="Recording.Live" Color="{themes:PaletteColor Recording.Live}" />
     <!-- Two-DIP focus rings are overlays, so the weight never moves layout. -->
     <Thickness x:Key="Border.DecorativeThickness">0</Thickness>
     <Thickness x:Key="Border.ToolThickness">0</Thickness>
     <Thickness x:Key="Focus.RingThickness">2</Thickness>
     <sys:Double x:Key="Focus.RingWidth">2</sys:Double>
-    <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Border.Badge" Color="#66F6F8FC" />
+    <SolidColorBrush x:Key="Border.Accent" Color="{themes:PaletteColor Border.Accent}" />
+    <SolidColorBrush x:Key="Border.Badge" Color="{themes:PaletteColor Border.Badge}" />
     <!-- Library folder cards: warm surface, outline and glyph (ThemeService recolours all six palettes). -->
-    <SolidColorBrush x:Key="Surface.Folder" Color="#FF2A2213" />
-    <SolidColorBrush x:Key="Border.Folder" Color="#FF8A6A2E" />
-    <SolidColorBrush x:Key="Accent.Folder" Color="#FFF0B44C" />
+    <SolidColorBrush x:Key="Surface.Folder" Color="{themes:PaletteColor Surface.Folder}" />
+    <SolidColorBrush x:Key="Border.Folder" Color="{themes:PaletteColor Border.Folder}" />
+    <SolidColorBrush x:Key="Accent.Folder" Color="{themes:PaletteColor Accent.Folder}" />
     <!-- A folder card's hover edge and wash: Accent.Folder and Surface.Hover's colours here, and the
          very same brushes once ThemeService applies a palette; a Windows contrast theme gets a
          Highlight edge and a clear wash. The defaults repeat the colours: StaticResource alias
@@ -192,24 +244,24 @@
     <SolidColorBrush x:Key="Surface.FolderHoverWash" Color="{StaticResource Primitive.Warm800}" />
 
     <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
-    <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />
-    <SolidColorBrush x:Key="Timeline.Track" Color="{StaticResource Primitive.Graphite850}" />
-    <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF7FA6FF" />
-    <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
-    <SolidColorBrush x:Key="Timeline.LayerText" Color="{StaticResource Primitive.Ink}" />
-    <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
+    <SolidColorBrush x:Key="Timeline.Background" Color="{themes:PaletteColor Timeline.Background}" />
+    <SolidColorBrush x:Key="Timeline.Track" Color="{themes:PaletteColor Timeline.Track}" />
+    <SolidColorBrush x:Key="Timeline.TextLayer" Color="{themes:PaletteColor Timeline.TextLayer}" />
+    <SolidColorBrush x:Key="Timeline.FrameLayer" Color="{themes:PaletteColor Timeline.FrameLayer}" />
+    <SolidColorBrush x:Key="Timeline.LayerText" Color="{themes:PaletteColor Timeline.LayerText}" />
+    <SolidColorBrush x:Key="Timeline.Grid" Color="{themes:PaletteColor Timeline.Grid}" />
     <!-- Dark palettes resolve the playhead to white; light themes override it at runtime
          with a deep iris that keeps focus-weight contrast on pale surfaces. -->
-    <SolidColorBrush x:Key="Timeline.Playhead" Color="#FFFFFFFF" />
-    <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="#55FF6B74" />
-    <SolidColorBrush x:Key="Timeline.TrimDeleteHandle" Color="{StaticResource Primitive.Red400}" />
-    <SolidColorBrush x:Key="Timeline.TrimDeleteHatch" Color="#CCFFB0B6" />
+    <SolidColorBrush x:Key="Timeline.Playhead" Color="{themes:PaletteColor Timeline.Playhead}" />
+    <SolidColorBrush x:Key="Timeline.TrimDeleteFill" Color="{themes:PaletteColor Timeline.TrimDeleteFill}" />
+    <SolidColorBrush x:Key="Timeline.TrimDeleteHandle" Color="{themes:PaletteColor Timeline.TrimDeleteHandle}" />
+    <SolidColorBrush x:Key="Timeline.TrimDeleteHatch" Color="{themes:PaletteColor Timeline.TrimDeleteHatch}" />
 
     <!-- ============================================================= -->
     <!-- Capture overlay                                               -->
     <!-- ============================================================= -->
-    <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF080C12" Opacity="0.52" />
-    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Overlay.Dimmer" Color="{themes:PaletteColor Overlay.Dimmer}" Opacity="0.52" />
+    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{themes:PaletteColor Overlay.SelectionBorder}" />
     <!-- Capture410 guide roles; ThemeService resolves all six palettes and system high contrast. -->
     <SolidColorBrush x:Key="CaptureGuide.SelectionBorder" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.InnerGlow" Color="#209789FF" />
@@ -219,7 +271,10 @@
     <SolidColorBrush x:Key="CaptureGuide.CrosshairShadow" Color="#FF000000" />
     <SolidColorBrush x:Key="CaptureGuide.StartPoint" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.ChipSurface" Color="#F2151E2B" />
-    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF9789FF" />
+    <!-- Chip outline (the DWM border on Windows 11), divider and key-cap roles: neutral, never the guide colour. -->
+    <SolidColorBrush x:Key="CaptureGuide.ChipBorder" Color="#FF2E3B4E" />
+    <SolidColorBrush x:Key="CaptureGuide.ChipHairline" Color="#FF263244" />
+    <SolidColorBrush x:Key="CaptureGuide.KeycapSurface" Color="#FF1E293B" />
     <SolidColorBrush x:Key="CaptureGuide.Text" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="CaptureGuide.MutedText" Color="#FFECF1F9" />
     <SolidColorBrush x:Key="CaptureGuide.MagnifierBorder" Color="#FF9789FF" />
@@ -228,31 +283,35 @@
     <!-- Text on accent-filled guide labels: black or white by WCAG contrast with the accent. -->
     <SolidColorBrush x:Key="CaptureGuide.AccentText" Color="#FF000000" />
 
-    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm900}" />
-    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{themes:PaletteColor Overlay.HandleFill}" />
+    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{themes:PaletteColor Overlay.HandleStroke}" />
 
     <!-- ============================================================= -->
     <!-- 4px spacing rhythm (principal steps 8/12/16/24/32)            -->
     <!-- ============================================================= -->
-    <sys:Double x:Key="Space.Xs">4</sys:Double>
-    <sys:Double x:Key="Space.Sm">8</sys:Double>
-    <sys:Double x:Key="Space.Md">12</sys:Double>
-    <sys:Double x:Key="Space.Lg">16</sys:Double>
-    <sys:Double x:Key="Space.Xl">24</sys:Double>
-    <sys:Double x:Key="Space.Xxl">32</sys:Double>
+    <x:Static x:Key="Space.Xs" Member="themes:FoundationMetrics.SpaceXs" />
+    <x:Static x:Key="Space.Sm" Member="themes:FoundationMetrics.SpaceSm" />
+    <x:Static x:Key="Space.Md" Member="themes:FoundationMetrics.SpaceMd" />
+    <x:Static x:Key="Space.Lg" Member="themes:FoundationMetrics.SpaceLg" />
+    <x:Static x:Key="Space.Xl" Member="themes:FoundationMetrics.SpaceXl" />
+    <x:Static x:Key="Space.Xxl" Member="themes:FoundationMetrics.SpaceXxl" />
     <sys:Double x:Key="Space.Hero">40</sys:Double>
 
-    <Thickness x:Key="Padding.Control">14,8,14,8</Thickness>
-    <Thickness x:Key="Padding.Panel">20</Thickness>
-    <Thickness x:Key="Padding.Card">18</Thickness>
-    <Thickness x:Key="Padding.Toolbar">10</Thickness>
+    <Thickness x:Key="Padding.Control">12,8,12,8</Thickness>
+    <Thickness x:Key="Padding.Panel">16</Thickness>
+    <Thickness x:Key="Padding.Card">16</Thickness>
+    <Thickness x:Key="Padding.Toolbar">8</Thickness>
 
     <!-- ============================================================= -->
     <!-- Shape: precise, compact, and consistently rounded             -->
     <!-- ============================================================= -->
-    <CornerRadius x:Key="Radius.Sm">6</CornerRadius>
-    <CornerRadius x:Key="Radius.Md">8</CornerRadius>
-    <CornerRadius x:Key="Radius.Lg">12</CornerRadius>
+    <!-- Role aliases share the established sizes; inner regions stay square unless they form a group. -->
+    <x:Static x:Key="Radius.Control" Member="themes:FoundationMetrics.ControlCornerRadius" />
+    <x:Static x:Key="Radius.Floating" Member="themes:FoundationMetrics.FloatingCornerRadius" />
+    <x:Static x:Key="Radius.Content" Member="themes:FoundationMetrics.ContentCornerRadius" />
+    <x:Static x:Key="Radius.Sm" Member="themes:FoundationMetrics.ControlCornerRadius" />
+    <x:Static x:Key="Radius.Md" Member="themes:FoundationMetrics.FloatingCornerRadius" />
+    <x:Static x:Key="Radius.Lg" Member="themes:FoundationMetrics.ContentCornerRadius" />
     <CornerRadius x:Key="Radius.Xl">16</CornerRadius>
     <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
@@ -291,8 +350,8 @@
     <!-- ============================================================= -->
     <!-- Desktop component sizing                                     -->
     <!-- ============================================================= -->
-    <sys:Double x:Key="Size.HitTarget">36</sys:Double>
-    <sys:Double x:Key="Size.HitTarget.Compact">32</sys:Double>
+    <x:Static x:Key="Size.HitTarget" Member="themes:FoundationMetrics.ControlHeight" />
+    <x:Static x:Key="Size.HitTarget.Compact" Member="themes:FoundationMetrics.CompactControlHeight" />
     <x:Static x:Key="Size.IconGlyph" Member="themes:TypeScale.IconGlyph" />
     <sys:Double x:Key="Size.RailButton">44</sys:Double>
 

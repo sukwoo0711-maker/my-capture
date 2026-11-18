@@ -206,6 +206,7 @@ internal static class ThemeService
         ApplyCropResources(resources, contrast);
         CaptureGuidePalette.Apply(resources, theme, captureGuideColor, contrast, accent);
         ApplyButtonResources(resources, theme, contrast);
+        ApplyControlLanguageResources(resources, theme, contrast);
         ThemeBrushes.Refresh(resources);
         ShortcutRevealMotion.SettleAll();
         Interlocked.Increment(ref _resourceVersion);
@@ -218,9 +219,7 @@ internal static class ThemeService
     internal static void ApplyButtonResources(ResourceDictionary resources, AppTheme theme, bool contrast)
     {
         bool highContrast = contrast || theme == AppTheme.HighContrast;
-        bool light = AppThemeNames.IsLight(theme);
-        if (highContrast) resources["Button.Fill"] = resources["Surface.Overlay"];
-        else SetBrush(resources, "Button.Fill", light ? Colors.White : Color.FromRgb(0x25, 0x32, 0x3C));
+        resources["Button.Fill"] = resources[highContrast ? "Surface.Overlay" : "Fill.Button"];
         resources["Button.FontWeight"] = highContrast ? FontWeights.SemiBold : FontWeights.Normal;
         resources["Button.ChromeInset"] = highContrast ? new Thickness(0) : new Thickness(0, 4, 0, 4);
         resources["Button.ChromeInset.Compact"] = highContrast ? new Thickness(0) : new Thickness(0, 2, 0, 2);
@@ -234,8 +233,11 @@ internal static class ThemeService
             return;
         }
 
-        Color top = (Color)ColorConverter.ConvertFromString(light ? "#E2E6EC" : "#3A4853");
-        Color bottom = (Color)ColorConverter.ConvertFromString(light ? "#B8C0CB" : "#1E2830");
+        // Overlay and crop dictionaries intentionally contain only the roles they consume.
+        if (resources["Stroke.ButtonTop"] is not SolidColorBrush topBrush
+            || resources["Stroke.ButtonBottom"] is not SolidColorBrush bottomBrush) return;
+        Color top = topBrush.Color;
+        Color bottom = bottomBrush.Color;
         var border = new LinearGradientBrush
         {
             StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
@@ -246,6 +248,60 @@ internal static class ThemeService
         };
         border.Freeze();
         resources["Button.BorderBrush"] = border;
+    }
+
+    /// <summary>Component aliases keep the original contrast-theme geometry and brushes intact.</summary>
+    internal static void ApplyControlLanguageResources(ResourceDictionary resources, AppTheme theme, bool contrast)
+    {
+        bool legacy = contrast || theme == AppTheme.HighContrast;
+        resources["ControlLanguage.Enabled"] = !legacy;
+        resources["FontWeight.ControlLabel"] = legacy ? FontWeights.SemiBold : FontWeights.Normal;
+        if (resources["Expander.Options"] is Style optionsStyle)
+        {
+            var optionalStyle = legacy ? new Style(typeof(System.Windows.Controls.Expander))
+                : new Style(typeof(System.Windows.Controls.Expander), optionsStyle);
+            if (!legacy) optionalStyle.Setters.Add(new Setter(ControlLanguage.PreserveExpanderMetricsProperty, true));
+            resources["Expander.OptionalStyle"] = optionalStyle;
+        }
+        void Alias(string name, string key) => resources[name] = resources[key];
+        Alias("Input.Fill", legacy ? "Surface.Sunken" : "Fill.Input");
+        Alias("Input.Border", legacy ? "Border.Control" : "Border.Subtle");
+        resources["Check.Fill"] = legacy ? resources["Surface.Sunken"] : ClearBrush;
+        Alias("Check.Edge", legacy ? "Border.Control" : "Stroke.CheckEdge");
+        resources["Check.HoverFill"] = legacy ? ClearBrush : resources["Surface.Hover"];
+        resources["Check.HoverEdge"] = legacy ? resources["Border.Focus"] : ClearBrush;
+        Alias("Check.CheckedFill", legacy ? "Surface.Selected" : "Text.Primary");
+        Alias("Check.CheckedEdge", "Text.Primary");
+        resources["Check.CheckedThickness"] = new Thickness(legacy ? 2 : 0);
+        resources["Check.Radius"] = new CornerRadius(legacy ? 5 : 4);
+        resources["Check.MarkMargin"] = new Thickness(legacy ? 0 : 2);
+        // Derive marks only when their source is present; sparse scopes have no check/radio chrome.
+        if (resources[legacy ? "Text.Primary" : "Surface.Base"] is SolidColorBrush checkMark)
+        {
+            Color color = checkMark.Color;
+            SetBrush(resources, "Check.Mark", legacy ? color : Color.FromRgb(color.R, color.G, color.B));
+        }
+        if (resources[legacy ? "Surface.Raised" : "Surface.Base"] is SolidColorBrush radioMark)
+        {
+            Color color = radioMark.Color;
+            SetBrush(resources, "Radio.Mark", legacy ? color : Color.FromRgb(color.R, color.G, color.B));
+        }
+        Alias("Selection.Stroke", legacy ? "Text.Primary" : "Stroke.Selected");
+        resources["Selection.Thickness"] = new Thickness(legacy ? 2 : 1);
+        Alias("Toggle.CheckedFill", legacy ? "Text.SelectionBackground" : "Surface.Floating");
+        resources["Toggle.CheckedStroke"] = legacy ? ClearBrush : resources["Stroke.Selected"];
+        resources["Toggle.CheckedThickness"] = new Thickness(legacy ? 0 : 1);
+        Alias("Toggle.CheckedForeground", legacy ? "Text.SelectionForeground" : "Text.Primary");
+        Alias("Toggle.CheckedFocusStroke", legacy ? "Text.SelectionForeground" : "Border.Focus");
+        Alias("Combo.Fill", legacy ? "Surface.Overlay" : "Button.Fill");
+        Alias("Combo.Edge", legacy ? "Border.Control" : "Button.BorderBrush");
+        Alias("Combo.FocusEdge", legacy ? "Border.Focus" : "Button.BorderBrush");
+        resources["Combo.HoverEdge"] = legacy ? resources["Border.Strong"] : resources["Border.Hover"];
+        resources["Combo.HoverFill"] = legacy ? ClearBrush : resources["Surface.Hover"];
+        resources["Combo.PressedFill"] = legacy ? ClearBrush : resources["Surface.Pressed"];
+        Alias("Combo.Chevron", legacy ? "Text.Primary" : "Text.Secondary");
+        resources["Combo.Radius"] = FoundationMetrics.ControlCornerRadius;
+        resources["Scroll.Lane"] = legacy ? resources["Surface.Base"] : ClearBrush;
     }
 
     /// <summary>The system colour of <paramref name="role"/>, always opaque.</summary>

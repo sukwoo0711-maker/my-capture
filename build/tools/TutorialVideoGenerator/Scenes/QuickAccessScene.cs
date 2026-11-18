@@ -20,8 +20,8 @@ namespace MyCapture.TutorialGenerator.Scenes;
 /// <remarks>
 /// The card window itself is never shown: on Loaded it would place itself topmost on the real
 /// monitor and register Alt+Q as a global hotkey. Its content is laid out detached instead, and the
-/// window's Alt+Q activation (keyboard focus moves to the first command, the countdown pauses) is
-/// shown with the focus look of that first command.
+/// window's Alt+Q activation (keyboard focus moves to Pin, the card's primary action, and the countdown
+/// pauses) is shown with the focus look of that command.
 /// </remarks>
 internal sealed class QuickAccessScene : TutorialScene
 {
@@ -39,7 +39,7 @@ internal sealed class QuickAccessScene : TutorialScene
     private readonly BitmapSource _captured;
     private readonly QuickAccessWindow _card;
     private readonly Border _cardRoot;
-    private readonly Button _closeButton;
+    private readonly Button _pinButton;
     private readonly ToggleButton _keepButton;
     private Point _cardOrigin;
     private bool _cardClosed, _active, _noteActive, _pasted;
@@ -64,8 +64,8 @@ internal sealed class QuickAccessScene : TutorialScene
         _cardRoot = new Border { Width = _card.Width, Child = surface };
         _cardRoot.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         Size size = Detached.Layout(_cardRoot, _card.Width);
-        _closeButton = OffscreenWindow.Descendants(_cardRoot).OfType<Button>()
-            .First(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
+        // QuickAccessWindow.ActivateForKeyboard: Alt+Q lands on Pin.
+        _pinButton = _card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf("Pin")];
         _keepButton = OffscreenWindow.Descendants(_cardRoot).OfType<ToggleButton>()
             .Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("QuickAccess.KeepName"));
 
@@ -130,10 +130,10 @@ internal sealed class QuickAccessScene : TutorialScene
         switch (frame.Segment)
         {
             case "alt-q" when !_active:
-                // Alt+Q: the card takes the keyboard; focus moves to its first command and the
-                // countdown pauses while the keyboard is on the card.
+                // Alt+Q: the card takes the keyboard; focus moves to Pin and the countdown
+                // pauses while the keyboard is on the card.
                 _active = true;
-                FocusLook.Apply(_closeButton);
+                FocusLook.Apply(_pinButton);
                 break;
             case "copy" when _copies == 0:
                 ShortcutDefinition copy = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Copy");
@@ -141,7 +141,7 @@ internal sealed class QuickAccessScene : TutorialScene
                 break;
             case "keep-on" when frame.IsLast:
                 _card.IsKept = true;
-                FocusLook.Apply(_closeButton, focused: false);
+                FocusLook.Apply(_pinButton, focused: false);
                 break;
             case "keep-off" when frame.IsLast:
                 _card.IsKept = false;
@@ -150,7 +150,7 @@ internal sealed class QuickAccessScene : TutorialScene
                 // Clicking another app deactivates the card: keyboard access ends, the countdown resumes.
                 _active = false;
                 _noteActive = true;
-                FocusLook.Apply(_closeButton, focused: false);
+                FocusLook.Apply(_pinButton, focused: false);
                 break;
             case "paste" when frame.IsFirst:
                 _pasted = true;

@@ -581,6 +581,7 @@ internal sealed class RecordingControlWindow : Window
         };
         frame.GotKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
         frame.LostKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
+        KeyboardFocusCue.AddVisibilityChangedHandler(frame, (_, _) => UpdateRegionFrameBrush(frame));
 
         AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(
@@ -1248,7 +1249,7 @@ internal sealed class RecordingControlWindow : Window
     {
         frame.BorderBrush = _paused
             ? CreatePausedFrameBrush()
-            : frame.IsKeyboardFocusWithin
+            : frame.IsKeyboardFocusWithin && KeyboardFocusCue.GetIsVisible(frame)
                 ? TryBrush("Border.Focus", Colors.White)
                 : TryBrush("Recording.Live", Colors.OrangeRed);
     }

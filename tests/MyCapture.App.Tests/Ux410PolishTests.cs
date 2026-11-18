@@ -60,9 +60,9 @@ public sealed class Ux410PolishTests
         Assert.Equal(WindowStyle.None,card.WindowStyle);
         Assert.False(card.ShowActivated);
         Assert.False(card.ShowInTaskbar);
-        var panel = (StackPanel)((Border)card.Content).Child;
-        // The close button shares the top row with the status line.
-        var close = panel.Children.OfType<Grid>().First().Children.OfType<Button>().Single();
+        // 6.0: the close button occupies the preview's control lane above the material.
+        Button close = card.CloseButtonForTest;
+        Assert.True(((Border)card.Content).IsAncestorOf(close));
         Assert.Equal(UiText.Get("Dialog.Close"),AutomationProperties.GetName(close));
         Assert.False(close.Focusable);
         close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

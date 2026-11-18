@@ -5,7 +5,7 @@ namespace MyCapture.App.Themes;
 public enum SplitButtonPart { None, Main, Options }
 
 /// <summary>
-/// The height a button takes from the shared Button style: Button.Height (32) for a plain button,
+/// The height a button takes from the shared Button style: Button.Height (36) for a plain button,
 /// or CommandButton.Height.Standard (44) once its face reserves the Alt shortcut line.
 /// </summary>
 /// <remarks>
@@ -19,10 +19,10 @@ public static class ButtonSizing
         "SplitPart", typeof(SplitButtonPart), typeof(ButtonSizing), new PropertyMetadata(SplitButtonPart.None, UpdateCornerRadius));
 
     public static readonly DependencyProperty CornerRadiusProperty = DependencyProperty.RegisterAttached(
-        "CornerRadius", typeof(CornerRadius), typeof(ButtonSizing), new PropertyMetadata(new CornerRadius(8), UpdateCornerRadius));
+        "CornerRadius", typeof(CornerRadius), typeof(ButtonSizing), new PropertyMetadata(FoundationMetrics.ControlCornerRadius, UpdateCornerRadius));
 
     private static readonly DependencyPropertyKey ChromeCornerRadiusPropertyKey = DependencyProperty.RegisterAttachedReadOnly(
-        "ChromeCornerRadius", typeof(CornerRadius), typeof(ButtonSizing), new PropertyMetadata(new CornerRadius(8)));
+        "ChromeCornerRadius", typeof(CornerRadius), typeof(ButtonSizing), new PropertyMetadata(FoundationMetrics.ControlCornerRadius));
 
     public static readonly DependencyProperty ChromeCornerRadiusProperty = ChromeCornerRadiusPropertyKey.DependencyProperty;
 
@@ -44,7 +44,7 @@ public static class ButtonSizing
     }
 
     public static readonly DependencyProperty RestHeightProperty = DependencyProperty.RegisterAttached(
-        "RestHeight", typeof(double), typeof(ButtonSizing), new PropertyMetadata(32d));
+        "RestHeight", typeof(double), typeof(ButtonSizing), new PropertyMetadata(FoundationMetrics.ControlHeight));
 
     public static readonly DependencyProperty ReservesShortcutLineProperty = DependencyProperty.RegisterAttached(
         "ReservesShortcutLine", typeof(bool), typeof(ButtonSizing), new PropertyMetadata(false));

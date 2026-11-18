@@ -206,7 +206,7 @@ public sealed class EditorNumericFieldTests : KoreanCaptionTest
                     Assert.True(contrast >= 3, $"{current}: numeric boundary contrast {contrast:F3}:1.");
                 }
             }
-            Assert.Same(field.Resources[current is AppTheme.Daylight or AppTheme.GlassLight ? "Border.Strong" : "Border.Control"], actual);
+            Assert.Same(field.Resources["Border.Control"], actual);
             NumberStepperField.SetValueFieldError(field, invalid: true);
             Assert.Same(field.Resources["State.Danger"], field.BorderBrush);
             NumberStepperField.SetValueFieldError(field, invalid: false);

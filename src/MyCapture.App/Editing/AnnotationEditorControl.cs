@@ -33,9 +33,9 @@ namespace MyCapture.App.Editing;
 /// </para>
 /// <para>
 /// Layout: a top command bar on the same surface as the title bar (Undo/Redo, Crop and
-/// Quick Redact on the left; Save to file, Copy, Done and Cancel on the right), a left rail
+/// Quick Redact on the left; Save to file, Copy and close, Pin and More on the right), a left rail
 /// of drawing tools grouped by intent, a central image-only viewport, a contextual
-/// wrapping property bar above the viewport, and a bottom status line that
+/// fixed-height property row above the viewport, and a bottom status line that
 /// reports results. Crop is a mode: while it is active the command bar becomes
 /// rotate / ratio / auto trim / Apply / Cancel. Rotation is also available beside Crop in
 /// the everyday command bar. There is no horizontal toolbar scrolling; compact commands retain their icon and
@@ -115,8 +115,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _textRecognitionInProgress;
     private Slider _thicknessSlider = null!;
     private ComboBox _strokeStyleComboBox = null!;
-    private Slider _fillTransparencySlider = null!;
-    private TextBlock _fillTransparencyLabel = null!;
+    private Slider _fillOpacitySlider = null!;
+    private TextBlock _fillOpacityLabel = null!;
     private FrameworkElement _shapeStyleSection = null!;
     private Slider _fontSizeSlider = null!;
     private FrameworkElement _fontSizeSection = null!;
@@ -315,8 +315,13 @@ internal sealed partial class AnnotationEditorControl : Grid
             SyncLiveTextInk();
             RefreshPointerFeedback();
         };
-        PreviewKeyDown += (_, _) => RefreshPointerModifiers();
+        PreviewKeyDown += (_, _) =>
+        {
+            CompleteWorkspaceEntrance();
+            RefreshPointerModifiers();
+        };
         PreviewKeyUp += (_, _) => RefreshPointerModifiers();
+        PreviewMouseDown += (_, _) => CompleteWorkspaceEntrance();
         _viewport.LostMouseCapture += (_, e) =>
         {
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
@@ -341,6 +346,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         Unloaded += (_, _) =>
         {
+            CompleteWorkspaceEntrance();
             DetachPointerWindow();
             HidePointerPreview();
             UnloadSourceFileSize();
@@ -540,6 +546,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool HandleKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
+        // Opening never delays a keyboard command or dims its newly revealed Alt captions.
+        CompleteWorkspaceEntrance();
         // Hangul mode reports letters as ImeProcessed. Outside a text input they are still
         // shortcuts; inside one the IME keeps the key so a composition and its Esc stay intact.
         // Handling the key here, in the preview stage, also keeps it from the IME: WPF passes an
@@ -1559,6 +1567,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         double em = box.FontSize;
         box.MinWidth = chrome + em;
         box.MinHeight = em + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
+        // The committed rectangle includes the outline's margin below its last line.
+        // TextBox's automatic height measures only the glyph lines, which can put its
+        // bottom frame over that final row. Keep the frame outside the same rectangle;
+        // UpdateLiveTextViewport still caps long captions at the visible canvas height.
+        box.Height = target.Height + _liveTextInset.Y + box.Padding.Bottom + box.BorderThickness.Bottom;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -2103,7 +2116,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // body
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // status
 
-        UIElement commandBar = BuildCommandBar();
+        UIElement commandBar = _workspaceCommandBar = BuildCommandBar();
         Grid.SetRow(commandBar, 0);
         Children.Add(commandBar);
 
@@ -2111,7 +2124,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         Grid.SetRow(body, 1);
         Children.Add(body);
 
-        UIElement statusBar = BuildStatusBar();
+        UIElement statusBar = _workspaceStatusBar = BuildStatusBar();
         Grid.SetRow(statusBar, 2);
         Children.Add(statusBar);
         AttachColorFlyoutLayer();
@@ -2146,6 +2159,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildEditCommands()
     {
         var left = CommandRow();
+        left.Name = "AnnotationEditCommands";
         _undoButton = IconTextButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             using var update = BatchInspectorUpdate();
@@ -2182,14 +2196,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         _redactButton = IconTextButton(
             UiText.Get("Text_E395E2567985"),
             UiText.Get("Text_A31A72A338DD"),
-            "Icon.Mosaic", FallbackMosaic,
+            "Phase2.PrivacyMask", () => PrivacyMaskGeometry,
             () => _ = ApplyPrivacyRedactionsAsync());
-        _redactButton.IsEnabled = _privacyRedactionService?.IsAvailable == true;
-        AutomationProperties.SetHelpText(
-            _redactButton,
-            _redactButton.IsEnabled
-                ? UiText.Get("Text_EB9AB8D7D13C")
-                : UiText.Get("Text_39E626945336"));
+        ToolTipService.SetShowOnDisabled(_redactButton, true);
+        RefreshRedactAvailability();
         left.Children.Add(_redactButton);
 
         // Text recognition of what the editor shows now, beside the other text-reading command.
@@ -2199,10 +2209,12 @@ internal sealed partial class AnnotationEditorControl : Grid
             "Icon.Text", FallbackText,
             () => _ = RecognizeCurrentTextAsync());
         AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
+        ToolTipService.SetShowOnDisabled(_copyTextButton, true);
         RefreshCopyTextAvailability();
         left.Children.Add(_copyTextButton);
 
         var right = CommandRow();
+        right.Name = "AnnotationResultCommands";
         Button save = BuildSaveOverflowMenu();
         Button done = IconTextButton(
             UiText.Get("EditorFlow_CopyAndClose"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
@@ -2225,6 +2237,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _pinButton.Loaded += (_, _) => RefreshPinShortcut();
         IsKeyboardFocusWithinChanged += (_, _) => RefreshPinShortcut();
         right.Children.Add(_pinButton);
+        right.Children.Add(BuildResultMoreMenu());
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
             (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
@@ -2238,7 +2251,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
-        // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
+        // last where it could be taken for a tool (the T on the tool rail) or needs its purpose named.
         CommandButtonPresentation.CollapseOrder(crop, 2);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
@@ -2404,22 +2417,15 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var saveAs = new MenuItem
         {
-            Header = UiText.Get("Text_57950AFF46BC"),
+            Header = UiText.Get("Text_A81F975C401F"),
             InputGestureText = ShortcutCatalog.Get(ShortcutScope.Annotation, "SaveAs").Hint,
             Icon = BuildIcon("Icon.SaveAs", FallbackSaveAs, 16),
         };
         saveAs.Click += (_, _) => Commit(EditorCommitAction.SaveAs);
-        AutomationName(saveAs, UiText.Get("Text_57950AFF46BC"));
+        AutomationName(saveAs, UiText.Get("Text_A81F975C401F"));
 
         menu.Items.Add(quickSave);
         menu.Items.Add(saveAs);
-        // The command opens a dialog, so its name ends with an ellipsis as in the library; the
-        // dialog's own title (ExportReduction_Title) has none.
-        var reduceExport = new MenuItem { Header = UiText.Get("Library.ExportImage") };
-        AutomationName(reduceExport, UiText.Get("Library.ExportImage"));
-        reduceExport.Click += (_, _) => Commit(EditorCommitAction.SaveAs, reduceExport: true);
-        menu.Items.Add(reduceExport);
-
         var content = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -2469,7 +2475,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         grid.SetResourceReference(Panel.BackgroundProperty, "Surface.Base");
-        UIElement toolRail = BuildToolRail();
+        UIElement toolRail = _workspaceToolRail = BuildToolRail();
         Grid.SetColumn(toolRail, 0);
         Grid.SetRowSpan(toolRail, 2);
         grid.Children.Add(toolRail);
@@ -2516,6 +2522,9 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var panel = new Border { Name = "AnnotationToolRail", Child = groups };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
+        panel.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
+        panel.BorderThickness = new Thickness(0);
+        panel.CornerRadius = new CornerRadius(0);
         // Tighter than the shared rail padding: six groups must still fit the 460 DIP minimum height.
         panel.Padding = new Thickness(6, 4, 6, 4);
         // A wrapped command row reduces the available rail height. Keep every tool's
@@ -2573,30 +2582,21 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private Border BuildViewport()
     {
-        _viewport.SetResourceReference(Panel.BackgroundProperty, "Surface.Sunken");
+        _viewport.SetResourceReference(Panel.BackgroundProperty, "Surface.Canvas");
         _viewport.Children.Add(_surface);
         _overlayCanvas.IsHitTestVisible = true;
         _overlayCanvas.Background = null;
         _viewport.Children.Add(_overlayCanvas);
 
-        Border frame = ThemedBorder(new Border
+        var frame = new Border
         {
-            Background = Brush("Surface.Sunken", Colors.Black),
-            BorderBrush = Brush("Border.Subtle", Colors.DimGray),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Margin = new Thickness(12),
+            Name = "AnnotationCanvasWorkspace",
             ClipToBounds = true,
             Child = _viewport,
-        }, "Surface.Sunken");
-        // A Border does not clip its child to its rounded corners, and the canvas paints its
-        // whole rectangle (the letterbox dimmer, or the image itself when zoomed in). The corners
-        // are drawn over the canvas, above everything in it, instead of clipping the canvas to
-        // the outline's inside edge: WPF draws a rounded clip through an intermediate surface as
-        // large as the canvas (about 30 MB for a 4K editor). The frame sits on the body's surface.
-        var corners = new CanvasFrameCorners(frame, "Surface.Base");
-        Panel.SetZIndex(corners, int.MaxValue);
-        _viewport.Children.Add(corners);
+        };
+        // The source already owns its precise pixel edge and inset. A second rounded frame
+        // and inset only boxed the work area in; the canvas now reaches the quiet chrome.
+        frame.SetResourceReference(Border.BackgroundProperty, "Surface.Canvas");
         return frame;
     }
 
@@ -2648,7 +2648,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             Name = "AnnotationPropertyBarHost",
             Height = 48,
-            BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(8, 4, 0, 4),
             Child = new ScrollViewer
             {
@@ -2661,8 +2660,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             },
             SnapsToDevicePixels = true,
         };
-        border.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-        border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        border.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         AutomationProperties.SetAutomationId(border, "AnnotationPropertyBarHost");
         return border;
     }
@@ -2916,13 +2914,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         panel.Children.Add(_strokeStyleComboBox);
         var fillPanel = PropertyGroup("AnnotationFillProperties");
         _fillSection = fillPanel;
-        _fillTransparencyLabel = PropertyLabel(UiText.Get("EditorProperty_FillTransparency"));
-        fillPanel.Children.Add(_fillTransparencyLabel);
-        _fillTransparencySlider = new Slider
+        _fillOpacityLabel = PropertyLabel(UiText.Get("EditorProperty_FillTransparency"));
+        fillPanel.Children.Add(_fillOpacityLabel);
+        // The slider shows opacity (100 = solid fill); the model keeps transparency (100 = hollow).
+        _fillOpacitySlider = new Slider
         {
             Minimum = 0,
             Maximum = 100,
-            Value = 100,
+            Value = FillOpacityOf(100),
             SmallChange = 1,
             LargeChange = 10,
             TickFrequency = 1,
@@ -2933,20 +2932,26 @@ internal sealed partial class AnnotationEditorControl : Grid
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        AutomationName(_fillTransparencySlider, UiText.Get("Text_35E5667BB610"));
-        AutomationProperties.SetHelpText(_fillTransparencySlider, (string)_fillTransparencySlider.ToolTip);
-        _fillTransparencySlider.ValueChanged += (_, args) =>
+        AutomationName(_fillOpacitySlider, UiText.Get("Text_35E5667BB610"));
+        AutomationProperties.SetHelpText(_fillOpacitySlider, (string)_fillOpacitySlider.ToolTip);
+        _fillOpacitySlider.ValueChanged += (_, args) =>
         {
             if (!_syncingInspector)
             {
-                _controller.ApplyFillTransparency(args.NewValue);
+                _controller.ApplyFillTransparency(FillTransparencyOf(args.NewValue));
                 RememberPreferences();
             }
         };
-        fillPanel.Children.Add(ValueEntry(_fillTransparencySlider, "%", UiText.Get("Text_35E5667BB610")).Element);
-        fillPanel.Children.Add(_fillTransparencySlider);
+        fillPanel.Children.Add(ValueEntry(_fillOpacitySlider, "%", UiText.Get("Text_35E5667BB610")).Element);
+        fillPanel.Children.Add(_fillOpacitySlider);
         return panel;
     }
+
+    /// <summary>The fill opacity the property bar shows for a stored fill transparency (the mapping is its own inverse).</summary>
+    internal static double FillOpacityOf(double fillTransparency) => 100 - fillTransparency;
+
+    /// <summary>The fill transparency the model stores for a fill opacity chosen on the property bar.</summary>
+    internal static double FillTransparencyOf(double fillOpacity) => 100 - fillOpacity;
 
     private FrameworkElement BuildFontSizeSection()
     {
@@ -3144,7 +3149,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 0, 0),
         };
-        dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Muted");
         Grid.SetColumn(dimensions, 2);
         grid.Children.Add(dimensions);
 
@@ -3164,19 +3169,16 @@ internal sealed partial class AnnotationEditorControl : Grid
         _retryCopyButton.Click += (_, _) => Commit(EditorCommitAction.CopyToClipboard);
         commands.Children.Add(_retryCopyButton);
         commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true));
-        commands.Children.Add(BuildMediaInfoButton(compact: true));
         Grid.SetColumn(commands, 3);
         grid.Children.Add(commands);
 
         return ThemedBorder(new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
-            BorderBrush = Brush("Border.Subtle", Colors.Gray),
-            BorderThickness = new Thickness(0, 1, 0, 0),
+            Name = "AnnotationStatusBarHost",
             Padding = new Thickness(12, 6, 12, 7),
             Child = grid,
             SnapsToDevicePixels = true,
-        }, "Surface.Raised");
+        }, "Surface.Base");
     }
 
     // ---- Tool rail / command helpers -----------------------------------------------
@@ -3302,11 +3304,10 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private static TextBlock SectionLabel(string text)
     {
-        var label = new TextBlock
+        var label = MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock
         {
-            Text = text, FontSize = TypeScale.Caption, FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 4),
-        };
+            Text = text, FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 0, 4),
+        });
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         return label;
     }
@@ -3408,6 +3409,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private static Geometry FallbackImage() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,13 L8,9 L11,12 L14,9 L17,12 M12.5,7.5 A1,1 0 1 1 12.4,7.5");
 
+    private static Geometry FallbackLock() => Geometry.Parse("M4,9 H16 V18 H4 Z M6,9 V6 A4,4 0 0 1 14,6 V9 M10,12 V15");
     private static Geometry FallbackMosaic() => Geometry.Parse("M3,4 H17 V16 H3 Z M3,9 H9 V4 M9,9 H15 M9,9 V16 M15,9 V14 A2,2 0 0 1 13,16");
 
     private static Geometry FallbackBlur() => Geometry.Parse("M10,2.75 C10,2.75 4.75,8.6 4.75,12 A5.25,5.25 0 0 0 15.25,12 C15.25,8.6 10,2.75 10,2.75 Z M7.6,12.4 A2.4,2.4 0 0 0 10,14.8");
@@ -3811,7 +3813,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                     .Select(item => item.StrokeStyle).Distinct().Take(2).ToArray();
                 _strokeStyleComboBox.SelectedIndex = styles.Length > 1 ? -1
                     : (int)(styles.Length == 1 ? styles[0] : _controller.StrokeStyle);
-                _fillTransparencySlider.Value = shape?.FillTransparency ?? _controller.FillTransparency;
+                _fillOpacitySlider.Value = FillOpacityOf(shape?.FillTransparency ?? _controller.FillTransparency);
             }
 
             if (fontSizeApplies)
@@ -3927,7 +3929,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         CommitActiveText();
         _redactionInProgress = true;
-        _redactButton.IsEnabled = false;
+        RefreshRedactAvailability();
         _redactionCts?.Dispose();
         _redactionCts = new CancellationTokenSource();
         CancellationTokenSource operation = _redactionCts;
@@ -3949,6 +3951,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             {
                 case PrivacyRedactionStatus.Success:
                     int count = _controller.AddPrivacyRedactions(result.Regions);
+                    // The controller switches to the select tool; the rail follows like every other switch.
+                    SyncToolButtons();
                     SetStatus(UiText.Format("Text_E68817537C75", count));
                     break;
                 case PrivacyRedactionStatus.NoMatches:
@@ -3974,8 +3978,24 @@ internal sealed partial class AnnotationEditorControl : Grid
             }
 
             _redactionInProgress = false;
-            _redactButton.IsEnabled = _privacyRedactionService.IsAvailable;
+            RefreshRedactAvailability();
         }
+    }
+
+    /// <summary>
+    /// Enables the privacy command only when the search service is available and none is running,
+    /// and lets its tooltip say which of the two it is while the button is disabled.
+    /// </summary>
+    private void RefreshRedactAvailability()
+    {
+        bool available = _privacyRedactionService?.IsAvailable == true;
+        _redactButton.IsEnabled = available && !_redactionInProgress;
+        _redactButton.ToolTip = UiText.Get(!available ? "Text_39E626945336"
+            : _redactionInProgress ? "EditorFlow_RedactBusy" : "Text_A31A72A338DD");
+        // The tooltip names the key after the command; setting a new text must keep that.
+        ShortcutPresentation.Describe(_redactButton, ShortcutScope.Annotation, "Privacy");
+        AutomationProperties.SetHelpText(_redactButton,
+            UiText.Get(available ? "Text_EB9AB8D7D13C" : "Text_39E626945336"));
     }
 
     /// <summary>
@@ -4016,6 +4036,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         bool available = TextRecognitionRoute.CanShow;
         _copyTextButton.IsEnabled = available && !_textRecognitionInProgress;
+        _copyTextButton.ToolTip = UiText.Get(!available ? "TextCapture_Unavailable"
+            : _textRecognitionInProgress ? "EditorFlow_CopyTextBusy" : "EditorFlow_CopyTextHint");
         AutomationProperties.SetHelpText(_copyTextButton,
             UiText.Get(available ? "EditorFlow_CopyTextHint" : "TextCapture_Unavailable"));
     }
@@ -4222,6 +4244,14 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         if (_completed || _commitInProgress)
         {
+            return;
+        }
+
+        // The running search announces "취소하려면 Esc"; honour it before any other step back.
+        if (_redactionInProgress && _redactionCts is { IsCancellationRequested: false } search)
+        {
+            search.Cancel();
+            SetStatus(UiText.Get("Text_6AE98E57E121"));
             return;
         }
 

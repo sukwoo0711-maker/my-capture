@@ -130,11 +130,19 @@ public sealed class SettingsCopyRegressionTests
         AssertSetters(style, "24", "24", "24", "Text.Secondary", "0");
         Assert.Empty(style.Descendants(p + "DataTrigger"));
         XElement[] triggers = style.Descendants(p + "Trigger").ToArray();
-        Assert.Equal(new[] { "IsMouseOver", "IsKeyboardFocused" },
+        Assert.Equal(new[] { "IsMouseOver" },
             triggers.Select(trigger => (string?)trigger.Attribute("Property")));
+        XElement keyboard = Assert.Single(style.Descendants(p + "MultiTrigger"));
+        XElement[] conditions = keyboard.Descendants(p + "Condition").ToArray();
+        Assert.Equal(new[] { "IsKeyboardFocused", "themes:KeyboardFocusCue.IsVisible" },
+            conditions.Select(condition => (string?)condition.Attribute("Property")));
+        Assert.All(conditions, condition => Assert.Equal("True", (string?)condition.Attribute("Value")));
         foreach (XElement trigger in triggers)
         {
             Assert.Equal("True", (string?)trigger.Attribute("Value"));
+        }
+        foreach (XElement trigger in triggers.Append(keyboard))
+        {
             Assert.DoesNotContain(trigger.Elements(p + "Setter"),
                 setter => (string?)setter.Attribute("Property") is "Height" or "Width" or "MaxWidth" or "Padding");
         }

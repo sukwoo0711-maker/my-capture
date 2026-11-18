@@ -135,8 +135,8 @@ public sealed class OpenPinsTrayMenuTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "그 외 3개")]
-    [InlineData("en-US", "3 more")]
+    [InlineData("ko-KR", "그 외 3개 앞으로 가져오기")]
+    [InlineData("en-US", "Bring 3 more to front")]
     public void NewestPinsComeFirstAndHiddenPinsKeepTheCappedList(string language, string more) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
@@ -161,8 +161,9 @@ public sealed class OpenPinsTrayMenuTests
                 .Select(pin => $"{pin.PinnedContent.Image.PixelWidth} × 24 px · {UiText.Get("Tray_PinKindImage")}"),
                 shown.Take(TrayMenuLayout.MaxOpenPinEntries).Select(entry => entry.Label));
             Assert.Equal(more, shown[^1].Label);
-            Assert.False(shown[^1].IsEnabled);
-            Assert.Null(shown[^1].Action);
+            // The pins past the list are reached through that row: a command, not a note.
+            Assert.True(shown[^1].IsEnabled);
+            Assert.NotNull(shown[^1].Action);
 
             manager.CloseAllForExit();
             Assert.DoesNotContain(Build(manager), entry => entry.Label == UiText.Get("Tray_OpenPins"));
@@ -208,6 +209,78 @@ public sealed class OpenPinsTrayMenuTests
             Assert.True(first.State.IsClickThrough);
             Assert.False(last.State.IsClickThrough);
             Assert.Equal([chosen], activated);
+        }
+        finally
+        {
+            manager.CloseAllForExit();
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Fact]
+    public void TheMoreRowBringsOnlyTheUnlistedPinsForwardWithTheNewestOfThemOnTop() => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage("en-US");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        var activated = new List<PinWindow>();
+        PinManager manager = Manager(activated.Add);
+        var opened = new List<PinWindow>();
+        try
+        {
+            for (int i = 1; i <= TrayMenuLayout.MaxOpenPinEntries + 3; i++)
+                opened.Add(manager.PinImage(Image(i + 32)));
+            // The three oldest are past the list; one hidden by itself and one letting clicks through.
+            PinWindow[] unlisted = [opened[0], opened[1], opened[2]];
+            unlisted[1].HidePin();
+            unlisted[2].ApplyClickThrough(true);
+            Assert.True(manager.AnyHidden);
+            ThemedShellPresenter.MenuEntry more = Branch(Build(manager)).Children![^1];
+            Assert.Equal("Bring 3 more to front", more.Label);
+            activated.Clear();
+
+            more.Action!();
+
+            // Oldest first, so the newest of them is activated last and ends on top.
+            Assert.Equal(unlisted, activated);
+            Assert.All(unlisted, pin =>
+            {
+                Assert.False(pin.State.IsHidden);
+                Assert.True(pin.IsVisible);
+                Assert.False(pin.State.IsClickThrough);
+                Assert.True(pin.FindCueRunning);
+            });
+            // The listed pins are left as they were.
+            Assert.All(opened.Skip(3), pin => Assert.False(pin.FindCueRunning));
+            Assert.False(manager.AnyHidden);
+        }
+        finally
+        {
+            manager.CloseAllForExit();
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Fact]
+    public void TheMoreRowSkipsPinsClosedSinceTheMenuOpened() => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage("en-US");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        var activated = new List<PinWindow>();
+        PinManager manager = Manager(activated.Add);
+        var opened = new List<PinWindow>();
+        try
+        {
+            for (int i = 1; i <= TrayMenuLayout.MaxOpenPinEntries + 2; i++)
+                opened.Add(manager.PinImage(Image(i + 32)));
+            ThemedShellPresenter.MenuEntry more = Branch(Build(manager)).Children![^1];
+            opened[0].Close();
+            activated.Clear();
+
+            more.Action!();
+
+            Assert.Equal([opened[1]], activated);
         }
         finally
         {

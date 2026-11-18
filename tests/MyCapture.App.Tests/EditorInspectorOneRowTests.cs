@@ -75,7 +75,7 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
                 widest = contentWidth;
                 widestName = name;
             }
-            if (rows > 1 || budget > 48.001 || scroll.ScrollableHeight > 0.001 || scroll.ScrollableWidth > 0.001)
+            if (rows > 1 || Math.Abs(budget - 48) > 0.001 || scroll.ScrollableHeight > 0.001 || scroll.ScrollableWidth > 0.001)
                 failures.Add($"{name}: rows={rows}, budget={budget:0.###}, contentWidth={visible.Sum(group => group.DesiredSize.Width):0.###}, available={panel.ActualWidth:0.###}, scroll={scroll.ScrollableWidth:0.###}/{scroll.ScrollableHeight:0.###}");
             Assert.Equal(Visibility.Collapsed, scroll.ComputedVerticalScrollBarVisibility);
         });
@@ -115,6 +115,57 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
         });
         Assert.True(count >= 40);
         output.WriteLine($"{language}: {count} configurations at 1000x640; stable budget={budget:0.###}, DipPerPixel={scale:R}, imageWidth={bounds.Width:R}, surfaceHeight={surface.ActualHeight:R}.");
+    });
+
+    [Theory]
+    [InlineData("ko-KR", 1)]
+    [InlineData("en-US", 1)]
+    [InlineData("ko-KR", 1.5)]
+    [InlineData("en-US", 1.5)]
+    public void EveryToolKeepsOnePropertyRowAtNarrowDefaultAndWideWidths(string language, double scale) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var host = new InspectorContractHost();
+        VisualTreeHelper.SetRootDpi(host.Window, new DpiScale(scale, scale));
+        foreach (UIElement element in Descendants(host.Window).Prepend(host.Window).OfType<UIElement>())
+        {
+            element.InvalidateMeasure();
+            element.InvalidateArrange();
+        }
+        foreach (double width in new[] { 1000d, 980d, 680d, 1000d })
+        {
+            host.Window.Width = width;
+            host.Settle();
+            ViewportSnapshot baseline = Snapshot(host);
+            var inspector = Field<Border>(host.Editor, "_inspectorPanel");
+            Assert.Equal(48, inspector.Height);
+            Assert.Equal(48, inspector.ActualHeight);
+            foreach (EditorTool tool in Enum.GetValues<EditorTool>())
+            {
+                Invoke(host.Editor, "SelectTool", tool);
+                Controller(host.Editor).SetSelected(null);
+                host.Settle();
+                string context = $"{language}/{scale}/{width}/{tool}";
+                Assert.Equal(48, inspector.Height);
+                Assert.Equal(48, inspector.ActualHeight);
+                AssertSameGeometry(baseline, host, context);
+                // Narrow configurations scroll within this row; they do not grow the chrome.
+                ScrollViewer scroll = PropertyScroll(host);
+                Assert.Equal(ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
+                Assert.Equal(0, scroll.ScrollableWidth);
+                var presenter = Descendants(scroll).OfType<ScrollContentPresenter>()
+                    .Single(candidate => ReferenceEquals(candidate.TemplatedParent, scroll));
+                foreach (Control control in Descendants(host.PropertyGroups).OfType<Control>()
+                    .Where(control => control.IsVisible && control.IsEnabled
+                        && control is ButtonBase or TextBox or ComboBox or Slider))
+                {
+                    control.BringIntoView();
+                    host.Settle();
+                    AssertInside(control, presenter, context);
+                    AssertSameGeometry(baseline, host, context);
+                }
+            }
+        }
     });
 
     [Theory]
@@ -199,10 +250,14 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
             AnnotationEditorController controller = Controller(host.Editor);
             controller.SetSelected(controller.Document.Items[0]);
             host.Settle();
-            Assert.True(scroll.ScrollableHeight == 0,
-                $"{language} {width} DIP, {name} -> {controller.Selected?.GetType().Name}: scrollbar remains with scrollable height={scroll.ScrollableHeight:R}, offset={scroll.VerticalOffset:R}, extent={scroll.ExtentWidth:R}x{scroll.ExtentHeight:R}, viewport={scroll.ViewportWidth:R}x{scroll.ViewportHeight:R}, visible content width={VisibleGroups(host.PropertyGroups).Sum(group => group.DesiredSize.Width):R}.");
+            // A one-type configuration can still need two lines in a narrow window. Its
+            // existing controls remain reachable inside the same 48-DIP viewport; only a
+            // configuration that fits one line must release the vertical scrollbar.
+            bool singleTypeWraps = VisibleGroups(host.PropertyGroups)
+                .Select(group => Math.Round(LayoutInformation.GetLayoutSlot(group).Top, 3)).Distinct().Count() > 1;
+            Assert.Equal(singleTypeWraps, scroll.ScrollableHeight > 0.001);
             Assert.Equal(0, scroll.VerticalOffset);
-            Assert.Equal(Visibility.Collapsed, scroll.ComputedVerticalScrollBarVisibility);
+            Assert.Equal(singleTypeWraps ? Visibility.Visible : Visibility.Collapsed, scroll.ComputedVerticalScrollBarVisibility);
             AssertSameGeometry(baseline, host, name + " return to one type");
         });
         Assert.True(mixedCount >= 10);

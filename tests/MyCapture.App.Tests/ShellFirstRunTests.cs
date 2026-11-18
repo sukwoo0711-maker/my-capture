@@ -299,7 +299,7 @@ public sealed class ShellFirstRunTests
             int reviews = 0;
             notice.ReviewChosen = () => reviews++;
             notice.ShowInvitation();
-            Button review = FirstRunWelcomeTests.Descendants(notice).OfType<Button>().Single(button => (string)button.Content == "평가");
+            Button review = FirstRunWelcomeTests.Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("StoreRating_InviteAction"));
             review.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.Equal(1, reviews);
             Assert.Equal(Visibility.Collapsed, notice.Visibility);

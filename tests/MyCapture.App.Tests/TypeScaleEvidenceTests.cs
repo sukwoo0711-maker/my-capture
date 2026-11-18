@@ -173,7 +173,8 @@ public sealed class TypeScaleEvidenceTests
     private static void RenderVideo(string output)
     {
         var result = new RecordingResult(DiagnosticOutputPaths.Child(output, "not-opened.mp4"), 12000, 30, 360, 640, 360);
-        var window = new VideoEditorWindow(result, AppPaths.CreateForRoot(output), NullLoggerFactory.Instance);
+        var window = new VideoEditorWindow(result, AppPaths.CreateForRoot(output), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         FrameworkElement root = Detach(window);
         try
         {

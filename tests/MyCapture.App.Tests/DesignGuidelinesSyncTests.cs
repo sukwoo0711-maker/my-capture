@@ -15,12 +15,13 @@ public sealed class DesignGuidelinesSyncTests
     [
         "Accent.Default", "Accent.Hover", "Accent.Pressed", "Text.OnAccent",
         "Text.Primary", "Text.Secondary", "Text.Muted", "Text.Warning", "Text.Success",
-        "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
+        "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay", "Surface.Floating",
         "State.Warning", "State.Success", "State.Danger", "Border.Focus", "Focus.RingWidth",
         "Size.HitTarget", "Size.HitTarget.Compact", "Size.RailButton", "Size.IconGlyph",
         "Motion.Fast", "Motion.Normal", "Motion.Deliberate",
         "Space.Xs", "Space.Sm", "Space.Md", "Space.Lg", "Space.Xl", "Space.Xxl", "Space.Hero",
         "Radius.Sm", "Radius.Md", "Radius.Lg", "Radius.Xl",
+        "Radius.Control", "Radius.Floating", "Radius.Content",
     ];
 
     [Fact]
@@ -47,6 +48,10 @@ public sealed class DesignGuidelinesSyncTests
     [Theory]
     [InlineData("Accent.Default")]
     [InlineData("FontSize.Body")]
+    [InlineData("Surface.Floating")]
+    [InlineData("Radius.Control")]
+    [InlineData("Radius.Floating")]
+    [InlineData("Radius.Content")]
     public void ScratchCopyMissingARequiredTokenIsRejected(string key) => StaTestHost.Run(() =>
     {
         ResourceDictionary tokens = LoadTokens();

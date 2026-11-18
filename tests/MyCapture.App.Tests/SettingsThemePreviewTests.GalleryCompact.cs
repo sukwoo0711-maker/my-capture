@@ -66,10 +66,10 @@ public sealed partial class SettingsThemePreviewTests
                         window.SetDetailsPaneOpen(true);
                         f.ViewModel.Select(f.Records[0].Id);
                         SettleGalleryLayout(window);
-                        Assert.NotEqual(GalleryWindow.ToolbarDensity.Labelled, window.ContentToolbarDensity);
+                        Assert.True(window.ContentToolbarShortfall <= 0.5);
                         var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
                         Assert.Equal(44, bar.ActualHeight, 1);
-                        foreach (string name in new[] { "FloatSelectedButton", "CopySelectedButton", "EditSelectedButton", "PreviewSelectedButton", "KeepSelectedButton" })
+                        foreach (string name in new[] { "FloatSelectedButton", "CopySelectedButton", "EditSelectedButton" })
                         {
                             var button = (Button)window.FindName(name);
                             Assert.True(button.IsVisible);
@@ -178,20 +178,23 @@ public sealed partial class SettingsThemePreviewTests
             var bar = (FrameworkElement)window.FindName("LibraryCommandBar");
             var contentBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
             var edit = (Button)window.FindName("EditSelectedButton");
+            var browseScope = (TextBlock)window.FindName("BrowseScopeLabel");
             var sort = (ComboBox)window.FindName("SortBox");
             var searchBox = (TextBox)window.FindName("SearchBox");
             var searchField = (FrameworkElement)window.FindName("SearchField");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             var capture = (Button)window.FindName("CaptureRegionButton");
+            var captureOptions = (Button)window.FindName("CaptureOptionsButton");
             var record = (Button)window.FindName("RecordRegionButton");
             Assert.Null(window.FindName("NewFolderButton"));
             var newFolder = (Button)window.FindName("NewFolderPaneButton");
             AssertInsideClient(newFolder, client, language);
             var more = (Button)window.FindName("MoreCommandsButton");
-            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, edit, more })
+            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, browseScope, more })
                 AssertInsideClient(element, client, language);
             AssertSameRow(bar, capture, record, searchField);
-            AssertSameRow(contentBar, edit, more);
+            AssertSameRow(contentBar, browseScope, more);
+            Assert.False(edit.IsVisible);
             AssertSameRow(contentBar, sort, more);
             Assert.True(contentBar.TranslatePoint(new Point(), client).Y >= bar.TranslatePoint(new Point(), client).Y + bar.ActualHeight);
             // The root hint switches to compact text at minimum width; folder hints may still ellipsize.
@@ -200,9 +203,9 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(vm.SearchToolTip, searchBox.ToolTip);
             foreach (TextBlock label in new[] { capture, record }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
                 AssertNotTrimmed(label, language);
-            // Tab order follows the visual order: capture, search, then the library commands.
-            AssertLeftToRight(client, record, searchField);
-            AssertLeftToRight(client, edit, more);
+            // Tab order follows the visual order: search, capture, then the current scope and sort.
+            AssertLeftToRight(client, searchField, capture, captureOptions, record);
+            AssertLeftToRight(client, browseScope, more);
             AssertLeftToRight(client, sort, more);
             double barHeight = bar.ActualHeight;
             double contentBarHeight = contentBar.ActualHeight;
@@ -221,7 +224,9 @@ public sealed partial class SettingsThemePreviewTests
             var compare = (MenuItem)window.FindName("CompareSelectedMenu");
             Assert.False(compare.IsEnabled);
             Assert.Same(window.FindName("ClearSelectionButton"), visibleActions[0]);
-            Assert.Same(window.FindName("KeepSelectedButton"), visibleActions[^1]);
+            Assert.Equal(new[] { "ClearSelectionButton", "FloatSelectedButton", "CopySelectedButton", "EditSelectedButton" }, visibleActions.Select(button => button.Name));
+            Assert.False(sort.IsVisible);
+            Assert.False(browseScope.IsVisible);
             // Apps must reach the toolbar button's own menu, not the canvas menu.
             // WPF opens keyboard context menus during InputManager.PostProcessInput;
             // RaiseEvent alone only visits the routed handlers and cannot open that menu.
@@ -276,7 +281,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Null(window.FindName("CaptureRegionIconButton"));
             Assert.Null(window.FindName("RecordRegionIconButton"));
             Assert.Equal(searchBounds, searchField.TransformToAncestor(client).TransformBounds(new Rect(searchField.RenderSize)));
-            AssertLeftToRight(client, record, searchField);
+            AssertLeftToRight(client, searchField, capture, captureOptions, record);
             AssertNotTrimmed(placeholder, language);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), language);
             foreach (Button button in visibleActions.Skip(1))
@@ -519,7 +524,10 @@ public sealed partial class SettingsThemePreviewTests
     private static void AssertSelectionActionsReachable(GalleryWindow window, bool compareVisible)
     {
         Assert.True(((Button)window.FindName("ClearSelectionButton")).IsVisible);
-        Assert.True(((Button)window.FindName("KeepSelectedButton")).IsVisible);
+        MenuItem keep = (MenuItem)window.FindName("KeepSelectedButton");
+        Assert.Equal(Visibility.Visible, keep.Visibility);
+        Assert.True(keep.IsEnabled);
+        Assert.Contains(keep, ((Button)window.FindName("MoreCommandsButton")).ContextMenu.Items.Cast<object>());
         Assert.Equal(compareVisible, ((MenuItem)window.FindName("CompareSelectedMenu")).IsEnabled);
         foreach (string menuName in new[] { "ArchiveOverflowMenu", "MoveOverflowMenu", "DeleteSelectedMenu" })
         {

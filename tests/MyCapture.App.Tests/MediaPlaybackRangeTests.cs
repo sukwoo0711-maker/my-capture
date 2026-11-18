@@ -134,7 +134,8 @@ public sealed class MediaPlaybackRangeTests
             const int width = 1280, height = 720;
             string clip = RangePatternClip.Encode(Path.Combine(dir, "clip.mp4"), width, height, fullRange);
             var recording = new RecordingResult(clip, 1000, 30, 30, width, height);
-            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance)
+            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(dir), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, Width = 1100, Height = 760,

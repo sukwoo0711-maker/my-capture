@@ -108,6 +108,21 @@ internal sealed class MagnifierSelector : IDisposable
         : ((DrawingVisual)typeof(CaptureOverlayView).GetField("_magnifierVisual",
             BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_wpf)!).Drawing;
 
+    /// <summary>
+    /// The native magnifier's panel in its drawing's coordinates: the whole window, which DWM rounds
+    /// (or the window's own hairline outlines) instead of a drawn rounded rectangle.
+    /// </summary>
+    internal Rect? NativeMagnifierPanelForTest
+    {
+        get
+        {
+            if (_native is null) return null;
+            NativeSelectorMagnifier magnifier = _chrome!.MagnifierForTest!;
+            Point inset = magnifier.ImageOffsetForTest;
+            return new Rect(new Point(-inset.X, -inset.Y), magnifier.LogicalSize);
+        }
+    }
+
     internal int MagnifierGridFillCount => _native is not null
         ? _chrome!.MagnifierForTest!.GridFillCount
         : _wpf!.MagnifierGridFillCount;

@@ -149,6 +149,10 @@ internal sealed class EditorScene : TutorialScene
             case "blur":
                 Rect email = Fixtures.PurchaseSheetParts.Requesters;
                 ChooseTool(story);
+                // The rail button is the one Obscure tool and it opens on Pixelate; Blur is the
+                // property bar's method choice, set as the user would.
+                if (_feature == "blur")
+                    story.Move("style-move", MeasureObscureStyleChoice()).Click("style").Hold("style-chosen", 0.9);
                 Drag(story, Image(email.X, email.Y), Image(email.Right, email.Bottom));
                 break;
             case "text":
@@ -206,6 +210,20 @@ internal sealed class EditorScene : TutorialScene
         return new PointD(ClientOrigin.X + center.X, ClientOrigin.Y + center.Y);
     }
 
+    /// <summary>The method choice exists only once the Obscure tool is active; an identical throwaway editor finds it.</summary>
+    private PointD MeasureObscureStyleChoice()
+    {
+        var region = new RectD(0, 0, _image.PixelWidth, _image.PixelHeight);
+        var probe = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image);
+        using var host = new OffscreenWindow(probe, ClientWidth, ClientHeight);
+        probe.Editor.ToolButton(EditorTool.Mosaic).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Stage.Pump(60);
+        FrameworkElement choice = host.Find<FrameworkElement>().First(element => element.IsVisible
+            && AutomationProperties.GetAutomationId(element) == "AnnotationObscureStyleMosaic");
+        PointD center = host.CenterOf(choice);
+        return new PointD(ClientOrigin.X + center.X, ClientOrigin.Y + center.Y);
+    }
+
     private void ChooseTool(TutorialStoryboard story) =>
         story.Move("tool-move", Of(_editor.ToolButton(_tool))).Click("tool").Hold("tool-chosen", 0.9);
 
@@ -255,6 +273,12 @@ internal sealed class EditorScene : TutorialScene
         {
             case "tool" when frame.IsLast:
                 _editor.ToolButton(_tool).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                break;
+            case "style" when frame.IsLast:
+                // Same effect as choosing Blur in the method list, without opening a popup.
+                ((ComboBox)ByAutomationId("AnnotationObscureStyleMosaic")).SelectedIndex = 1;
+                Stage.Pump(30);
+                ByAutomationId("AnnotationObscureStyleBlur");
                 break;
             case "drag":
                 if (frame.IsFirst) _editor.SimulatePointerDown(Viewport(Reproject(_dragStart)));
@@ -478,6 +502,17 @@ internal sealed class EditorScene : TutorialScene
                     "open" or "tool-move" or "tool" or "tool-chosen" => (L(tool + " 도구 선택", "Choose " + tool), _toolKey),
                     "result" => (L("클릭한 순서대로 번호가 늘어남", "Numbers increase in click order"), ""),
                     _ => (L("설명할 위치를 차례로 클릭", "Click each spot in order"), ""),
+                };
+            case "blur":
+                string obscure = Ui("EditorObscure_Name"), method = Ui("EditorObscure_Style");
+                return segment switch
+                {
+                    "open" or "tool-move" or "tool" or "tool-chosen" =>
+                        (L($"{obscure} 도구 선택", $"Choose the {obscure} tool"), Hint(ShortcutScope.Annotation, "Mosaic")),
+                    "style-move" or "style" or "style-chosen" =>
+                        (L($"{method}에서 {tool} 선택", $"Choose {tool} under {method}"), _toolKey),
+                    "canvas" or "drag" or "dragged" => (L("가릴 영역을 드래그", "Drag over the area to hide"), ""),
+                    _ => (L(tool + " 적용됨 · 범위 확인 후 저장", tool + " applied · check the area, then save"), ""),
                 };
             default:
                 return segment switch

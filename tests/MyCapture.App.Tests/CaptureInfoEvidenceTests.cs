@@ -199,7 +199,8 @@ public sealed class CaptureInfoEvidenceTests
             foreach ((int width, int height) in new[] { (1180, 640), (860, 600) })
             {
                 var region = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
-                var editor = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image);
+                var editor = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image,
+                    pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
                 Place(editor, width, height);
                 typeof(AnnotationEditorControl).GetProperty("SourceFilePath", Members)?.SetValue(editor.Editor, source);
                 try
@@ -237,7 +238,8 @@ public sealed class CaptureInfoEvidenceTests
         {
             using var language = UiText.UseLanguage("ko-KR");
             RecordingResult recording = UxReviewSelfTest.CreateFixtureVideo(Path.Combine(root, "sample.mp4"), SampleImage(640, 360));
-            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
             Place(editor, 920, 680);
             editor.Show();
             SetDpi(editor);

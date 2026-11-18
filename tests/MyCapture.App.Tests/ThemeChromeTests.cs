@@ -43,20 +43,20 @@ public sealed class ThemeChromeTests
     }
 
     [Theory]
-    [InlineData("glass", false, 0x15, 0x17, 0x1F)]
-    [InlineData("glass-light", false, 0xF0, 0xF1, 0xF4)]
-    [InlineData("midnight", false, 0x15, 0x17, 0x1F)]
-    [InlineData("daylight", false, 0xF0, 0xF1, 0xF4)]
+    [InlineData("glass", false, 0x19, 0x1B, 0x1E)]
+    [InlineData("glass-light", false, 0xED, 0xF0, 0xF3)]
+    [InlineData("midnight", false, 0x19, 0x1B, 0x1E)]
+    [InlineData("daylight", false, 0xED, 0xF0, 0xF3)]
     [InlineData("high-contrast", false, 0x00, 0x00, 0x00)]
-    [InlineData("workspace", false, 0x15, 0x17, 0x1F)]
-    [InlineData("workspace", true, 0x15, 0x17, 0x1F)]
+    [InlineData("workspace", false, 0x19, 0x1B, 0x1E)]
+    [InlineData("workspace", true, 0x19, 0x1B, 0x1E)]
     public void CaptionColourIsTheBodyColourTheWindowActuallyShows(string themeId, bool videoEditor, int r, int g, int b)
     {
         AppTheme theme = AppThemeNames.Parse(themeId);
         WorkspaceRole role = videoEditor ? WorkspaceRole.VideoEditor : WorkspaceRole.Gallery;
         WindowChromePlan plan = ModernWindowChrome.ResolveChrome(theme, role, systemHighContrast: false);
 
-        // Glass surfaces are translucent and WPF clears the client to black under them.
+        // The foundation gives every caption the same opaque Surface.Base as its client.
         Assert.Equal(ModernWindowChrome.ToColorRef(ThemeColor.Rgb((byte)r, (byte)g, (byte)b)), plan.CaptionColor);
         Assert.Equal(ModernWindowChrome.UseDarkCaption(theme, role), plan.DarkMode);
         ThemeColor caption = FromColorRef(plan.CaptionColor!.Value);

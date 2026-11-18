@@ -37,7 +37,7 @@ internal sealed partial class CaptureOverlayView
             {
                 if (_ended || _released || _interaction != InteractionMode.None || _selection is not null) return;
                 RefreshHover(ReadCursor());
-                _shownHover = _glideTarget = _hoverRegion; _gliding = false;
+                _hoverGlide.Snap(_hoverRegion);
                 QueueFeedback();
             }, Dispatcher, CreateElementSource);
             _hoverRegion = TrackElements(_hoverWindow, _hoverRegion, ReadCursor());
