@@ -65,6 +65,9 @@ internal static class ClipboardCodeRenderer
             var colors = new List<PinCodeRun>();
             const string foreground = "#DCDCDC";
             string background = "#1E1E1E";
+            double? fontSize = null, lineHeight = null;
+            string? fontFamily = null;
+            bool metricsRead = false;
             int visitedNodes = 0;
             void Visit(XNode node, string inherited, int depth = 0)
             {
@@ -86,6 +89,12 @@ internal static class ClipboardCodeRenderer
                 string style = (string?)element.Attribute("style") ?? "";
                 string color = ReadColor(style, "color") ?? inherited;
                 if (tag is "div" or "pre" or "code") background = ReadColor(style, "background-color") ?? background;
+                // The editor's block names its font once, on the outermost element that sets one.
+                if (!metricsRead && tag is ("div" or "pre" or "code") && ReadDeclaration(style, "font-size") is not null)
+                {
+                    metricsRead = true;
+                    (fontSize, lineHeight, fontFamily) = ReadMetrics(style);
+                }
                 foreach (XNode child in element.Nodes()) Visit(child, color, depth + 1);
                 if (tag == "div" && text.Length > 0 && text[^1] != '\n') text.Append('\n');
             }
@@ -100,7 +109,12 @@ internal static class ClipboardCodeRenderer
                 int length = Math.Min(run.Length, preview.Length - run.Start);
                 if (length > 0) runs.Add(run with { Length = length });
             }
-            return new PinCodeDocument(preview, Array.AsReadOnly(runs.ToArray()), background, foreground);
+            return new PinCodeDocument(preview, Array.AsReadOnly(runs.ToArray()), background, foreground)
+            {
+                FontSizeDip = fontSize,
+                LineHeightDip = lineHeight,
+                FontFamily = fontFamily,
+            };
         }
         catch (Exception ex) when (ex is XmlException or ArgumentException or InvalidOperationException or FormatException or RegexMatchTimeoutException)
         {
@@ -119,8 +133,8 @@ internal static class ClipboardCodeRenderer
         // Ideal DIP metrics preserve the original wrapping and trimming at every target DPI.
         // The drawing retains vector glyphs until RenderTargetBitmap rasterises them.
         var formatted = new FormattedText(document.DisplayText, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface(FontFamilyName), FontSizeDip, ColorBrush(document.Foreground), 1)
-        { MaxTextWidth = 1152, MaxTextHeight = 852, LineHeight = LineHeightDip, Trimming = TextTrimming.CharacterEllipsis };
+            new Typeface(FontFamilyFor(document), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), FontSizeFor(document), ColorBrush(document.Foreground), 1)
+        { MaxTextWidth = 1152, MaxTextHeight = 852, LineHeight = LineHeightFor(document), Trimming = TextTrimming.CharacterEllipsis };
         foreach (PinCodeRun run in document.Runs)
         {
             formatted.SetForegroundBrush(ColorBrush(run.Color), run.Start, run.Length);
@@ -142,6 +156,104 @@ internal static class ClipboardCodeRenderer
         var brush = new SolidColorBrush(Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb));
         brush.Freeze();
         return brush;
+    }
+
+    /// <summary>The font size the pin draws <paramref name="document"/> with: its source's, or the default.</summary>
+    internal static double FontSizeFor(PinCodeDocument? document) => document?.FontSizeDip ?? FontSizeDip;
+
+    /// <summary>The line height the pin draws <paramref name="document"/> with: its source's, or the default.</summary>
+    internal static double LineHeightFor(PinCodeDocument? document) => document?.LineHeightDip ?? LineHeightDip;
+
+    /// <summary>
+    /// The source's installed families first, then the default code font, as one WPF fallback list.
+    /// </summary>
+    internal static FontFamily FontFamilyFor(PinCodeDocument? document) =>
+        document?.FontFamily is { } families && PinCodeDocument.IsFontFamilyList(families)
+            ? new FontFamily(families + ", " + FontFamilyName)
+            : new FontFamily(FontFamilyName);
+
+    /// <summary>
+    /// Reads an editor's font size, line height and family from one CSS declaration list. CSS
+    /// px are DIP and pt are 96/72 DIP. A size outside <see cref="PinCodeDocument.MinFontSizeDip"/>
+    /// to <see cref="PinCodeDocument.MaxFontSizeDip"/>, or in any other unit, keeps every default.
+    /// A missing or unusable line height follows the size at a typical editor spacing.
+    /// </summary>
+    internal static (double? FontSize, double? LineHeight, string? FontFamily) ReadMetrics(string style)
+    {
+        double? size = ReadLength(ReadDeclaration(style, "font-size"));
+        if (size is not { } fontSize || fontSize < PinCodeDocument.MinFontSizeDip || fontSize > PinCodeDocument.MaxFontSizeDip)
+            return (null, null, null);
+        string? lineValue = ReadDeclaration(style, "line-height");
+        double? line = ReadLength(lineValue);
+        if (line is null && lineValue is not null
+            && double.TryParse(lineValue, NumberStyles.Float, CultureInfo.InvariantCulture, out double factor)
+            && double.IsFinite(factor) && factor > 0)
+        {
+            line = fontSize * factor;
+        }
+        if (line is not { } lineHeight || lineHeight < fontSize
+            || lineHeight < PinCodeDocument.MinLineHeightDip || lineHeight > PinCodeDocument.MaxLineHeightDip)
+        {
+            line = Math.Clamp(Math.Round(fontSize * DefaultLineSpacing), PinCodeDocument.MinLineHeightDip, PinCodeDocument.MaxLineHeightDip);
+        }
+        return (fontSize, line, ReadFontFamilies(ReadDeclaration(style, "font-family")));
+    }
+
+    // VS Code's default editor line height for a 14 px font is 19 px.
+    private const double DefaultLineSpacing = 1.35;
+
+    private static readonly string[] GenericFamilies =
+    [
+        "monospace", "serif", "sans-serif", "cursive", "fantasy", "system-ui", "ui-monospace",
+        "ui-serif", "ui-sans-serif", "ui-rounded", "emoji", "math", "fangsong", "inherit", "initial",
+        "unset", "revert", "-apple-system", "blinkmacsystemfont",
+    ];
+
+    /// <summary>Plain family names from a CSS font-family list, without generic or unsafe entries.</summary>
+    internal static string? ReadFontFamilies(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var families = new List<string>();
+        foreach (string entry in value.Split(','))
+        {
+            string name = entry.Trim().Trim('"', '\'').Trim();
+            if (name.Length is 0 or > 64 || GenericFamilies.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+            if (name.Equals(FontFamilyName, StringComparison.OrdinalIgnoreCase)) break;
+            if (!PinCodeDocument.IsFontFamilyList(name) || families.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
+            families.Add(name);
+            if (families.Count == 4) break;
+        }
+        string joined = string.Join(", ", families);
+        return families.Count == 0 || joined.Length > PinCodeDocument.MaxFontFamilyLength - FontFamilyName.Length - 2
+            ? null : joined;
+    }
+
+    private static double? ReadLength(string? value)
+    {
+        if (value is null) return null;
+        double unit;
+        string number;
+        if (value.EndsWith("px", StringComparison.OrdinalIgnoreCase)) { unit = 1; number = value[..^2]; }
+        else if (value.EndsWith("pt", StringComparison.OrdinalIgnoreCase)) { unit = 96.0 / 72.0; number = value[..^2]; }
+        else return null;
+        return double.TryParse(number.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double length)
+               && double.IsFinite(length) && length > 0
+            ? length * unit : null;
+    }
+
+    private static string? ReadDeclaration(string style, string property)
+    {
+        foreach (string declaration in style.Split(';'))
+        {
+            string[] pair = declaration.Split(':', 2);
+            if (pair.Length == 2 && pair[0].Trim().Equals(property, StringComparison.OrdinalIgnoreCase))
+            {
+                string value = pair[1].Trim();
+                if (value.EndsWith("!important", StringComparison.OrdinalIgnoreCase)) value = value[..^"!important".Length].Trim();
+                return value.Length == 0 ? null : value;
+            }
+        }
+        return null;
     }
 
     private static string? ReadColor(string style, string property)

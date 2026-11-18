@@ -148,6 +148,10 @@ internal sealed partial class GalleryWindow : Window
                 _viewModel.Refresh();
                 RefreshOcrCoverageBanner();
             }
+            // Once the cards are up, the icon thread reads each distinct source application once,
+            // behind every card's own request and at below-normal priority.
+            if (IsVisible)
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, PrewarmSourceIcons);
         };
 
         // F2 edits a capture title in place, or renames the focused folder.
@@ -759,7 +763,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnMoreCommandsClick(object sender, RoutedEventArgs e)
     {
-        ContactSheetMenu.IsEnabled = _viewModel.HasSelection;
+        ContactSheetMenu.SetCurrentValue(IsEnabledProperty, _viewModel.CanCreatePdfSelected);
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.PlacementTarget = button;
@@ -804,6 +808,7 @@ internal sealed partial class GalleryWindow : Window
     [
         "Library.Archive.Preparing", "Library.Archive.Progress", "Folder410.ExportPreparing", "Folder410.ExportProgress",
         "LibraryUndo_Restoring", "LibrarySelection_Moving", "LibrarySelection_MovingProgress",
+        "OpenWith.Preparing",
     ];
 
     private void InitializeActionStatus()
@@ -849,7 +854,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (text == UiText.Get("LibraryRecovery_Failed") || ActionRequiredStatusKeys.Any(key => text == UiText.Get(key))
             || text.StartsWith(UiText.Get("Folder410.ExportFailed"), StringComparison.Ordinal)
-            || MatchesFormat(text, "LibraryUndo_PartlyRestored"))
+            || MatchesFormat(text, "LibraryUndo_PartlyRestored") || MatchesFormat(text, "OpenWith.Failed"))
         {
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -23,7 +24,8 @@ public sealed class PinTranslationOverlayR7GeometryTests
             observeFit: (_, chosen, _) => fit = chosen);
         Assert.Equal(1, result.RenderedBlocks);
         Assert.NotNull(fit);
-        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, 11);
+        // Ten rows of ink: the em they show for this text. The size is measured per word, so 1.1 allows for a word whose ink is shorter than the whole text's.
+        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, 1.1 * InkEm(10, "Other (see instructions)") + 1e-4);
     });
 
     [Fact]
@@ -43,7 +45,9 @@ public sealed class PinTranslationOverlayR7GeometryTests
             observeFit: (_, chosen, _) => fit = chosen);
         Assert.Equal(1, result.RenderedBlocks);
         Assert.NotNull(fit);
-        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, 16.5);
+        double textCap = 1.1 * new[] { "Other", "(see", "instructions)" }.Max(word => InkEm(15, word));
+        Assert.True(textCap < 1.1 * InkEm(24, "口"), "The checkbox alone would allow a larger em.");
+        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, textCap + 1e-4);
     });
 
     [Fact]
@@ -58,7 +62,8 @@ public sealed class PinTranslationOverlayR7GeometryTests
             observeFit: (_, chosen, _) => fit = chosen);
         Assert.Equal(1, result.RenderedBlocks);
         Assert.NotNull(fit);
-        Assert.InRange(fit.FontSize, 6, 6.6 + .00001);
+        Assert.InRange(fit.FontSize, InkEm(6, "Small label"), 1.1 * InkEm(6, "Small label") + 1e-4);
+        Assert.True(fit.FontSize < PinTranslationOverlay.MinimumFontSize);
     });
 
     [Fact]
@@ -74,7 +79,7 @@ public sealed class PinTranslationOverlayR7GeometryTests
             observeFit: (_, chosen, _) => fit = chosen);
         Assert.Equal(1, result.RenderedBlocks);
         Assert.NotNull(fit);
-        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, 11);
+        Assert.InRange(fit.FontSize, PinTranslationOverlay.MinimumFontSize, 1.1 * InkEm(10, "Faint source") + 1e-4);
     });
 
     [Fact]
@@ -114,7 +119,8 @@ public sealed class PinTranslationOverlayR7GeometryTests
         Assert.Equal(1, ordinary.RenderedBlocks);
         Assert.Equal(1, reserved.RenderedBlocks);
         Assert.NotNull(fit);
-        Assert.InRange(fit.FontSize, 10, 11);
+        Assert.InRange(fit.FontSize, Math.Min(InkEm(10, first.Text), InkEm(10, second.Text)),
+            1.1 * Math.Max(InkEm(10, first.Text), InkEm(10, second.Text)) + 1e-4);
         Assert.Single(fit.LineOffsets);
         byte[] ordinaryPixels = Pixels(ordinary.Image, new(20, 15, 150, 30));
         byte[] reservedPixels = Pixels(reserved.Image, new(20, 15, 150, 30));
@@ -211,21 +217,58 @@ public sealed class PinTranslationOverlayR7GeometryTests
     public void RecordedSmallScreenshotRendersAtItsCappedSourceScale() => StaTestHost.Run(() =>
     {
         string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
-        const string name = "var-small60-en-wiki";
+        // The 60% picture is the same page as web-en-wiki-screenshot. Each of its blocks must render at
+        // about 0.6 times the size of the same block at 100%: the small source is neither enlarged to the
+        // ordinary scale nor shrunk below its own. The minimum size may round a block up by a few percent.
+        // Per block, the estimates may differ by at most 1.2 times: equal-size grouping (12 percent) can put a
+        // boundary word in the neighbouring group (measured maximum 1.17). Rendered sizes are not bounded per
+        // block: a 100% block that shrinks to pass an obstacle has no counterpart below the small page's floor.
+        (PinOverlayBlock Block, PinOverlayFit Fit, double Estimate)[] small = RenderShort(replay, "var-small60-en-wiki");
+        (PinOverlayBlock Block, PinOverlayFit Fit, double Estimate)[] full = RenderShort(replay, "web-en-wiki-screenshot");
+        var ratios = new List<double>();
+        var estimates = new List<double>();
+        foreach ((PinOverlayBlock block, PinOverlayFit fit, double estimate) in small)
+        {
+            double x = block.Bounds.X / .6, y = block.Bounds.Y / .6;
+            var match = full.MinBy(item => Math.Abs(item.Block.Bounds.X - x) + Math.Abs(item.Block.Bounds.Y - y));
+            if (Math.Abs(match.Block.Bounds.X - x) + Math.Abs(match.Block.Bounds.Y - y) > 12) continue;
+            ratios.Add(fit.FontSize / (.6 * match.Fit.FontSize));
+            estimates.Add(estimate / (.6 * match.Estimate));
+        }
+        Assert.True(ratios.Count >= 10, $"Only {ratios.Count} blocks matched the 100% page.");
+        double[] ordered = [.. ratios.Order()];
+        double median = ordered[ordered.Length / 2];
+        Assert.InRange(median, .9, 1.1);
+        Assert.True(ordered.Count(ratio => ratio > 1.25) <= ordered.Length / 10, $"Ratios to the 100% page: {Listed(ordered)}");
+        Assert.True(estimates.Max() <= 1.2, $"Estimate ratios to the 100% page: {Listed([.. estimates.Order()])}");
+
+        static string Listed(IEnumerable<double> values) =>
+            string.Join(", ", values.Select(ratio => ratio.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)));
+    });
+
+    private static (PinOverlayBlock Block, PinOverlayFit Fit, double Estimate)[] RenderShort(string replay, string name)
+    {
         OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
         using FileStream stream = File.OpenRead(DiagnosticOutputPaths.Child(replay, name + "-source.png"));
         BitmapFrame source = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         source.Freeze();
         IReadOnlyList<PinOverlayBlock> blocks = PinTranslationOverlay.BuildBlocks(recognized, source);
-        var fits = new List<PinOverlayFit>();
+        double[] estimates;
+        using (PinOverlayPreparation preparation = PinTranslationOverlay.Prepare(source, blocks)) estimates = preparation.FontSizes;
+        var fits = new List<(PinOverlayBlock, PinOverlayFit, double)>();
         PinOverlayComposition result = PinTranslationOverlay.Compose(source,
             blocks.Select(block => new PinOverlayTranslation(block, block.PreservePixels ? null : "번역")).ToArray(),
-            observeFit: (_, fit, _) => fits.Add(fit));
+            observeFit: (block, fit, _) => fits.Add((block, fit, estimates[IndexOf(block)])));
         Assert.True(result.RenderedBlocks >= 10);
-        Assert.True(fits.Count(fit => fit.FontSize < PinTranslationOverlay.MinimumFontSize) >= 10);
-        Assert.All(fits.Where(fit => fit.FontSize < PinTranslationOverlay.MinimumFontSize),
-            fit => Assert.InRange(fit.FontSize, 1, 8.8 + .00001));
-    });
+        return [.. fits];
+
+        int IndexOf(PinOverlayBlock block)
+        {
+            for (int index = 0; index < blocks.Count; index++)
+                if (ReferenceEquals(blocks[index], block)) return index;
+            throw new InvalidOperationException("The block is not one of the prepared blocks.");
+        }
+    }
 
     [PinOverlayReplayFact]
     public void RecordedArxivFootnotesRetainTwoIndependentBodies() => StaTestHost.Run(() =>
@@ -247,6 +290,10 @@ public sealed class PinTranslationOverlayR7GeometryTests
             Assert.False(block.Text.StartsWith("twork", StringComparison.Ordinal));
         });
     });
+
+    /// <summary>The em that <paramref name="rows"/> rows of source ink show for <paramref name="text"/>, as the cap measures it.</summary>
+    private static double InkEm(double rows, string text) => rows / new FormattedText(text, CultureInfo.CurrentUICulture,
+        FlowDirection.LeftToRight, ClipboardTextRenderer.TextTypeface, 1, Brushes.Black, 1).BuildGeometry(new Point()).Bounds.Height;
 
     private static OcrLine Words(params OcrWord[] words) => new(string.Join(" ", words.Select(word => word.Text)),
         words.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union), words);

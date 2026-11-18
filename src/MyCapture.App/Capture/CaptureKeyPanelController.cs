@@ -120,10 +120,13 @@ internal sealed class CaptureKeyPanelController
 
         public bool ShouldShow => view.ShowKeyPanel && !view.DeferredGuideSuppressed;
         public bool CanPresent => view.DeferredGuideHasFrame && view.ActualWidth > 0 && view.ActualHeight > 0;
-        public CaptureKeyPanelContext Context => new(view.ShowKeyPanel, view.DeferredGuideCanDrag,
-            view.DeferredGuideWindowDetection, view.DeferredGuideHasSelection, view.DeferredGuideRatioAvailable,
+        public CaptureKeyPanelContext Context => new(view.ShowKeyPanel, view.DeferredGuideCanDrag && view.Mode != CaptureSelectorMode.Scroll,
+            view.DeferredGuideWindowDetection && view.Mode != CaptureSelectorMode.Scroll, view.DeferredGuideHasSelection,
+            view.DeferredGuideRatioAvailable && view.Mode != CaptureSelectorMode.Scroll,
             view.CopyColorText is not null, view.TextCaptureAvailable, view.TextCaptureMode,
-            view.PinSelectionAvailable, view.PasteToScreenHotkey);
+            view.PinSelectionAvailable, view.PasteToScreenHotkey, view.FreeformAvailable,
+            view.Mode == CaptureSelectorMode.Freeform, view.ScrollAvailableForKeys, view.Mode == CaptureSelectorMode.Scroll,
+            view.ScrollAvailableForKeys && CaptureModeBar.DelayApplies(view.Mode), view.Mode == CaptureSelectorMode.Color);
         public FontFamily UiFont => view.DeferredGuideUiFont;
         public FontFamily MonoFont => view.DeferredGuideMonoFont;
         public IReadOnlyDictionary<string, Brush> Palette => view.GuidePalette;

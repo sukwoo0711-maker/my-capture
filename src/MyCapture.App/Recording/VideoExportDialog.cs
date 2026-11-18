@@ -78,8 +78,9 @@ internal sealed class VideoExportDialog : Window
     // the advice wraps at one width whichever action it offers.
     private readonly Button _applyAdvice;
     private readonly Button _switchToMp4;
-    private readonly StackPanel _mp4 = new();
-    private readonly StackPanel _gif = new();
+    private readonly StackPanel _gifPreview = new();
+    private readonly StackPanel _mp4 = new() { Margin = new Thickness(0, 16, 0, 0) };
+    private readonly StackPanel _gif = new() { Margin = new Thickness(0, 16, 0, 0) };
     private readonly StackPanel _settings = new();
     private readonly MediaExportProgressRow _progressRow = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
@@ -164,9 +165,9 @@ internal sealed class VideoExportDialog : Window
         advancedHeader.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         var advanced = new Expander { Header = advancedHeader, Content = advancedBody, IsExpanded = false, Margin = new Thickness(0, 10, 0, 0) };
         advanced.SetResourceReference(ForegroundProperty, "Text.Primary");
+        advanced.SetResourceReference(StyleProperty, "Expander.OptionalStyle");
         AutomationProperties.SetName(advanced, UiText.Get("MediaExport_Advanced"));
         _mp4.Children.Add(advanced);
-        _settings.Children.Add(_mp4);
 
         foreach (GifExportQuality quality in GifSharePolicy.Presets)
             _quality.Items.Add(new OptionItem(QualityText(quality), quality) { SelectionText = QualitySelectionText(quality) });
@@ -204,9 +205,9 @@ internal sealed class VideoExportDialog : Window
         _samplePositionRow.Children.Add(_samplePosition);
         AutomationProperties.SetName(_samplePosition, UiText.Get("GifPreview_SamplePosition"));
         _samplePositionRow.Visibility = SpanMs > GifPreviewSampling.MaximumSourceMs ? Visibility.Visible : Visibility.Collapsed;
-        _gif.Children.Add(_samplePositionRow);
-        _samplePanel = new GifPreviewPanel(RenderOriginalAsync, _document.SourceDurationMs);
-        _gif.Children.Add(_samplePanel);
+        _samplePanel = new GifPreviewPanel(RenderOriginalAsync, _document.SourceDurationMs, _logs.CreateLogger("VideoExport"));
+        _gifPreview.Children.Add(_samplePanel);
+        _gifPreview.Children.Add(_samplePositionRow);
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _adviceRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _advice.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
@@ -219,17 +220,22 @@ internal sealed class VideoExportDialog : Window
         }
         _applyAdvice = AdviceAction("GifPreview_ApplyAdvice");
         _switchToMp4 = AdviceAction("GifPreview_SwitchToMp4");
-        _gif.Children.Add(_adviceRow);
-        _settings.Children.Add(_gif);
+
+        // Read the result before its controls. Each preview keeps its existing reserved height;
+        // changing the format swaps the preview and its details without rebuilding either tree.
+        AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
+        _settings.Children.Add(BuildSourcePreviewCard());
+        _settings.Children.Add(_gifPreview);
 
         _estimate.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetLiveSetting(_estimate, AutomationLiveSetting.Polite);
-        var estimateCell = new Grid { Margin = new Thickness(0, 14, 0, 0) };
+        var estimateCell = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         estimateCell.Children.Add(_estimate);
         foreach (TextBlock reserve in _estimateReserves) estimateCell.Children.Add(reserve);
         _settings.Children.Add(estimateCell);
-        AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
-        _settings.Children.Add(BuildSourcePreviewCard());
+        _settings.Children.Add(_adviceRow);
+        _settings.Children.Add(_mp4);
+        _settings.Children.Add(_gif);
 
         Grid.SetRow(_progressRow, 1);
         root.Children.Add(_progressRow);
@@ -593,6 +599,7 @@ internal sealed class VideoExportDialog : Window
         bool gif = IsGif;
         _mp4.Visibility = gif ? Visibility.Collapsed : Visibility.Visible;
         _gif.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
+        _gifPreview.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
         if (!_working)
         {
@@ -786,7 +793,7 @@ internal sealed class VideoExportDialog : Window
         {
             _logs.CreateLogger("VideoExport").LogWarning(error, "GIF preview sample failed");
             if (IsCurrentSample(revision, request, cancellation) && _sample is null)
-                _samplePanel.ShowFailure(error.Message);
+                _samplePanel.ShowFailure(ThemedDialog.RecoveryMessage(error));
         }
         finally
         {
@@ -865,7 +872,7 @@ internal sealed class VideoExportDialog : Window
             // says so, as the GIF sample's does, instead of staying empty.
             _logs.CreateLogger("VideoExport").LogWarning(error, "Export preview frame failed");
             if (!_closed && !_closeRequested && !cancellation.IsCancellationRequested && _preview.Source is null)
-                KoreanWordWrap.Show(_previewMessage, UiText.Format("GifPreview_Failed", error.Message));
+                KoreanWordWrap.Show(_previewMessage, UiText.Format("GifPreview_Failed", ThemedDialog.RecoveryMessage(error)));
         }
         finally
         {
@@ -1075,10 +1082,13 @@ internal sealed class VideoExportDialog : Window
         ? FormatSize(estimate.ExpectedBytes)
         : UiText.Format("GifPreview_SizeRange", FormatSize(estimate.LowBytes), FormatSize(estimate.HighBytes));
 
-    /// <summary>Decimal units, matching how share sites state their upload limits; MB with one decimal.</summary>
+    /// <summary>
+    /// Decimal units, matching how share sites state their upload limits; MB with one decimal.
+    /// A size is cut, never rounded up, so a file under a limit never reads as the limit itself.
+    /// </summary>
     internal static string FormatSize(long bytes) => bytes >= 1_000_000
-        ? UiText.Format("MediaExport_SizeMb", bytes / 1_000_000d)
-        : UiText.Format("MediaExport_SizeKb", Math.Max(1, bytes / 1_000d));
+        ? UiText.Format("MediaExport_SizeMb", Math.Floor(bytes / 100_000d) / 10)
+        : UiText.Format("MediaExport_SizeKb", Math.Max(1, Math.Floor(bytes / 1_000d)));
 
     /// <summary>
     /// The most bytes a GIF of <paramref name="frames"/> full images of this size can take. LZW
@@ -1161,6 +1171,8 @@ internal sealed class VideoExportDialog : Window
         double speed = SelectedSpeed;
         int revision = _settingsRevision;
         VideoExportCalculation? staged = gif ? _result : null;
+        long? shareLimit = gif ? SelectedShareTarget.Bytes : null;
+        GifExportQuality? adjusted = null;
         using var cancellation = new CancellationTokenSource();
         _cancellation = cancellation;
         SetWorking(true);
@@ -1218,6 +1230,28 @@ internal sealed class VideoExportDialog : Window
                 token.ThrowIfCancellationRequested();
                 var file = new FileInfo(temp);
                 if (!file.Exists || file.Length <= 0) throw new IOException("The video encoder produced no output.");
+                if (shareLimit is long limit)
+                {
+                    // The recommendation only estimates; the file itself is held under the limit.
+                    GifExportQuality exported = quality;
+                    long Encode(GifExportQuality candidate)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        File.Delete(temp);
+                        _gifSession.Export(temp, candidate, speed, progress, token);
+                        exported = candidate;
+                        return new FileInfo(temp).Length;
+                    }
+
+                    GifShareFitResult fit = GifShareFit.Fit(quality, file.Length, limit, Encode);
+                    if (!fit.Fits)
+                        throw UserFacingError.Mark(new IOException(UiText.Format("GifExport_ShareLimitUnmet", FormatSize(limit), FormatSize(fit.Bytes))));
+                    // The last probe was not the best fit; the frame cache makes this one cheap.
+                    if (!ReferenceEquals(exported, fit.Quality)) Encode(fit.Quality);
+                    if (!ReferenceEquals(fit.Quality, quality)) adjusted = fit.Quality;
+                    file.Refresh();
+                }
+
                 // Hold the source against replacement through an alias while the result takes
                 // its final name; the lexical check above cannot see junctions or hard links.
                 using var sourceProtection = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -1228,7 +1262,10 @@ internal sealed class VideoExportDialog : Window
             if (_closed) return;
             _savedPath = full;
             ShowStatus(gif
-                ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
+                ? adjusted is null
+                    ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
+                    : UiText.Format("GifExport_SavedAdjusted", Path.GetFileName(full), FormatSize(savedBytes),
+                        FormatSize(shareLimit ?? 0), AnimatedGifExporter.FitWithin(_recording.Width, _recording.Height, adjusted.LongEdge).Width, adjusted.FramesPerSecond)
                 : UiText.Format("MediaExport_Saved", Path.GetFileName(full)));
             _openFolder.Visibility = Visibility.Visible;
         }

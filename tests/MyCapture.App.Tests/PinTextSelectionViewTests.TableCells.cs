@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Pinning;
+using MyCapture.App.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -181,12 +182,21 @@ public sealed partial class PinTextSelectionViewTests
         {
             window.Show();
             DataGrid grid = view.TableGrid!;
+            PointerInput();
             view.FocusSelection();
             view.SelectCells(1, 1, 1, 1);
             Settle(window);
             Assert.True(grid.IsKeyboardFocusWithin, "The table has keyboard focus.");
             double scale = VisualTreeHelper.GetDpi(view).DpiScaleX;
             int ring = (int)Math.Max(1, Math.Round(2 * scale));
+            Assert.False(KeyboardFocusCue.GetIsVisible(grid));
+            AssertNoRing(1, 1, Color.FromRgb(0x00, 0x78, 0xD7), "programmatic focus after pointer input");
+            // A real routed keyboard event enters the foundation's keyboard-only cue mode.
+            // Shift alone does not move the current cell or alter the selected range.
+            grid.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.LeftShift)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+            Settle(window);
+            Assert.True(KeyboardFocusCue.GetIsVisible(grid));
             AssertRing(1, 1, Colors.White, Color.FromRgb(0x00, 0x78, 0xD7), ring, "first cell");
 
             // Shift+Right extends the selection; the ring moves with the current cell.
@@ -201,6 +211,14 @@ public sealed partial class PinTextSelectionViewTests
             Settle(window);
             AssertRing(1, 2, Colors.Black, Color.FromRgb(0x1A, 0xEB, 0xFF), (int)Math.Max(1, Math.Round(4 * scale)), "contrast colours, width 4");
             AssertNoRing(1, 1, Color.FromRgb(0x1A, 0xEB, 0xFF), "selected, not current");
+            PointerInput();
+            Settle(window);
+            Assert.True(grid.IsKeyboardFocusWithin, "Pointer mode does not discard the table's keyboard focus.");
+            Assert.False(KeyboardFocusCue.GetIsVisible(grid));
+            AssertNoRing(1, 2, Color.FromRgb(0x1A, 0xEB, 0xFF), "pointer hides the current-cell cue");
+
+            void PointerInput() => window.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+                { RoutedEvent = Mouse.PreviewMouseDownEvent });
 
             void AssertRing(int row, int column, Color ink, Color fill, int width, string step)
             {

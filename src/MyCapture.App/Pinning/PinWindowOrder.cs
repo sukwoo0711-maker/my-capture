@@ -29,6 +29,31 @@ internal static class PinWindowOrder
         return handles.Where(remaining.Contains).Concat(ordered).ToArray();
     }
 
+    /// <summary>
+    /// Stacks <paramref name="handles"/> bottom to top directly beneath the last one, which keeps its slot;
+    /// no window is moved, resized or activated, and other windows keep their relative order.
+    /// </summary>
+    internal static void StackBottomToTop(IReadOnlyList<IntPtr> handles)
+    {
+        IntPtr above = IntPtr.Zero;
+        for (int i = handles.Count - 1; i >= 0; i--)
+        {
+            IntPtr handle = handles[i];
+            if (handle == IntPtr.Zero) continue;
+            // hWndInsertAfter places the window directly below the one given.
+            if (above != IntPtr.Zero) _ = SetWindowPos(handle, above, 0, 0, 0, 0, NoSize | NoMove | NoActivate);
+            above = handle;
+        }
+    }
+
+    private const uint NoSize = 0x0001;
+    private const uint NoMove = 0x0002;
+    private const uint NoActivate = 0x0010;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetTopWindow(IntPtr handle);
 

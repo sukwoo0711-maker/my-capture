@@ -5,11 +5,12 @@
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:themes="clr-namespace:MyCapture.App.Themes"
         xmlns:gallery="clr-namespace:MyCapture.App.Gallery"
+        xmlns:sources="clr-namespace:MyCapture.App.Sources"
         x:ClassModifier="internal"
         Style="{DynamicResource Window.Standard}"
         Title="{loc:Text Text_37AD4F28D422}"
         Width="1280" Height="760"
-        MinWidth="980" MinHeight="560"
+        MinWidth="1032" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Surface.Base}"
         Foreground="{DynamicResource Text.Primary}">
@@ -65,9 +66,13 @@
                                 <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
                                 <Setter TargetName="SelectionCheck" Property="Visibility" Value="Visible" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="SelectionFocus" Property="Visibility" Value="Visible" />
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.48" />
                             </Trigger>
@@ -163,6 +168,7 @@
             <MenuItem Tag="Compare" Header="{loc:Text Gallery.Compare}"
                       Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                       CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Tag="OpenWith" Header="{loc:Text OpenWith.Menu}" AutomationProperties.Name="{loc:Text OpenWith.Menu}" />
             <Separator />
             <MenuItem Tag="Copy" Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
                       AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
@@ -196,7 +202,22 @@
             <Separator Tag="SeparatorSource" />
             <MenuItem Tag="OpenSource" Header="{loc:Text Source.Open}" CommandParameter="{Binding}" Click="OnOpenSourceMenuClick"
                       AutomationProperties.Name="{loc:Text Source.Open}"
-                      Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}" />
+                      Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem.Icon>
+                    <Border TextElement.FontSize="{x:Static themes:TypeScale.IconGlyph}" sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Tag="OpenSourceLocation" Header="{loc:Text Source.OpenLocation}" CommandParameter="{Binding}" Click="OnOpenSourceFolderClick"
+                      AutomationProperties.Name="{loc:Text Source.OpenLocation}"
+                      Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="CopySourceUrl" Header="{loc:Text Source.CopyUrl}" CommandParameter="{Binding}" Click="OnCopySourcePageClick"
+                      AutomationProperties.Name="{loc:Text Source.CopyUrl}"
+                      Visibility="{Binding HasSourcePageUrl, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="CopySourcePath" Header="{loc:Text Source.CopyPath}" CommandParameter="{Binding}" Click="OnCopySourcePathClick"
+                      AutomationProperties.Name="{loc:Text Source.CopyPath}"
+                      Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}" />
+            <Separator Tag="SeparatorSourceViews"
+                       Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Tag="SameSource" Header="{loc:Text Source.ShowSame}" CommandParameter="{Binding}" Click="OnSameSourceMenuClick"
                       AutomationProperties.Name="{loc:Text Source.ShowSame}"
                       Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
@@ -244,7 +265,7 @@
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding FolderBadge}" Margin="4,0,0,0"
                            Foreground="{DynamicResource Text.Badge}" FontSize="{DynamicResource FontSize.Caption}"
-                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                           FontWeight="{DynamicResource FontWeight.ControlLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </Grid>
         </DataTemplate>
 
@@ -265,9 +286,13 @@
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                 </Trigger>
-                <Trigger Property="IsKeyboardFocused" Value="True">
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsKeyboardFocused" Value="True" />
+                        <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                    </MultiTrigger.Conditions>
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                </Trigger>
+                </MultiTrigger>
             </Style.Triggers>
         </Style>
 
@@ -334,9 +359,13 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                                <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                            </MultiTrigger.Conditions>
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                        </Trigger>
+                        </MultiTrigger>
                     </Style.Triggers>
                 </Style>
             </DataTemplate.Resources>
@@ -392,7 +421,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid Grid.ColumnSpan="2" Margin="0,0,8,2" VerticalAlignment="Center">
                             <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
-                                       Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Text.Primary}" FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                        FontSize="{DynamicResource FontSize.Body}" TextTrimming="CharacterEllipsis">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -762,9 +791,13 @@
                                 <Setter TargetName="DropRing" Property="StrokeDashArray" Value="{x:Null}" />
                                 <Setter TargetName="DropRing" Property="Opacity" Value="1" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -919,11 +952,15 @@
                                 <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1030,11 +1067,15 @@
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1119,11 +1160,15 @@
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1165,11 +1210,15 @@
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="Chevron" Property="themes:FluidMotion.RotateTo" Value="90" />
                                             </Trigger>
-                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <MultiTrigger>
+                                                <MultiTrigger.Conditions>
+                                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                                </MultiTrigger.Conditions>
                                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                                            </Trigger>
+                                            </MultiTrigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
@@ -1267,9 +1316,13 @@
                                 <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="0" />
                             </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsKeyboardFocused" Value="True" />
+                                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.48" />
                             </Trigger>
@@ -1390,7 +1443,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
                                     <Setter Property="Background" Value="Transparent" />
                                     <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="FontWeight" Value="{DynamicResource FontWeight.ControlLabel}" />
                                     <Setter Property="Padding" Value="6,2" />
                                     <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
                                     <Setter Property="Margin" Value="8,0,0,0" />
@@ -1422,10 +1475,14 @@
                                                     <Trigger Property="IsPressed" Value="True">
                                                         <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                                     </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                    <MultiTrigger>
+                                                        <MultiTrigger.Conditions>
+                                                            <Condition Property="IsKeyboardFocused" Value="True" />
+                                                            <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                                                        </MultiTrigger.Conditions>
                                                         <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                                         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                                                    </Trigger>
+                                                    </MultiTrigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Setter.Value>
@@ -1438,9 +1495,19 @@
                                 </Style>
                             </StackPanel.Resources>
                             <TextBlock Text="{loc:Text Library.Source.Label}" FontWeight="SemiBold" Margin="0,0,0,6" />
-                            <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
-                                       ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
-                                       Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+                            <DockPanel Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}">
+                                <!-- The kind's glyph until the application's icon is in memory, at a fixed 16 DIP slot. -->
+                                <Border DockPanel.Dock="Left" Width="16" Margin="0,0,6,0" VerticalAlignment="Top" TextElement.FontSize="{x:Static themes:TypeScale.Body}"
+                                        AutomationProperties.AutomationId="LibrarySourceAppIcon"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}"
+                                        sources:SourceAppIcon.Provenance="{Binding SourceProvenance}" />
+                                <TextBlock AutomationProperties.AutomationId="LibrarySourceApp" Text="{Binding SourceAppName}" TextWrapping="Wrap"
+                                           ToolTip="{Binding SourceAppToolTip}" AutomationProperties.Name="{Binding SourceAppAutomationName}"
+                                           Visibility="{Binding HasSourceApp, Converter={StaticResource BoolToVisibility}}" />
+                            </DockPanel>
+                            <TextBlock AutomationProperties.AutomationId="LibrarySourceAppOnly" Margin="0,2,0,0"
+                                       Text="{loc:Text Source.AppOnly}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Secondary}"
+                                       Visibility="{Binding IsSourceAppOnly, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock AutomationProperties.AutomationId="LibrarySourceWindow" Margin="0,2,0,0"
                                        Foreground="{DynamicResource Text.Secondary}" ToolTip="{Binding SourceWindowTitle}"
                                        gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceWindowTitle}"
@@ -1525,18 +1592,18 @@
         </Grid.RowDefinitions>
 
         <Border x:Name="LibraryGlobalCommandSurface" Grid.Row="0" Padding="8,0" Margin="0,0,0,8"
-                Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,0,1">
+                Background="{DynamicResource Surface.Base}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,0,1">
             <Grid x:Name="LibraryCommandBar" Height="48"
                   AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" KeyboardNavigation.TabIndex="1">
                     <!-- Keep labelled capture commands available in every selection state. -->
                     <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
-                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0,0,0"
+                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Secondary}" Margin="3,0,0,0"
                                 VerticalAlignment="Center"
                                 themes:ButtonSizing.SplitPart="Main"
                                 AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
@@ -1547,7 +1614,7 @@
                                 <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Primary}" Margin="0,0,3,0"
+                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Secondary}" Margin="0,0,3,0"
                                 MinWidth="28" Padding="5,0" VerticalAlignment="Center"
                                 themes:ButtonSizing.SplitPart="Options"
                                 ToolTip="{loc:Text CaptureEntry.MoreOptions}"
@@ -1572,9 +1639,23 @@
                 <!-- An input boundary, not a decorative card line: it takes the control outline, hands it
                      over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
                      the focus colour at once while the search box inside has keyboard focus. -->
-                <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
-                      MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                <Grid x:Name="SearchField" Grid.Column="0" Margin="0,0,12,0" KeyboardNavigation.TabIndex="0"
+                      themes:ControlLanguage.Enabled="{DynamicResource ControlLanguage.Enabled}"
+                      VerticalAlignment="Center" HorizontalAlignment="Stretch">
                     <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
+                    <themes:InputFieldBorder x:Name="SearchInputChrome" IsHitTestVisible="False"
+                                            IsInputFocused="{Binding IsKeyboardFocusWithin, ElementName=SearchField}"
+                                            IsInputHovered="{Binding IsMouseOver, ElementName=SearchField}">
+                        <themes:InputFieldBorder.Style>
+                            <Style TargetType="themes:InputFieldBorder">
+                                <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="False">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </themes:InputFieldBorder.Style>
+                    </themes:InputFieldBorder>
                     <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" Background="Transparent" />
                     <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
                         <Border.Style>
@@ -1582,6 +1663,9 @@
                                 <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
                                 <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                                 <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
                                     <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                         <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
                                     </DataTrigger>
@@ -1600,6 +1684,9 @@
                             <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
                             <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
                             <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                    </Trigger>
                                 <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
                                     <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                 </DataTrigger>
@@ -1626,7 +1713,17 @@
                              Padding="4,4" MinHeight="32" VerticalContentAlignment="Center"
                              ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
-                             TextChanged="OnSearchTextChanged" />
+                             TextChanged="OnSearchTextChanged">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Style.Triggers>
+                                    <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                                        <Setter Property="Template" Value="{StaticResource TextBox.InputContentTemplate}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
                     <gallery:LibrarySearchPlaceholder x:Name="SearchPlaceholderText" Grid.Column="1" IsHitTestVisible="False"
                                FullText="{Binding SearchPlaceholder}" CompactText="{Binding CompactSearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
@@ -1693,7 +1790,7 @@
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="OcrCoverageHeadline"
                                Foreground="{DynamicResource Text.Primary}"
-                               FontWeight="SemiBold"
+                               FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                FontSize="{StaticResource FontSize.Body}" />
                     <TextBlock x:Name="OcrCoverageDetail"
                                Foreground="{DynamicResource Text.Secondary}"
@@ -1960,14 +2057,29 @@
                      the command labels collapse to icons (then the count and sort narrow) instead of wrapping to a second row,
                      and its overflow menu retains every secondary command. -->
                 <Grid x:Name="LibraryContentCommandBar" Margin="0,0,0,8"
-                      Background="{DynamicResource Surface.Raised}"
+                      Background="{DynamicResource Surface.Base}"
                       AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
                     <Grid.RowDefinitions><RowDefinition Height="44" /></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="BrowseScopeLabel" themes:KoreanWordWrap.Text="{Binding BrowseScopeText}" Margin="12,0,8,0"
+                               AutomationProperties.Name="{Binding BrowseScopeText}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding BrowseScopeText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center" MinHeight="44"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}"
                                 AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}">
                         <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
                                 IsEnabled="{Binding HasSelection}" ToolTip="{loc:Text LibraryUx_ClearSelectionHint}"
@@ -1975,24 +2087,7 @@
                             <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         </Button>
                         <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" Width="96" TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
-                        <!-- Open actions precede copy and organizing; labels collapse when space is limited. -->
-                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
-                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="PreviewSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}"
-                                AutomationProperties.Name="{loc:Text LibraryUx_Preview}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="PreviewSelectedLabel" Text="{loc:Text LibraryUx_Preview}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
+                                   VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="{DynamicResource FontWeight.Regular}" AutomationProperties.LiveSetting="Polite" />
                         <Button x:Name="FloatSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}" Click="OnFloatClick"
                                 ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}">
@@ -2014,26 +2109,28 @@
                                 <TextBlock x:Name="CopySelectedLabel" Text="{loc:Text QuickAccess.Copy}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="CreatePdfSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding CanCreatePdfSelected}" Click="OnContactSheetClick"
-                                ToolTip="{loc:Text ContactSheet.Action}" AutomationProperties.Name="{loc:Text ContactSheet.Action}">
+                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
+                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text QuickAccess.Edit}">
                             <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Pdf}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="CreatePdfSelectedLabel" Text="{loc:Text ContactSheet.Action}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="KeepSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" ToolTip="{loc:Text LibraryUx_KeepHint}"
-                                AutomationProperties.Name="{loc:Text LibraryUx_Keep}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="KeepSelectedLabel" Text="{loc:Text LibraryUx_Keep}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text QuickAccess.Edit}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                     <StackPanel x:Name="SortCommands" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="SortBox" Width="112" Margin="8,0,4,0" SelectedIndex="{Binding SortIndex, Mode=TwoWay}"
                               AutomationProperties.Name="{loc:Text Folder410.Sort}">
+                        <ComboBox.Style>
+                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.Style>
                         <!-- The box is as wide as its longest choice, except when even the compact bar does not
                              fit (FitContentToolbar); only then does the shown choice end in an ellipsis. The
                              choices carry the template, because the box shows a ComboBoxItem's own template. -->
@@ -2057,6 +2154,9 @@
                                 <MenuItem x:Name="FloatSelectedMenu" Header="{loc:Text Gallery.Float}" InputGestureText="P"
                                           IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}"
                                           AutomationProperties.Name="{loc:Text Gallery.Float}" Click="OnFloatClick" />
+                                <MenuItem x:Name="PreviewSelectedButton" Header="{loc:Text LibraryUx_Preview}" InputGestureText="Space"
+                                          IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick"
+                                          ToolTip="{loc:Text LibraryUx_PreviewHint}" AutomationProperties.Name="{loc:Text LibraryUx_Preview}" />
                                 <MenuItem x:Name="CompareSelectedMenu" Header="{loc:Text Gallery.Compare}" IsEnabled="{Binding CanCompareSelected}" Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                                           CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <Separator />
@@ -2069,8 +2169,19 @@
                                 <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick" />
                                 <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
                                           IsEnabled="{Binding CanCreatePdfSelected}" AutomationProperties.Name="{loc:Text ContactSheet.Action}"
-                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                          ToolTip="{loc:Text ContactSheet.Action}"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                                    <MenuItem.Icon>
+                                        <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Pdf}" Style="{StaticResource Icon.Symbol}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
+                                <MenuItem x:Name="KeepSelectedButton" IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" InputGestureText="K"
+                                          ToolTip="{loc:Text LibraryUx_KeepHint}" AutomationProperties.Name="{loc:Text LibraryUx_Keep}">
+                                    <MenuItem.Header>
+                                        <TextBlock x:Name="KeepSelectedLabel" Text="{loc:Text LibraryUx_Keep}" />
+                                    </MenuItem.Header>
+                                </MenuItem>
                                 <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
                                           InputGestureText="M" />
                                 <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
@@ -2202,9 +2313,10 @@
                             <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                         </Button>
                     </Grid>
-                    <TextBlock Grid.Row="1" Text="{loc:Text Workspace.SelectHint}" TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                    <!-- The pane stays when nothing single is selected: it says so instead of disappearing. -->
+                    <StackPanel x:Name="GalleryDetailsEmpty" Grid.Row="1" AutomationProperties.AutomationId="LibraryDetailsEmpty">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding SingleSelectedTile}" Value="{x:Null}">
@@ -2212,8 +2324,12 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                        </StackPanel.Style>
+                        <TextBlock x:Name="GalleryDetailsEmptyTitle" TextWrapping="Wrap" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Text.Secondary}" />
+                        <TextBlock x:Name="GalleryDetailsEmptyHint" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource Text.Muted}" />
+                    </StackPanel>
                     <Border x:Name="GalleryDetailsHost" Grid.Row="1" />
                 </Grid>
             </Border>
@@ -2263,7 +2379,7 @@
             <DockPanel x:Name="LibraryNotice" Grid.Column="1" Margin="16,0,0,0" HorizontalAlignment="Right"
                        VerticalAlignment="Center" Visibility="Collapsed" LastChildFill="True">
                 <Button x:Name="LibraryNoticeAction" DockPanel.Dock="Right" Style="{StaticResource Button.GhostCompact}"
-                        Height="24" MinHeight="24" Padding="8,0" VerticalAlignment="Center" FontWeight="SemiBold" Margin="8,0,0,0"
+                        Height="24" MinHeight="24" Padding="8,0" VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}" Margin="8,0,0,0"
                         Click="OnNoticeActionClick" />
                 <TextBlock x:Name="LibraryNoticeText" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
                            VerticalAlignment="Center" Foreground="{DynamicResource Text.Secondary}"
@@ -2283,7 +2399,7 @@
                      bar by 10 DIP, which moved the list's bottom and the status text each time it came and went. -->
                 <Button x:Name="LibraryStatusAction" Style="{StaticResource Button.GhostCompact}"
                         Height="24" MinHeight="24" Padding="8,0"
-                        VerticalAlignment="Center" FontWeight="SemiBold" Click="OnStatusActionClick" />
+                        VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}" Click="OnStatusActionClick" />
             </StackPanel>
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <Button x:Name="ArchiveCancelButton" Content="{loc:Text Library.Action.Cancel}"
@@ -2310,7 +2426,7 @@
             <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="UpdateAvailableButton" Margin="12,0,0,0" Visibility="Collapsed"
                         Height="24" MinHeight="24" MaxWidth="188" Padding="8,0" Style="{StaticResource Button.GhostCompact}" FontSize="{StaticResource FontSize.Caption}"
-                        FontWeight="SemiBold" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
+                        FontWeight="{DynamicResource FontWeight.ControlLabel}" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
                 <Button x:Name="UpdateDismissButton" Margin="4,0,0,0" Visibility="Collapsed"
                         Content="{loc:Text Dialog.Close}" AutomationProperties.Name="{loc:Text Dialog.Close}"
                         Height="24" MinHeight="24" Padding="8,0" Style="{StaticResource Button.GhostCompact}"
@@ -2325,7 +2441,7 @@
                 <StackPanel Orientation="Horizontal">
                     <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                           Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
-                    <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
+                    <TextBlock x:Name="DragHintText" Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="{DynamicResource FontWeight.ControlLabel}"
                                Foreground="{DynamicResource Text.Primary}" />
                 </StackPanel>
             </Border>

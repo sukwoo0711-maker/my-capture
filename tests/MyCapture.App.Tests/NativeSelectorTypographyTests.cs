@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -37,23 +38,42 @@ public sealed class NativeSelectorTypographyTests
         try
         {
             using var chrome = new NativeSelectorChrome(owner, false, false);
+            // The size read-out: the UI face with tabular figures, so its digits keep one advance.
             TextBlock readout = Assert.IsType<TextBlock>(Assert.IsAssignableFrom<Border>(chrome.Windows[1].Content).Child);
-            TextBlock guide = Assert.IsType<TextBlock>(Assert.IsType<Border>(chrome.Windows[2].Content).Child);
             Assert.Equal(TypeScale.Caption, readout.FontSize);
-            Assert.Equal(TypeScale.Caption, guide.FontSize);
-            AssertTypeface(reference, "_monoTypeface", readout);
-            AssertTypeface(reference, "_uiTypeface", guide);
-            foreach (Window window in new[] { chrome.Windows[1], chrome.Windows[2] })
+            AssertTypeface(reference, "_uiTypeface", readout);
+            Assert.Equal(FontNumeralAlignment.Tabular, Typography.GetNumeralAlignment(readout));
+            // The hint: every word, Korean included, at the Caption size; only Latin key caps at Micro.
+            var hint = Assert.IsType<NativeSelectorHint>(Assert.IsType<Border>(chrome.Windows[2].Content).Child);
+            Typeface ui = UiTypeface(reference);
+            Assert.NotEmpty(hint.WordsForTest);
+            foreach (TextBlock word in hint.WordsForTest)
             {
-                var border = Assert.IsAssignableFrom<Border>(window.Content);
-                var label = Assert.IsType<TextBlock>(border.Child);
-                var transform = Assert.IsType<ScaleTransform>(border.LayoutTransform);
+                Assert.Equal(TypeScale.Caption, word.FontSize);
+                Assert.Equal(ui.FontFamily.Source, word.FontFamily.Source);
+                Assert.Equal(FontWeights.Medium, word.FontWeight);
+            }
+            Assert.NotEmpty(hint.KeycapBordersForTest);
+            foreach (Border cap in hint.KeycapBordersForTest)
+            {
+                var key = Assert.IsType<TextBlock>(cap.Child);
+                Assert.Equal(TypeScale.Micro, key.FontSize);
+                Assert.Equal(FontWeights.SemiBold, key.FontWeight);
+                Assert.Matches("^[A-Za-z0-9+←↑→↓]+$", key.Text);
+            }
+            foreach ((Window window, TextBlock label) in new[] { (chrome.Windows[1], readout), (chrome.Windows[2], hint.WordsForTest[0]) })
+            {
+                var content = Assert.IsAssignableFrom<Border>(window.Content);
+                var transform = Assert.IsType<ScaleTransform>(content.LayoutTransform);
                 Matrix device = HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)!.CompositionTarget.TransformToDevice;
                 Assert.Equal(TypeScale.Caption * dpi / 96d, label.FontSize * transform.ScaleY * device.M22, 8);
             }
         }
         finally { reference.ReleaseResources(); }
     });
+
+    private static Typeface UiTypeface(CaptureOverlayView reference) => Assert.IsType<Typeface>(typeof(CaptureOverlayView)
+        .GetField("_uiTypeface", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(reference));
 
     private static void AssertTypeface(CaptureOverlayView reference, string field, TextBlock label)
     {

@@ -53,7 +53,7 @@ internal sealed class PracticePinScene : TutorialScene
     private OffscreenWindow? _guideHost;
     private MenuCamera? _opacityMenu, _restoreMenu, _visibleMenu;
     private MenuItem? _opacity60, _reopen;
-    private PointD _corner, _cornerEnd, _opacityButton, _closeButton;
+    private PointD _corner, _cornerEnd, _closeButton;
     private int _previousRepeat;
     private double _clock;
     private double _closedZoom, _closedOpacity;
@@ -162,13 +162,16 @@ internal sealed class PracticePinScene : TutorialScene
         pin.ShowHoverBar();
         Stage.Pump(35);
         PinHoverBar bar = pin.HoverBarForTest!;
-        _opacityButton = ButtonCenter(bar.OpacityButton);
         _closeButton = ButtonCenter(bar.CloseButton);
         if (Id == "pin-opacity")
         {
             ContextMenu menu = bar.CreateOpacityMenu();
             _opacity60 = menu.Items.OfType<MenuItem>().Single(item => item.Header as string == "60%");
-            _opacityMenu = new MenuCamera(menu, _opacity60, new Point(454, 106), 2.2, cropToTarget: false);
+            // Under the bar and aligned with it, as PinHoverBar.CreateOpacityMenu places it
+            // (PlacementTarget the bar surface, Placement Bottom, VerticalOffset 2). Enlarged only as
+            // far as the room below the bar allows, so it never covers the bar's own commands.
+            Rect barBounds = BarBounds();
+            _opacityMenu = new MenuCamera(menu, _opacity60, new Point(barBounds.X, barBounds.Bottom + 2 * _camera), 2.2, cropToTarget: false);
         }
         if (Id == "pin-restore")
         {
@@ -191,8 +194,9 @@ internal sealed class PracticePinScene : TutorialScene
                     .Motion("resize", 44, _corner, _cornerEnd, true).Hold("released", .5)
                     .Move("away", new PointD(890, 445), 12).Finish("result", 8.4);
             case "pin-opacity":
-                return story.Hold("open", .8).Move("hover", ToStage(new Point(110, 80)), 17).Hold("hover", .4)
-                    .Move("opacity", _opacityButton, 16).Hold("opacity", .4).Click("open-menu")
+                // The bar has no opacity button: the picture is selected and O opens the same menu.
+                return story.Hold("open", .8).Move("hover", ToStage(new Point(110, 80)), 17).Click("select")
+                    .Hold("opacity", .8).Hold("open-menu", .1)
                     .Hold("menu", .8).Move("sixty", _opacityMenu!.CenterOf(_opacity60!), 17)
                     .Hold("sixty", .7).Click("choose-opacity").Move("away", new PointD(870, 420), 13).Finish("result", 8.4);
             case "practice-pin-close":
@@ -234,10 +238,11 @@ internal sealed class PracticePinScene : TutorialScene
         if (Id == "pin-restore") Taskbar.Draw(dc, Korean, new DateTimeOffset(2026, 10, 30, 10, 0, 0, TimeSpan.FromHours(9)));
         DrawPin(dc);
         _visibleMenu?.Draw(dc, frame.Cursor);
-        string key = Id == "practice-image-pin" && frame.Segment == "shortcut" ? _keys.PasteToScreen.ToString() : string.Empty;
+        string key = Id == "practice-image-pin" && frame.Segment == "shortcut" ? _keys.PasteToScreen.ToString()
+            : Id == "pin-opacity" && frame.Segment is "opacity" or "open-menu" ? "O" : string.Empty;
         Stage.PointerKind pointer = Id == "pin-resize" && frame.Segment is "corner" or "resize" or "released"
             ? Stage.PointerKind.SizeNwse
-            : frame.Segment is "opacity" or "sixty" or "choose-opacity" or "close" or "close-pin" or "reopen" or "restore-pin"
+            : frame.Segment is "sixty" or "choose-opacity" or "close" or "close-pin" or "reopen" or "restore-pin"
                 ? Stage.PointerKind.Hand : Stage.PointerKind.Arrow;
         PracticeOverlay(dc, frame, Caption(frame.Segment), key, pointer);
     }
@@ -313,7 +318,7 @@ internal sealed class PracticePinScene : TutorialScene
         }
         if (_pin is { IsClosed: false, HoverBarForTest: { } bar })
         {
-            foreach (Button button in new[] { bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton })
+            foreach (Button button in bar.CommandOrder)
             {
                 Rect bounds = ButtonBounds(button);
                 button.SetValue(MouseOverKey, _visibleMenu is null && bounds.Contains(new Point(frame.Cursor.X, frame.Cursor.Y)));
@@ -340,7 +345,7 @@ internal sealed class PracticePinScene : TutorialScene
         int step = Id switch
         {
             "pin-resize" => segment is "open" or "corner" ? 1 : segment == "resize" ? 2 : 3,
-            "pin-opacity" => segment is "open" or "hover" ? 1 : segment is "opacity" or "open-menu" or "menu" ? 2 : 3,
+            "pin-opacity" => segment is "open" or "hover" or "select" ? 1 : segment is "opacity" or "open-menu" or "menu" ? 2 : 3,
             "practice-image-pin" => segment is "copied" or "beside" ? 1 : segment == "shortcut" ? 2 : 3,
             "practice-pin-close" => segment is "open" or "hover" ? 1 : segment is "close" or "close-pin" ? 2 : 3,
             "pin-restore" => segment is "open" or "hover" or "close" or "close-pin" or "closed" ? 1
@@ -502,7 +507,10 @@ internal sealed class PracticePinScene : TutorialScene
             double height = cropToTarget ? Math.Min(164, menu.ActualHeight) : menu.ActualHeight;
             double top = cropToTarget ? Math.Clamp(choice.Y + choice.Height / 2 - height / 2, 0, menu.ActualHeight - height) : 0;
             _source = new Rect(0, top, menu.ActualWidth, height);
-            _scale = Math.Min(scale, (Stage.Width - origin.X - 38) / _source.Width);
+            // Enlarged as far as the room to the right of and below the origin allows.
+            _scale = Math.Min(Math.Min(scale, (Stage.Width - origin.X - 38) / _source.Width),
+                (Stage.SceneHeight - origin.Y - 12) / _source.Height);
+            if (_scale <= 0) throw new InvalidOperationException("The menu has no room at its origin.");
             _target = new Rect(origin, new Size(_source.Width * _scale, _source.Height * _scale));
             if (_target.Bottom > Stage.SceneHeight) throw new InvalidOperationException("The enlarged menu exceeds the scene.");
         }

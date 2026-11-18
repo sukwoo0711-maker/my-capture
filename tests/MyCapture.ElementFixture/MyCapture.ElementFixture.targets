@@ -1,0 +1,19 @@
+<Project>
+  <!-- A test-only executable compiled with the test project's already restored framework references.
+       No extra NuGet graph, application reference, solution entry or product packaging. -->
+  <Target Name="BuildElementFixture" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="$(MSBuildThisFileDirectory)Program.cs;$(MSBuildThisFileFullPath);@(ReferencePath)"
+          Outputs="$(TargetDir)MyCapture.ElementFixture.dll">
+    <Csc Sources="$(MSBuildThisFileDirectory)Program.cs" References="@(ReferencePath)"
+         OutputAssembly="$(TargetDir)MyCapture.ElementFixture.dll" TargetType="Exe"
+         LangVersion="$(LangVersion)" Nullable="enable" Platform="$(PlatformTarget)"
+         TreatWarningsAsErrors="true" UseSharedCompilation="false" />
+  </Target>
+  <Target Name="CopyElementFixtureRuntimeConfig" AfterTargets="Build" DependsOnTargets="BuildElementFixture"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="$(TargetDir)$(TargetName).runtimeconfig.json"
+          Outputs="$(TargetDir)MyCapture.ElementFixture.runtimeconfig.json">
+    <Copy SourceFiles="$(TargetDir)$(TargetName).runtimeconfig.json"
+          DestinationFiles="$(TargetDir)MyCapture.ElementFixture.runtimeconfig.json" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

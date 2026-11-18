@@ -36,21 +36,31 @@ internal sealed class CaptureSourceActions
     {
         if (!source.HasSource) return string.Empty;
         if (source.Kind == CaptureProvenanceKind.Web)
-            return Launch(new ProcessStartInfo(source.Url) { UseShellExecute = true }, "Library.SourcePage.OpenFailed");
+        {
+            // The browser the page was captured in, while it is installed; otherwise the default browser.
+            ProcessStartInfo? page = source.AppExecutablePath.Length == 0
+                ? SourceAppLaunch.CreateUrl(source.Url, null)
+                : await Task.Run(() => SourceAppLaunch.CreateUrl(source.Url, source.AppExecutablePath, _fileExists));
+            return Launch(page, "Library.SourcePage.OpenFailed");
+        }
         if (source.Kind == CaptureProvenanceKind.App)
         {
-            if (!source.CanOpen || !await Task.Run(() => FileExists(source.AppExecutablePath)))
-                return UiText.Get("Source.AppMissing");
-            return Launch(new ProcessStartInfo(source.AppExecutablePath) { UseShellExecute = false }, "Source.AppOpenFailed");
+            if (!source.CanOpen) return UiText.Get("Source.AppMissing");
+            // The executable, or a Store app by its ID once an update has replaced the executable's folder.
+            ProcessStartInfo? app = await Task.Run(() => SourceAppLaunch.CreateApp(source.AppExecutablePath,
+                source.AppUserModelId, _explorerPath, _fileExists));
+            return app is null ? UiText.Get("Source.AppMissing") : Launch(app, "Source.AppOpenFailed");
         }
 
         return await Task.Run(() =>
         {
             string path = source.DocumentPath;
-            if (!SourceDocument.IsSupportedApp(source.AppExecutablePath) && DirectoryExists(path))
+            if (!SourceDocument.IsFileSource(source.AppExecutablePath) && DirectoryExists(path))
                 return Launch(SourceDocument.CreateOpenFolderStartInfo(path, _explorerPath, selectFile: false), "Library.Source.OpenFolderFailed");
             if (!FileExists(path)) return UiText.Get("Library.Source.FileMissing");
-            return Launch(SourceDocument.CreateOpenStartInfo(path, _textEditorPath, _fileExists), "Library.Source.OpenFileFailed");
+            // The captured application when it is a known document application; otherwise the safe plan.
+            return Launch(SourceDocument.CreateOpenStartInfo(path, _textEditorPath, _fileExists, source.AppExecutablePath),
+                "Library.Source.OpenFileFailed");
         });
     }
 
@@ -58,7 +68,7 @@ internal sealed class CaptureSourceActions
     {
         string path = source.DocumentPath;
         if (path.Length == 0) return string.Empty;
-        bool document = SourceDocument.IsSupportedApp(source.AppExecutablePath);
+        bool document = SourceDocument.IsFileSource(source.AppExecutablePath);
         bool file = FileExists(path);
         bool directory = !document && !file && DirectoryExists(path);
         if (!file && !directory && allowMissingParent)

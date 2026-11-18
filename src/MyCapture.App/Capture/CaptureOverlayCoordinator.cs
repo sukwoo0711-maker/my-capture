@@ -28,6 +28,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private NativeCaptureOverlay? _nativeOverlay;
     internal bool UseNativeDibSelector { get; set; } = true;
     internal NativeSelectorChromeStrategy NativeChromeStrategy { get; set; } = NativeSelectorChromeStrategy.Retained;
+    internal bool SkipNativeChromeShowRestackForProbe { get; set; }
     internal NativeCaptureOverlay? NativeOverlayForProbe => _nativeOverlay;
     internal Func<RectD, bool, bool, NativeCaptureOverlay> CreateNativeSelector { get; set; } =
         (bounds, abortOnFocusLoss, showMagnifier) => new(bounds, abortOnFocusLoss, showMagnifier);
@@ -59,8 +60,23 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
         : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
             new BrowserPageUrlService(waitForBusyProbe: true).ReadAsync,
-            new WindowSourceService(waitForBusyProbe: true).ReadAsync)
+            new WindowSourceService(waitForBusyProbe: true))
     {
+    }
+
+    private CaptureOverlayCoordinator(
+        ScreenCaptureEngine captureEngine,
+        WindowCandidateService windowCandidates,
+        ILogger<CaptureOverlayCoordinator> log,
+        Func<bool, FrozenFrame>? acquireFrame,
+        Func<RectD>? desktopBounds,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> readPageUrls,
+        WindowSourceService sources)
+        : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
+            readPageUrls, sources.ReadAsync)
+    {
+        ReadEditorDocuments = sources.ReadEditorDocumentsAsync;
     }
 
     private CaptureOverlayCoordinator(
@@ -101,6 +117,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// replace it; null skips source metadata entirely.
     /// </summary>
     internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? ReadWindowSources { get; set; }
+
+    /// <summary>
+    /// Reads a code editor's document again after the capture, for editor windows whose confirmed source
+    /// has none (<see cref="WindowSourceService.ReadEditorDocumentsAsync"/>). Null skips it.
+    /// </summary>
+    internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, string>>>? ReadEditorDocuments { get; set; }
 
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
     internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
@@ -169,6 +191,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Raised when the complete selector/editor session has ended.</summary>
     internal event EventHandler? OverlayClosed;
     internal event Action? SessionStarted;
+    /// <summary>No selector or frame preparation remains, even if an editor is still open.</summary>
+    internal event Action? SelectorClosed;
     private readonly Dictionary<object, PracticeCaptureTarget> _practiceSelectors = [];
     private readonly HashSet<object> _practiceSelections = [];
     private PracticeCaptureTarget? _persistingPracticeCapture;
@@ -297,20 +321,25 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 
+    /// <param name="mode">The mode the selector opens in: <see cref="CaptureSelectorMode.Scroll"/> for the scrolling command.</param>
+    /// <param name="delaySeconds">A delay armed when the selector opens, for the delayed capture command.</param>
     internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true,
-        bool textCapture = false, bool preserveEditor = false, PracticeCaptureTarget? practiceTarget = null)
+        bool textCapture = false, bool preserveEditor = false, PracticeCaptureTarget? practiceTarget = null,
+        CaptureSelectorMode mode = CaptureSelectorMode.Capture, int delaySeconds = 0)
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
         SelectorTimeline.Mark?.Invoke("start");
         if (_editorScreenCapture is { } current)
         {
+            current.ApplyStartRequest(mode, delaySeconds);
             current.ActivateCurrent();
             return;
         }
         if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
         {
-            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget);
+            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget,
+                mode, delaySeconds);
             return;
         }
 
@@ -324,6 +353,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // The text capture command over an open selector switches it to text mode.
         if (textCapture && _activeOverlay is { TextCaptureAvailable: true } open) open.TextCaptureMode = true;
         if (textCapture && _nativeOverlay is { TextCaptureAvailable: true } native) native.TextCaptureMode = true;
+        // The scrolling and delayed commands over an open selector switch it the same way.
+        ApplyStartRequest(mode, delaySeconds);
 
         if (ActivateCurrent())
         {
@@ -338,7 +369,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             ShowSelectionGrid = showSelectionGrid,
             TextCapture = textCapture && TextCaptureRequested is not null,
             PracticeTarget = practiceTarget,
+            Mode = mode,
+            DelaySeconds = Math.Max(0, delaySeconds),
         };
+        _includeCursor = includeCursor;
         _practiceCancellationIssued = false;
         _preparation = preparation;
         SessionStarted?.Invoke();
@@ -374,13 +408,30 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal static bool NeedsPresentationSettle(long currentTick, long lastDismissedTick)
         => PresentationDismissals.IsRecent(currentTick, lastDismissedTick);
 
+    /// <summary>Puts an open selector in the requested mode and arms the requested delay.</summary>
+    private void ApplyStartRequest(CaptureSelectorMode mode, int delaySeconds)
+    {
+        if (_nativeOverlay is { } native)
+        {
+            if (mode == CaptureSelectorMode.Scroll) native.SelectMode(mode);
+            if (delaySeconds > 0) native.ArmedDelaySeconds = delaySeconds;
+        }
+        if (_activeOverlay is { } overlay)
+        {
+            if (mode == CaptureSelectorMode.Scroll) overlay.SelectMode(mode);
+            if (delaySeconds > 0) overlay.ArmedDelaySeconds = delaySeconds;
+        }
+    }
+
     private void StartOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist,
-        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid, bool textCapture, PracticeCaptureTarget? practiceTarget)
+        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid, bool textCapture, PracticeCaptureTarget? practiceTarget,
+        CaptureSelectorMode mode, int delaySeconds)
     {
         CaptureOverlayCoordinator nested = CreateCaptureOverEditor(persist);
         try
         {
-            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget: practiceTarget);
+            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget: practiceTarget,
+                mode: mode, delaySeconds: delaySeconds);
             LastPreparationForTest = nested.LastPreparationForTest;
         }
         catch
@@ -396,6 +447,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var nested = new CaptureOverlayCoordinator(_captureEngine, _windowCandidates, _log,
             _acquireFrame, _desktopBounds, _readWindowCandidates, ReadPageUrls, ReadWindowSources)
         {
+            ReadEditorDocuments = ReadEditorDocuments,
             SelectionPersistRequested = persist,
             OpenEditorAfterCapture = () => false,
             AutoDetectWindows = AutoDetectWindows,
@@ -405,6 +457,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             ApplyNativeCaptureExclusion = ApplyNativeCaptureExclusion,
             UseNativeDibSelector = UseNativeDibSelector,
             NativeChromeStrategy = NativeChromeStrategy,
+            SkipNativeChromeShowRestackForProbe = SkipNativeChromeShowRestackForProbe,
             CreateNativeSelector = CreateNativeSelector,
             ShowNativeSelector = ShowNativeSelector,
             TextCaptureRequested = TextCaptureRequested,
@@ -414,8 +467,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             ColorCopied = ColorCopied,
             ReadColorFormat = ReadColorFormat,
         };
+        // A test's countdown carries over; the default stays the nested session's own.
+        nested._runDelay = _runDelay;
+        nested.DelayCancelled += () => DelayCancelled?.Invoke();
+        nested.DelayExclusionFailed += () => DelayExclusionFailed?.Invoke();
         nested._presentationDismissals = _presentationDismissals;
         nested.SessionStarted += () => SessionStarted?.Invoke();
+        nested.SelectorClosed += () => SelectorClosed?.Invoke();
         _editorScreenCapture = nested;
         nested.TransitionFailed += error => TransitionFailed?.Invoke(error);
         nested.OverlayClosed += (_, _) =>
@@ -439,10 +497,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation) =>
         AcquirePreparedFrameAsync(preparation, includeCursor, settlePresentation).ContinueWith(acquired =>
         {
+            SelectorTimeline.Mark?.Invoke("frame-continuation-enter");
             var (frame, failure, confirmedWindows) = acquired.GetAwaiter().GetResult();
             // Complete on the same dispatcher turn that shows the selector. Extra asynchronous
             // continuations here leave a visible selector with its preparation still pending.
-            return DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure, confirmedWindows));
+            return DispatchAsync(() =>
+            {
+                SelectorTimeline.Mark?.Invoke("frame-dispatch-enter");
+                return ShowPreparedFrame(preparation, frame, failure, confirmedWindows);
+            });
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();
 
     private async Task<(FrozenFrame? Frame, Exception? Failure, Task<IReadOnlyList<WindowCandidate>>? Windows)>
@@ -470,7 +533,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             }, ReadPageUrls,
                 () => _readWindowCandidates(preparation.DesktopBounds),
                 ReadWindowSources,
-                settlePresentation ? Task.Delay(100) : null).ConfigureAwait(false);
+                settlePresentation ? Task.Delay(100) : null,
+                ReadEditorDocuments).ConfigureAwait(false);
+            SelectorTimeline.Mark?.Invoke("frame-acquire-await-complete");
             frame = capturedFrame;
             confirmedWindows = sourceWindows;
             LastSourceDetailsForTest = sourceWindows;
@@ -486,6 +551,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // The selector appears as soon as its frozen pixels exist. A browser walk on any monitor
         // costs up to ten screen grabs, so the page and application details never hold it back:
         // the selector and every selection made on it receive them when the reads finish.
+        SelectorTimeline.Mark?.Invoke("frame-acquire-return");
         return (frame, failure, confirmedWindows);
     }
 
@@ -519,7 +585,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private Task<bool> DispatchAsync(Func<bool> step)
     {
         if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return Task.FromResult(false);
-        return _dispatcher.InvokeAsync(step).Task.ContinueWith(completed =>
+        SelectorTimeline.Mark?.Invoke("frame-dispatch-posting");
+        DispatcherOperation<bool> operation = _dispatcher.InvokeAsync(step);
+        SelectorTimeline.Mark?.Invoke("frame-dispatch-posted");
+        return operation.Task.ContinueWith(completed =>
         {
             try
             {
@@ -643,6 +712,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             PracticeTarget = _preparation?.PracticeTarget,
             SourceWindows = _preparation?.SourceWindows ?? [],
             TextCapture = _preparation?.TextCapture == true,
+            Mode = _preparation?.Mode ?? CaptureSelectorMode.Capture,
+            DelaySeconds = _preparation?.DelaySeconds ?? 0,
         };
         if (UseNativeDibSelector)
         {
@@ -697,6 +768,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             };
             overlay.ReadColorFormat = ReadColorFormat;
             overlay.TextCaptureAvailable = TextCaptureRequested is not null;
+            overlay.FreeformUnavailableReason = presentation.TextCapture ? UiText.Get("CaptureFreeform_Text") : null;
             overlay.TextCaptureMode = presentation.TextCapture;
             // The screenshot selector always offers its modes as a bar; recording keeps the plain selector.
             overlay.ShowModeBar = true;
@@ -707,6 +779,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
             // F3 pins the chosen region (ConfirmSelectionAsPin), except while an editor is open for a retake.
             overlay.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
+            overlay.ArmedDelaySeconds = presentation.DelaySeconds;
+            if (presentation.Mode == CaptureSelectorMode.Scroll) overlay.SelectMode(CaptureSelectorMode.Scroll);
             overlay.SelectionCompleted += OnOverlaySelectionCompleted;
             overlay.ActionRequested += OnOverlayActionRequested;
             overlay.ContentRendered += OnFirstRendered;
@@ -747,6 +821,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var native = CreateNativeSelector(presentation.Bounds, presentation.AbortOnFocusLoss, presentation.ShowMagnifier);
         _nativeOverlay = native;
         native.ChromeStrategy = NativeChromeStrategy;
+        native.SkipChromeShowRestackForProbe = SkipNativeChromeShowRestackForProbe;
         native.RequireCaptureExclusion = RequiresCaptureExclusion?.Invoke() == true;
         native.SourceWindows = presentation.SourceWindows;
         if (presentation.SourceDetails is { } sourceDetails) native.AwaitSourceDetails(sourceDetails);
@@ -754,11 +829,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.ColorCopied = feedback => { if (!_disposed) ColorCopied?.Invoke(feedback); };
         native.ReadColorFormat = ReadColorFormat;
         native.TextCaptureAvailable = TextCaptureRequested is not null;
+        native.FreeformUnavailableReason = presentation.TextCapture ? UiText.Get("CaptureFreeform_Text") : null;
         native.TextCaptureMode = presentation.TextCapture;
         native.DetectWindows = AutoDetectWindows();
         native.OffersOtherActions = SelectorActionRequested is not null;
         native.CanRepeatLastRegion = CanRepeatLastRegion;
         native.ShowSelectionGrid = presentation.ShowSelectionGrid;
+        native.ArmedDelaySeconds = presentation.DelaySeconds;
+        if (presentation.Mode == CaptureSelectorMode.Scroll) native.SelectMode(CaptureSelectorMode.Scroll);
         if (presentation.PracticeTarget is { } practice) _practiceSelectors[native] = practice;
         native.ShowStartGuide = ClaimStartGuide();
         native.ClaimKeyPanel = ClaimKeyPanel;
@@ -768,6 +846,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         native.InputReady += OnNativeInputReady;
         native.ActionRequested += OnOverlayActionRequested;
         native.Failed += OnNativeFailed;
+        native.ChromePlacementMissed = error =>
+            _log.LogWarning(error, "Capture selector chrome missed its bounds; the selection continues");
         native.Closed += OnNativeOverlayClosed;
         native.Prepare(ApplyNativeCaptureExclusion);
         if (presentation.Frame is { } frame) { native.AttachFrame(frame); ShowNativeSelector(native); }
@@ -860,6 +940,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         internal Task<IReadOnlyList<WindowCandidate>>? SourceDetails { get; set; }
         internal bool TextCapture { get; set; }
         internal bool PracticeReady { get; set; }
+        internal CaptureSelectorMode Mode { get; init; }
+        internal int DelaySeconds { get; init; }
     }
 
     internal bool StartWithSelection(FrozenFrame frame, RectD region) =>
@@ -995,6 +1077,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         internal bool ShowSelectionGrid { get; init; } = true;
         internal bool TextCapture { get; init; }
         internal PracticeCaptureTarget? PracticeTarget { get; init; }
+        internal CaptureSelectorMode Mode { get; init; }
+        internal int DelaySeconds { get; init; }
         internal volatile bool Cancelled;
         internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
@@ -1083,6 +1167,40 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         SessionStarted?.Invoke();
         try
         {
+            if (selection.DelaySeconds > 0)
+            {
+                // The selector has closed. Count down clear of the region, then take the region
+                // again from the screen as it is now; that capture is the one kept.
+                DelayOutcome outcome;
+                _countingDown++;
+                try
+                {
+                    outcome = await RunDelay(selection.DelaySeconds, ScreenRegion(selection), transition.Token);
+                }
+                finally
+                {
+                    _countingDown--;
+                }
+                if (outcome == DelayOutcome.ExclusionFailed)
+                {
+                    // A recording needs the countdown kept out of its frames; it could not be, so
+                    // nothing was shown and nothing is captured.
+                    _log.LogWarning("Delayed capture stopped: the countdown could not be excluded from the recording");
+                    CancelPractice(selection.PracticeTarget);
+                    DelayExclusionFailed?.Invoke();
+                    return;
+                }
+                if (outcome != DelayOutcome.Elapsed)
+                {
+                    _log.LogInformation("Delayed capture cancelled during the countdown");
+                    CancelPractice(selection.PracticeTarget);
+                    DelayCancelled?.Invoke();
+                    return;
+                }
+                if (transition.IsCancellationRequested) return;
+                selection = await RetakeAsync(selection);
+            }
+
             if (SelectionPersistRequested is not null)
             {
                 await SelectionPersistRequested(selection);
@@ -1156,6 +1274,109 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             transition.Dispose();
             EndSessionIfIdle();
         }
+    }
+
+    private bool _includeCursor;
+    private int _countingDown;
+
+    /// <summary>True while a delayed capture counts down; the selector has already closed.</summary>
+    internal bool IsCountingDown => !_disposed && (_countingDown > 0 || _editorScreenCapture?.IsCountingDown == true);
+
+    /// <summary>Told when Esc ends a delayed capture's countdown; nothing was captured.</summary>
+    internal event Action? DelayCancelled;
+
+    /// <summary>
+    /// Told when a recording requires capture exclusion and the countdown window could not be
+    /// excluded: no countdown was shown and nothing was captured.
+    /// </summary>
+    internal event Action? DelayExclusionFailed;
+
+    /// <summary>How a delayed capture's countdown ended.</summary>
+    internal enum DelayOutcome
+    {
+        /// <summary>The seconds passed and the countdown has left the screen.</summary>
+        Elapsed,
+
+        /// <summary>Esc or the session ended it.</summary>
+        Cancelled,
+
+        /// <summary>A recording requires exclusion and the countdown could not be excluded; it was never shown.</summary>
+        ExclusionFailed,
+    }
+
+    /// <summary>
+    /// Counts <c>seconds</c> down clear of the region (virtual-desktop pixels). Tests replace it; the
+    /// default is <see cref="CountDownAsync"/>.
+    /// </summary>
+    internal Func<int, RectD, CancellationToken, Task<DelayOutcome>> RunDelay
+    {
+        get => _runDelay ??= CountDownAsync;
+        set => _runDelay = value;
+    }
+
+    private Func<int, RectD, CancellationToken, Task<DelayOutcome>>? _runDelay;
+
+    private static RectD ScreenRegion(CaptureSelectionCompletedEventArgs selection)
+    {
+        RectD frame = selection.Frame.ScreenBounds;
+        return new RectD(frame.Left + selection.BitmapRegion.Left, frame.Top + selection.BitmapRegion.Top,
+            selection.BitmapRegion.Width, selection.BitmapRegion.Height);
+    }
+
+    /// <summary>The same region from a new picture of the desktop, taken off the dispatcher.</summary>
+    private async Task<CaptureSelectionCompletedEventArgs> RetakeAsync(CaptureSelectionCompletedEventArgs selection)
+    {
+        bool includeCursor = _includeCursor;
+        FrozenFrame fresh = await Task.Run(() => _acquireFrame(includeCursor)).ConfigureAwait(true);
+        if (fresh.ScreenBounds.ToPixelBounds() != selection.Frame.ScreenBounds.ToPixelBounds())
+            throw new InvalidOperationException(UiText.Get("Capture.DisplayChanged"));
+        System.Windows.Media.Imaging.BitmapSource crop = selection.Freeform is { } outline
+            ? FreeformCapture.Crop(fresh, outline) : ScreenCaptureEngine.Crop(fresh, selection.BitmapRegion);
+        _log.LogInformation("Delayed capture retook the region after {Seconds}s", selection.DelaySeconds);
+        return selection.Retaken(fresh, crop);
+    }
+
+    /// <summary>
+    /// The countdown window, placed clear of the region on its monitor. It closes, exit included,
+    /// before this returns <see cref="DelayOutcome.Elapsed"/>, so it is never in the new picture.
+    /// While a recording requires capture exclusion the window is excluded before it is shown;
+    /// when that fails it is closed unshown, as the old countdown-first flow did.
+    /// </summary>
+    private async Task<DelayOutcome> CountDownAsync(int seconds, RectD region, CancellationToken cancellation)
+    {
+        var countdown = new CountdownWindow(seconds);
+        if (RequiresCaptureExclusion?.Invoke() == true && !ApplyCaptureExclusion(countdown))
+        {
+            countdown.Close();
+            return DelayOutcome.ExclusionFailed;
+        }
+        var outcome = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        countdown.Elapsed += (_, _) => outcome.TrySetResult(true);
+        countdown.Cancelled += (_, _) => outcome.TrySetResult(false);
+        countdown.Closed += (_, _) => { outcome.TrySetResult(false); closed.TrySetResult(); };
+        using CancellationTokenRegistration registration = cancellation.Register(() => outcome.TrySetResult(false));
+        try
+        {
+            IReadOnlyList<MonitorInfo> monitors = MonitorEnumerator.GetAll();
+            if (MonitorWindowPlacement.MonitorFor(monitors, region) is { } monitor && countdown.Content is FrameworkElement content)
+            {
+                content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                MonitorWindowPlacement.PlaceClearOf(countdown, monitor, content.DesiredSize, region);
+            }
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            // Centred on the pointer's monitor, as before.
+        }
+        countdown.Show();
+        countdown.Activate();
+        bool elapsed = await outcome.Task.ConfigureAwait(true);
+        if (countdown.IsVisible || !closed.Task.IsCompleted) countdown.Close();
+        await closed.Task.ConfigureAwait(true);
+        // One more dispatcher turn so the closed window has left the composed desktop.
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        return elapsed ? DelayOutcome.Elapsed : DelayOutcome.Cancelled;
     }
 
     /// <summary>Reads the displays when the editor opens. Tests replace it.</summary>
@@ -1244,6 +1465,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private void EndSessionIfIdle()
     {
+        if (!_disposed && !_handlingNativeFailure && !IsSelecting) SelectorClosed?.Invoke();
         if (!_disposed && !_handlingNativeFailure && _preparation is null && _activeOverlay is null && _nativeOverlay is null && _activeEditor is null && !_isOpeningEditor && _editorScreenCapture is null)
         {
             OverlayClosed?.Invoke(this, EventArgs.Empty);

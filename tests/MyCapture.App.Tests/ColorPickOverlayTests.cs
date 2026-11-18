@@ -61,8 +61,8 @@ public sealed class ColorPickOverlayTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "클릭 또는 C: 색상 복사 후 캡처 종료")]
-    [InlineData("en-US", "Click or C: Copy color and end capture")]
+    [InlineData("ko-KR", "클릭 또는 Enter: 색상 복사")]
+    [InlineData("en-US", "Click or Enter: Copy color")]
     public void ColorModeKeepsCopyAndEndHintOnlyWithoutModeBar(string language, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
@@ -95,7 +95,7 @@ public sealed class ColorPickOverlayTests
     [InlineData(ColorFormat.Hex, "#604020")]
     [InlineData(ColorFormat.Rgb, "rgb(96, 64, 32)")]
     [InlineData(ColorFormat.Hsl, "hsl(30, 50%, 25%)")]
-    public void CKeyCopiesTheFrozenPixelInTheConfiguredFormatAndEndsTheOverlay(ColorFormat format, string expected) =>
+    public void CKeyEntersColorModeAndEnterCopiesTheFrozenPixelInTheConfiguredFormat(ColorFormat format, string expected) =>
         StaTestHost.Run(() =>
         {
             using var language = UiText.UseLanguage("ko-KR");
@@ -118,8 +118,17 @@ public sealed class ColorPickOverlayTests
                 view.InitializePointer();
                 KeyEventArgs key = KeyArgs(Key.C);
                 view.RaiseEvent(key);
-
+                // C switches to the colour mode (the bar shows it checked); it copies nothing.
                 Assert.True(key.Handled);
+                Assert.Empty(copied);
+                Assert.Equal(CaptureSelectorMode.Color, view.Mode);
+                Assert.Equal(true, view.ModeBarForTest!.ColorButton.IsChecked);
+                Assert.Equal("C", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(view.ModeBarForTest.ColorButton));
+                Assert.EndsWith("(C)", (string)view.ModeBarForTest.ColorButton.ToolTip, StringComparison.Ordinal);
+                KeyEventArgs enter = KeyArgs(Key.Enter);
+                view.RaiseEvent(enter);
+
+                Assert.True(enter.Handled);
                 Assert.Equal(new[] { expected }, copied);
                 Assert.NotNull(feedback);
                 Assert.Equal(UiText.Format("Tools_ColorCopied", expected), feedback.Message);
@@ -129,12 +138,6 @@ public sealed class ColorPickOverlayTests
                 Assert.Equal(0, confirmed);
                 Assert.Null(view.CopyColorAtPointerAsync().Result);
                 Assert.Single(copied);
-                // C is a shortcut, not a mode switch: the bar still shows image capture, and its
-                // colour button names C as its accelerator key and in its tooltip (no badge on the bar).
-                Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
-                Assert.Equal(System.Windows.Visibility.Visible, view.ModeBarForTest!.ColorButton.Visibility);
-                Assert.Equal("C", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(view.ModeBarForTest.ColorButton));
-                Assert.EndsWith("(C)", (string)view.ModeBarForTest.ColorButton.ToolTip, StringComparison.Ordinal);
             }
             finally { view.ReleaseResources(); }
         });
@@ -199,8 +202,8 @@ public sealed class ColorPickOverlayTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "선택 중 색상 복사 후 캡처 종료")]
-    [InlineData("en-US", "Copy color and end capture while selecting")]
+    [InlineData("ko-KR", "선택 중 색상 복사 모드")]
+    [InlineData("en-US", "Color copy mode while selecting")]
     public void ExistingShortcutHelpExplainsCopyAndEndCapture(string language, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);

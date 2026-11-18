@@ -581,6 +581,7 @@ internal sealed class RecordingControlWindow : Window
         };
         frame.GotKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
         frame.LostKeyboardFocus += (_, _) => UpdateRegionFrameBrush(frame);
+        KeyboardFocusCue.AddVisibilityChangedHandler(frame, (_, _) => UpdateRegionFrameBrush(frame));
 
         AutomationProperties.SetName(frame, UiText.Get("Text_E7A732EAE7D5"));
         AutomationProperties.SetHelpText(
@@ -1248,7 +1249,7 @@ internal sealed class RecordingControlWindow : Window
     {
         frame.BorderBrush = _paused
             ? CreatePausedFrameBrush()
-            : frame.IsKeyboardFocusWithin
+            : frame.IsKeyboardFocusWithin && KeyboardFocusCue.GetIsVisible(frame)
                 ? TryBrush("Border.Focus", Colors.White)
                 : TryBrush("Recording.Live", Colors.OrangeRed);
     }
@@ -1678,7 +1679,10 @@ internal sealed class RecordingControlWindow : Window
                 ? LoadWatermarkImage is { } load ? load() : RecordingWatermarkAssets.Load(WatermarkImageFolder)
                 : null;
             RecordingWatermarkSnapshot snapshot = RecordingWatermarkSnapshot.Create(_watermarkSettings, pixels);
-            _watermark = new RecordingWatermarkWindow(_screenRegion, ResolveWindowScale(), snapshot);
+            _watermark = new RecordingWatermarkWindow(_screenRegion, ResolveWindowScale(), snapshot)
+            {
+                PlacementMissed = error => _log.LogWarning(error, "The recording watermark missed its bounds; it stays where Windows put it"),
+            };
             if (IsVisible) _watermark.Show();
             _statusText.Text = string.Empty;
             return true;

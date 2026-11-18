@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App.Gallery;
 
@@ -49,9 +50,9 @@ public static class GalleryCardInput
     private static void OnTrackChanged(DependencyObject owner, DependencyPropertyChangedEventArgs e)
     {
         if (owner is not UIElement element) return;
-        element.GotKeyboardFocus -= OnGotKeyboardFocus;
-        element.LostKeyboardFocus -= OnLostKeyboardFocus;
-        element.RemoveHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown));
+        element.RemoveHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnGotKeyboardFocus));
+        element.RemoveHandler(Keyboard.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnLostKeyboardFocus));
+        KeyboardFocusCue.RemoveVisibilityChangedHandler(element, OnCueChanged);
         element.RemoveHandler(UIElement.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPreviewMouseDown));
         if (!(bool)e.NewValue)
         {
@@ -59,18 +60,17 @@ public static class GalleryCardInput
             return;
         }
 
-        element.GotKeyboardFocus += OnGotKeyboardFocus;
-        element.LostKeyboardFocus += OnLostKeyboardFocus;
+        element.AddHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnGotKeyboardFocus), handledEventsToo: true);
+        element.AddHandler(Keyboard.LostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnLostKeyboardFocus), handledEventsToo: true);
+        KeyboardFocusCue.AddVisibilityChangedHandler(element, OnCueChanged);
         // Also when a handler above the card already took the press or the key (the list handles a card click and
         // the content area handles the card keys): the ring follows what the user did, not who handled it.
-        element.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown), handledEventsToo: true);
         element.AddHandler(UIElement.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPreviewMouseDown), handledEventsToo: true);
     }
 
     private static void OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (InputManager.Current.MostRecentInputDevice is KeyboardDevice && Mouse.LeftButton != MouseButtonState.Pressed)
-            ((UIElement)sender).SetValue(ShowsKeyboardFocusKey, true);
+        UpdateVisibility((UIElement)sender);
     }
 
     private static void OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -80,10 +80,11 @@ public static class GalleryCardInput
         card.SetValue(ShowsKeyboardFocusKey, false);
     }
 
-    private static void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    private static void OnCueChanged(object sender, RoutedEventArgs e) => UpdateVisibility((UIElement)sender);
+
+    private static void UpdateVisibility(UIElement card)
     {
-        var card = (UIElement)sender;
-        if (card.IsKeyboardFocusWithin) card.SetValue(ShowsKeyboardFocusKey, true);
+        card.SetValue(ShowsKeyboardFocusKey, card.IsKeyboardFocusWithin && KeyboardFocusCue.GetIsVisible(card));
     }
 
     private static void OnPreviewMouseDown(object sender, MouseButtonEventArgs e) =>

@@ -11,8 +11,9 @@ namespace MyCapture.App.Diagnostics;
 /// </summary>
 /// <remarks>
 /// Memory is read with ReadProcessMemory on this process, so a block freed by another thread while
-/// it is read fails the read instead of faulting. Heaps are walked under HeapLock. Nothing here runs
-/// outside an audit run.
+/// it is read fails the read instead of faulting. Only the process default heap is walked (under
+/// HeapLock); other heaps are listed as not walked unless MYCAPTURE_RESIDENT_FOREIGN_HEAPS=1. Nothing
+/// here runs outside an audit run.
 /// </remarks>
 internal static class ResidentProbeMemoryMap
 {
@@ -47,12 +48,17 @@ internal static class ResidentProbeMemoryMap
     /// <summary>Allocations at least this large are listed one by one and fingerprinted.</summary>
     private const long ListedBytes = 1L << 20;
 
-    internal static Snapshot Take(string step)
+    /// <summary>Note of a heap row for a heap this process did not touch (other code's private heap).</summary>
+    internal const string NotWalkedNote = "private heap, not walked";
+
+    internal static Snapshot Take(string step) => Take(step, ForeignHeapsEnabled());
+
+    internal static Snapshot Take(string step, bool walkForeignHeaps)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         List<Group> groups = Enumerate();
         MarkManagedHeap(groups);
-        List<HeapRow> heaps = WalkHeaps(groups);
+        List<HeapRow> heaps = WalkHeaps(groups, walkForeignHeaps);
         foreach (Group group in groups.Where(group => group.Type == MemPrivate && group.Owner is null))
             group.Owner = group.Guard ? "thread stack" : "direct VirtualAlloc";
         // Every committed private page's residency, before any page is read: committed memory never
@@ -160,18 +166,71 @@ internal static class ResidentProbeMemoryMap
         GC.KeepAlive(pinned);
     }
 
-    private static List<HeapRow> WalkHeaps(List<Group> groups)
+    /// <summary>Environment switch that also walks heaps created by other code. Unsafe, see <see cref="WalkHeaps"/>.</summary>
+    internal const string ForeignHeapsVariable = "MYCAPTURE_RESIDENT_FOREIGN_HEAPS";
+
+    /// <summary>How many times the heap list is read into a grown buffer before the part that fits is used.</summary>
+    internal const int HeapListAttempts = 4;
+
+    private static bool ForeignHeapsEnabled() =>
+        string.Equals(Environment.GetEnvironmentVariable(ForeignHeapsVariable), "1", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether a <c>GetProcessHeaps</c> result of <paramref name="returned"/> heaps fits a buffer of
+    /// <paramref name="capacity"/> entries: 0 when it fits, otherwise the larger capacity to retry with
+    /// (the list can grow between calls, so some slack is added).
+    /// </summary>
+    internal static int HeapListRetryCapacity(uint returned, int capacity) =>
+        returned <= (uint)Math.Max(0, capacity) ? 0 : (int)Math.Min(int.MaxValue - 16L, returned + 16L);
+
+    /// <summary>How many entries of a buffer of <paramref name="capacity"/> are valid after <paramref name="returned"/> heaps were reported.</summary>
+    internal static int UsableHeapCount(uint returned, int capacity) => (int)Math.Min(returned, (uint)Math.Max(0, capacity));
+
+    private static (IntPtr[] Handles, int Count) ReadHeapHandles() => ReadHeapHandles(GetProcessHeaps);
+
+    /// <summary>
+    /// Reads the heap list through <paramref name="read"/> (GetProcessHeaps), growing the buffer while
+    /// the list does not fit. A buffer that is too small still receives as many handles as it holds, so
+    /// after the last attempt the entries of the buffer that call filled are used; a fresh buffer is
+    /// never returned without a call that filled it.
+    /// </summary>
+    internal static (IntPtr[] Handles, int Count) ReadHeapHandles(Func<uint, IntPtr[]?, uint> read)
+    {
+        int capacity = Math.Max(1, (int)Math.Min(int.MaxValue - 16L, read(0, null) + 8L));
+        IntPtr[] handles = new IntPtr[capacity];
+        for (int attempt = 1; ; attempt++)
+        {
+            uint returned = read((uint)handles.Length, handles);
+            int retry = HeapListRetryCapacity(returned, handles.Length);
+            if (retry == 0 || attempt == HeapListAttempts) return (handles, UsableHeapCount(returned, handles.Length));
+            handles = new IntPtr[retry];
+        }
+    }
+
+    /// <summary>
+    /// Walks the process default heap, which is never destroyed and is serialized. Every other heap was
+    /// created by other code: it can be destroyed after the list is taken, and HeapLock on a heap made
+    /// with HEAP_NO_SERIALIZE is undefined (it faulted the test host with 0xC0000005, which .NET cannot
+    /// catch). So by default those heaps are listed by handle only and no API is called on them.
+    /// Setting <see cref="ForeignHeapsVariable"/>=1 walks them as well: use it only in a throwaway
+    /// process, and expect that run to crash if another thread is creating or destroying heaps.
+    /// </summary>
+    private static List<HeapRow> WalkHeaps(List<Group> groups, bool walkForeignHeaps)
     {
         var rows = new List<HeapRow>();
-        uint count = GetProcessHeaps(0, null);
-        var handles = new IntPtr[Math.Max(1, count + 8)];
-        count = GetProcessHeaps((uint)handles.Length, handles);
+        (IntPtr[] handles, int count) = ReadHeapHandles();
         IntPtr processHeap = GetProcessHeap();
         var large = new List<(long Address, long Size)>(4096);
         var regions = new List<long>(256);
         for (int index = 0; index < count; index++)
         {
             IntPtr heap = handles[index];
+            if (heap != processHeap && !walkForeignHeaps)
+            {
+                rows.Add(new HeapRow(index, "0x" + heap.ToInt64().ToString("X", CultureInfo.InvariantCulture),
+                    -1, -1, -1, 0, 0, 0, 0, NotWalkedNote));
+                continue;
+            }
             var summary = new HeapSummaryInfo { cb = (uint)Marshal.SizeOf<HeapSummaryInfo>() };
             bool summarized;
             try { summarized = HeapSummary(heap, 0, ref summary); }

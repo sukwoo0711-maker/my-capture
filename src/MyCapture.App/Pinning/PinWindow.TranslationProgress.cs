@@ -135,7 +135,7 @@ internal sealed partial class PinWindow
             _translationStrip.Hide(keepSpace: false);
             return;
         }
-        double? share = _translationCount is { Completed: > 0 } count ? (double)count.Completed / count.Total : null;
+        double? share = _translationCount is { Completed: > 0 } count ? (double)count.Completed / count.Total : TranslationDownloadShare;
         _translationStrip.Show(share, FluidMotion.AnimationsEnabled);
     }
 
@@ -151,6 +151,7 @@ internal sealed partial class PinWindow
     /// <summary>A closing pin keeps no timer, handler or animation of its translation progress.</summary>
     private void ReleaseTranslationProgress()
     {
+        EndTranslationReveal();
         ResetTranslationCount();
         _translationProgressLine = null;
         _feedbackShowsTranslation = false;

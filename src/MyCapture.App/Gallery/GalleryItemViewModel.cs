@@ -248,10 +248,17 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public bool HasSourceDocumentPath => SourceDocumentPath.Length > 0;
 
     public bool IsSourceDocumentFile => HasSourceDocumentPath
-        && MyCapture.Core.Capture.SourceDocument.IsSupportedApp(SourceAppPath);
+        && MyCapture.Core.Capture.SourceDocument.IsFileSource(SourceAppPath);
 
     public bool HasUnsavedSourceDocument => IsImage && !HasSourceDocumentPath && !HasSourcePageUrl
         && MyCapture.Core.Capture.SourceDocument.IsUnsaved(SourceAppPath, SourceWindowTitle);
+
+    /// <summary>
+    /// Only the application is known: opening the source starts the application, not a page or file.
+    /// The details say so, so the result of Open source is not a surprise.
+    /// </summary>
+    public bool IsSourceAppOnly => Record.ImportedFileName is null && IsImage && SourceProvenance.IsAppOnly
+        && !HasUnsavedSourceDocument;
 
     public string SourceLocationAction => UiText.Get(IsSourceDocumentFile
         ? "Library.Source.OpenFileLocation" : "Library.Source.OpenFolder");
@@ -394,6 +401,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         if (_publishedSourceLocation.Action != sourceLocation.Action) Raise(nameof(SourceLocationAction));
         _publishedSourceLocation = sourceLocation;
         Raise(nameof(SourceDocumentPathAutomationName));
+        Raise(nameof(IsSourceAppOnly));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));

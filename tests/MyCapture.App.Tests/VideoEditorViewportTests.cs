@@ -29,9 +29,9 @@ public sealed class VideoEditorViewportTests
         RecordingResult recording = EncodeClip(Path.Combine(root, "source.mp4"), 3840, 2160);
         foreach (MonitorInfo monitor in MonitorEnumerator.GetAll())
         {
-            // A tiny nonactivating owner chooses WPF's CenterScreen target without moving
-            // the user's pointer or changing any display setting. Editor dimensions are
-            // left exactly as the production constructor computes them.
+            // The explicit monitor chooses the constructor's fit, and the tiny nonactivating
+            // owner keeps WPF's CenterScreen owner relationship on that same monitor.
+            // Editor dimensions stay exactly as the production constructor computes them.
             var owner = new Window
             {
                 Width = 1, Height = 1, WindowStyle = WindowStyle.None,
@@ -45,7 +45,8 @@ public sealed class VideoEditorViewportTests
             try
             {
                 owner.Show();
-                editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+                editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+                    pointerMonitor: monitor)
                 {
                     Owner = owner, ShowActivated = false, ShowInTaskbar = false,
                     Opacity = 0, IsHitTestVisible = false,
@@ -90,7 +91,8 @@ public sealed class VideoEditorViewportTests
         // Keep generated evidence recoverable; this fixture never deletes its temporary clip.
         string root = MyCapture.Tests.TestRecycleBin.CreateTempSubdirectory("mc-video-viewport-").FullName;
         RecordingResult recording = EncodeClip(Path.Combine(root, "source.mp4"), sourceWidth, sourceHeight);
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         try
         {
             LoadWindowTheme(editor);
@@ -216,22 +218,8 @@ public sealed class VideoEditorViewportTests
 
     private static void LoadWindowTheme(Window window)
     {
-        XElement? combined = null;
-        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(VideoEditorViewportTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            XElement dictionary = XDocument.Load(source).Root!;
-            combined ??= new XElement(dictionary.Name);
-            foreach (XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-            {
-                string value = declaration.Value;
-                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal) && !value.Contains(";assembly=", StringComparison.Ordinal))
-                    value += ";assembly=MyCapture";
-                combined.SetAttributeValue(declaration.Name, value);
-            }
-            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
-        }
-        window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+        // Use compiled product templates so custom named parts keep their namescope.
+        window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

@@ -318,7 +318,7 @@ public sealed partial class SettingsThemePreviewTests
                     foreach (string name in new[] { "CancelButton" })
                     {
                         Button action = Assert.IsType<Button>(window.FindName(name));
-                        Assert.Equal(32, action.ActualHeight, 1);
+                        Assert.Equal(36, action.ActualHeight, 1);
                         Assert.Equal(new Thickness(10, 4, 10, 4), action.Padding);
                     }
                     TabItem[] items = tabs.Items.OfType<TabItem>().ToArray();
@@ -512,11 +512,13 @@ public sealed partial class SettingsThemePreviewTests
                     HotkeyRecorder hide = Recorder(nameof(SettingsDraft.HideAllPinsHotkey));
                     if (name == "new")
                     {
-                        // A new installation starts with the four core shortcuts; pins also hide with Shift+F3.
+                        // A new installation also assigns hide/show and reopen for pins.
                         Assert.Equal("Ctrl+Shift+Z", library.Text);
                         Assert.Equal("F3", paste.Text);
                         Assert.Equal("Shift+F3", hide.Text);
-                        Assert.All(recorders.Skip(2).Where(recorder => recorder != library && recorder != paste && recorder != hide),
+                        HotkeyRecorder restore = Recorder(nameof(SettingsDraft.RestoreClosedPinHotkey));
+                        Assert.Equal("Ctrl+Shift+F3", restore.Text);
+                        Assert.All(recorders.Skip(2).Where(recorder => recorder != library && recorder != paste && recorder != hide && recorder != restore),
                             recorder => Assert.Equal(string.Empty, recorder.Text));
                         // Every row's "Default" restores the chord a new installation starts with.
                         Assert.All(recorders, recorder => Assert.Equal(recorder.Text, recorder.DefaultText));

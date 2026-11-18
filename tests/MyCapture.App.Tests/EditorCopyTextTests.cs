@@ -32,6 +32,8 @@ public sealed class EditorCopyTextTests
             Button unavailable = Command(offline, "EditorFlowCopyText");
             Assert.False(unavailable.IsEnabled);
             Assert.Equal(UiText.Get("TextCapture_Unavailable"), AutomationProperties.GetHelpText(unavailable));
+            Assert.Equal(UiText.Get("TextCapture_Unavailable"), unavailable.ToolTip);
+            Assert.True(ToolTipService.GetShowOnDisabled(unavailable));
 
             TextRecognitionRoute.Show = (image, context) => shown.Add((image, context));
             TextRecognitionRoute.IsAvailable = () => true;

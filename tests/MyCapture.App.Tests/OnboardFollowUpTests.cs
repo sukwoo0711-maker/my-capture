@@ -17,8 +17,8 @@ namespace MyCapture.App.Tests;
 public sealed class QuickAccessCardLabelTests
 {
     [Theory]
-    [InlineData("ko", new[] { "편집", "핀", "저장", "텍스트 복사", "복사" }, new[] { "편집", "핀", "저장", "텍스트", "복사" }, "자동으로 닫지 않음", "자동으로 닫지 않음")]
-    [InlineData("en", new[] { "Edit", "Pin", "Save", "Copy text", "Copy" }, new[] { "Edit", "Pin", "Save", "Text", "Copy" }, "Keep open", "Keep open")]
+    [InlineData("ko", new[] { "핀", "편집", "복사" }, new[] { "핀", "편집", "복사" }, "자동으로 닫지 않음", "자동으로 닫지 않음")]
+    [InlineData("en", new[] { "Pin", "Edit", "Copy" }, new[] { "Pin", "Edit", "Copy" }, "Keep open", "Keep open")]
     public void EveryActionHasAVisibleNameUnderItsIconAndKeepsItsAccessibleName(string language, string[] names,
         string[] visibleNames, string keepName, string keepTip) =>
         StaTestHost.Run(() =>
@@ -34,8 +34,8 @@ public sealed class QuickAccessCardLabelTests
                 // Each action is an icon with its short name below it; the first stays the primary action.
                 Assert.Equal(visibleNames, actions.Select(button => Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(button)).Text));
                 Assert.All(actions, button => Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(button)));
-                Assert.Equal(UiText.Get("QuickAccess.Library"), QuickAccessActionPanel.LabelOf(card.LibraryButtonForTest)!.Text);
-                Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(card.LibraryButtonForTest));
+                Assert.Equal(UiText.Get("QuickAccess.Library"), card.LibraryMenuItemForTest.Header);
+                Assert.Single(Assert.IsType<Grid>(card.LibraryMenuItemForTest.Icon).Children.OfType<SymbolIcon>());
                 // The key is not written on the face; it is the tooltip's and the accelerator key's.
                 Assert.All(actions, button => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))));
                 ToggleButton keepToggle = card.KeepToggleForTest;
@@ -45,8 +45,8 @@ public sealed class QuickAccessCardLabelTests
                 Assert.Equal(keepTip, AutomationProperties.GetHelpText(keepToggle));
                 // Keep belongs to the receipt line; close remains over the preview.
                 var rows = ((StackPanel)((Border)card.Content).Child).Children.OfType<Grid>().ToArray();
-                Assert.Same(rows[1], keepToggle.Parent);
-                Assert.Contains(rows[0].Children.OfType<Button>(), button =>
+                Assert.Same(rows[2], keepToggle.Parent);
+                Assert.Contains(rows[0].Children.OfType<DockPanel>().Single().Children.OfType<Button>(), button =>
                     AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
                 // The card's own tooltip is one short line, not a paragraph of keys.
                 Assert.True(((string)card.ToolTip).Length <= 40, (string)card.ToolTip);
@@ -87,7 +87,7 @@ public sealed class QuickAccessCardLabelTests
                 {
                     // The name is under the icon, so the action is taller than an icon-only command.
                     Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(button), button.ActualHeight, 2);
-                    Assert.True(button.ActualHeight > 36);
+                    Assert.True(button.ActualHeight >= 36);
                     if (restingSizes.TryGetValue(button, out Size size)) Assert.Equal(size, button.RenderSize);
                     else restingSizes.Add(button, button.RenderSize);
                     Grid face = Assert.IsType<Grid>(button.Content);

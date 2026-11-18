@@ -25,6 +25,8 @@ internal static class ShortcutCatalog
         foreach (var (command, key) in new[] { ("Select", Key.V), ("Crop", Key.X), ("Rectangle", Key.R), ("Ellipse", Key.E),
             ("Arrow", Key.A), ("Pen", Key.P), ("Highlighter", Key.H), ("Text", Key.T), ("StepNumber", Key.N), ("Image", Key.I), ("Stamp", Key.S), ("Mosaic", Key.M), ("Blur", Key.B) })
             Add(ShortcutScope.Annotation, command, key, key.ToString());
+        // E is the ellipse; as in GIMP and Inkscape, where E is also an ellipse tool, Shift+E is the eraser.
+        Add(ShortcutScope.Annotation, "Eraser", Key.E, "Shift+E", ModifierKeys.Shift);
         Add(ShortcutScope.Annotation, "Done", Key.Enter, "Ctrl+Enter", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "EditText", Key.Enter, "Enter");
         Add(ShortcutScope.Annotation, "EditText", Key.F2, "F2");
@@ -62,6 +64,8 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.QuickAccess, "Activate", Key.Q, "Alt+Q", ModifierKeys.Alt);
         Add(ShortcutScope.QuickAccess, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.QuickAccess, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
+        Add(ShortcutScope.QuickAccess, "Menu", Key.Apps, "Menu");
+        Add(ShortcutScope.QuickAccess, "Menu", Key.F10, "Shift+F10", ModifierKeys.Shift);
         Add(ShortcutScope.Ocr, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.Ocr, "Export", Key.S, "Ctrl+S", ModifierKeys.Control);
         Add(ShortcutScope.Ocr, "Close", Key.Escape, "Esc");
@@ -103,8 +107,14 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Selector, "Color", Key.C, "Shift+C", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Text", Key.T, "T");
         Add(ShortcutScope.Selector, "Text", Key.T, "Shift+T", ModifierKeys.Shift);
+        Add(ShortcutScope.Selector, "Freeform", Key.F, "F");
+        Add(ShortcutScope.Selector, "Freeform", Key.F, "Shift+F", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Ratio", Key.R, "R");
         Add(ShortcutScope.Selector, "Ratio", Key.R, "Shift+R", ModifierKeys.Shift);
+        Add(ShortcutScope.Selector, "Scroll", Key.S, "S");
+        Add(ShortcutScope.Selector, "Scroll", Key.S, "Shift+S", ModifierKeys.Shift);
+        Add(ShortcutScope.Selector, "Delay", Key.D, "D");
+        Add(ShortcutScope.Selector, "Delay", Key.D, "Shift+D", ModifierKeys.Shift);
         Add(ShortcutScope.Selector, "Confirm", Key.Enter, "Enter");
         Add(ShortcutScope.Selector, "Cancel", Key.Escape, "Esc");
         Add(ShortcutScope.Selector, "SelectAll", Key.A, "Ctrl+A", ModifierKeys.Control);
@@ -155,7 +165,7 @@ internal static class ShortcutCatalog
                 Row("Text_8D1A750C9351", "Select"), Row("Tools_Crop", "Crop"),
                 Row("Text_DC0760235344", "Rectangle"), Row("Tools.Ellipse", "Ellipse"),
                 Row("Text_2785CE58DF74", "Arrow"), Row("Text_37DB9D0B1C8E", "Pen"),
-                Row("Tools.Highlighter", "Highlighter"), Row("Text_258AD4B095A1", "Text"),
+                Row("Tools.Highlighter", "Highlighter"), Row("Tools.Eraser", "Eraser"), Row("Text_258AD4B095A1", "Text"),
                 Row("Tools.StepNumber", "StepNumber"), Row("Text_302BAE127938", "Image"), Row("Stamp_Place", "Stamp"),
                 Row("EditorObscure_Pixelate", "Mosaic"), Row("EditorBlur_Name", "Blur"),
                 Row("EditorUx_RotateLeftHint", "RotateLeft"), Row("EditorUx_RotateRightHint", "RotateRight"),
@@ -173,9 +183,10 @@ internal static class ShortcutCatalog
                 Row("Shortcuts.CropMove10", "LeftFast", "RightFast", "UpFast", "DownFast")],
             ShortcutScope.QuickAccess => [Row("QuickAccess.Copy", "Copy"), Row("QuickAccess.Edit", "Edit"),
                 Row("QuickAccess.Pin", "Pin"), Row("QuickAccess.Save", "Save"), Row("QuickAccess.CopyText", "CopyText"),
-                Row("Dialog.Close", "Close"), Row("QuickAccess.Title", "Activate")],
+                Row("Dialog.Close", "Close"), Row("QuickAccess.Title", "Activate"), Row("Shortcuts.ContextMenu", "Menu")],
             ShortcutScope.Selector => [Row("ColorPick_HelpLabel", "Color"), Row("TextCapture_HelpToggle", "Text"),
-                Row("CaptureRatio_HelpLabel", "Ratio"), Row("Shortcuts.CaptureConfirm", "Confirm"),
+                Row("CaptureFreeform_KeyHelp", "Freeform"), Row("CaptureRatio_HelpLabel", "Ratio"),
+                Row("CaptureKeyPanel.Scroll", "Scroll"), Row("CaptureKeyPanel.Delay", "Delay"), Row("Shortcuts.CaptureConfirm", "Confirm"),
                 Row("Shortcuts.CaptureCancel", "Cancel"), Row("Shortcuts.CaptureAll", "SelectAll"),
                 Row("Shortcuts.SelectionMove1", "Move"), Row("Shortcuts.SelectionMove10", "MoveFast"),
                 Row("Shortcuts.SelectionResize1", "Resize"), Row("Shortcuts.SelectionResize10", "ResizeFast")],

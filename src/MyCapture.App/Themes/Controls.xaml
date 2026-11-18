@@ -1,9 +1,9 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (M06 mark, with Windows-native glass palettes):
-    * Quiet graphite hierarchy with red primary actions and neutral selection/focus. Glass themes keep
-      the same keys and paint translucent Surface brushes over the WPF client background.
+  Direction (M06 mark, with opaque semantic surfaces):
+    * Quiet graphite hierarchy with red primary actions and neutral selection/focus.
+      Canvas, Base, Raised and Floating describe the role of each solid surface.
     * Primary fills pair with Text.OnAccent; selection uses Surface.Selected and Text.Primary.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
@@ -34,6 +34,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <!-- Pretendard needs Ideal formatting (Display distorts its Hangul strokes) with grayscale
@@ -73,20 +74,41 @@
     </Style>
     <Style x:Key="Text.Body" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style x:Key="Text.MutedBlock" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <!-- Mono caption for dimensions / timing / shortcuts. -->
     <Style x:Key="Text.Mono" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Muted}" />
     </Style>
+
+    <!-- Complete UI scale. Content typography (pins, OCR and edited pixels) stays separate. -->
+    <Style x:Key="Text.Micro" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Micro}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+    </Style>
+    <Style x:Key="Text.Caption" TargetType="TextBlock" BasedOn="{StaticResource Text.Micro}">
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+    </Style>
+    <Style x:Key="Text.Control" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Control}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+    </Style>
+    <Style x:Key="Text.BodyLarge" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.BodyLarge}" />
+    </Style>
+    <Style x:Key="Text.Subtitle" TargetType="TextBlock" BasedOn="{StaticResource Text.Section}" />
 
     <!-- ============================================================= -->
     <!-- Cards -->
@@ -120,9 +142,9 @@
     <!--   Focus: recolour border to primary text + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
-    <!-- A plain button is 32 DIP. A button whose face reserves the Alt shortcut line under its
+    <!-- A plain button is 36 DIP. A button whose face reserves the Alt shortcut line under its
          label (CommandButtonPresentation) keeps the command heights 44 / 36. -->
-    <sys:Double x:Key="Button.Height">32</sys:Double>
+    <x:Static x:Key="Button.Height" Member="themes:FoundationMetrics.ControlHeight" />
     <sys:Double x:Key="CommandButton.Height.Standard">44</sys:Double>
     <sys:Double x:Key="CommandButton.Height.Compact">36</sys:Double>
     <x:Static x:Key="CommandButton.FontSize" Member="themes:TypeScale.Body" />
@@ -130,6 +152,8 @@
     <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
     <Thickness x:Key="CommandButton.Padding.StandardIconOnly">4,4</Thickness>
     <Thickness x:Key="CommandButton.Padding.Compact">10,0</Thickness>
+    <!-- An icon-only compact command (the pin hover bar's icon bar): narrow sides that still hold a Ctrl+C caption. -->
+    <Thickness x:Key="CommandButton.Padding.CompactIconOnly">4,0</Thickness>
     <Thickness x:Key="CommandButton.IconLabelGap">6,0,0,0</Thickness>
 
     <!-- Interaction state layers. A template stacks them over its rest chrome, with the same
@@ -140,7 +164,7 @@
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="Opacity" Value="0" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Md}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource Radius.Control}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Hover}" />
     </Style>
     <Style x:Key="StateLayer.Hover" TargetType="Border" BasedOn="{StaticResource StateLayer}">
@@ -151,8 +175,8 @@
     </Style>
     <Style x:Key="StateLayer.Selected" TargetType="Border" BasedOn="{StaticResource StateLayer}">
         <Setter Property="Background" Value="{DynamicResource Surface.Selected}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Selection.Stroke}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Selection.Thickness}" />
         <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
     </Style>
     <!-- Template parts set motion through these styles rather than attached-property attributes,
@@ -171,7 +195,7 @@
         <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource Button.Height}" />
         <Setter Property="Height" Value="{Binding Path=(themes:ButtonSizing.RestHeight), RelativeSource={RelativeSource Self}}" />
         <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
-        <Setter Property="themes:ButtonSizing.CornerRadius" Value="{DynamicResource Radius.Md}" />
+        <Setter Property="themes:ButtonSizing.CornerRadius" Value="{DynamicResource Radius.Control}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Button.Fill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Button.BorderBrush}" />
@@ -227,31 +251,31 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
-                             plain 32-DIP button draws edge to edge. -->
+                             plain 36-DIP button draws edge to edge. -->
                         <Trigger Property="Height" Value="44">
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
                         </Trigger>
-                        <Trigger Property="Height" Value="36">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="Height" Value="36" /><Condition Property="themes:ButtonSizing.ReservesShortcutLine" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="PressedLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsDefaulted" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                             <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
@@ -317,28 +341,28 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
-                             plain 32-DIP button draws edge to edge. -->
+                             plain 36-DIP button draws edge to edge. -->
                         <Trigger Property="Height" Value="44">
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.PrimaryFocusInset}" />
                         </Trigger>
-                        <Trigger Property="Height" Value="36">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="Height" Value="36" /><Condition Property="themes:ButtonSizing.ReservesShortcutLine" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.PrimaryFocusInset.Compact}" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <!-- Like WinUI's disabled accent button: the fill stays but turns neutral
                              with disabled text. Fading the accent fill made its ink-on-accent
                              caption and shortcut drop to about 2:1 on dark themes. -->
@@ -369,7 +393,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}"
+                                CornerRadius="{DynamicResource Radius.Control}"
                                 SnapsToDevicePixels="True" />
                         <Border x:Name="HoverLayer"
                                 Margin="0"
@@ -395,19 +419,19 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
-                             plain 32-DIP button draws edge to edge. -->
+                             plain 36-DIP button draws edge to edge. -->
                         <Trigger Property="Height" Value="44">
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
                         </Trigger>
-                        <Trigger Property="Height" Value="36">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="Height" Value="36" /><Condition Property="themes:ButtonSizing.ReservesShortcutLine" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
-                        </Trigger>
+                        </MultiTrigger>
                         <!-- Hover and press wash the background only; the tool tier stays borderless. -->
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
@@ -416,10 +440,10 @@
                             <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <!-- Keyboard focus still recolours the fixed border so focus stays visible. -->
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
@@ -444,7 +468,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}"
+                                CornerRadius="{DynamicResource Radius.Control}"
                                 SnapsToDevicePixels="True" />
                         <Border x:Name="HoverLayer"
                                 Margin="0"
@@ -472,28 +496,28 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
-                             plain 32-DIP button draws edge to edge. -->
+                             plain 36-DIP button draws edge to edge. -->
                         <Trigger Property="Height" Value="44">
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
                         </Trigger>
-                        <Trigger Property="Height" Value="36">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="Height" Value="36" /><Condition Property="themes:ButtonSizing.ReservesShortcutLine" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
                             <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
                             <Setter Property="Cursor" Value="Arrow" />
@@ -506,6 +530,7 @@
     <!-- A compact bordered button keeps the plain 32-DIP height (never taller than a plain
          button) with tighter padding; a compact shortcut face takes the compact command height. -->
     <Style x:Key="Button.Compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
@@ -523,7 +548,7 @@
     </Style>
 
     <!-- Command bars share sizing with action rows. The height comes from the base style:
-         32 DIP, or 44 DIP once the content helper reserves the shortcut line. -->
+         36 DIP, or 44 DIP once the content helper reserves the shortcut line. -->
     <Style x:Key="Button.Command" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
         <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
@@ -538,13 +563,40 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!--   On fills with the selection ink pair: a Text.SelectionBackground fill under
-           Text.SelectionForeground content (Highlight and HighlightText in a Windows contrast
-           theme). On and off differ by fill, not by the 2-DIP primary-text outline that read
-           as the focus ring. Content follows Foreground, so it switches ink with the fill. -->
+    <!-- Normal palettes raise the current choice with a floating face and thin outline; contrast palettes retain
+         their original Highlight / HighlightText pair. The outline distinguishes on and off. -->
     <!-- ============================================================= -->
+    <!-- A hotkey recorder is an input face with button activation and unchanged measuring. -->
+    <Style x:Key="Button.InputField" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
+        <Style.Triggers>
+            <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <themes:InputFieldBorder x:Name="Chrome" BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                IsInputFocused="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource TemplatedParent}}"
+                                IsInputHovered="{Binding IsMouseOver, RelativeSource={RelativeSource TemplatedParent}}"
+                                IsInvalid="{Binding Path=(themes:InputFieldBorder.IsInvalid), RelativeSource={RelativeSource TemplatedParent}}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True" />
+                            </themes:InputFieldBorder>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="{DynamicResource Button.DisabledOpacity}" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="ToggleButton.CheckedLayer" TargetType="Border" BasedOn="{StaticResource StateLayer}">
-        <Setter Property="Background" Value="{DynamicResource Text.SelectionBackground}" />
+        <Setter Property="Background" Value="{DynamicResource Toggle.CheckedFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Toggle.CheckedStroke}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Toggle.CheckedThickness}" />
         <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
     </Style>
     <Style TargetType="{x:Type ToggleButton}">
@@ -555,7 +607,7 @@
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
         <Setter Property="Template">
@@ -566,7 +618,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}" />
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
@@ -593,21 +645,21 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text.SelectionForeground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Toggle.CheckedForeground}" />
+                            <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Emphasis}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
-                        <!-- On and focused, Border.Focus is the fill's own colour (Text.Primary in the app
-                             palettes) or close to it (WindowText on Highlight in a contrast theme), so the
-                             ring takes the fill's ink. Place and size stay; after the focus trigger, so it wins. -->
+                        </MultiTrigger>
+                        <!-- Contrast palettes keep their original inverted focus ink. -->
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsChecked" Value="True" />
                                 <Condition Property="IsKeyboardFocused" Value="True" />
+                                <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource Text.SelectionForeground}" />
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource Toggle.CheckedFocusStroke}" />
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.48" />
@@ -629,13 +681,13 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}" />
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="CheckedLayer"
                                 Style="{StaticResource StateLayer.Selected}"
-                                BorderThickness="2" />
+                                BorderThickness="{DynamicResource Selection.Thickness}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Center"
@@ -658,10 +710,10 @@
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.48" />
                         </Trigger>
@@ -683,7 +735,7 @@
                                       IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                       AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
                             <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon x:Name="Chevron" Size="16" Data="{StaticResource Icon.ChevronDown}"
+                                <themes:SymbolIcon x:Name="Chevron" Size="16" Data="{DynamicResource Icon.ChevronDown}"
                                                    Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                                                    VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                     <themes:SymbolIcon.RenderTransform>
@@ -696,6 +748,12 @@
                         <ContentPresenter x:Name="Options" Visibility="Collapsed" />
                     </StackPanel>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="themes:ControlLanguage.PreserveExpanderMetrics" Value="True">
+                            <Setter TargetName="HeaderToggle" Property="MinWidth" Value="0" />
+                            <Setter TargetName="HeaderToggle" Property="MinHeight" Value="0" />
+                            <Setter TargetName="HeaderToggle" Property="Padding" Value="1,2" />
+                            <Setter TargetName="Chevron" Property="themes:SymbolIcon.Size" Value="19" />
+                        </Trigger>
                         <Trigger Property="IsExpanded" Value="True">
                             <Setter TargetName="Options" Property="Visibility" Value="Visible" />
                             <Setter TargetName="Chevron" Property="UIElement.RenderTransform">
@@ -711,14 +769,65 @@
     <!-- ============================================================= -->
     <!-- TextBox -->
     <!-- ============================================================= -->
+    <!-- Used inside an InputFieldBorder that already owns the control chrome. -->
+    <ControlTemplate x:Key="TextBox.InputContentTemplate" TargetType="TextBox">
+        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+    </ControlTemplate>
+    <!-- Content-host geometry matches the legacy input; the bottom contour is a drawing overlay. -->
+    <ControlTemplate x:Key="TextBox.ControlLanguageTemplate" TargetType="TextBox">
+        <Grid>
+            <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource Radius.Control}" />
+            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer}" Background="{DynamicResource Fill.InputHover}"
+                    BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}" CornerRadius="{DynamicResource Radius.Control}" />
+            <Border BorderThickness="{TemplateBinding BorderThickness}"><ScrollViewer x:Name="PART_ContentHost" /></Border>
+            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                    BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Control}"
+                    IsHitTestVisible="False" Opacity="0" />
+            <!-- The error edge remains visible even while the keyboard cue is shown. -->
+            <themes:InputEdge x:Name="BottomEdge" Brush="{DynamicResource Stroke.InputEdge}" Thickness="1" Radius="{x:Static themes:FoundationMetrics.ControlRadius}" IsHitTestVisible="False" />
+        </Grid>
+        <ControlTemplate.Triggers>
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsKeyboardFocused" Value="True" />
+                    <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                </MultiTrigger.Conditions>
+                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+            </MultiTrigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" /></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Fill.InputActive}" />
+                <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="BottomEdge" Property="themes:InputEdge.Brush" Value="{DynamicResource Text.Primary}" />
+                <Setter TargetName="BottomEdge" Property="themes:InputEdge.Thickness" Value="2" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
+            <Trigger Property="IsReadOnly" Value="True">
+                <Setter TargetName="Chrome" Property="Background" Value="Transparent" />
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+                <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="BottomEdge" Property="UIElement.Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+                <Setter TargetName="Chrome" Property="BorderBrush" Value="{Binding BorderBrush, RelativeSource={RelativeSource TemplatedParent}}" />
+                <Setter TargetName="BottomEdge" Property="themes:InputEdge.Brush" Value="{DynamicResource State.Danger}" />
+                <Setter TargetName="BottomEdge" Property="UIElement.Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="VerticalContentAlignment" Value="Center"><Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Center" /></Trigger>
+            <Trigger Property="VerticalContentAlignment" Value="Bottom"><Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Bottom" /></Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
     <Style TargetType="{x:Type TextBox}">
-        <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
+        <Setter Property="Background" Value="{DynamicResource Input.Fill}" />
+        <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource Text.SelectionBackground}" />
         <Setter Property="SelectionTextBrush" Value="{DynamicResource Text.SelectionForeground}" />
         <Setter Property="SelectionOpacity" Value="1" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Input.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <!-- 7 + a 14px line (18.6) + 7 + border stays inside the 36 hit target. -->
         <Setter Property="Padding" Value="11,7" />
@@ -732,7 +841,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}" />
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <!-- Hover strengthens the outline only; an input keeps its well colour. -->
                         <Border x:Name="HoverLayer"
                                 Style="{StaticResource StateLayer}"
@@ -760,8 +869,9 @@
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+
                         </Trigger>
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions><Setter TargetName="FocusRing" Property="Opacity" Value="1" /></MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
                         </Trigger>
@@ -778,6 +888,9 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <Trigger Property="themes:ControlLanguage.Enabled" Value="True"><Setter Property="Template" Value="{StaticResource TextBox.ControlLanguageTemplate}" /></Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ============================================================= -->
@@ -785,7 +898,7 @@
     <!-- ============================================================= -->
     <Style TargetType="{x:Type CheckBox}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
@@ -800,28 +913,28 @@
                         <!-- PART_PressTarget takes the press feedback, so the label never scales. -->
                         <Grid x:Name="PART_PressTarget" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
                             <Border x:Name="Box"
-                                    Background="{DynamicResource Surface.Sunken}"
-                                    BorderBrush="{DynamicResource Border.Control}"
+                                    Background="{DynamicResource Check.Fill}"
+                                    BorderBrush="{DynamicResource Check.Edge}"
                                     BorderThickness="1"
-                                    CornerRadius="5" />
+                                    CornerRadius="{DynamicResource Check.Radius}" />
                             <Border x:Name="HoverLayer"
                                     Style="{StaticResource StateLayer}"
-                                    BorderBrush="{DynamicResource Border.Focus}"
+                                    BorderBrush="{DynamicResource Check.HoverEdge}" Background="{DynamicResource Check.HoverFill}"
                                     BorderThickness="1"
-                                    CornerRadius="5" />
+                                    CornerRadius="{DynamicResource Check.Radius}" />
                             <!-- The selected box fades in while the check mark settles from a smaller size. -->
                             <Border x:Name="CheckedLayer"
                                     Style="{StaticResource StateLayer.Selected}"
-                                    Background="{DynamicResource Surface.Selected}"
-                                    BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2"
-                                    CornerRadius="5">
+                                    Background="{DynamicResource Check.CheckedFill}"
+                                    BorderBrush="{DynamicResource Check.CheckedEdge}" BorderThickness="{DynamicResource Check.CheckedThickness}"
+                                    CornerRadius="{DynamicResource Check.Radius}">
                                 <!-- Coordinates start inside the 2-DIP selected edge. The mark is centred
                                      on the box and lifted 0.25 DIP, since a check's weight sits at its
                                      vertex; drawn for the outer box it ran low and into the right edge. -->
                                 <Path x:Name="Check"
                                       Style="{StaticResource StatePart.SettlingGlyph}"
                                       Data="M 3,6.75 L 5.875,9.625 L 11,3.875"
-                                      Stroke="{DynamicResource Text.Primary}"
+                                      Stroke="{DynamicResource Check.Mark}" Margin="{DynamicResource Check.MarkMargin}"
                                       StrokeThickness="2"
                                       StrokeStartLineCap="Round"
                                       StrokeEndLineCap="Round"
@@ -851,10 +964,10 @@
                             <Setter TargetName="Check" Property="Path.Data" Value="M 4,7 L 10,7" />
                             <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.48" />
                         </Trigger>
@@ -869,7 +982,7 @@
     <!-- ============================================================= -->
     <Style TargetType="{x:Type RadioButton}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="themes:FluidMotion.PressFeedback" Value="True" />
@@ -884,11 +997,11 @@
                         <!-- PART_PressTarget takes the press feedback, so the label never scales. -->
                         <Grid x:Name="PART_PressTarget" Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
                             <Ellipse x:Name="Dot"
-                                     Fill="{DynamicResource Surface.Sunken}"
-                                     Stroke="{DynamicResource Border.Control}"
+                                     Fill="{DynamicResource Check.Fill}"
+                                     Stroke="{DynamicResource Check.Edge}"
                                      StrokeThickness="1" />
                             <Ellipse x:Name="HoverRing"
-                                     Stroke="{DynamicResource Border.Focus}"
+                                     Stroke="{DynamicResource Check.HoverEdge}" Fill="{DynamicResource Check.HoverFill}"
                                      StrokeThickness="1"
                                      IsHitTestVisible="False"
                                      Opacity="0" />
@@ -900,7 +1013,7 @@
                                 <Ellipse Fill="{DynamicResource Text.Primary}" />
                                 <Ellipse x:Name="Check" Width="8" Height="8"
                                          Style="{StaticResource StatePart.SettlingGlyph}"
-                                         Fill="{DynamicResource Surface.Raised}" />
+                                         Fill="{DynamicResource Radio.Mark}" />
                             </Grid>
                             <!-- Inset focus ring, opacity-toggled (stable thickness). -->
                             <Ellipse x:Name="FocusRing"
@@ -920,10 +1033,10 @@
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Dot" Property="Stroke" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.48" />
                         </Trigger>
@@ -950,24 +1063,26 @@
          bottom border by the margin's width. -->
     <Style x:Key="Tab.Help" TargetType="{x:Type TabItem}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}" />
         <Setter Property="Padding" Value="12,9" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TabItem}">
                     <Grid Margin="0,0,6,4">
-                        <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}"
+                        <Border x:Name="TabBorder" Background="{DynamicResource Surface.Sunken}"
                                 BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
-                                CornerRadius="8" />
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
-                                BorderThickness="{DynamicResource Border.ToolThickness}" CornerRadius="8" />
-                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2" CornerRadius="8" />
+                                BorderThickness="{DynamicResource Border.ToolThickness}" CornerRadius="{DynamicResource Radius.Control}" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" Background="{DynamicResource Surface.Floating}"
+                                BorderBrush="{DynamicResource Selection.Stroke}" BorderThickness="{DynamicResource Selection.Thickness}"
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
                         <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="8"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Control}"
                                 IsHitTestVisible="False" Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -976,11 +1091,11 @@
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Emphasis}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -1008,7 +1123,7 @@
                                 CornerRadius="{DynamicResource Radius.Sm}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{DynamicResource Border.ToolThickness}" />
-                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" BorderThickness="2" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" BorderThickness="{DynamicResource Selection.Thickness}" />
                         <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                         <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
@@ -1022,9 +1137,9 @@
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocusWithin" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
                         </Trigger>
@@ -1043,7 +1158,38 @@
     <Style TargetType="{x:Type Popup}">
         <Setter Property="themes:ThemeFonts.PopupText" Value="True" />
     </Style>
+    <!-- Values remain owned by WPF ProgressBar; only normal-palette chrome changes. -->
+    <Style TargetType="{x:Type ProgressBar}">
+        <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
+        <Style.Triggers>
+            <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ProgressBar}">
+                            <Grid x:Name="ProgressRoot" SnapsToDevicePixels="True">
+                                <Border x:Name="PART_Track" Background="{DynamicResource Border.Subtle}" CornerRadius="99" />
+                                <themes:ProgressIndicator x:Name="PART_Indicator" Background="{TemplateBinding Foreground}"
+                                    HorizontalAlignment="Left" CornerRadius="99" IsIndeterminate="{TemplateBinding IsIndeterminate}" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="themes:ControlLanguage.PreserveProgressPalette" Value="True">
+                                    <Setter TargetName="PART_Track" Property="Background" Value="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}" />
+                                </Trigger>
+                                <Trigger Property="Orientation" Value="Vertical">
+                                    <Setter TargetName="ProgressRoot" Property="LayoutTransform">
+                                        <Setter.Value><MatrixTransform Matrix="0,-1,1,0,0,0" /></Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
     <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="themes:ControlLanguage.Enabled" Value="{DynamicResource ControlLanguage.Enabled}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
@@ -1058,6 +1204,25 @@
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
+        <Style.Triggers>
+            <Trigger Property="themes:ControlLanguage.Enabled" Value="True">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ToolTip}">
+                            <Grid>
+                                <!-- Render-only edge preserves the content's baseline measured size. -->
+                                <Border x:Name="ToolTipChrome" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource Border.Subtle}"
+                                        BorderThickness="1" CornerRadius="{DynamicResource Radius.Floating}" Effect="{DynamicResource Shadow.Card}" IsHitTestVisible="False" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" Content="{TemplateBinding Content}"
+                                    ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
     </Style>
     <Style TargetType="{x:Type ContextMenu}">
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
@@ -1090,7 +1255,7 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{DynamicResource Radius.Md}"
+                            CornerRadius="{DynamicResource Radius.Floating}"
                             Padding="{TemplateBinding Padding}"
                             Effect="{DynamicResource Shadow.Card}"
                             SnapsToDevicePixels="True">
@@ -1170,7 +1335,7 @@
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                             <Border Background="{DynamicResource Surface.Floating}"
                                     BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                                    CornerRadius="{DynamicResource Radius.Md}" Padding="5" Margin="12"
+                                    CornerRadius="{DynamicResource Radius.Floating}" Padding="5" Margin="12"
                                     Effect="{DynamicResource Shadow.Card}"
                                     SnapsToDevicePixels="True"
                                     MaxHeight="{x:Static themes:PopupMetrics.SubmenuMaxHeight}">
@@ -1187,9 +1352,9 @@
                             <Setter TargetName="SubmenuArrow" Property="UIElement.Visibility" Value="Visible" />
                             <Setter TargetName="GestureText" Property="UIElement.Visibility" Value="Collapsed" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocusWithin" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
@@ -1226,25 +1391,35 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="10,7" />
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
                     <Grid>
                         <Border x:Name="ItemChrome" Background="{TemplateBinding Background}"
-                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" />
+                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
-                                BorderBrush="{DynamicResource Border.Focus}" BorderThickness="2" CornerRadius="4" />
+                                BorderBrush="{DynamicResource Border.Control}" BorderThickness="{DynamicResource Selection.Thickness}" CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2" CornerRadius="4" />
+                                BorderBrush="{DynamicResource Selection.Stroke}" BorderThickness="{DynamicResource Selection.Thickness}" CornerRadius="{DynamicResource Radius.Control}" />
 
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter VerticalAlignment="Center"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                         </Border>
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Control}"
+                                IsHitTestVisible="False" Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                                <Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </MultiTrigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
@@ -1279,12 +1454,12 @@
         </Setter>
     </Style>
     <Style TargetType="ComboBox">
-        <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
+        <Setter Property="Background" Value="{DynamicResource Combo.Fill}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Combo.Edge}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,5,32,5" />
-        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
@@ -1294,16 +1469,17 @@
                     <Grid>
                         <Border x:Name="ComboChrome" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" />
+                                CornerRadius="{DynamicResource Combo.Radius}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer}"
-                                BorderBrush="{DynamicResource Border.Strong}" BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" />
+                                BorderBrush="{DynamicResource Combo.HoverEdge}" Background="{DynamicResource Combo.HoverFill}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Combo.Radius}" />
+                        <Border x:Name="PressedLayer" Style="{StaticResource StateLayer}" Background="{DynamicResource Combo.PressedFill}" CornerRadius="{DynamicResource Combo.Radius}" />
                         <ToggleButton x:Name="DropDownToggle" Style="{x:Null}" Focusable="False" ClickMode="Press"
                                       IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border Background="Transparent">
-                                        <Path Data="M 0,0 L 4,4 L 8,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                        <Path Data="M 0,0 L 4,4 L 8,0" Stroke="{DynamicResource Combo.Chevron}"
                                               StrokeThickness="1.5" HorizontalAlignment="Right"
                                               VerticalAlignment="Center" Margin="0,0,12,0" />
                                     </Border>
@@ -1321,8 +1497,8 @@
                                  Padding="0" Margin="{TemplateBinding Padding}" VerticalContentAlignment="Center" />
                         <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
                                Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}">
-                            <Border x:Name="PopupChrome" Background="{DynamicResource Surface.Overlay}" BorderBrush="{DynamicResource Border.Strong}"
-                                    BorderThickness="1" CornerRadius="6" Padding="4" Margin="0,3,0,0"
+                            <Border x:Name="PopupChrome" Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Strong}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Floating}" Padding="4" Margin="0,3,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     MaxHeight="{TemplateBinding MaxDropDownHeight}">
                                 <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled"
@@ -1332,7 +1508,7 @@
                             </Border>
                         </Popup>
                         <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
-                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="6"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Combo.Radius}"
                                 IsHitTestVisible="False" Opacity="0" />
                     </Grid>
                     <!-- Contrast themes need no extra triggers here: every token the chrome uses
@@ -1341,14 +1517,16 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocusWithin" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                        </Trigger>
+                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Combo.FocusEdge}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Combo.FocusEdge}" />
+                        </MultiTrigger>
+                        <Trigger SourceName="DropDownToggle" Property="IsPressed" Value="True"><Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" /></Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                            <Setter TargetName="PressedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Combo.FocusEdge}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Combo.FocusEdge}" />
                         </Trigger>
                         <Trigger Property="IsEditable" Value="True">
                             <Setter TargetName="Selection" Property="Visibility" Value="Collapsed" />
@@ -1473,9 +1651,9 @@
                 <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
                 <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
+            <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-            </Trigger>
+            </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.46" />
             </Trigger>
@@ -1524,9 +1702,9 @@
                 <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
                 <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
             </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
+            <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-            </Trigger>
+            </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.46" />
             </Trigger>
@@ -1670,13 +1848,13 @@
                                 Background="Transparent"
                                 BorderBrush="Transparent"
                                 BorderThickness="1"
-                                CornerRadius="{DynamicResource Radius.Md}" />
+                                CornerRadius="{DynamicResource Radius.Control}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
                         <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" BorderThickness="1" />
                         <!-- Selection fills the tool's own tile. -->
                         <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
                                 Background="{DynamicResource Surface.Selected}"
-                                BorderBrush="{DynamicResource Border.SelectedTool}" BorderThickness="2" />
+                                BorderBrush="{DynamicResource Selection.Stroke}" BorderThickness="{DynamicResource Selection.Thickness}" />
                         <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
@@ -1701,10 +1879,10 @@
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsKeyboardFocused" Value="True" /><Condition Property="themes:KeyboardFocusCue.IsVisible" Value="True" /></MultiTrigger.Conditions>
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.46" />
                         </Trigger>
@@ -1809,39 +1987,57 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <Style TargetType="ScrollBar">
-        <Setter Property="Background" Value="{DynamicResource Surface.Base}" />
-        <Setter Property="Width" Value="16" />
-        <Setter Property="Focusable" Value="False" />
+    <Style x:Key="ScrollBar.ControlLanguageThumb" TargetType="Thumb">
+        <Setter Property="MinHeight" Value="24" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="ScrollBar">
-                    <Border Background="{TemplateBinding Background}">
-                        <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}"
-                               IsDirectionReversed="True">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton x:Name="Decrease" Style="{StaticResource ScrollBar.PageButton}"
-                                              Command="ScrollBar.PageUpCommand" />
-                            </Track.DecreaseRepeatButton>
-                            <Track.Thumb>
-                                <Thumb Style="{StaticResource ScrollBar.Thumb}" />
-                            </Track.Thumb>
-                            <Track.IncreaseRepeatButton>
-                                <RepeatButton x:Name="Increase" Style="{StaticResource ScrollBar.PageButton}"
-                                              Command="ScrollBar.PageDownCommand" />
-                            </Track.IncreaseRepeatButton>
-                        </Track>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="Orientation" Value="Horizontal">
-                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
-                            <Setter TargetName="Decrease" Property="Command" Value="ScrollBar.PageLeftCommand" />
-                            <Setter TargetName="Increase" Property="Command" Value="ScrollBar.PageRightCommand" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
+                <ControlTemplate TargetType="Thumb">
+                    <Grid Background="Transparent">
+                        <themes:ScrollThumbChrome x:Name="Grip"
+                            Orientation="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}"
+                            Expanded="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ScrollBar}}"
+                            Pressed="{Binding IsDragging, RelativeSource={RelativeSource TemplatedParent}}"
+                            RestBrush="{DynamicResource Fill.ScrollThumb}" HoverBrush="{DynamicResource Fill.ScrollThumbHover}"
+                            PressedBrush="{DynamicResource Fill.ScrollThumbPressed}" />
+                    </Grid>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="Horizontal">
+                <Setter Property="MinHeight" Value="0" /><Setter Property="MinWidth" Value="24" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <ControlTemplate x:Key="ScrollBar.ControlLanguageTemplate" TargetType="ScrollBar">
+        <Border x:Name="Lane" Background="{TemplateBinding Background}" Width="16" HorizontalAlignment="Right">
+            <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True">
+                <Track.Resources>
+                    <!-- Native Track takes half this system metric as its minimum thumb length. -->
+                    <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">48</sys:Double>
+                    <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">48</sys:Double>
+                </Track.Resources>
+                <Track.DecreaseRepeatButton><RepeatButton x:Name="Decrease" Style="{StaticResource ScrollBar.PageButton}" Command="ScrollBar.PageUpCommand" /></Track.DecreaseRepeatButton>
+                <Track.Thumb><Thumb Style="{StaticResource ScrollBar.ControlLanguageThumb}" /></Track.Thumb>
+                <Track.IncreaseRepeatButton><RepeatButton x:Name="Increase" Style="{StaticResource ScrollBar.PageButton}" Command="ScrollBar.PageDownCommand" /></Track.IncreaseRepeatButton>
+            </Track>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter TargetName="Lane" Property="Width" Value="Auto" /><Setter TargetName="Lane" Property="Height" Value="16" />
+                <Setter TargetName="Lane" Property="HorizontalAlignment" Value="Stretch" /><Setter TargetName="Lane" Property="VerticalAlignment" Value="Bottom" />
+                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                <Setter TargetName="Decrease" Property="Command" Value="ScrollBar.PageLeftCommand" />
+                <Setter TargetName="Increase" Property="Command" Value="ScrollBar.PageRightCommand" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="{DynamicResource Scroll.Lane}" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Focusable" Value="False" />
+        <!-- All palettes share the native track and growing grip; contrast colours stay system-owned. -->
+        <Setter Property="Template" Value="{StaticResource ScrollBar.ControlLanguageTemplate}" />
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto" />

@@ -57,6 +57,7 @@ public static class GallerySourceBadge
         string actionText = provenance.HasSource
             ? UiText.Format(provenance.CanOpen ? "Source.BadgeOpen" : "Source.BadgeDetails", provenance.BadgeText)
             : string.Empty;
+        if (provenance.IsAppOnly) actionText += Environment.NewLine + UiText.Get("Source.AppOnly");
         var tip = new ToolTip
         {
             Content = new TextBlock { Text = actionText, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
@@ -83,16 +84,11 @@ public static class GallerySourceBadge
         AutomationProperties.SetHelpText(button, actionText);
         AutomationProperties.SetName(button, actionText);
 
-        button.Content = new TextBlock
-        {
-            Text = SourceChip.GlyphFor(provenance.Kind),
-            FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-            FontSize = TypeScale.IconGlyph,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        // The kind's glyph until the application's icon is in memory; nothing here reads a file.
+        button.Content = provenance.HasSource ? SourceAppIcon.Create(provenance, TypeScale.IconGlyph) : null;
         button.ContextMenu = null;
-        button.SetValue(MenuFactoryProperty, (Func<ContextMenu>)(() => SourceChip.CreateMenu(provenance, status, search, actions)));
+        button.SetValue(MenuFactoryProperty, (Func<ContextMenu>)(() => SourceChip.CreateMenu(provenance, status, search, actions,
+            details: Window.GetWindow(button) is GalleryWindow ? () => ShowDetails(button) : null)));
         button.ContextMenuOpening -= OnContextMenuOpening;
         button.ContextMenuOpening += OnContextMenuOpening;
     }
@@ -192,6 +188,12 @@ public static class GallerySourceBadge
     private static void ClosePreview(Button button)
     {
         if (button.ToolTip is ToolTip tip) tip.IsOpen = false;
+    }
+
+    private static void ShowDetails(Button button)
+    {
+        if (Window.GetWindow(button) is GalleryWindow gallery && button.DataContext is GalleryItemViewModel tile)
+            gallery.ShowSourceDetails(tile);
     }
 
     private static void ShowMenu(Button button)

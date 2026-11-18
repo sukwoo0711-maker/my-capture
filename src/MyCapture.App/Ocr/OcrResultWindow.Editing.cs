@@ -217,7 +217,8 @@ internal sealed partial class OcrResultWindow
                     int first = 0;
                     foreach (OcrParagraph paragraph in _currentExtraction.Paragraphs)
                     {
-                        int count = _joinLines.IsChecked == true ? 1 : paragraph.Lines.Count;
+                        int count = _joinLines.IsChecked == true && !paragraph.SourceLines.Any(source => source.IsCodePayload)
+                            ? 1 : paragraph.Lines.Count;
                         if (line >= first && line < first + count) { regions = [paragraph.Bounds]; break; }
                         first += count + 1;
                     }

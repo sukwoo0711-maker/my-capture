@@ -62,7 +62,8 @@ public sealed partial class SettingsThemePreviewTests
                     if (root is not null) SaveBitmap(image, Path.Combine(root, name + "-" + suffix));
                 }
 
-                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+                var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+                    options: new WelcomeOptions { MonitorProvider = () => MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary) })
                 {
                     WindowStartupLocation = WindowStartupLocation.Manual,
                     Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
@@ -165,7 +166,7 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
-    /// <summary>A hovered pin with its bar in the corner, both kept off the desktop.</summary>
+    /// <summary>A hovered pin with its bar just above its top-right corner, both kept off the desktop.</summary>
     private static void RenderPinHoverScene(Action<BitmapSource, string> save)
     {
         BitmapSource image = PinEvidenceImage();
@@ -184,25 +185,41 @@ public sealed partial class SettingsThemePreviewTests
             bar.UpdateLayout();
             var pinContent = (FrameworkElement)pin.Content;
             var barContent = (FrameworkElement)bar.Content;
-            RectD placed = PinHoverBar.Place(new RectD(0, 0, pin.ActualWidth, pin.ActualHeight), bar.ActualWidth, bar.ActualHeight,
-                new RectD(-1000, -1000, 4000, 4000), 1);
+            var bounds = new RectD(0, 0, pin.ActualWidth, pin.ActualHeight);
+            RectD placed = PinHoverBar.Place(bounds, bar.ActualWidth, bar.ActualHeight, new RectD(-1000, -1000, 4000, 4000), 1);
+            // The bar sits outside the pin now, so the backdrop holds both with the same margin around them.
             const double margin = 24;
-            var visual = new DrawingVisual();
-            using (DrawingContext dc = visual.RenderOpen())
-            {
-                dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x2F, 0x55, 0x7A), Color.FromRgb(0x7A, 0x9C, 0xB8), 35), null,
-                    new Rect(0, 0, pin.ActualWidth + (margin * 2), pin.ActualHeight + (margin * 2)));
-                dc.DrawRectangle(new VisualBrush(pinContent) { Stretch = Stretch.None }, null,
-                    new Rect(margin, margin, pinContent.ActualWidth, pinContent.ActualHeight));
-                dc.DrawRectangle(new VisualBrush(barContent) { Stretch = Stretch.None }, null,
-                    new Rect(margin + placed.Left, margin + placed.Top, barContent.ActualWidth, barContent.ActualHeight));
-            }
-            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(pin.ActualWidth + (margin * 2)),
-                (int)Math.Ceiling(pin.ActualHeight + (margin * 2)), 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(visual);
-            save(bitmap, "pin-hover");
+            double left = Math.Min(bounds.Left, placed.Left), top = Math.Min(bounds.Top, placed.Top);
+            var backdrop = new RectD(left - margin, top - margin,
+                Math.Max(bounds.Right, placed.Right) - left + (margin * 2), Math.Max(bounds.Bottom, placed.Bottom) - top + (margin * 2));
+            save(RenderPinScene(pinContent, barContent, bounds, placed, backdrop), "pin-hover");
         }
         finally { pin.Close(); }
+    }
+
+    /// <summary>
+    /// A pin and its hover bar drawn where they stand, in DIP, over a desktop-coloured <paramref name="backdrop"/>
+    /// that sets the picture's extent (a work area, or the two with a margin).
+    /// </summary>
+    internal static BitmapSource RenderPinScene(FrameworkElement pinContent, FrameworkElement barContent, RectD pin, RectD bar,
+        RectD backdrop, double scale = 1)
+    {
+        var visual = new DrawingVisual();
+        using (DrawingContext dc = visual.RenderOpen())
+        {
+            dc.PushTransform(new TranslateTransform(-backdrop.Left, -backdrop.Top));
+            dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x2F, 0x55, 0x7A), Color.FromRgb(0x7A, 0x9C, 0xB8), 35), null,
+                new Rect(backdrop.Left, backdrop.Top, backdrop.Width, backdrop.Height));
+            dc.DrawRectangle(new VisualBrush(pinContent) { Stretch = Stretch.None }, null,
+                new Rect(pin.Left, pin.Top, pinContent.ActualWidth, pinContent.ActualHeight));
+            dc.DrawRectangle(new VisualBrush(barContent) { Stretch = Stretch.None }, null,
+                new Rect(bar.Left, bar.Top, barContent.ActualWidth, barContent.ActualHeight));
+            dc.Pop();
+        }
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(backdrop.Width * scale), (int)Math.Ceiling(backdrop.Height * scale),
+            96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        return bitmap;
     }
 
     private static BitmapSource PinEvidenceImage()

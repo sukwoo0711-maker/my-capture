@@ -89,8 +89,8 @@ public sealed class CapturePixelFillTests
                 Rect colour = texts[0].Bounds, location = texts[1].Bounds;
                 string what = $"scale {scale}, cursor {cursor}: colour {colour}, coordinates {location}";
                 Assert.False(colour.IntersectsWith(location), what);
-                Rect panel = leaves.OfType<GeometryDrawing>().Select(drawing => drawing.Geometry).OfType<RectangleGeometry>()
-                    .Single(geometry => geometry.RadiusX == 9).Rect;
+                Rect panel = view.NativeMagnifierPanelForTest ?? leaves.OfType<GeometryDrawing>()
+                    .Select(drawing => drawing.Geometry).OfType<RectangleGeometry>().Single(geometry => geometry.RadiusX == 9).Rect;
                 Assert.True(panel.Contains(colour) && panel.Contains(location), $"{what}, panel {panel}");
                 // 100% keeps the values side by side, as before; 200% puts the coordinates under the colour.
                 if (scale == 1.0) Assert.True(location.Top < colour.Bottom && location.Left > colour.Right, what);

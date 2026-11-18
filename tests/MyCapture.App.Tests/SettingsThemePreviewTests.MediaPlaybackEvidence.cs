@@ -62,7 +62,8 @@ public sealed partial class SettingsThemePreviewTests
 
             foreach ((double w, double h, string size) in new[] { (1180.0, 760.0, "1180"), (920.0, 680.0, "920"), (760.0, 555.0, "760") })
             {
-                var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document.Clone())
+                var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document.Clone(),
+                    pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
                 {
                     WindowStartupLocation = WindowStartupLocation.Manual,
                     Left = -10000, Top = -10000, Width = w, Height = h,

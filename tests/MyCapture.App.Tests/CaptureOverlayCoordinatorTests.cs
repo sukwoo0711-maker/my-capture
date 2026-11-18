@@ -26,6 +26,66 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureOverlayCoordinatorTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void GuideWriteWaitsForHiddenAndVisibleSelectorButNotForPersistence(bool native, bool confirm) => RunSta(() =>
+    {
+        using var releaseFrame = new ManualResetEventSlim();
+        using var coordinator = Coordinator(_ => { releaseFrame.Wait(TimeSpan.FromSeconds(8)); return Frame(); });
+        coordinator.UseNativeDibSelector = native;
+        coordinator.ReadWindowSources = null;
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ApplyCaptureExclusion = _ => true;
+        var pending = new Queue<Action>();
+        int saves = 0;
+        var settings = new AppSettings();
+        var scheduler = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pending.Enqueue);
+        var bookkeeping = new CaptureStartGuideBookkeeping(() => settings, _ => saves++, scheduler.Schedule, NullLogger.Instance);
+        coordinator.ClaimStartGuide = bookkeeping.Claim;
+        coordinator.ClaimKeyPanel = bookkeeping.ClaimKeyPanel;
+        coordinator.SelectorClosed += scheduler.NotifySelectorClosed;
+        var persisted = new TaskCompletionSource();
+        coordinator.SelectionPersistRequested = _ => persisted.Task;
+        coordinator.OpenEditorAfterCapture = () => false;
+        try
+        {
+            coordinator.Start(false, false, false);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Equal(1, settings.Capture.StartGuideShownCount);
+            Assert.Empty(pending);
+            Assert.Equal(0, saves);
+            releaseFrame.Set();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pending);
+            if (confirm)
+            {
+                new CoordinatorSelector(coordinator, native).SelectAll();
+                coordinator.ConfirmSelectionAsPin();
+                Assert.True(coordinator.IsActive); // Persistence continues after the selector closes.
+            }
+            else coordinator.Cancel();
+            Assert.False(coordinator.IsSelecting);
+            Assert.Single(pending);
+            Assert.Equal(0, saves);
+            pending.Dequeue()();
+            Assert.Equal(1, saves);
+            persisted.SetResult();
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.Empty(pending);
+        }
+        finally
+        {
+            releaseFrame.Set();
+            persisted.TrySetResult();
+            coordinator.Cancel();
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted && coordinator.LastTransitionForTest.IsCompleted);
+        }
+    });
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void PinConfirmationPersistsBeforeEndingWithoutOpeningEditor(bool native) => RunSta(() =>
@@ -286,11 +346,18 @@ public sealed class CaptureOverlayCoordinatorTests
         EditorKeysTests.Invoke(original, "CommitActiveText");
         Assert.Single(original.CreateCurrentImageSnapshot().Items);
         window.ConfirmClose = () => throw new InvalidOperationException("Capture must not ask to discard the editor.");
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         try
         {
             coordinator.Start(false, false, false, preserveEditor: true);
             PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
             var selector = new CoordinatorSelector(coordinator, native);
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             Assert.NotNull(selector);
             Assert.Same(original, coordinator.CurrentEditor);
             Assert.True(window.IsVisible);
@@ -307,6 +374,12 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.Equal(1, originalWrites);
             Assert.Equal(cancel ? 0 : 1, screenshotWrites);
             Assert.Equal(0, originalClosed);
+            Assert.False(coordinator.IsSelecting);
+            Assert.True(coordinator.IsActive); // The parent editor stays open after the nested selector.
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            pendingGuideWrites.Clear();
+            Assert.Equal(1, guideSaves);
             Assert.Single(original.CreateCurrentImageSnapshot().Items);
             Assert.True(original.HasUnsavedChanges);
         }
@@ -465,6 +538,10 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
             return Frame();
         });
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         coordinator.OverlayClosed += (_, _) => { Assert.Equal(ownerThread, Environment.CurrentManagedThreadId); closed++; };
         coordinator.RequiresCaptureExclusion = () => true;
         ObservePreparation(coordinator, selector => { windows++; pendingOverlay = selector; return true; });
@@ -474,6 +551,8 @@ public sealed class CaptureOverlayCoordinatorTests
             SynchronizationContext.SetSynchronizationContext(null);
             coordinator.Start(true, false, false);
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.Empty(pendingGuideWrites);
             Assert.True(coordinator.IsActive);
             Assert.Equal(1, windows);
             Assert.NotNull(pendingOverlay);
@@ -489,6 +568,8 @@ public sealed class CaptureOverlayCoordinatorTests
             coordinator.Start(false, true, true);
             Assert.Equal(1, calls);
             Assert.Equal(0, closed);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
         }
         finally
         {
@@ -499,6 +580,10 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.False(coordinator.IsActive);
         Assert.Equal(1, windows);
         Assert.Equal(1, closed);
+        Assert.False(coordinator.IsSelecting);
+        Assert.Equal(0, guideSaves);
+        Assert.Single(pendingGuideWrites).Invoke();
+        Assert.Equal(1, guideSaves);
     });
 
     [Fact]

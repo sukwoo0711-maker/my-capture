@@ -167,13 +167,19 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
             pin.AdvanceFeedbackForTest(TimeSpan.FromSeconds(0.2));
             Assert.False(pin.IsFeedbackVisible);
 
-            // A saved file name and the click-through recovery key are results to read.
+            // A saved file name covers the content's last line, so it leaves as soon as a copy confirmation does.
             pin.ReportSaveResult(new PinSaveResult(PinSaveStatus.Saved, @"C:\Captures\pin-2026.png"));
-            Assert.Equal((UiText.Format("Text_E3F51EDC0F16", "pin-2026.png"), FeedbackKind.Result, false), pin.FeedbackForTest);
-            pin.AdvanceFeedbackForTest(TimeSpan.FromSeconds(5.9));
+            Assert.Equal((UiText.Format("Text_E3F51EDC0F16", "pin-2026.png"), FeedbackKind.Confirmation, false), pin.FeedbackForTest);
+            pin.AdvanceFeedbackForTest(TimeSpan.FromSeconds(1.9));
             Assert.True(pin.IsFeedbackVisible);
+            pin.AdvanceFeedbackForTest(TimeSpan.FromSeconds(0.2));
+            Assert.False(pin.IsFeedbackVisible);
+
+            // The click-through recovery key tells how to undo the state, so it stays as long as a result.
             pin.ApplyClickThrough(true);
             Assert.Equal(FeedbackKind.Result, pin.FeedbackForTest.Kind);
+            pin.AdvanceFeedbackForTest(TimeSpan.FromSeconds(5.9));
+            Assert.True(pin.IsFeedbackVisible);
             pin.ApplyClickThrough(false);
             Assert.Equal(FeedbackKind.Confirmation, pin.FeedbackForTest.Kind);
 

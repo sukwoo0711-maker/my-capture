@@ -33,7 +33,8 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         fixture.Guide.Session.Skip(); // B2 -> B3; pin identity comes from the real manager.
         PinWindow pin = fixture.Pin;
         pin.ShowHoverBar();
-        pin.HoverBarForTest!.OpacityButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        // The bar has no opacity button; the pin's O key opens the same menu.
+        pin.HoverBarForTest!.OpenOpacityMenu();
         Drain();
         ContextMenu menu = OpenMenu(pin);
         Assert.True(menu.IsOpen);
@@ -278,7 +279,12 @@ public sealed class PracticeReviewFixProducerTests(ITestOutputHelper output)
         return app;
     }
     private static void Set(App app, string name, object value) => typeof(App).GetField(name, Private)!.SetValue(app, value);
-    private static WelcomeWindow Guide(App app) => (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false, false])!;
+    private static WelcomeWindow Guide(App app)
+    {
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", Private)!.Invoke(app, [true, false, false, false, false])!;
+        guide.Session.StartGroup(PracticeStep.A1);
+        return guide;
+    }
     private static void Capture(App app) => typeof(App).GetMethod("HandleCaptureRequested", Private)!.Invoke(app, null);
     private static FrozenFrame Frame() => new(EditorKeysTests.Solid(320, 200, 80), new RectD(-10000, -10000, 320, 200), null, 0);
     // A shown native HWND must intersect the desktop to submit its first frame. The pixels stay synthetic.

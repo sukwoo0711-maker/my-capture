@@ -25,7 +25,7 @@ public partial class App
             AppUpdating = _storeInstallationPending,
             AppExiting = _preparingExit,
             CaptureStarting = _preparingAdvancedCapture,
-            Countdown = _activeCountdown is not null,
+            Countdown = _overlay?.IsCountingDown == true,
             ScrollingCapture = _scrollCancellation is not null,
             RecordingActive = _recorder?.HasRecordingSession == true,
             RecordingCanCaptureStill = _recorder?.CanCaptureStill == true,
@@ -87,7 +87,7 @@ public partial class App
                     _ = _overlay?.BringSelectorForward();
                     return;
                 case CaptureBlock.Countdown:
-                    _ = _activeCountdown?.Activate();
+                    // The countdown is on screen and counts on; Esc there cancels it.
                     return;
                 case CaptureBlock.AppUpdating:
                     if (!BringHoldingWindowForward()) ShowCommandNotice(mode, UiText.Get("CaptureBlocked_Updating"));

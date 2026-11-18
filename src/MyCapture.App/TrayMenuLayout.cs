@@ -56,11 +56,31 @@ internal sealed record TrayMenuState(
 /// </summary>
 internal static class TrayMenuLayout
 {
+    internal static string OpenPinStatus(PinWindow pin) =>
+        string.Join(" · ", new[]
+        {
+            pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : null,
+            pin.State.IsCollapsed ? UiText.Get("Tray_PinCollapsed") : null,
+        }.Where(value => value is not null));
+
     /// <summary>F1 opens the shortcut window from any MyCapture window; the tray shows the same key.</summary>
     internal const string ShortcutsGesture = "F1";
     internal const int MaxOpenPinEntries = 15;
     internal const int MaxPinTitleLength = 40;
     private const int MaxPinTitleCodeUnits = 512;
+
+    /// <summary>
+    /// Brings the pins the menu does not list to the front, oldest first, so the newest of them ends on
+    /// top and active. Each one comes back like a listed pin: shown, clicks caught again, find cue played.
+    /// </summary>
+    internal static void ActivateUnlistedPins(IReadOnlyList<PinWindow> openPins, Action<PinWindow> activatePin)
+    {
+        ArgumentNullException.ThrowIfNull(openPins);
+        ArgumentNullException.ThrowIfNull(activatePin);
+        // Copied first: activating a pin can reorder or prune the list the menu was built from.
+        PinWindow[] unlisted = openPins.Skip(MaxOpenPinEntries).Reverse().ToArray();
+        foreach (PinWindow pin in unlisted) activatePin(pin);
+    }
 
     internal static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(
         TrayMenuCommands commands, HotkeySettings keys, bool canRestoreClosedPin, bool scrollingActive) =>
@@ -108,12 +128,16 @@ internal static class TrayMenuLayout
         {
             var children = openPins.Take(MaxOpenPinEntries)
                 .Select(pin => new ThemedShellPresenter.MenuEntry(OpenPinLabel(pin.PinnedContent), () => activatePin(pin),
-                    Gesture: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty,
+                    Gesture: OpenPinStatus(pin),
                     LiteralLabel: true, Thumbnail: pin.PinnedContent.Image,
-                    IsMuted: pin.State.IsHidden, ItemStatus: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty))
+                    IsMuted: pin.State.IsHidden, ItemStatus: OpenPinStatus(pin)))
                 .ToList();
+            // The rest cannot be told apart in a menu, so their row brings them all to the front instead.
             if (openPins.Count > MaxOpenPinEntries)
-                children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries), null, IsEnabled: false));
+            {
+                children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries),
+                    () => ActivateUnlistedPins(openPins, activatePin)));
+            }
             entries.Add(new(UiText.Get("Tray_OpenPins"), null, children));
         }
 

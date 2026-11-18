@@ -63,7 +63,8 @@ public sealed partial class SettingsThemePreviewTests
 
     private static void RenderVideoEditorScenes(RecordingResult recording, string root, string theme, string phase)
     {
-        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
+        var window = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 1180, Height = 760,

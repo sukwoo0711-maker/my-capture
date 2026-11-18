@@ -523,13 +523,13 @@ public sealed class GalleryCaptionPreviewTests
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var combined = new XElement(p + "ResourceDictionary");
+        var themes = new XElement(p + "ResourceDictionary.MergedDictionaries");
+        // Load the shipped BAML for shared templates so their nested namescopes stay intact.
+        // Only the gallery's local card resources below need the window-event fixture transform.
         foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(GalleryCaptionPreviewTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            XElement dictionary = XDocument.Load(source).Root!;
-            CopyNamespaces(dictionary, combined);
-            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
-        }
+            themes.Add(new XElement(p + "ResourceDictionary",
+                new XAttribute("Source", $"pack://application:,,,/MyCapture;component/Themes/{name}.xaml")));
+        combined.Add(themes);
         combined.SetAttributeValue(XNamespace.Xmlns + "gallery", "clr-namespace:MyCapture.App.Gallery;assembly=MyCapture");
         combined.Add(new XElement(XName.Get("BoolToVisibilityConverter", "clr-namespace:MyCapture.App.Gallery;assembly=MyCapture"), new XAttribute(x + "Key", "BoolToVisibility")));
         combined.Add(new XElement(XName.Get("PinLabelConverter", "clr-namespace:MyCapture.App.Gallery;assembly=MyCapture"), new XAttribute(x + "Key", "PinLabel")));

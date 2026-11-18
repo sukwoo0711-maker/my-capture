@@ -33,7 +33,7 @@ internal sealed class PinTranslationEngines(TextTranslationService englishToKore
         MyCapture.Core.Settings.OcrSettings settings, CancellationToken cancellationToken)
     {
         if (ocr is null) return null;
-        OcrResult result = await ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, settings), cancellationToken);
+        OcrResult result = await PinTextCopyService.RecognizeAsync(image, ocr, settings, cancellationToken);
         if (!result.HasText) return null;
         string text = OcrExtractionAnalyzer.Analyze(result).Text(joinLines: false);
         return string.IsNullOrWhiteSpace(text) ? null : text;
@@ -48,7 +48,8 @@ internal sealed class PinTranslationEngines(TextTranslationService englishToKore
         MyCapture.Core.Settings.OcrSettings settings, CancellationToken cancellationToken,
         Action<OcrResult>? windowsReading = null) =>
         ocr is null ? Task.FromResult(OcrResult.Unavailable())
-            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, OverlayReading(settings)).WithLatinRecovery(windowsReading), cancellationToken);
+            : PinTextCopyService.RecognizeAsync(image, ocr,
+                OcrRequestFactory.FromBitmap(image, OverlayReading(settings)).WithLatinRecovery(windowsReading), cancellationToken);
 
     /// <summary>
     /// The Fast stage the in-place translation was measured with, in the user's languages. Accurate also reads with

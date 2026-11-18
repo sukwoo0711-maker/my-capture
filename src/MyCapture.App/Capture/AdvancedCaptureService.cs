@@ -56,6 +56,13 @@ internal interface IAdvancedCaptureEnvironment
     Task<WindowSourceSnapshot?> ReadWindowSourceAsync(WindowUnderCursor? window) =>
         Task.FromResult(ReadWindowSource(window));
 
+    /// <summary>
+    /// Optional late read of a code editor's document for a window whose confirmed source has none; empty
+    /// when there is none. Runs after the capture's own reads; nothing waits for it.
+    /// </summary>
+    Task<string> ReadEditorDocumentAsync(WindowUnderCursor window, CaptureSourceDetails source) =>
+        Task.FromResult(string.Empty);
+
     /// <summary>Resolves a stored region against the current display topology.</summary>
     RectD? ResolveRepeatRegion(RegionHistoryEntry entry);
 
@@ -446,6 +453,16 @@ internal sealed class AdvancedCaptureService
         catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
 
+    /// <summary>The confirmed details with the document a code editor's selected tab names, when it names one.</summary>
+    private async Task<CaptureSourceDetails> WithEditorDocumentAsync(WindowUnderCursor window, CaptureSourceDetails details)
+    {
+        if (details.DocumentPath.Length > 0 || !EditorDocumentMatch.IsEditor(details.AppPath)) return details;
+        string path;
+        try { path = await _environment.ReadEditorDocumentAsync(window, details).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return details; }
+        return CaptureSourceDetails.WithDocument(details, path, CaptureDocumentOrigin.Editor) ?? details;
+    }
+
     private static WindowSourceSnapshot? ValidateSource(WindowUnderCursor window, WindowSourceSnapshot? source) =>
         source is not null && source.ProcessId == window.ProcessId ? source : null;
 
@@ -478,10 +495,14 @@ internal sealed class AdvancedCaptureService
         document is not null && document.ProcessId == window.ProcessId
         && string.Equals(document.WindowTitle, window.Title, StringComparison.Ordinal)
         && !string.IsNullOrWhiteSpace(document.DocumentId)
-        && !string.IsNullOrEmpty(SourcePageUrl.Normalize(document.Url)) ? document : null;
+        && !string.IsNullOrEmpty(SourcePageUrl.NormalizeDocument(document.Url)) ? document : null;
 
     private static string StableUrl(BrowserDocumentSnapshot? before, BrowserDocumentSnapshot? after) =>
-        before is not null && before == after ? SourcePageUrl.Normalize(before.Url) : string.Empty;
+        before is not null && before == after ? before.PageUrl : string.Empty;
+
+    /// <summary>The application details with the local file a browser showed in every read, when it showed one.</summary>
+    private static CaptureSourceDetails WithLocalFile(CaptureSourceDetails details, BrowserDocumentSnapshot? document) =>
+        CaptureSourceDetails.WithDocument(details, document?.LocalFilePath, CaptureDocumentOrigin.Browser) ?? details;
 
     private BitmapSource CaptureScrollingFrame(RectD region, ScrollingSource source, CancellationToken cancellation)
     {
@@ -532,8 +553,10 @@ internal sealed class AdvancedCaptureService
                 ? owner.ReadSourceAsync(window) : NoSource;
             BrowserDocumentSnapshot? pageConfirmed = await pageAfter.ConfigureAwait(false);
             WindowSourceSnapshot? sourceConfirmed = await sourceAfter.ConfigureAwait(false);
+            CaptureSourceDetails details = WithLocalFile(StableSource(window, source, sourceConfirmed),
+                page is not null && page == pageConfirmed ? page : null);
             return new CaptureSelectionSource(window.Title, StableUrl(page, pageConfirmed),
-                StableSource(window, source, sourceConfirmed));
+                await owner.WithEditorDocumentAsync(window, details).ConfigureAwait(false));
         }
     }
 
@@ -624,9 +647,11 @@ internal sealed class AdvancedCaptureService
             BrowserDocumentSnapshot? pageConfirmed = await pageAfter.ConfigureAwait(false);
             WindowSourceSnapshot? sourceConfirmed = await sourceAfter.ConfigureAwait(false);
             if (confirmPage) page = Observe(pageConfirmed);
+            CaptureSourceDetails details = WithLocalFile(StableSource(window, sourceFirst, sourceConfirmed),
+                page ? _document : null);
             return new CaptureSelectionSource(string.Empty,
-                page ? SourcePageUrl.Normalize(_document?.Url) : string.Empty,
-                StableSource(window, sourceFirst, sourceConfirmed));
+                page ? _document?.PageUrl ?? string.Empty : string.Empty,
+                await _owner.WithEditorDocumentAsync(window, details).ConfigureAwait(false));
         }
 
         /// <summary>

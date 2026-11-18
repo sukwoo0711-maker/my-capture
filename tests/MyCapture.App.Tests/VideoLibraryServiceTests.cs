@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
+using MyCapture.App.Threading;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
@@ -646,6 +647,149 @@ public sealed class VideoLibraryServiceTests
             Assert.True(library.IsBusy(id));
 
             AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("timeout")]
+    [InlineData("media-failed")]
+    public async Task InconclusiveDurationFallback_KeepsFinishedRecordingUntilStartupPublishesIt(string outcome)
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            // The real probe runs on the real clip, but as if the reader reported no duration and
+            // the media player's container fallback then timed out or failed for a moment.
+            library.CaptureCompletionProbeForTest = (path, token) =>
+                VideoFrameRenderPipeline.Probe(path, ignoreReaderDuration: true, InconclusiveContainerOpen(outcome), token);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            Guid id = capture.Record.Id;
+            string pending = Path.Combine(queue.GetDirectory(capture.Record), CaptureFileNames.VideoPending);
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+            byte[] encoded = SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath));
+
+            Exception thrown = await Assert.ThrowsAnyAsync<Exception>(
+                () => library.CompleteCaptureAsync(capture, result));
+            capture.Dispose();
+
+            Assert.False(thrown is InvalidDataException, thrown.ToString());
+            Assert.True(capture.IsRetainedForRecovery);
+            Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(capture.StagingOutputPath)));
+            Assert.True(File.Exists(pending));
+            Assert.Empty(bin.Moved);
+            Assert.Empty(queue.Records);
+            Assert.True(library.IsBusy(id));
+
+            AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("timeout")]
+    [InlineData("media-failed")]
+    public void InconclusiveDurationFallback_PreservesAbandonedRecordingForTheNextStart(string outcome)
+    {
+        string root = NewRoot();
+        VideoCaptureWriteSession? abandoned = null;
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue firstQueue = NewQueue(paths);
+            VideoLibraryService firstLibrary = NewLibrary(firstQueue, paths, bin);
+            abandoned = firstLibrary.BeginCapture(expectedFrameRate: 10);
+            Guid id = abandoned.Record.Id;
+            string pending = Path.Combine(firstQueue.GetDirectory(abandoned.Record), CaptureFileNames.VideoPending);
+            _ = EncodeClip(abandoned.StagingOutputPath, 160, 90, 10, 10);
+            byte[] encoded = SHA256.HashData(File.ReadAllBytes(abandoned.StagingOutputPath));
+
+            CaptureQueue restartQueue = NewQueue(paths);
+            var restarted = new VideoLibraryService(
+                restartQueue,
+                paths,
+                NullLogger<VideoLibraryService>.Instance,
+                path => StaThreadTask.RunAsync(
+                        () => VideoFrameRenderPipeline.Probe(
+                            path,
+                            ignoreReaderDuration: true,
+                            InconclusiveContainerOpen(outcome),
+                            CancellationToken.None),
+                        "MyCapture test abandoned video recovery")
+                    .GetAwaiter()
+                    .GetResult(),
+                bin.Remove);
+
+            Assert.Empty(restartQueue.Records);
+            Assert.Equal(encoded, SHA256.HashData(File.ReadAllBytes(abandoned.StagingOutputPath)));
+            Assert.True(File.Exists(pending));
+            Assert.Empty(bin.Moved);
+            Assert.True(restarted.IsBusy(id));
+
+            AssertRestartPublishes(paths, bin, id, encoded);
+        }
+        finally
+        {
+            abandoned?.Dispose();
+            DeleteRoot(root);
+        }
+    }
+
+    /// <summary>
+    /// The media player's open wait ending without an answer: the eight-second deadline passing,
+    /// or a MediaFailed raised by a busy media stack rather than by the file.
+    /// </summary>
+    private static Func<string, CancellationToken, VideoFrameRenderPipeline.ContainerOpenOutcome>
+        InconclusiveContainerOpen(string outcome) => (_, _) => outcome == "timeout"
+            ? new VideoFrameRenderPipeline.ContainerOpenOutcome(Opened: false, Failure: null, DurationMs: null)
+            // E_OUTOFMEMORY: the media stack could not get the resources to open the file this time.
+            : new VideoFrameRenderPipeline.ContainerOpenOutcome(
+                Opened: false,
+                Failure: new COMException("The media player could not open the file.", unchecked((int)0x8007000E)),
+                DurationMs: null);
+
+    [Fact]
+    public async Task DurationFallbackThatOpensWithoutADuration_StillRejectsTheRecording()
+    {
+        string root = NewRoot();
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            var bin = new FakeRecycleBin(root);
+            CaptureQueue queue = NewQueue(paths);
+            VideoLibraryService library = NewLibrary(queue, paths, bin);
+            // Two media stacks agree here: the reader gave no duration and the player opened the
+            // container and found none either. That stays a verdict on the media, as before.
+            library.CaptureCompletionProbeForTest = (path, token) =>
+                VideoFrameRenderPipeline.Probe(
+                    path,
+                    ignoreReaderDuration: true,
+                    (_, _) => new VideoFrameRenderPipeline.ContainerOpenOutcome(Opened: true, Failure: null, DurationMs: null),
+                    token);
+            VideoCaptureWriteSession capture = library.BeginCapture(expectedFrameRate: 10);
+            string directory = queue.GetDirectory(capture.Record);
+            RecordingResult result = EncodeClip(capture.StagingOutputPath, 160, 90, 10, 10);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => library.CompleteCaptureAsync(capture, result));
+            capture.Dispose();
+
+            Assert.False(capture.IsRetainedForRecovery);
+            Assert.Empty(queue.Records);
+            Assert.False(File.Exists(capture.StagingOutputPath));
+            Assert.False(File.Exists(Path.Combine(directory, CaptureFileNames.VideoPending)));
+            Assert.Contains(capture.StagingOutputPath, bin.Moved);
+            Assert.False(library.IsBusy(capture.Record.Id));
         }
         finally
         {

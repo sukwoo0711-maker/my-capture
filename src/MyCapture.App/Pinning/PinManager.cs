@@ -9,6 +9,7 @@ using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Pinning;
@@ -38,9 +39,11 @@ internal enum PasteResult
 /// </para>
 /// <para>
 /// Placement uses the monitor under the cursor: the frozen image's pixel size is converted
-/// to DIP with that monitor's scale factor, fitted to ~80% of its working area by
-/// <see cref="PinGeometry"/>, and centred near the cursor but clamped fully inside the work
-/// area. This keeps a pin from opening off-screen or larger than the display.
+/// to DIP with that monitor's scale factor, shown at that size (or, for a spreadsheet's picture
+/// of its cells, at the size the cells had in the sheet window) unless it would not fit the
+/// working area, then reduced by <see cref="PinGeometry"/> just enough to fit, and centred near
+/// the cursor but clamped fully inside the work area. This keeps a pin from opening off-screen
+/// or larger than the display.
 /// </para>
 /// <para>
 /// Every pin that closes (Esc, Delete, double-click, its menu, or close all) is remembered
@@ -171,7 +174,8 @@ internal sealed partial class PinManager
         double Zoom,
         double Opacity,
         PinClosedPlacement? Placement,
-        long OpenedOrder = 0, Guid LogicalPracticeId = default);
+        long OpenedOrder = 0, Guid LogicalPracticeId = default,
+        bool IsCollapsed = false, double? CollapsedOpacity = null, bool IsClickThrough = false);
 
     private sealed record EncodedClosedPin(
         Task<EncodedPinContent> Content,
@@ -209,6 +213,8 @@ internal sealed partial class PinManager
     /// <summary>Raised when a pin requests OCR of its image (Ctrl+double-click or menu).</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
 
+    internal Func<BitmapSource, CancellationToken, Task<MyCapture.Ocr.OcrResult>>? RecognizeSelection { get; set; }
+
     /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
     internal event Action? PinCreated;
 
@@ -231,6 +237,27 @@ internal sealed partial class PinManager
     internal Func<MonitorInfo>? ReadPlacementMonitorForTest { get; set; }
     internal Func<IReadOnlyList<MonitorInfo>>? ReadRestoreMonitorsForTest { get; set; }
 
+    /// <summary>
+    /// Starts the optional read of how large a copied spreadsheet range looked on screen, or
+    /// returns null when the copy did not come from the foreground spreadsheet window. Runs on
+    /// the UI thread before the clipboard is read, so it must only start work, never wait.
+    /// Null (no read) until the app shell sets <see cref="ReadSpreadsheetView"/>; tests set a stand-in.
+    /// </summary>
+    internal Func<Task<SpreadsheetSelectionView?>?>? BeginSpreadsheetViewRead { get; set; }
+
+    /// <summary>Reads the foreground spreadsheet window's object model, when the copy came from it.</summary>
+    internal static Task<SpreadsheetSelectionView?>? ReadSpreadsheetView()
+    {
+        IntPtr source = ExcelSelectionReader.FindCopySource();
+        return source == IntPtr.Zero ? null : ExcelSelectionReader.ReadAsync(source);
+    }
+
+    /// <summary>
+    /// Longest a paste waits for <see cref="BeginSpreadsheetViewRead"/>, counted from when the read
+    /// started; it runs while the clipboard is read, so a pin usually waits for none of it.
+    /// </summary>
+    internal TimeSpan SpreadsheetViewWait { get; set; } = ExcelSelectionReader.Budget;
+
     /// <summary>Open pins in opening order, newest first, including hidden pins.</summary>
     internal IReadOnlyList<PinWindow> SnapshotOpenPinWindows()
     {
@@ -249,7 +276,7 @@ internal sealed partial class PinManager
         if (pin.State.IsHidden) ShowPinWindow(pin, pin.ShowPin);
         if (pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
         if (ActivatePinForTest is { } activatePin) activatePin(pin);
-        else pin.Activate();
+        else pin.ActivatePin();
         pin.PlayFindCue();
     }
 
@@ -277,9 +304,11 @@ internal sealed partial class PinManager
             pin.TranslationSourceView.Width,
             pin.TranslationSourceView.Height,
             pin.TranslationSourceView.Zoom,
-            pin.State.Opacity,
+            pin.State.ExpandedOpacity,
             pin.GetCurrentPlacement(),
-            openingAge[pin])).ToArray();
+            openingAge[pin], IsCollapsed: pin.State.IsCollapsed,
+            CollapsedOpacity: pin.State.IsCollapsed ? pin.State.Opacity : null,
+            IsClickThrough: pin.State.IsClickThrough)).ToArray();
     }
 
     /// <summary>Number of open pins.</summary>
@@ -332,15 +361,22 @@ internal sealed partial class PinManager
     /// </summary>
     internal async Task<PasteResult> PasteFromClipboardAsync(Func<Task<ClipboardImageReader.PinReadAttempt>>? readClipboard = null)
     {
+        long sheetViewStarted = Stopwatch.GetTimestamp();
+        Task<SpreadsheetSelectionView?>? sheetView = StartSpreadsheetViewRead();
         ClipboardImageReader.PinReadAttempt read = await (readClipboard ?? ClipboardImageReader.ReadPinAsync)();
 
         switch (read.Outcome.Status)
         {
             case ClipboardImageStatus.Success when read.Content is not null:
-                PinWindow clipboardPin = OpenPin(read.Content, activate: false);
-                PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, LogicalPinId: clipboardPin.LogicalPracticeId,
-                    WindowPinId: clipboardPin.PracticeId, ClipboardSequence: read.ClipboardSequence));
-                return PasteResult.Pinned;
+                // Only a spreadsheet's own picture of its cells has an on-screen size to follow.
+                SpreadsheetSelectionView? view = read.Content.Kind == PinContentKind.Table
+                    && !read.Content.UsesDeviceIndependentPixels
+                        ? await AwaitSpreadsheetViewAsync(sheetView, sheetViewStarted)
+                        : null;
+                // Waiting for the view may resume on a pool thread; windows open on the manager's thread.
+                if (!_dispatcher.CheckAccess())
+                    return await _dispatcher.InvokeAsync(() => OpenPastedPin(read, view));
+                return OpenPastedPin(read, view);
 
             case ClipboardImageStatus.Busy:
                 _log.LogInformation("Paste-to-screen: clipboard was busy");
@@ -350,6 +386,47 @@ internal sealed partial class PinManager
                 _log.LogInformation("Paste-to-screen: no supported clipboard content");
                 return PasteResult.NoSupportedContent;
         }
+    }
+
+    private PasteResult OpenPastedPin(ClipboardImageReader.PinReadAttempt read, SpreadsheetSelectionView? view)
+    {
+        PinWindow clipboardPin = OpenPin(read.Content!, activate: false, spreadsheetView: view);
+        PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, LogicalPinId: clipboardPin.LogicalPracticeId,
+            WindowPinId: clipboardPin.PracticeId, ClipboardSequence: read.ClipboardSequence));
+        return PasteResult.Pinned;
+    }
+
+    private Task<SpreadsheetSelectionView?>? StartSpreadsheetViewRead()
+    {
+        try
+        {
+            return BeginSpreadsheetViewRead?.Invoke();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.LogDebug("Spreadsheet view read did not start ({FailureType})", ex.GetType().Name);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The spreadsheet view if its read has finished within <see cref="SpreadsheetViewWait"/> of
+    /// starting; otherwise null, and the pin opens at its usual size. A late result is dropped,
+    /// never applied to the open pin.
+    /// </summary>
+    private async Task<SpreadsheetSelectionView?> AwaitSpreadsheetViewAsync(Task<SpreadsheetSelectionView?>? read, long started)
+    {
+        if (read is null) return null;
+        TimeSpan remaining = SpreadsheetViewWait - Stopwatch.GetElapsedTime(started);
+        if (!read.IsCompleted && remaining > TimeSpan.Zero)
+            await Task.WhenAny(read, Task.Delay(remaining));
+        if (!read.IsCompletedSuccessfully)
+        {
+            if (read.IsFaulted) _ = read.Exception; // Observed: the view is optional.
+            _log.LogDebug("Spreadsheet view was not available in time; the pin keeps the picture's size");
+            return null;
+        }
+        return read.Result;
     }
 
     /// <summary>Opens a new pin for an already-decoded, frozen image.</summary>
@@ -375,7 +452,8 @@ internal sealed partial class PinManager
     internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
         OpenPin(PinContent.FromText(image, originalText, isTable), activate: true);
 
-    private PinWindow OpenPin(PinContent content, bool activate, RectD? screenOrigin = null, MonitorInfo? captureMonitor = null)
+    private PinWindow OpenPin(PinContent content, bool activate, RectD? screenOrigin = null, MonitorInfo? captureMonitor = null,
+        SpreadsheetSelectionView? spreadsheetView = null)
     {
         PinSettings settings = _settings();
         MonitorInfo monitor = captureMonitor ?? ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
@@ -386,6 +464,14 @@ internal sealed partial class PinManager
         // previews keep their original DIP layout while their raster follows the display.
         double imageWidthDip = content.UsesDeviceIndependentPixels ? content.LayoutWidthDip : content.Image.PixelWidth / scale;
         double imageHeightDip = content.UsesDeviceIndependentPixels ? content.LayoutHeightDip : content.Image.PixelHeight / scale;
+        // A spreadsheet picture opens as large as its cells looked in the sheet window, when the
+        // window's selection still has the picture's shape (PinGeometry.SpreadsheetViewZoom).
+        double preferredZoom = 1;
+        if (spreadsheetView is { } view && screenOrigin is null && !content.UsesDeviceIndependentPixels
+            && PinGeometry.SpreadsheetViewZoom(content.PixelWidth, content.PixelHeight, scale, view) is { } sheetZoom)
+        {
+            preferredZoom = sheetZoom;
+        }
         content = content.RenderedAt(scale);
         BitmapSource image = content.Image;
 
@@ -409,7 +495,8 @@ internal sealed partial class PinManager
             workHeightDip,
             cursorXDip,
             cursorYDip,
-            _pins.Count);
+            _pins.Count,
+            preferredZoom);
 
         var state = new PinViewState(
             imageWidthDip,
@@ -418,7 +505,9 @@ internal sealed partial class PinManager
             settings.InitialOpacity,
             settings.ZoomStep);
 
-        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
+        var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        TryUseNativeHost(pin, content, settings, state,
+            screenOrigin?.Left ?? placement.Left * scale, screenOrigin?.Top ?? placement.Top * scale, scale);
         if (screenOrigin is { } origin)
             pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
@@ -436,12 +525,13 @@ internal sealed partial class PinManager
             content.Kind,
             state.Zoom,
             _pins.Count);
+        OpeningStepForProbe?.Invoke("LogInformation");
 
         if (PinCreated is { } handlers)
         {
             foreach (Action handler in handlers.GetInvocationList())
             {
-                try { handler(); }
+                try { handler(); OpeningStepForProbe?.Invoke("PinCreated:" + handler.Method.DeclaringType?.Name + "." + handler.Method.Name); }
                 catch (Exception ex)
                 {
                     // Optional guidance must not turn an already-open pin into a failed action.
@@ -509,17 +599,34 @@ internal sealed partial class PinManager
         }
     }
 
-    /// <summary>Reopens a saved open pin without activation, guidance, or closed-history changes.</summary>
+    /// <summary>
+    /// Reopens a saved open pin without activation, guidance, or closed-history changes. Unlike a
+    /// closed pin reopened on request, it comes back exactly as the exit left it, click-through included:
+    /// the pin's recovery handle and the open-pins menu still reach it.
+    /// </summary>
     internal PinWindow RestoreSessionPin(ClosedPin snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        return RestorePin(snapshot, activate: false);
+        PinWindow pin = RestorePin(snapshot, activate: false);
+        if (snapshot.IsClickThrough && !pin.IsClosed) pin.ApplyClickThrough(enabled: true);
+        return pin;
+    }
+
+    /// <summary>
+    /// Puts restored session pins back in their saved stacking order, bottom to top. A pin settles its
+    /// position and size after it is shown, which can raise it above a pin restored after it.
+    /// </summary>
+    internal void RestackSessionPins(IReadOnlyList<PinWindow> bottomToTop)
+    {
+        Prune();
+        IntPtr[] handles = bottomToTop.Where(pin => !pin.IsClosed && _pins.Contains(pin)).Select(pin => pin.Handle).ToArray();
+        if (handles.Length > 1) PinWindowOrder.StackBottomToTop(handles);
     }
 
     private PinWindow RestorePin(ClosedPin closed, bool activate)
     {
-        // Click-through is deliberately not carried over: the new state starts interactive.
-        // A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
+        // Click-through is not carried over to a closed pin reopened on request: the new state starts
+        // interactive. A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
         // zoom or open its menu, and the user is reopening this pin precisely to work with it.
         // Hidden (Shift+F3) state is not carried over either; a restored pin is shown.
         var state = new PinViewState(
@@ -529,8 +636,14 @@ internal sealed partial class PinManager
             closed.Opacity,
             _settings().ZoomStep);
 
+        state.SetCollapsed(closed.IsCollapsed);
+        if (closed.IsCollapsed && closed.CollapsedOpacity is { } opacity) state.SetOpacity(opacity);
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings);
+        PinContent content = closed.Content.RenderedAt(scale);
+        var pin = new PinWindow(content, state, leftDip, topDip, _settings, dragInput: CreateDragInputForTest?.Invoke(), recognizeSelection: RecognizeSelection);
+        // A reopened or restored pin goes through the policy again (design 4.4).
+        TryUseNativeHost(pin, content, _settings(), state,
+            physical?.Left ?? leftDip * scale, physical?.Top ?? topDip * scale, scale);
         if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {
@@ -623,12 +736,20 @@ internal sealed partial class PinManager
         return (left, top, null, scale);
     }
 
+    internal Func<IPinDragInput>? CreateDragInputForTest { get; set; }
+
     private void AttachAndShow(PinWindow pin, bool activate, bool landing = true)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.HideRequested += (_, _) => pin.HidePin();
         pin.ShowOnlyRequested += (_, _) => ShowOnlyPin(pin);
         pin.CanShowOnlyPin = () => _pins.Any(other => other != pin && !other.IsClosed && !other.State.IsHidden);
+        pin.ReadSnapTargets = () => _pins.Where(other => other != pin && !other.IsClosed && !other.State.IsHidden && other.IsShown)
+            .Select(other =>
+            {
+                var bounds = other.PhysicalBounds;
+                return new PinSnap.Target(new RectD(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top));
+            }).ToArray();
         pin.HiddenStateChanged += NotifyOpenPinsChanged;
         pin.CopyRequested += OnPinCopyRequested;
         pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
@@ -644,24 +765,36 @@ internal sealed partial class PinManager
         pin.UserZoomChanged += OnUserZoomChanged;
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
+        pin.HostSwitched += reason => _log.LogInformation("Pin host switched to WPF ({Reason})", reason);
+        pin.NativeHostFailed += error => LogNativeFailureOnce(error, pin.PinnedContent);
+        pin.NativeInteractionEnded += OnPinInteractionEnded;
         AttachTranslation(pin);
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
-        ShowPinWindow(pin, pin.Show);
+        ShowPinWindow(pin, pin.Present);
+        OpeningStepForProbe?.Invoke("Present");
         AttachMermaid(pin);
+        OpeningStepForProbe?.Invoke("AttachMermaid");
         if (landing) pin.StartLandingEffect();
+        OpeningStepForProbe?.Invoke("StartLandingEffect");
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
-            else pin.Activate();
+            else pin.ActivatePin();
         }
+        OpeningStepForProbe?.Invoke("ActivatePin");
 
         NotifyOpenPinsChanged();
+        OpeningStepForProbe?.Invoke("NotifyOpenPinsChanged");
         NotifyPracticePinObservers(PinOpened, pin.PracticeId);
+        OpeningStepForProbe?.Invoke("NotifyPracticePinObservers");
     }
+
+    /// <summary>Resident probe only: marks each step of a pin's opening turn after its window is shown.</summary>
+    internal Action<string>? OpeningStepForProbe { get; set; }
 
     private void NotifyPracticePinObservers(Action<Guid>? observers, Guid pinId)
     {
@@ -709,7 +842,10 @@ internal sealed partial class PinManager
 
         PinViewState state = pin.State;
         PinContent content = pin.PinnedContent;
-        byte[]? cached = content.EncodedPng ?? pin.ClipboardCache.TryGetEncoded(content.Image, content.SourcePageUrl);
+        // A copy's PNG is keyed by the bitmap it encoded; a picture kept only as a native source has no bitmap
+        // to look up unless one built for a copy is still alive, and building one here would only cost time.
+        byte[]? cached = content.EncodedPng ?? (content.ImageIfPresent is { } image
+            ? pin.ClipboardCache.TryGetEncoded(image, content.SourcePageUrl) : null);
         // The task owns the frozen source only until PNG encoding finishes. Its result has no
         // bitmap/window references; closing order is reserved before any background work completes.
         Func<PinContent, byte[]?, EncodedPinContent> encode = EncodeClosedForTest ?? EncodedPinContent.Encode;
@@ -976,7 +1112,7 @@ internal sealed partial class PinManager
 
         if (sender is PinWindow pin && !pin.IsClosed)
         {
-            pin.ReportCopyResult(copied);
+            pin.ReportCopyResult(copied, request.OriginalText is not null);
         }
     }
 
@@ -1039,7 +1175,7 @@ internal sealed partial class PinManager
         try
         {
             result = e.Mode == PinSaveMode.SaveAs
-                ? await _saveService.SaveAsAsync(e.Image, pin, e.SourcePageUrl)
+                ? await _saveService.SaveAsAsync(e.Image, pin.DialogOwner, e.SourcePageUrl, pin.DialogOwnerHandle)
                 : await _saveService.QuickSaveAsync(e.Image, e.SourcePageUrl);
         }
         catch (Exception ex)
@@ -1068,7 +1204,7 @@ internal sealed partial class PinManager
         // folder so space can be freed or the other program found.
         string? folder = result.Error is { } error ? MyCapture.App.Themes.ThemedDialog.SaveLocationFor(error, result.Path) : null;
         _ = MyCapture.App.Themes.ThemedDialog.Show(
-            pin,
+            pin.DialogOwner,
             MyCapture.App.Themes.ThemedDialog.SaveFailureMessage(result.Error, result.Path),
             UiText.Get("Text_A97A3B71F038"),
             MessageBoxButton.OK,
@@ -1076,7 +1212,8 @@ internal sealed partial class PinManager
             details: detail,
             recovery: () => LastSaveOperationForTest = SavePinAsync(pin, new PinSaveRequestedEventArgs(PinSaveMode.SaveAs, e.Image, e.SourcePageUrl)),
             recoveryLabel: UiText.Get("Dialog.ChooseLocation"),
-            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)]);
+            commands: folder is null ? null : [MyCapture.App.Themes.ThemedDialog.OpenSaveLocationCommand(folder)],
+            ownerHandle: pin.DialogOwnerHandle);
         return result;
     }
 

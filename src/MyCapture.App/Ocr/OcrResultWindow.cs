@@ -127,7 +127,7 @@ internal sealed partial class OcrResultWindow : Window
         // TSF formats every selected line when it measures the selection (TextStore.GetTextExt).
         // With the IME on, a 100k-character select-all took 5.8 s to lay out, so editing keeps
         // the IME for a caret or a small selection only (UpdateInputMethod).
-        _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
+        _textBox.SetResourceReference(Control.BackgroundProperty, "Input.Fill");
         _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
         AutomationProperties.SetHelpText(
@@ -135,17 +135,12 @@ internal sealed partial class OcrResultWindow : Window
 
         var textFrame = new Border
         {
+            Name = "OcrWorkspace",
             Margin = new Thickness(24, 2, 24, 4),
-            Padding = new Thickness(1),
-            Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
-            BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12),
             ClipToBounds = true,
             Child = BuildAdvancedWorkspace(),
         };
-        textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
-        textFrame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        textFrame.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         Grid.SetRow(textFrame, 1);
         root.Children.Add(textFrame);
 

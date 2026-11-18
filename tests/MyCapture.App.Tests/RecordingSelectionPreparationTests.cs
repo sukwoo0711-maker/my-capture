@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Capture;
 using MyCapture.App.Recording;
 using MyCapture.App.Gallery;
 using MyCapture.Core.Primitives;
@@ -19,6 +20,51 @@ namespace MyCapture.App.Tests;
 
 public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RecordingSelectorDefersAPreviousGuideWriteUntilSelectionCloses(bool native) => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-record-guide-write-");
+        RegionRecordingCoordinator recorder = Create(root, native);
+        using var releaseFrame = new ManualResetEventSlim();
+        var pending = new Queue<Action>();
+        int saves = 0;
+        var scheduler = new CaptureGuideWriteScheduler(() => recorder.IsSelecting, pending.Enqueue);
+        recorder.SelectorClosed += scheduler.NotifySelectorClosed;
+        recorder.AcquireSelectionFrame = () => { releaseFrame.Wait(TimeSpan.FromSeconds(8)); return Frame(); };
+        recorder.OpenControlsForTest = _ => { };
+        ExcludeSelection(recorder, native, _ => true);
+        try
+        {
+            scheduler.Schedule(() => saves++); // Previous screenshot closed before this recording started.
+            Assert.Single(pending);
+            recorder.Toggle();
+            Assert.True(recorder.IsSelecting);
+            pending.Dequeue()();
+            Assert.Equal(0, saves);
+            Assert.Empty(pending);
+            releaseFrame.Set();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            Assert.True(recorder.IsSelecting);
+            Assert.Empty(pending);
+            new RecordingSelector(recorder, native).CompleteSelection(new RectD(1, 1, 20, 12));
+            Assert.False(recorder.IsSelecting);
+            Assert.Single(pending);
+            pending.Dequeue()();
+            Assert.Equal(1, saves);
+            output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(RecordingSelectorDefersAPreviousGuideWriteUntilSelectionCloses)} native={native}");
+        }
+        catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
+        finally
+        {
+            releaseFrame.Set();
+            recorder.CancelRegionSelection();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -158,11 +204,17 @@ public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)));
             return Frame();
         };
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         coordinator.SessionEnded += (_, _) => ended++;
         try
         {
             coordinator.Toggle();
             Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.Empty(pendingGuideWrites);
             Assert.NotNull(overlay);
             Assert.False(overlay.IsVisible);
             bool responsive = false;
@@ -173,11 +225,17 @@ public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
             coordinator.CancelRegionSelection();
             Assert.True(coordinator.IsActive); // reserve until native acquisition drains
             Assert.Equal(0, ended);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             release.Set();
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.False(coordinator.IsActive);
             Assert.False(overlay.IsVisible);
             Assert.Equal(1, ended);
+            Assert.False(coordinator.IsSelecting);
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            Assert.Equal(1, guideSaves);
             output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(DelayedAcquisition_LeavesDispatcherResponsive_AndCancelDiscardsLateFrame)} excluded={excluded} native={native}");
         }
         catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }
@@ -200,6 +258,10 @@ public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
         int attempts = 0;
         int failures = 0;
         int ownerThread = Environment.CurrentManagedThreadId;
+        var pendingGuideWrites = new Queue<Action>();
+        int guideSaves = 0;
+        var guideWrites = new CaptureGuideWriteScheduler(() => coordinator.IsSelecting, pendingGuideWrites.Enqueue);
+        coordinator.SelectorClosed += guideWrites.NotifySelectorClosed;
         RecordingSelector? overlay = null;
         ExcludeSelection(coordinator, native, window => { overlay = window; return false; });
         coordinator.AcquireSelectionFrame = () => ++attempts == 1 ? throw new InvalidOperationException("capture failed") : Frame();
@@ -212,14 +274,24 @@ public sealed class RecordingSelectionPreparationTests(ITestOutputHelper output)
         try
         {
             coordinator.Toggle();
+            guideWrites.Schedule(() => guideSaves++);
+            Assert.True(coordinator.IsSelecting);
+            Assert.Empty(pendingGuideWrites);
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.Equal(1, failures);
             Assert.False(coordinator.IsActive);
+            Assert.False(coordinator.IsSelecting);
+            Assert.Equal(0, guideSaves);
+            Assert.Single(pendingGuideWrites).Invoke();
+            pendingGuideWrites.Clear();
+            Assert.Equal(1, guideSaves);
             coordinator.Toggle();
             PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
             Assert.NotNull(overlay);
             Assert.True(overlay.IsVisible);
             Assert.True(coordinator.IsActive);
+            Assert.Empty(pendingGuideWrites);
+            Assert.Equal(1, guideSaves);
             output.WriteLine($"Body assertions completed before fixture cleanup: {nameof(AcquisitionFailure_IsReportedOnOwner_AndNextSelectionCanOpen)} native={native}");
         }
         catch (Exception error) { output.WriteLine($"Body failure before fixture cleanup: {error}"); throw; }

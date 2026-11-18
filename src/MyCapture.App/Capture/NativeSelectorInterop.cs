@@ -73,8 +73,15 @@ internal static class NativeSelectorInterop
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern IntPtr SetFocus(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
+    [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(IntPtr hwnd, int id);
     [DllImport("user32.dll")] internal static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("user32.dll")] internal static extern IntPtr LoadCursor(IntPtr instance, IntPtr name);
+    [DllImport("user32.dll")] internal static extern IntPtr SetCursor(IntPtr cursor);
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(CursorPoint point);
+    internal static IntPtr WindowFromPoint(MyCapture.Core.Primitives.PointD point) =>
+        WindowFromPoint(new CursorPoint((int)Math.Round(point.X), (int)Math.Round(point.Y)));
+    [StructLayout(LayoutKind.Sequential)] private readonly record struct CursorPoint(int X, int Y);
     [DllImport("gdi32.dll", SetLastError = true)] internal static extern IntPtr CreateCompatibleDC(IntPtr dc);
     [DllImport("gdi32.dll", SetLastError = true)] internal static extern IntPtr CreateDIBSection(IntPtr dc, ref BitmapInfo info, uint usage, out IntPtr bits, IntPtr section, uint offset);
     [DllImport("gdi32.dll", SetLastError = true)] internal static extern IntPtr SelectObject(IntPtr dc, IntPtr value);
@@ -87,8 +94,10 @@ internal static class NativeSelectorInterop
     [DllImport("gdi32.dll")] internal static extern bool BitBlt(IntPtr dc, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, uint operation);
     [DllImport("gdi32.dll")] internal static extern IntPtr CreatePen(int style, int width, uint color);
     [DllImport("gdi32.dll")] internal static extern IntPtr GetStockObject(int item);
-    [DllImport("gdi32.dll")] internal static extern bool Rectangle(IntPtr dc, int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] internal static extern bool MoveToEx(IntPtr dc, int x, int y, IntPtr previous);
+    [DllImport("gdi32.dll")] internal static extern bool LineTo(IntPtr dc, int x, int y);
     [DllImport("msimg32.dll", SetLastError = true)] internal static extern bool AlphaBlend(IntPtr dc, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int sourceWidth, int sourceHeight, uint blend);
     [DllImport("dwmapi.dll")] internal static extern int DwmFlush();
+    [DllImport("user32.dll")] internal static extern uint GetQueueStatus(uint flags);
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }

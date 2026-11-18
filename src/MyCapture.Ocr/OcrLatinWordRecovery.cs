@@ -137,6 +137,7 @@ internal static class OcrLatinWordRecovery
 
     private static bool IsLatinLine(OcrLine line)
     {
+        if (line.IsCodePayload) return false;
         int latin = line.Text.Count(char.IsAsciiLetter), hangul = line.Text.Count(IsHangul);
         return latin >= 12 && hangul > 0 && latin >= hangul * 6 &&
             line.Words.Count(word => word.Text.Count(char.IsAsciiLetter) >= 2 && !word.Text.Any(IsHangul)) >= 3;

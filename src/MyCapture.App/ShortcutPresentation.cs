@@ -332,7 +332,9 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             if (content is FrameworkElement glyph) { glyph.HorizontalAlignment = HorizontalAlignment.Center; glyph.VerticalAlignment = VerticalAlignment.Center; }
             grid.Children.Add(content);
             // The letter sits in the corner; its line box hangs below the glyph, not over it.
-            hint.HorizontalAlignment = HorizontalAlignment.Right; hint.VerticalAlignment = VerticalAlignment.Bottom;
+            // A chord such as Shift+E is wider than the face; centred, it stays within the button.
+            hint.HorizontalAlignment = hint.Text.Length > 2 ? HorizontalAlignment.Center : HorizontalAlignment.Right;
+            hint.VerticalAlignment = VerticalAlignment.Bottom;
             hint.Height = 12;
             hint.LineHeight = 12;
             hint.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;

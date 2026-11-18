@@ -93,6 +93,8 @@ public sealed class TrayIconService : IDisposable
 
     public Action<string, string, TrayBalloonKind>? NotificationPresenter { get; set; }
     public Action? MenuPresenter { get; set; }
+    /// <summary>Reports keyboard (true) or pointer (false) activation immediately before its queued UI action.</summary>
+    public Action<bool>? InputOriginChanged { get; set; }
 
     public void Initialize()
     {
@@ -280,21 +282,31 @@ public sealed class TrayIconService : IDisposable
                 e.Handled = true;
                 // Explorer can deliver callbacks synchronously. Never open WPF windows
                 // or run a nested native menu loop on its SendMessage call stack.
-                QueueShellAction(() => GalleryRequested?.Invoke(this, EventArgs.Empty));
+                QueueShellAction(() => GalleryRequested?.Invoke(this, EventArgs.Empty), IsKeyboardActivation(notification, e.WParam));
                 break;
 
             case NativeMethods.WM_CONTEXTMENU:
             case NativeMethods.WM_RBUTTONUP:
                 e.Handled = true;
                 NativeMethods.POINT? anchor = _usesVersion4 ? PointFromPackedValue(e.WParam) : null;
-                QueueShellAction(() => ShowContextMenu(anchor));
+                QueueShellAction(() => ShowContextMenu(anchor), IsKeyboardActivation(notification, e.WParam));
                 break;
         }
     }
 
-    private void QueueShellAction(Action action) => _dispatcher.BeginInvoke(new Action(() =>
+    internal static bool IsKeyboardActivation(int notification, nint packedPoint) =>
+        notification == NativeMethods.NIN_KEYSELECT
+        || (notification == NativeMethods.WM_CONTEXTMENU && unchecked((int)packedPoint) == -1);
+
+    private void QueueShellAction(Action action, bool? keyboardInput = null) => _dispatcher.BeginInvoke(new Action(() =>
     {
-        if (!_disposed) { action(); }
+        if (!_disposed)
+        {
+            // A programmatic notification is not new input. Only the native activation callbacks
+            // supply an origin; the existing background-notification path keeps the current mode.
+            if (keyboardInput is bool keyboard) InputOriginChanged?.Invoke(keyboard);
+            action();
+        }
     }));
 
     private void ShowContextMenu(NativeMethods.POINT? shellAnchor)

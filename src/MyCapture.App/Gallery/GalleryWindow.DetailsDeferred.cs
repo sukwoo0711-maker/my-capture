@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using MyCapture.App.Themes;
+using MyCapture.Core.Localization;
 
 namespace MyCapture.App.Gallery;
 
@@ -14,12 +16,31 @@ internal sealed partial class GalleryWindow
         Closed += OnDeferredDetailsClosed;
         // A window constructed with a selection still creates its visible details immediately.
         EnsureSelectedDetails();
+        RefreshDetailsEmptyText();
+        // The language can change while the window is closed.
+        IsVisibleChanged += (_, _) => { if (IsVisible) RefreshDetailsEmptyText(); };
     }
 
     private void OnDetailsSelectionChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(GalleryViewModel.SingleSelectedTile))
+        {
             EnsureSelectedDetails();
+            RefreshDetailsEmptyText();
+        }
+    }
+
+    /// <summary>
+    /// The pane's body while no single capture is selected: "none selected", or the count when several are.
+    /// Set here, from the selection change the pane already follows, so the view model gains no notification.
+    /// </summary>
+    private void RefreshDetailsEmptyText()
+    {
+        bool several = _viewModel.Selection.Count > 1;
+        string title = several ? _viewModel.SelectionText : UiText.Get("Workspace.NoSelection");
+        string hint = UiText.Get(several ? "Workspace.SelectOneHint" : "Workspace.SelectHint");
+        if (KoreanWordWrap.Strip(GalleryDetailsEmptyTitle.Text) != title) _ = KoreanWordWrap.Show(GalleryDetailsEmptyTitle, title);
+        if (KoreanWordWrap.Strip(GalleryDetailsEmptyHint.Text) != hint) _ = KoreanWordWrap.Show(GalleryDetailsEmptyHint, hint);
     }
 
     private void EnsureSelectedDetails()

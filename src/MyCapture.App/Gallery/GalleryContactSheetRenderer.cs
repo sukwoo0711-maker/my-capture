@@ -10,8 +10,9 @@ using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Gallery;
 
+/// <param name="ThumbnailPath">The library's small picture, shown in the order list; the image itself when absent.</param>
 internal sealed record GalleryContactSheetItem(string ImagePath, string Title, DateTimeOffset CreatedAt,
-    string? SourceApp, string SourceWindow);
+    string? SourceApp, string SourceWindow, string? ThumbnailPath = null);
 
 internal static class GalleryContactSheetRenderer
 {
@@ -43,20 +44,27 @@ internal static class GalleryContactSheetRenderer
         finally { RenderGate.Release(); }
     }
 
+    /// <summary>Sees each picture a preview decodes, at the size it was decoded (tests only).</summary>
+    internal static Action<GalleryContactSheetItem, BitmapSource>? PreviewDecodedForTest { get; set; }
+
+    /// <summary>Draws page <paramref name="pageIndex"/> (from 0) of the PDF at screen resolution.</summary>
     internal static BitmapSource Preview(IReadOnlyList<GalleryContactSheetItem> items, ContactSheetOptions options,
-        CultureInfo culture, CancellationToken token)
+        CultureInfo culture, CancellationToken token, int pageIndex = 0)
     {
         var layout = new ContactSheetLayout(options);
-        _ = layout.PageCount(items.Count);
+        int pages = layout.PageCount(items.Count);
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, pages);
+        int first = pageIndex * layout.CellsPerPage;
         var page = new DrawingVisual();
         using (DrawingContext drawing = page.RenderOpen())
         {
             drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, layout.PageWidth, layout.PageHeight));
-            for (int index = 0; index < Math.Min(items.Count, layout.CellsPerPage); index++)
+            for (int index = 0; index < Math.Min(items.Count - first, layout.CellsPerPage); index++)
             {
                 token.ThrowIfCancellationRequested();
                 ContactSheetRect cell = layout.Cell(index);
-                BitmapSource bitmap = RenderCell(items[index], options, cell, 96, culture, token);
+                BitmapSource bitmap = RenderCell(items[first + index], options, cell, 96, culture, token, preview: true);
                 drawing.DrawImage(bitmap, Rect(cell));
             }
         }
@@ -78,12 +86,14 @@ internal static class GalleryContactSheetRenderer
     }
 
     private static BitmapSource RenderCell(GalleryContactSheetItem item, ContactSheetOptions options,
-        ContactSheetRect cell, int dpi, CultureInfo culture, CancellationToken token)
+        ContactSheetRect cell, int dpi, CultureInfo culture, CancellationToken token, bool preview = false)
     {
         token.ThrowIfCancellationRequested();
+        // Decoded no larger than the cell it fills: a 4K capture in a preview cell costs a cell's pixels.
         int longEdge = (int)Math.Ceiling(Math.Max(cell.Width, cell.Height) * dpi / 72);
         BitmapSource image = ImageCodec.TryLoadScaled(item.ImagePath, longEdge)
             ?? throw new IOException("A contact-sheet image could not be read.");
+        if (preview) PreviewDecodedForTest?.Invoke(item, image);
         token.ThrowIfCancellationRequested();
         IReadOnlyList<string> lines = ContactSheetCaptions.Lines(options, item.Title, item.CreatedAt,
             item.SourceApp, item.SourceWindow, culture);

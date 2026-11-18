@@ -167,12 +167,14 @@ public sealed class QueueSettings
     public int MaxItems { get; set; } = 300;
 
     /// <summary>
-    /// Maximum total bytes on disk. Whichever limit is reached first triggers
-    /// eviction.
+    /// The library byte cap of earlier versions. This version never reads it: total bytes no longer
+    /// remove captures, and the settings window has no field for it.
     /// </summary>
     /// <remarks>
-    /// The legacy fallback is 2 GiB; new installations use <see cref="NewInstallDefaults"/>.
-    /// A byte cap limits disk use independently of the number of captures.
+    /// Kept in the file so a rollback finds the value it saved. Earlier versions evict down to this cap,
+    /// and a missing member would read back as the 2 GiB initializer, which is below the 5 GiB a new
+    /// installation saved (<see cref="NewInstallDefaults"/>). The store clamps it into the range those
+    /// versions accept (<see cref="SettingsRanges.MaxBytes"/>) and otherwise writes it back unchanged.
     /// </remarks>
     public long MaxBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
@@ -280,9 +282,19 @@ public sealed class PinSettings
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
+    /// <summary>Snap interior drags to work-area and other visible pin edges.</summary>
+    public bool SnapWhileDragging { get; set; } = true;
+
     /// <summary>Save open pins on this PC and reopen them at the next launch.</summary>
-    /// <remarks>Legacy settings stay off; new installations enable this through <see cref="NewInstallDefaults"/>.</remarks>
+    /// <remarks>
+    /// New installations enable this through <see cref="NewInstallDefaults"/>. A settings file without
+    /// <see cref="RestoreOpenPinsRevision"/> predates restore being the default for everyone, and the
+    /// settings store turns it on once; a later choice in Settings is kept.
+    /// </remarks>
     public bool RestoreOpenPinsOnLaunch { get; set; } = false;
+
+    /// <summary>One records that <see cref="RestoreOpenPinsOnLaunch"/> holds the everyone-on default or a later choice.</summary>
+    public int RestoreOpenPinsRevision { get; set; }
 
     /// <summary>
     /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.
@@ -312,6 +324,13 @@ public sealed class PinSettings
 
     /// <summary>Scale step applied per mouse-wheel notch.</summary>
     public double ZoomStep { get; set; } = 0.1;
+
+    /// <summary>
+    /// Shows new and reopened picture pins in a native window that holds less memory. A pin that
+    /// starts a feature only the standard pin offers (text selection, translation) becomes one.
+    /// </summary>
+    /// <remarks>Off by default and on new installations.</remarks>
+    public bool LightweightImagePins { get; set; }
 }
 
 public sealed class AnnotationDefaults
@@ -377,7 +396,7 @@ public sealed class AnnotationDefaults
 public sealed class StampSettings
 {
     /// <summary>The opacities offered by the stamp menu, in percent.</summary>
-    public static readonly IReadOnlyList<int> OpacityChoices = [100, 70, 50, 30];
+    public static readonly IReadOnlyList<int> OpacityChoices = [100, 70, 50, 30, 20];
 
     public const int MinOpacityPercent = 10;
 
@@ -392,8 +411,36 @@ public sealed class StampSettings
     /// <summary>The stamp's width as a fraction of the canvas width.</summary>
     public double WidthFraction { get; set; } = MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction;
 
-    /// <summary>How opaque the placed stamp is, in percent.</summary>
+    /// <summary>How opaque the placed stamp is, in percent, when it lies over the capture.</summary>
     public int OpacityPercent { get; set; } = 100;
+
+    /// <summary>
+    /// How the placed stamp combines with the capture. A settings file written before this
+    /// field reads as <see cref="MyCapture.Core.Annotations.ImageBlend.IntoPage"/>, so a stamp
+    /// registered earlier also blends into the page from now on.
+    /// </summary>
+    public MyCapture.Core.Annotations.ImageBlend Blend { get; set; } = MyCapture.Core.Annotations.ImageBlend.IntoPage;
+
+    /// <summary>
+    /// How strong the placed stamp is, in percent, when it blends into the page. Kept apart from
+    /// <see cref="OpacityPercent"/> because the strength that reads as faint print is far below
+    /// the opacity that suits a logo lying on top.
+    /// </summary>
+    public int PageOpacityPercent { get; set; } = DefaultPageOpacityPercent;
+
+    public const int DefaultPageOpacityPercent = 20;
+
+    /// <summary>The percentage the opacity menu shows and changes for the current <see cref="Blend"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int CurrentOpacityPercent
+    {
+        get => Blend == MyCapture.Core.Annotations.ImageBlend.IntoPage ? PageOpacityPercent : OpacityPercent;
+        set
+        {
+            if (Blend == MyCapture.Core.Annotations.ImageBlend.IntoPage) PageOpacityPercent = value;
+            else OpacityPercent = value;
+        }
+    }
 
     /// <summary>
     /// Repairs values a hand-edited or imported file could hold, silently: this is bookkeeping the
@@ -410,6 +457,8 @@ public sealed class StampSettings
             MyCapture.Core.Annotations.StampLayout.MaxWidthFraction,
             MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction);
         OpacityPercent = Math.Clamp(OpacityPercent, MinOpacityPercent, 100);
+        if (!Enum.IsDefined(Blend)) Blend = MyCapture.Core.Annotations.ImageBlend.IntoPage;
+        PageOpacityPercent = Math.Clamp(PageOpacityPercent, MinOpacityPercent, 100);
     }
 
     public StampSettings Clone() => new()
@@ -419,6 +468,8 @@ public sealed class StampSettings
         MarginY = MarginY,
         WidthFraction = WidthFraction,
         OpacityPercent = OpacityPercent,
+        Blend = Blend,
+        PageOpacityPercent = PageOpacityPercent,
     };
 
     private static double Repair(double value, double min, double max, double fallback) =>
@@ -473,6 +524,9 @@ public sealed class GeneralSettings : IJsonOnDeserializing
 
     /// <summary>Newest practice revision already presented on this installation.</summary>
     public int PracticeRevisionOffered { get; set => field = Math.Max(0, value); }
+
+    /// <summary>The library's details pane was folded away by the user. Open by default.</summary>
+    public bool LibraryDetailsCollapsed { get; set; }
 
     /// <summary>Shared presentation count for editor and dismissed-card library-location tips.</summary>
     public int SavedLocationTipCount

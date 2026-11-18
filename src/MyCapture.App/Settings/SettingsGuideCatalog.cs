@@ -38,7 +38,7 @@ internal static class SettingsGuideCatalog
         new("G08", [new("G08.restart", "Pin.RestoreOpenPinsOnLaunch"), new("G08.reopen", "Pin.ClosedWindowRestoreLimit"), new("G08.none", "Pin.ClosedWindowRestoreLimit")]),
         new("G09", [new("G09.balanced", "Ocr.Quality"), new("G09.accurate", "Ocr.Quality")]),
         new("G10", [new("G10.alt", "General.AlwaysShowShortcutHints"), new("G10.always", "General.AlwaysShowShortcutHints")]),
-        new("G11", [new("G11.time", "Queue.ImageRetentionHours"), new("G11.items", "Queue.MaxItems"), new("G11.bytes", "Queue.MaxBytes")]),
+        new("G11", [new("G11.time", "Queue.ImageRetentionHours"), new("G11.items", "Queue.MaxItems")]),
         new("G12", [new("G12.folder", "Queue.UseCurrentFolderForNewCaptures"), new("G12.storage", "Queue.CapturesDirectoryOverride"), new("G12.export", "Export.QuickSaveDirectoryOverride")]),
         new("G13", [new("G13.title", "Export.ShowSourceWindowTitle")]),
     ]);

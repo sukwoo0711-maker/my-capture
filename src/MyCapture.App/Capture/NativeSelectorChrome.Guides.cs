@@ -18,6 +18,7 @@ internal sealed partial class NativeSelectorChrome
     private Window? _keyPanelWindow, _startGuideWindow;
     private CaptureStartGuideCard? _startGuideCard;
     private bool _keyPanelReady, _keyPanelContentPrepared;
+    private bool? _keyPanelRounded;
     private Rect? _staticReadoutBounds;
     internal FrameworkElement? KeyPanel => _keyPanelController?.Active;
     internal IEnumerable<CaptureKeyPanel> KeyPanels => _keyPanelController?.Panels ?? [];
@@ -44,9 +45,9 @@ internal sealed partial class NativeSelectorChrome
         _keyPanelController?.Update();
     }
 
-    private Window CreateDeferred(FrameworkElement content)
+    private Window CreateDeferred(FrameworkElement content, DwmCornerPreference? corners = null, Action<bool>? frame = null)
     {
-        Window window = Create(content, 1, 1, interactive: false);
+        Window window = Create(content, 1, 1, interactive: false, corners, frame);
         _deferredWindows.Add(window);
         new WindowInteropHelper(window).Owner = _owner!.Handle;
         bool excluded = CaptureWindowExclusion.TryApply(window);
@@ -66,12 +67,23 @@ internal sealed partial class NativeSelectorChrome
         window.Width = bounds.Width / dpi;
         window.Height = bounds.Height / dpi;
         double x = bounds.X + owner.ScreenBounds.Left, y = bounds.Y + owner.ScreenBounds.Top;
-        window.Left = x / dpi;
-        window.Top = y / dpi;
-        // The HWND is already owned and topmost. Guide updates, including F1 and pointer movement,
-        // never restack it; that would feed synthetic mouse moves back into the selector.
-        PhysicalWindowPositioner.Move(new WindowInteropHelper(window).Handle,
-            new RectD(x, y, bounds.Width, bounds.Height));
+        IntPtr handle = new WindowInteropHelper(window).Handle;
+        BeginOwnPlacement(handle, new RectD(x, y, bounds.Width, bounds.Height));
+        try
+        {
+            window.Left = x / dpi;
+            window.Top = y / dpi;
+            // The HWND is already owned and topmost. Guide updates, including F1 and pointer movement,
+            // never restack it; that would feed synthetic mouse moves back into the selector.
+            PhysicalWindowPositioner.Move(handle, new RectD(x, y, bounds.Width, bounds.Height));
+        }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // A guide that misses its position across a DPI seam is placed again by its next update;
+            // it never ends the selection.
+            owner.ReportChromePlacementMiss(error);
+        }
+        finally { EndOwnPlacement(); }
         if (_showingWindows && !window.IsVisible) window.Show();
     }
 
@@ -113,6 +125,21 @@ internal sealed partial class NativeSelectorChrome
         PlaceGuideWindow(_startGuideWindow!, _startGuideCard, placed, scale);
     }
 
+    /// <summary>
+    /// A key panel fills its own window: square, since the window has the corners. DWM draws the
+    /// edge of a rounded window, so the panel's own edge goes and its padding keeps the panel's size.
+    /// </summary>
+    private void FitFrame(CaptureKeyPanel panel)
+    {
+        if (_keyPanelRounded is not { } rounded) return;
+        panel.CornerRadius = new CornerRadius(0);
+        double edge = rounded ? 0 : 1;
+        Thickness padding = panel.Padding;
+        double grow = panel.BorderThickness.Left - edge;
+        panel.BorderThickness = new Thickness(edge);
+        panel.Padding = new Thickness(padding.Left + grow, padding.Top + grow, padding.Right + grow, padding.Bottom + grow);
+    }
+
     private void ResetGuides()
     {
         _keyPanelReady = _keyPanelContentPrepared = false;
@@ -127,11 +154,14 @@ internal sealed partial class NativeSelectorChrome
         public bool ShouldShow => chrome._owner is { ShowKeyPanel: true, ShowStartGuide: false, RecordingSelection: false, IsClosed: false }
             && !CaptureOverlayView.SuppressKeyPanelForProbe;
         public bool CanPresent => chrome._owner is { FirstFramePresentedForTest: true, Frame: not null };
-        public CaptureKeyPanelContext Context => new(Owner.ShowKeyPanel, Owner.Mode != CaptureSelectorMode.Color,
-            Owner.UsesWindowDetection && Owner.Mode != CaptureSelectorMode.Color,
-            Owner.SelectionRectangle.Width >= 2 && Owner.SelectionRectangle.Height >= 2,
-            Owner.Mode != CaptureSelectorMode.Color && Owner.PresetSize is null, Owner.CopyColorText is not null,
-            Owner.TextCaptureAvailable, Owner.TextCaptureMode, Owner.PinSelectionAvailable, Owner.PasteToScreenHotkey);
+        public CaptureKeyPanelContext Context => new(Owner.ShowKeyPanel, Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Scroll),
+            Owner.UsesWindowDetection && Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Scroll),
+            Owner.FreeformStrokeActive || (Owner.SelectionRectangle.Width >= 2 && Owner.SelectionRectangle.Height >= 2),
+            Owner.Mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform) && Owner.PresetSize is null, Owner.CopyColorText is not null,
+            Owner.TextCaptureAvailable, Owner.TextCaptureMode, Owner.PinSelectionAvailable, Owner.PasteToScreenHotkey,
+            Owner.FreeformAvailable, Owner.Mode == CaptureSelectorMode.Freeform, Owner.ScrollAvailable,
+            Owner.Mode == CaptureSelectorMode.Scroll, Owner.ScrollAvailable && CaptureModeBar.DelayApplies(Owner.Mode),
+            Owner.Mode == CaptureSelectorMode.Color);
         public FontFamily UiFont => ThemeFonts.Ui;
         public FontFamily MonoFont { get; } = new("Consolas");
         public IReadOnlyDictionary<string, Brush> Palette => CaptureGuidePalette.Resolve();
@@ -156,8 +186,10 @@ internal sealed partial class NativeSelectorChrome
             if (chrome._keyPanelCanvas is null)
             {
                 chrome._keyPanelCanvas = new Canvas { IsHitTestVisible = false, Focusable = false };
-                chrome._keyPanelWindow = chrome.CreateDeferred(chrome._keyPanelCanvas);
+                chrome._keyPanelWindow = chrome.CreateDeferred(chrome._keyPanelCanvas, DwmCornerPreference.Round,
+                    rounded => chrome._keyPanelRounded = rounded);
             }
+            chrome.FitFrame(panel);
             chrome._keyPanelCanvas.Children.Add(panel);
         }
         public void Remove(CaptureKeyPanel panel) => chrome._keyPanelCanvas?.Children.Remove(panel);

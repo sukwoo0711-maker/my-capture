@@ -54,12 +54,73 @@ public sealed class CaptureQueueRecoverableRemovalTests
     [InlineData("capacity", true)]
     [InlineData("retention-age", true)]
     [InlineData("item-limit", true)]
-    [InlineData("byte-limit", true)]
+    // Total bytes no longer remove captures, so the former byte-cap reason is not an automatic one.
+    [InlineData("byte-limit", false)]
     [InlineData(CaptureQueue.ManualPermanentReason, false)]
     [InlineData("manual", false)]
     [InlineData("manual-batch", false)]
     public void OnlyAutomaticEvictionDefersCleanupUntilAfterIndexPublication(string reason, bool permanent) =>
         Assert.Equal(permanent, CaptureQueue.IsPermanentRemovalReason(reason));
+
+    private static CaptureRecord LargeRecord(int minutesOld) => new()
+    {
+        Id = Guid.NewGuid(), TotalBytes = 1L << 30,
+        CreatedAt = DateTimeOffset.Now.AddMinutes(-minutesOld), UpdatedAt = DateTimeOffset.Now.AddMinutes(-minutesOld),
+    };
+
+    [Theory]
+    [InlineData(2L * 1024 * 1024 * 1024, true)]
+    [InlineData(2L * 1024 * 1024 * 1024, false)]
+    [InlineData(5L * 1024 * 1024 * 1024, true)]
+    [InlineData(5L * 1024 * 1024 * 1024, false)]
+    public async Task TotalBytesOverTheFormerDefaultCaps_ScheduleAndRemoveNothingWithinTheItemCap(long formerCap, bool scheduled)
+    {
+        // 2 GiB and 5 GiB were the byte caps existing and new installations saved before.
+        var queue = CreateQueue(new QueueSettings { MaxItems = 8, MaxBytes = formerCap });
+        var prepared = new List<Guid>();
+        var schedules = new List<string>();
+        queue.PrepareRemoval = (record, _) => { prepared.Add(record.Id); return new Transaction(); };
+        if (scheduled) queue.ScheduleAutomaticRemoval = (_, reason) => schedules.Add(reason);
+        CaptureRecord[] records = Enumerable.Range(0, 8).Select(index => LargeRecord(minutesOld: 8 - index)).ToArray();
+        foreach (CaptureRecord record in records) queue.Add(record);
+
+        queue.RequestAutomaticMaintenance();
+        // A capacity request re-checks the cap when it runs, so even a stale request selects nothing.
+        CaptureBatchRemovalResult result = await queue.RemoveAutomaticallyAsync(records.Select(record => record.Id), "capacity");
+
+        Assert.Empty(schedules);
+        Assert.Empty(prepared);
+        Assert.Equal(0, result.RemovedCount);
+        Assert.Equal(8, queue.Count);
+        Assert.Equal(8L << 30, queue.TotalBytes);
+        Assert.True(queue.TotalBytes > formerCap);
+        Assert.False(queue.IsOverCapacityDueToPins);
+    }
+
+    [Fact]
+    public async Task ItemCap_SchedulesAndRemovesOnlyTheOldestOverTheCap_HoweverManyBytesStay()
+    {
+        var queue = CreateQueue(new QueueSettings { MaxItems = 3, MaxBytes = 2L * 1024 * 1024 * 1024 });
+        var schedules = new List<(Guid[] Ids, string Reason)>();
+        var prepared = new List<string>();
+        queue.PrepareRemoval = (_, reason) => { prepared.Add(reason); return new Transaction(); };
+        queue.ScheduleAutomaticRemoval = (ids, reason) => schedules.Add((ids.ToArray(), reason));
+        CaptureRecord[] records = Enumerable.Range(0, 6).Select(index => LargeRecord(minutesOld: 6 - index)).ToArray();
+        using (queue.SuspendEviction())
+            foreach (CaptureRecord record in records) queue.Add(record);
+
+        // Releasing the suspension checks the limits once: the three oldest are over the item cap of 3.
+        (Guid[] ids, string reason) = Assert.Single(schedules);
+        Assert.Equal("capacity", reason);
+        Assert.Equal(new[] { records[0].Id, records[1].Id, records[2].Id }.Order(), ids.Order());
+        CaptureBatchRemovalResult result = await queue.RemoveAutomaticallyAsync(ids, "capacity");
+
+        Assert.Equal(3, result.RemovedCount);
+        Assert.Equal(["capacity", "capacity", "capacity"], prepared);
+        Assert.Equal(new[] { records[5].Id, records[4].Id, records[3].Id }, queue.Records.Select(record => record.Id));
+        // 3 GiB stay, over the former 2 GiB cap.
+        Assert.Equal(3L << 30, queue.TotalBytes);
+    }
 
     [Fact]
     public async Task PermanentRemoval_CompletesOnlyAfterTheIndexStopsNamingTheCapture()

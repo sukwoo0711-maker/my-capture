@@ -53,13 +53,14 @@ internal sealed class RegionRecordingCoordinator
     internal Func<FrozenFrame>? AcquireSelectionFrame { get; set; }
     internal Func<RectD> SelectionDesktopBounds { get; set; } = MonitorEnumerator.GetVirtualDesktopBounds;
     internal Func<bool> ShowSelectionGrid { get; set; } = () => true;
+    internal Func<bool> ShowMagnifier { get; set; } = () => true;
     internal Func<Window, bool> ExcludeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
     internal Func<IntPtr, bool> ExcludeNativeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
     internal bool UseNativeDibSelector { get; set; } = true;
     internal NativeSelectorChromeStrategy NativeChromeStrategy { get; set; } = NativeSelectorChromeStrategy.Retained;
     internal NativeCaptureOverlay? NativeOverlayForProbe => _nativeSelectionOverlay;
-    internal Func<RectD, NativeCaptureOverlay> CreateNativeSelector { get; set; } =
-        bounds => new NativeCaptureOverlay(bounds, abortOnFocusLoss: false, showMagnifier: true);
+    internal Func<RectD, bool, NativeCaptureOverlay> CreateNativeSelector { get; set; } =
+        (bounds, showMagnifier) => new NativeCaptureOverlay(bounds, abortOnFocusLoss: false, showMagnifier);
     internal Action<NativeCaptureOverlay> ShowNativeSelector { get; set; } = native => native.Show();
     internal Action<RectD>? OpenControlsForTest { get; set; }
     internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
@@ -80,6 +81,7 @@ internal sealed class RegionRecordingCoordinator
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
         internal RectD DesktopBounds { get; set; }
         internal bool ShowSelectionGrid { get; set; }
+        internal bool ShowMagnifier { get; set; }
         internal System.Drawing.Size? PresetSize { get; set; }
         internal bool OffersOtherActions { get; set; }
         internal FrozenFrame? Frame { get; set; }
@@ -103,6 +105,8 @@ internal sealed class RegionRecordingCoordinator
 
     /// <summary>Raised whenever the whole recording session (selection→record→edit) ends.</summary>
     internal event EventHandler? SessionEnded;
+    /// <summary>No selector or frame preparation remains, even if recording controls are open.</summary>
+    internal event Action? SelectorClosed;
 
     /// <summary>
     /// Committed edit that yielded a still image the caller should push into the
@@ -285,6 +289,7 @@ internal sealed class RegionRecordingCoordinator
         {
             preparation.DesktopBounds = SelectionDesktopBounds();
             preparation.ShowSelectionGrid = ShowSelectionGrid();
+            preparation.ShowMagnifier = ShowMagnifier();
             preparation.OffersOtherActions = CaptureSelectionRequested is not null;
             RecordingSettings settings = _settings();
             if (settings.PresetWidth is { } w && w > 0 && settings.PresetHeight is { } h && h > 0)
@@ -313,8 +318,8 @@ internal sealed class RegionRecordingCoordinator
 
     private void CreateWpfSelection(SelectionPreparation preparation)
     {
-        var overlay = new CaptureOverlayWindow(preparation.DesktopBounds, abortOnFocusLoss: false, showMagnifier: true,
-            showSelectionGrid: preparation.ShowSelectionGrid)
+        var overlay = new CaptureOverlayWindow(preparation.DesktopBounds, abortOnFocusLoss: false,
+            showMagnifier: preparation.ShowMagnifier, showSelectionGrid: preparation.ShowSelectionGrid)
         {
             // Says "record" and takes the recording colour, so it never reads as a screenshot.
             RecordingSelection = true,
@@ -335,7 +340,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void CreateNativeSelection(SelectionPreparation preparation)
     {
-        NativeCaptureOverlay native = CreateNativeSelector(preparation.DesktopBounds);
+        NativeCaptureOverlay native = CreateNativeSelector(preparation.DesktopBounds, preparation.ShowMagnifier);
         _nativeSelectionOverlay = native;
         _nativeSelectionCompleted = false;
         _nativeSelectionContext = preparation;
@@ -348,6 +353,8 @@ internal sealed class RegionRecordingCoordinator
         native.ActionRequested += OnSelectionActionRequested;
         native.InputReady += OnNativeInputReady;
         native.Failed += OnNativeSelectionFailed;
+        native.ChromePlacementMissed = error =>
+            _log.LogWarning(error, "Recording selector chrome missed its bounds; the selection continues");
         // The same hidden-window exclusion boundary as the WPF recording selector.
         native.Prepare(ExcludeNativeSelectionWindow);
         if (!native.IsClosed) native.Closed += OnNativeSelectionClosed;
@@ -962,6 +969,7 @@ internal sealed class RegionRecordingCoordinator
 
     private void EndSessionIfIdle()
     {
+        if (!IsSelecting) SelectorClosed?.Invoke();
         if (!IsActive)
         {
             SessionEnded?.Invoke(this, EventArgs.Empty);

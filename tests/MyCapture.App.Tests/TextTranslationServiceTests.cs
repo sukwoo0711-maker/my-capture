@@ -102,6 +102,47 @@ public sealed class TextTranslationServiceTests
         Assert.Equal(["0/3", "1/3", "returned", "3/3"], log);
     }
 
+    [Fact]
+    public async Task EachBlockIsHandedOverOnceWhenTheCallThatCompletesItEndsWithTheResultItReturns()
+    {
+        // One long sentence gets a call of its own before the short labels; the labels and a repeated one share the second.
+        string longSentence = string.Join(" ", Enumerable.Range(0, 50).Select(index => "word" + index)) + ".";
+        string[] sources = ["Open the file.", longSentence, "Save it.", "Open the file.", "Close the window now."];
+        using var plain = new ServiceFixture(progressInterval: TimeSpan.Zero, load: () => new FakeEngine(source => "KO " + source));
+        IReadOnlyList<TranslatedText> expected = await plain.Service.TranslateAsync(sources,
+            new SyncProgress<TranslationProgress>(_ => { }), CancellationToken.None);
+
+        using var fixture = new ServiceFixture(progressInterval: TimeSpan.Zero, load: () => new FakeEngine(source => "KO " + source));
+        var handed = new List<(int Index, TranslatedText Result, int Calls)>();
+        var receiver = new HandOverProgress(blocks =>
+        {
+            foreach ((int index, TranslatedText result) in blocks) handed.Add((index, result, fixture.Engine.Batches.Count));
+        });
+        IReadOnlyList<TranslatedText> results = await fixture.Service.TranslateAsync(sources, receiver, CancellationToken.None);
+
+        // The model's calls are the same with or without a receiver.
+        Assert.Equal(plain.Engine.Batches.Select(batch => string.Join("|", batch)), fixture.Engine.Batches.Select(batch => string.Join("|", batch)));
+        Assert.Equal(2, fixture.Engine.Batches.Count);
+        Assert.Equal(expected.Select(item => item.Text), results.Select(item => item.Text));
+        Assert.Equal(Enumerable.Range(0, sources.Length), handed.Select(item => item.Index).Order());
+        foreach ((int index, TranslatedText result, int calls) in handed)
+        {
+            Assert.Equal(results[index], result with { Missing = results[index].Missing, Invented = results[index].Invented });
+            Assert.Equal(results[index].Missing, result.Missing);
+            Assert.Equal(results[index].Invented, result.Invented);
+            // Handed over right after the call that held its sentence.
+            int call = fixture.Engine.Batches.FindIndex(batch => batch.Contains(sources[index])) + 1;
+            Assert.Equal(call, calls);
+        }
+    }
+
+    private sealed class HandOverProgress(Action<IReadOnlyList<(int Index, TranslatedText Result)>> handOver)
+        : IProgress<TranslationProgress>, ITranslatedBlockSink
+    {
+        public void Report(TranslationProgress value) { }
+        public void Translated(IReadOnlyList<(int Index, TranslatedText Result)> blocks) => handOver(blocks);
+    }
+
     // A paragraph of two sentences that splits in two segments, then two blocks of one sentence; all of one length.
     private static readonly string[] SplitAndSingleSentences =
     [

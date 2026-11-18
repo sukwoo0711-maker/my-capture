@@ -45,6 +45,7 @@ internal sealed partial class OcrResultWindow
         workspace.RowDefinitions.Add(new() { Height = GridLength.Auto });
         workspace.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
         _tabs = new TabControl { Height = 42, BorderThickness = new Thickness(0), SelectedIndex = 2 };
+        _tabs.SetResourceReference(Control.BackgroundProperty, "Surface.Base");
         AutomationProperties.SetName(_tabs, UiText.Get("OCR410_ExtractionMode"));
         // Tab order follows OcrExtractionMode; the translation tab shows once a translator is set.
         foreach (string key in new[] { "OCR410_Table", "OCR410_Code", "OCR410_Text", "Translate_Tab" })
@@ -85,7 +86,8 @@ internal sealed partial class OcrResultWindow
             VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12),
         }, UiText.Get("OCR410_ImageUnavailable"));
         _imageEmpty.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        var preview = new Grid { Margin = new Thickness(8) };
+        var preview = new Grid { Name = "OcrSourceCanvas", Margin = new Thickness(8) };
+        preview.SetResourceReference(Panel.BackgroundProperty, "Surface.Canvas");
         preview.Children.Add(_imageOverlay);
         preview.Children.Add(_imageEmpty);
         panes.Children.Add(preview);

@@ -182,6 +182,15 @@ internal static class CaptureWindowExclusion
         HideClosedPopup(popup);
     }
 
+    internal static void ExcludeSubmenuPopup(MenuItem item, Popup popup)
+    {
+        var source = popup.Child is Visual visual ? PresentationSource.FromVisual(visual) as HwndSource : null;
+        if (source is not null && TryApply(source.Handle)) return;
+        Logger.LogWarning("Could not exclude capture control submenu; closing it");
+        item.IsSubmenuOpen = false;
+        HideClosedPopup(source);
+    }
+
     // WPF keeps a closed animated popup's window on screen for its closing animation and renders
     // it meanwhile (about 100 to 200 ms), so capture would still see it: hide the window now.
     private static void HideClosedPopup(HwndSource? popup)

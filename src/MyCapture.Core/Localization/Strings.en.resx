@@ -72,7 +72,7 @@
     <comment>src\MyCapture.App\Recording\VideoLayerTimeline.cs</comment>
   </data>
   <data name="Text_0642E2D15469" xml:space="preserve">
-    <value>Copy failed</value>
+    <value>Image copy failed</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_0669BC5BEA50" xml:space="preserve">
@@ -318,7 +318,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_1E0DD4F46A0C" xml:space="preserve">
-    <value>Fill transparency · 100%</value>
+    <value>Fill opacity · 0%</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_1E8C10206F5B" xml:space="preserve">
@@ -445,12 +445,8 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_27FD5EFB7773" xml:space="preserve">
-    <value>100%: outline only · 0%: fill completely with the stroke color</value>
+    <value>0%: outline only · 100%: fill completely with the stroke color</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
-  </data>
-  <data name="Text_284A54C660EC" xml:space="preserve">
-    <value>Maximum storage (GB)</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
     <value>Library images are deleted automatically, oldest first, after the configured retention period. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
@@ -601,7 +597,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Gallery\GalleryItemViewModel.cs</comment>
   </data>
   <data name="Text_35E5667BB610" xml:space="preserve">
-    <value>Shape fill transparency (percent)</value>
+    <value>Shape fill opacity (percent)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_35E85A6E99A5" xml:space="preserve">
@@ -643,10 +639,6 @@ This cannot be undone.</value>
   <data name="Text_38476EDDA50B" xml:space="preserve">
     <value>Delayed capture</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
-  </data>
-  <data name="Text_3862727D2DCB" xml:space="preserve">
-    <value>The allowed range is {0:0.###}–{1:0.###} GB.</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
   </data>
   <data name="Text_388CC5AD1AE8" xml:space="preserve">
     <value>Double arrow</value>
@@ -833,7 +825,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_4C160257F02C" xml:space="preserve">
-    <value>Copying…</value>
+    <value>Copying image…</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_4C27BFC6C0E5" xml:space="preserve">
@@ -925,7 +917,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_5321CB80BCA3" xml:space="preserve">
-    <value>Fill transparency</value>
+    <value>Fill opacity</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorController.cs</comment>
   </data>
   <data name="Text_53A86A0A3347" xml:space="preserve">
@@ -1053,7 +1045,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5D92A3982F2F" xml:space="preserve">
-    <value>Fill transparency · {0:0}%</value>
+    <value>Fill opacity · {0:0}%</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_5DBC2621FC1E" xml:space="preserve">
@@ -1397,10 +1389,6 @@ This cannot be undone.</value>
     <value>{0}: captures the dragged region. With window highlighting on, click to select the window under the pointer, or click the empty desktop to select the whole monitor.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
-  <data name="Text_764879D98E25" xml:space="preserve">
-    <value>Enter a number for the maximum storage (GB).</value>
-    <comment>src\MyCapture.Core\Settings\SettingsDraft.cs</comment>
-  </data>
   <data name="Text_773C24F0A693" xml:space="preserve">
     <value>The countdown window cannot be excluded from the recording.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
@@ -1505,6 +1493,7 @@ This cannot be undone.</value>
     <value>To cancel, choose Cancel scrolling capture from the tray menu.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
+  <data name="ScrollCapture_CancelHintEsc" xml:space="preserve"><value>To cancel, press Esc or choose Cancel scrolling capture from the tray menu.</value></data>
   <data name="Text_8300472A5BE3" xml:space="preserve">
     <value>Save a PNG at its original resolution in the configured quick save folder.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
@@ -1710,7 +1699,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_9693E1EB3EDB" xml:space="preserve">
-    <value>Copied</value>
+    <value>Image copied</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_976A6C92B870" xml:space="preserve">
@@ -1719,6 +1708,9 @@ This cannot be undone.</value>
   </data>
   <data name="Pin_SelectText" xml:space="preserve">
     <value>Select text</value>
+  </data>
+  <data name="Pin_SelectTextRecognizing" xml:space="preserve">
+    <value>Recognizing text…</value>
   </data>
   <data name="Pin_SelectTextStarted" xml:space="preserve">
     <value>Select text: drag to choose, then press Ctrl+C. Press Esc to finish.</value>
@@ -1731,6 +1723,9 @@ This cannot be undone.</value>
   </data>
   <data name="Pin_SelectTextImageHint" xml:space="preserve">
     <value>Ctrl+double-click recognizes and copies text from the image.</value>
+  </data>
+  <data name="Pin_SelectTextTip" xml:space="preserve">
+    <value>{0}: select text</value>
   </data>
   <data name="Text_97B224926F71" xml:space="preserve">
     <value>Change {1} of {0}</value>
@@ -2830,7 +2825,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>Reopen open pins at the next launch</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>Each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place and size at the next launch. Pins you close yourself do not reopen. Turning this off deletes the saved pins right away.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>Include pointer in recordings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2844,7 +2839,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_F1A864DCBEC4" xml:space="preserve">
-    <value> · Storage limit temporarily exceeded to protect kept items</value>
+    <value> · Item limit temporarily exceeded to protect kept items</value>
     <comment>src\MyCapture.App\Gallery\GalleryViewModel.cs</comment>
   </data>
   <data name="Text_F1C1BB1D5771" xml:space="preserve">
@@ -2945,7 +2940,6 @@ This cannot be undone.</value>
   <data name="SettingsRange_Seconds1To10" xml:space="preserve"><value>1–10 s</value></data>
   <data name="SettingsRange_RegionHistory" xml:space="preserve"><value>1–200</value></data>
   <data name="SettingsRange_MaxItems" xml:space="preserve"><value>10–5000</value></data>
-  <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
   <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>Long edge 96–1024 px</value></data>
   <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
   <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 px</value></data>
@@ -2956,6 +2950,7 @@ This cannot be undone.</value>
   <data name="SettingsRange_ClosedPins" xml:space="preserve"><value>0–100</value></data>
   <data name="SettingsRange_ZoomStep" xml:space="preserve"><value>0.02–0.5</value></data>
   <data name="Settings_ZoomStepNote" xml:space="preserve"><value>How much one mouse wheel step changes the zoom.</value></data>
+  <data name="Settings_DelayNote" xml:space="preserve"><value>Delayed capture opens the selector with this delay chosen. After you choose the area, the same area is captured again when the time has passed.</value></data>
   <data name="Settings_RegionHistoryNote" xml:space="preserve"><value>Previous regions kept for repeat capture.</value></data>
   <data name="Settings_ClosedPinsNote" xml:space="preserve"><value>Closed pins remembered so they can be reopened; 0 turns it off. Cleared when the app exits; never saved to disk.</value></data>
   <data name="Settings_RecordingSizeHint" xml:space="preserve"><value>With a fixed size, dragging only places the recording area. Width and height: 96–7680 px.</value></data>
@@ -2986,10 +2981,6 @@ This cannot be undone.</value>
   <data name="Text_FB68C3A34978" xml:space="preserve">
     <value>Text recognition could not start.</value>
     <comment>src\MyCapture.Ocr\WindowsOcrService.cs</comment>
-  </data>
-  <data name="Text_FC05BD860043" xml:space="preserve">
-    <value>Maximum storage in gigabytes</value>
-    <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_FD6443988325" xml:space="preserve">
     <value>Playing · Text preview active</value>
@@ -3157,7 +3148,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="MediaExport_EditedSuffix" xml:space="preserve"><value>_edited</value></data>
   <data name="MediaExport_Hint" xml:space="preserve"><value>The original video stays unchanged.</value></data>
-  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · within the {0} limit</value></data>
+  <data name="MediaExport_AdviceCurrentShort" xml:space="preserve"><value>Recommended · under the {0} limit</value></data>
   <data name="MediaExport_AdviceCurrentNoLimitShort" xml:space="preserve"><value>Recommended · no size limit</value></data>
   <data name="MediaExport_AdviceSwitchShort" xml:space="preserve"><value>Recommended: {0} · about {1}</value></data>
   <data name="MediaExport_AdviceMp4Short" xml:space="preserve"><value>Over the {0} GIF limit · MP4 recommended</value></data>
@@ -3233,7 +3224,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
   <data name="Workspace.Details" xml:space="preserve"><value>Selected capture</value></data>
-  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select one capture to see its preview and details.</value></data>
+  <data name="Workspace.NoSelection" xml:space="preserve"><value>No item selected.</value></data>
+  <data name="Workspace.SelectHint" xml:space="preserve"><value>Select an item to see its details.</value></data>
+  <data name="Workspace.SelectOneHint" xml:space="preserve"><value>Select a single item to see its details.</value></data>
   <data name="LibraryUx_DetailsHide" xml:space="preserve"><value>Hide details</value></data>
   <data name="LibraryUx_DetailsShow" xml:space="preserve"><value>Show details</value></data>
   <data name="Workspace.RetentionHint" xml:space="preserve"><value>Images are cleaned up after their retention period. Use More to keep a capture.</value></data>
@@ -3409,7 +3402,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_CustomColor" xml:space="preserve"><value>Custom color</value></data>
   <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
-  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill opacity</value></data>
   <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>Width</value></data>
   <data name="EditorProperty_ArrowHead" xml:space="preserve"><value>Head</value></data>
   <data name="EditorProperty_ArrowHeadEnd" xml:space="preserve"><value>End</value></data>
@@ -3428,6 +3421,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorObscure_Shortcuts" xml:space="preserve"><value>Pixelate {0} · Blur {1}</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
+  <data name="Tools.Eraser" xml:space="preserve"><value>Eraser</value></data>
+  <data name="Tools.EraserHelp" xml:space="preserve"><value>Removes each annotation it touches. The capture itself is not erased.</value></data>
+  <data name="Tools.EraserErase" xml:space="preserve"><value>Erase</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>
   <data name="Tools.StepNumber" xml:space="preserve"><value>Step number</value></data>
   <data name="Dialog.Access" xml:space="preserve"><value>The selected file or folder cannot be accessed. Check permissions or choose another location.</value></data>
@@ -3553,7 +3549,7 @@ Open the library or Settings from the tray menu.</value></data>
 <data name="SettingsGuide.G08.restart.Title" xml:space="preserve"><value>Restore open pins on launch</value></data>
 <data name="SettingsGuide.G08.restart.Before" xml:space="preserve"><value>Restore on launch off</value></data>
 <data name="SettingsGuide.G08.restart.After" xml:space="preserve"><value>Restore on launch on</value></data>
-<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins on exit and restore them on the next launch.</value></data>
+<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins whenever they change and restore them on the next launch. Pins you close yourself are not restored.</value></data>
 <data name="SettingsGuide.G08.reopen.Title" xml:space="preserve"><value>Closed pin restore limit</value></data>
 <data name="SettingsGuide.G08.reopen.Before" xml:space="preserve"><value>Close pin</value></data>
 <data name="SettingsGuide.G08.reopen.After" xml:space="preserve"><value>Reopen closed pin</value></data>
@@ -3581,15 +3577,11 @@ Open the library or Settings from the tray menu.</value></data>
 <data name="SettingsGuide.G11.time.Title" xml:space="preserve"><value>Image retention period</value></data>
 <data name="SettingsGuide.G11.time.Before" xml:space="preserve"><value>No time limit</value></data>
 <data name="SettingsGuide.G11.time.After" xml:space="preserve"><value>7 days</value></data>
-<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>Item and size limits still apply with no time limit. Items in folders and items marked to keep remain.</value></data>
+<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>The item limit still applies with no time limit. Items in folders and items marked to keep remain.</value></data>
 <data name="SettingsGuide.G11.items.Title" xml:space="preserve"><value>Maximum items</value></data>
 <data name="SettingsGuide.G11.items.Before" xml:space="preserve"><value>9 items / limit 10</value></data>
 <data name="SettingsGuide.G11.items.After" xml:space="preserve"><value>New capture at limit 10</value></data>
 <data name="SettingsGuide.G11.items.Description" xml:space="preserve"><value>At the item limit, the oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
-<data name="SettingsGuide.G11.bytes.Title" xml:space="preserve"><value>Maximum storage size</value></data>
-<data name="SettingsGuide.G11.bytes.Before" xml:space="preserve"><value>0.8 GB / limit 1 GB</value></data>
-<data name="SettingsGuide.G11.bytes.After" xml:space="preserve"><value>New capture exceeds 1 GB</value></data>
-<data name="SettingsGuide.G11.bytes.Description" xml:space="preserve"><value>The size limit applies separately from the item limit. The oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
 <data name="SettingsGuide.G12.folder.Title" xml:space="preserve"><value>Library folder for new captures</value></data>
 <data name="SettingsGuide.G12.folder.Before" xml:space="preserve"><value>Default folder</value></data>
 <data name="SettingsGuide.G12.folder.After" xml:space="preserve"><value>Use current folder</value></data>
@@ -3731,7 +3723,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Folder410.DeleteDateIncludes" xml:space="preserve"><value>Includes folders, unassigned captures, and kept captures for this date.</value></data>
   <data name="Folder410.DeleteIrreversible" xml:space="preserve"><value>Folders and captures move to the Windows Recycle Bin. You can bring them back from Restore recently deleted.</value></data>
   <data name="Folder410.Storage" xml:space="preserve"><value>{0} {0:plural:folder|folders} · {1}</value></data>
-  <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage exceeds the ordinary capture limit. Folder contents are kept until you delete them.</value></data>
+  <data name="Folder410.StorageInfo" xml:space="preserve"><value>Folder storage is large. Folder contents are kept until you delete them.</value></data>
   <data name="Folder410.ExportPathTooLong" xml:space="preserve"><value>The destination is too deep. Choose a shorter path.</value></data>
   <data name="Folder410.ExportNameExists" xml:space="preserve"><value>A file with this name exists. Choose another name.</value></data>
   <data name="Folder410.ExportMissing" xml:space="preserve"><value>The source file or destination folder is missing. Check the path.</value></data>
@@ -3805,11 +3797,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. After the Text copied notification appears, press Ctrl+V where you want to paste.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
-  <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format and end the capture.</value></data>
+  <data name="ColorPick_FormatHint" xml:space="preserve"><value>In the selector's color copy mode (C key), a click copies the color at the pointer tip in this format and ends the capture.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color and end capture while selecting</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Color copy mode while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
@@ -3838,8 +3830,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="GifPreview_Recommended" xml:space="preserve"><value>best fit</value></data>
   <data name="GifPreview_Estimate" xml:space="preserve"><value>Estimated size {0} · {1:N0} frames · playback {2:N1} s · calculation about {3:N0} s</value></data>
   <data name="GifPreview_Exact" xml:space="preserve"><value>Size {0} (measured) · {1:N0} frames · playback {2:N1} s</value></data>
-  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays within {1}.</value></data>
-  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit within {1}, at an estimated {2}.</value></data>
+  <data name="GifPreview_AdviceCurrent" xml:space="preserve"><value>The current setting is recommended. Its estimated size of {0} stays under {1}.</value></data>
+  <data name="GifPreview_AdviceSwitch" xml:space="preserve"><value>Recommended: {0}, the best fit under {1}, at an estimated {2}.</value></data>
   <data name="GifPreview_AdviceCurrentOver" xml:space="preserve"><value>The current setting may exceed {1} (estimated {0}).</value></data>
   <data name="GifPreview_AdviceMp4" xml:space="preserve"><value>Even the smallest GIF setting is expected to exceed {1} ({0}). Export MP4, or trim the range to about {2:N0} s or less.</value></data>
   <data name="GifPreview_AdviceSpeed" xml:space="preserve"><value>Playback takes {0:N1} s. At {1:0.#}× speed it takes {2:N1} s. Speed barely changes the file size.</value></data>
@@ -3973,8 +3965,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureKeyPanel.Resize" xml:space="preserve"><value>Resize 1 pixel · Ctrl for 10 pixels</value></data>
   <data name="CaptureKeyPanel.All" xml:space="preserve"><value>Select the entire screen</value></data>
   <data name="CaptureKeyPanel.Ratio" xml:space="preserve"><value>Change aspect ratio</value></data>
-  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Copy color</value></data>
+  <data name="CaptureKeyPanel.Delay" xml:space="preserve"><value>Change delay</value></data>
+  <data name="CaptureKeyPanel.ScrollDelay" xml:space="preserve"><value>Scrolling capture · Change delay</value></data>
+  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Switch to color copy</value></data>
+  <data name="CaptureKeyPanel.ColorCopy" xml:space="preserve"><value>Copy color</value></data>
   <data name="CaptureKeyPanel.Text" xml:space="preserve"><value>Switch to text copy</value></data>
+  <data name="CaptureKeyPanel.Scroll" xml:space="preserve"><value>Switch to scrolling capture</value></data>
+  <data name="CaptureKeyPanel.ScrollWindow" xml:space="preserve"><value>Scroll-capture this window</value></data>
   <data name="CaptureKeyPanel.Image" xml:space="preserve"><value>Switch to image capture</value></data>
   <data name="CaptureKeyPanel.Pin" xml:space="preserve"><value>Pin selected region</value></data>
   <data name="CaptureKeyPanel.ConfirmCancel" xml:space="preserve"><value>Confirm · Cancel</value></data>
@@ -3985,9 +3982,11 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>
   <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>Click the window under the pointer to capture it. Click the desktop to capture that monitor.</value></data>
-  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Select a window for scrolling capture.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Switches to scrolling capture. Click the window to scroll to start the capture.</value></data>
   <data name="CaptureBar_Delay" xml:space="preserve"><value>Delayed capture</value></data>
-  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Choose capture after 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Captures the screen again a set time after you choose the area. Choose no delay, 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_DelayArmed" xml:space="preserve"><value>{0}s</value></data>
+  <data name="CaptureBar_DelayNone" xml:space="preserve"><value>No delay</value></data>
   <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>Drag over the area to record. Press Esc to cancel.</value></data>
   <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>Selects this entire monitor as the recording area.</value></data>
   <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>Choose a recording area</value></data>
@@ -3998,7 +3997,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_Text" xml:space="preserve"><value>Copy text</value></data>
   <data name="CaptureGuide2_TextHelp" xml:space="preserve"><value>Recognizes the text in the window you click or the region you drag and copies it to the clipboard. The image is not saved.</value></data>
   <data name="CaptureGuide2_Color" xml:space="preserve"><value>Copy color</value></data>
-  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press C to copy the color under the pointer and end the capture.</value></data>
+  <data name="CaptureGuide2_ColorHelp" xml:space="preserve"><value>Click or press Enter to copy the color at the pointer tip and end the capture. Arrow keys move 1 pixel.</value></data>
   <data name="CaptureGuide2_Help" xml:space="preserve"><value>Help</value></data>
   <data name="CaptureGuide2_HelpTip" xml:space="preserve"><value>Shows how to capture again.</value></data>
   <data name="CaptureGuide2_Cancel" xml:space="preserve"><value>Cancel</value></data>
@@ -4009,7 +4008,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_DragText" xml:space="preserve"><value>Drag: Copy text from region</value></data>
   <data name="CaptureGuide2_ClickWindowText" xml:space="preserve"><value>Click: Copy text from window</value></data>
   <data name="CaptureGuide2_ClickMonitorText" xml:space="preserve"><value>Click: Copy text from monitor</value></data>
-  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or C: Copy color and end capture</value></data>
+  <data name="CaptureGuide2_ClickColor" xml:space="preserve"><value>Click or Enter: Copy color</value></data>
+  <data name="CaptureGuide2_ClickScroll" xml:space="preserve"><value>Click: Scroll-capture this window</value></data>
+  <data name="CaptureGuide2_DelaySuffix" xml:space="preserve"><value>Capture after {0} {0:plural:second|seconds}</value></data>
   <data name="CaptureGuide2_Esc" xml:space="preserve"><value>Esc: Cancel</value></data>
   <data name="CaptureGuide2_IntroTitle" xml:space="preserve"><value>How to capture</value></data>
   <data name="CaptureGuide2_IntroBody" xml:space="preserve"><value>Click a window to capture it, or drag to capture the region you want. Press Esc to cancel.</value></data>
@@ -4021,7 +4022,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>Step number — Adds 1, 2, 3… in order with each click</value></data>
   <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>Click to mark the order.</value></data>
   <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>Next number</value></data>
-  <data name="EditorStep_Number" xml:space="preserve"><value>Number</value></data>
+  <data name="EditorStep_Number" xml:space="preserve"><value>Selected number</value></data>
   <data name="EditorStep_NumberRange" xml:space="preserve"><value>Enter a number from 1 to 999.</value></data>
   <data name="EditorStep_Size" xml:space="preserve"><value>Size</value></data>
   <data name="EditorStep_SizeRange" xml:space="preserve"><value>24–{0} px</value></data>
@@ -4074,6 +4075,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_SaveShort" xml:space="preserve"><value>Save</value></data>
   <data name="VideoEditorUx_ExportShort" xml:space="preserve"><value>Export</value></data>
   <data name="VideoEditorUx_Details" xml:space="preserve"><value>Details</value></data>
+  <data name="VideoEditorUx_FrameNavigation" xml:space="preserve"><value>Frame navigation</value></data>
   <data name="VideoEditorUx_DetailsHelp" xml:space="preserve"><value>Show or hide frame navigation, start and end times, and the layer list. Press Enter to toggle.</value></data>
   <data name="VideoEditorUx_TrimTrackHelp" xml:space="preserve"><value>Drag the handles or press I and O to set the start and end. Press Ctrl+K to split at the playhead.</value></data>
   <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>Double-click a layer or select it and press F2 or Enter to edit. Press Del to delete. Drag a layer to adjust its visible range.</value></data>
@@ -4097,7 +4099,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_NextFrameShort" xml:space="preserve">
     <value>Next frame</value>
   </data>
-  <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>Applies the trim and layers to this recording in the library. The original is kept and can be edited again later.</value></data>
+  <data name="VideoEditorUx_SaveEditsHelp" xml:space="preserve"><value>Applies the trim and layers to this recording in the library. The original is kept and can be edited again later. Saves and closes the window.</value></data>
   <data name="VideoEditorUx_ExportHelp" xml:space="preserve"><value>Creates a new MP4 or GIF file with the trim and layers applied. The recording in the library is unchanged.</value></data>
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>Save your edits to the library?</value></data>
   <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>If you don't save, the trim and layer edits you made will be lost. The original recording stays as it is.</value></data>
@@ -4110,7 +4112,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsStructure_CaptureControls" xml:space="preserve"><value>Selection, delay &amp; history</value></data>
   <data name="SettingsStructure_RecordingCompatibility" xml:space="preserve"><value>Recording method</value></data>
   <data name="SettingsStructure_PinHistory" xml:space="preserve"><value>Zoom &amp; closed pin history</value></data>
-  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>Capacity &amp; thumbnails</value></data>
+  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>Item limit &amp; thumbnails</value></data>
   <data name="SettingsStructure_ImageExport" xml:space="preserve"><value>Image export</value></data>
   <data name="SettingsStructure_GitHub" xml:space="preserve"><value>GitHub connection</value></data>
   <data name="SettingsStructure_Backup" xml:space="preserve"><value>Backup &amp; previous data</value></data>
@@ -4154,7 +4156,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Support_Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
   <data name="Support_Message" xml:space="preserve"><value>Message</value></data>
   <data name="Support_GitHub" xml:space="preserve"><value>Send to GitHub issue</value></data>
-  <data name="Support_StoreReview" xml:space="preserve"><value>Review in Microsoft Store</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Rate in Microsoft Store</value></data>
   <data name="Support_Accounts" xml:space="preserve"><value>GitHub issues need a GitHub account; Store reviews use your Microsoft account.</value></data>
   <data name="Support_GitHubAccount" xml:space="preserve"><value>You need a GitHub account to send an issue.</value></data>
   <data name="Support_Opened" xml:space="preserve"><value>Contact page opened</value></data>
@@ -4204,8 +4206,6 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>Keys on buttons</value></data>
   <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Hold Alt to show shortcuts beneath buttons. Hover over a button to see its shortcut.</value></data>
   <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>Select, then press the key combination.</value></data>
-  <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>Maximum storage (GB)</value></data>
-  <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125–512 GB.</value></data>
   <data name="SettingsUx_PreviewSize" xml:space="preserve"><value>Preview image size (pixels)</value></data>
   <data name="SettingsUx_PreviewSizeRange" xml:space="preserve"><value>Longest edge, 96–1024 pixels.</value></data>
   <data name="SettingsUx_Retention" xml:space="preserve"><value>Image retention (hours)</value></data>
@@ -4217,7 +4217,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Retention_Year1" xml:space="preserve"><value>1 year</value></data>
   <data name="Retention_Never" xml:space="preserve"><value>Never</value></data>
   <data name="Retention_Custom" xml:space="preserve"><value>Custom ({0} hours)</value></data>
-  <data name="Retention_SummaryNever" xml:space="preserve"><value>Library images are not deleted after a set time. When the library goes over its maximum number of items or storage, the oldest items are deleted first.</value></data>
+  <data name="Retention_SummaryNever" xml:space="preserve"><value>Library images are not deleted after a set time. When the library goes over its maximum number of items, the oldest items are deleted first.</value></data>
   <data name="Retention_Notice" xml:space="preserve"><value>Deleted {0} images past the retention period</value></data>
   <data name="Retention_NoticeAction" xml:space="preserve"><value>Change</value></data>
   <data name="Retention_NoticeActionName" xml:space="preserve"><value>Change when images are deleted automatically</value></data>
@@ -4304,6 +4304,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>Crop and rotate the image</value></data>
   <data name="EditorFlow_CopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>Recognize the text in the edited image</value></data>
+  <data name="EditorFlow_CopyTextBusy" xml:space="preserve"><value>Text recognition is running. It can be used again when it finishes.</value></data>
+  <data name="EditorFlow_RedactBusy" xml:space="preserve"><value>Searching for personal information. It can be used again when the search ends or Esc cancels it.</value></data>
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>Apply the crop</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>Cancel the crop</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
@@ -4400,7 +4402,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Copy the picture</value>
   </data>
   <data name="Journey.A6.Body" xml:space="preserve">
-    <value>Select Copy and close at the top of the editor. The picture is copied and the editor closes.</value>
+    <value>Select Copy and close at the top right of the editor. The picture is copied and the editor closes.</value>
   </data>
   <data name="Journey.A6.Success" xml:space="preserve">
     <value>Picture copied.</value>
@@ -4436,7 +4438,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Open Opacity</value>
   </data>
   <data name="Journey.B3.Body" xml:space="preserve">
-    <value>Move the pointer over the picture and select Opacity at the top. With the keyboard, focus the picture and press O.</value>
+    <value>Click the picture to select it, then press O.</value>
   </data>
   <data name="Journey.PictureName" xml:space="preserve">
     <value>Practice picture</value>
@@ -4598,10 +4600,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>Change pin opacity</value>
   </data>
   <data name="Tutorial.pin-opacity.Step1" xml:space="preserve">
-    <value>Move the pointer over the picture.</value>
+    <value>Click the picture to select it.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step2" xml:space="preserve">
-    <value>Select Opacity at the top.</value>
+    <value>Press O.</value>
   </data>
   <data name="Tutorial.pin-opacity.Step3" xml:space="preserve">
     <value>Select 60% to see behind the picture.</value>
@@ -4702,7 +4704,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_PinKindTable" xml:space="preserve"><value>Table</value></data>
   <data name="Tray_PinKindImage" xml:space="preserve"><value>Image</value></data>
   <data name="Tray_PinImageTitle" xml:space="preserve"><value>{0} × {1} px</value></data>
-  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>{0} more</value></data>
+  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>Bring {0} more to front</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>
@@ -4741,6 +4743,7 @@ Turn off: {0}</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q or click the card: use the keys</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>Click the card: use the keys</value></data>
+  <data name="Onboard_QuickCardKeysTip" xml:space="preserve"><value>{0}: use the keys</value></data>
   <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>If this keeps happening, exit MyCapture from the tray menu and start it again. If it still happens, select Report error, review what will be sent, and send it.</value></data>
   <data name="Onboard_StartFailureTitle" xml:space="preserve"><value>MyCapture could not start</value></data>
   <data name="Onboard_StartFailureBody" xml:space="preserve"><value>Start MyCapture again. If it still fails, restart the computer and try once more. If it still does not start, copy the text under Details, select Report a problem, and attach it.</value></data>
@@ -4779,19 +4782,19 @@ Turn off: {0}</value></data>
   <data name="Tutorial.capture-fullscreen.Step1" xml:space="preserve"><value>1. Place the pointer on the monitor to capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step2" xml:space="preserve"><value>2. Run Full-screen capture.</value></data>
   <data name="Tutorial.capture-fullscreen.Step3" xml:space="preserve"><value>3. Review the full-screen capture of that monitor.</value></data>
-  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Choose Scrolling capture under More captures in the tray menu.</value></data>
-  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Place the pointer over a scrollable window.</value></data>
-  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Run Scrolling capture and wait for automatic scrolling to finish.</value></data>
+  <data name="Tutorial.capture-scroll.Unassigned" xml:space="preserve"><value>Switch to scrolling capture with the Scroll button or the S key in the capture selector.</value></data>
+  <data name="Tutorial.capture-scroll.Step1" xml:space="preserve"><value>1. Start Scrolling capture; the selector opens in scrolling capture mode.</value></data>
+  <data name="Tutorial.capture-scroll.Step2" xml:space="preserve"><value>2. Click the window to scroll and wait for automatic scrolling to finish.</value></data>
   <data name="Tutorial.capture-scroll.Step3" xml:space="preserve"><value>3. Review the stitched capture. Run the same command during capture to cancel.</value></data>
-  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay in the capture selector's More captures menu.</value></data>
-  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture.</value></data>
-  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Prepare the screen during the countdown.</value></data>
-  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. When the selector appears, drag to select the capture area.</value></data>
+  <data name="Tutorial.capture-delay.Unassigned" xml:space="preserve"><value>Choose a delay with the Delay button or the D key in the capture selector.</value></data>
+  <data name="Tutorial.capture-delay.Step1" xml:space="preserve"><value>1. Start a delayed capture; the selector opens with the delay chosen.</value></data>
+  <data name="Tutorial.capture-delay.Step2" xml:space="preserve"><value>2. Drag over the area or click a window.</value></data>
+  <data name="Tutorial.capture-delay.Step3" xml:space="preserve"><value>3. Prepare the screen during the countdown. When it ends, the same area is captured again.</value></data>
   <data name="Tutorial.quick-access.Step1" xml:space="preserve"><value>1. When a capture appears in the quick access card, press Alt+Q.</value></data>
   <data name="Tutorial.quick-access.Step2" xml:space="preserve"><value>2. Click Copy in the card or press C.</value></data>
   <data name="Tutorial.quick-access.Step3" xml:space="preserve"><value>3. Press Ctrl+V in the destination to use the capture.</value></data>
   <data name="Tutorial.color-copy.Step1" xml:space="preserve"><value>1. Start a region capture.</value></data>
-  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Place the pointer over the color and press C.</value></data>
+  <data name="Tutorial.color-copy.Step2" xml:space="preserve"><value>2. Press C for the eyedropper, then click the color to copy.</value></data>
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. Paste the value with Ctrl+V. Its format follows your color-format setting.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. Select Rectangle and drag over the area to mark.</value></data>
@@ -5036,6 +5039,9 @@ Turn off: {0}</value></data>
   <data name="ContactSheet.Preview" xml:space="preserve">
     <value>Page 1 preview</value>
   </data>
+  <data name="ContactSheet.PreviewPage" xml:space="preserve">
+    <value>Page {0} preview</value>
+  </data>
   <data name="ContactSheet.PageCount" xml:space="preserve">
     <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages}</value>
   </data>
@@ -5074,6 +5080,48 @@ Turn off: {0}</value></data>
   </data>
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>Select images for the PDF. Videos are skipped.</value>
+  </data>
+  <data name="ContactSheet.Order" xml:space="preserve">
+    <value>Image order</value>
+  </data>
+  <data name="ContactSheet.Sort" xml:space="preserve">
+    <value>Sort</value>
+  </data>
+  <data name="ContactSheet.SortLibrary" xml:space="preserve">
+    <value>Library order</value>
+  </data>
+  <data name="ContactSheet.SortOldest" xml:space="preserve">
+    <value>Oldest first</value>
+  </data>
+  <data name="ContactSheet.SortNewest" xml:space="preserve">
+    <value>Newest first</value>
+  </data>
+  <data name="ContactSheet.SortTitle" xml:space="preserve">
+    <value>By title</value>
+  </data>
+  <data name="ContactSheet.SortCustom" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="ContactSheet.MoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="ContactSheet.MoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="ContactSheet.IncludeItem" xml:space="preserve">
+    <value>Include image {0}</value>
+  </data>
+  <data name="ContactSheet.OrderItem" xml:space="preserve">
+    <value>Image {0}, {1}</value>
+  </data>
+  <data name="ContactSheet.OrderItemExcluded" xml:space="preserve">
+    <value>Image {0}, {1}, excluded</value>
+  </data>
+  <data name="ContactSheet.NoneIncluded" xml:space="preserve">
+    <value>Select at least one image to include in the PDF.</value>
+  </data>
+  <data name="ContactSheet.PageCountExcluded" xml:space="preserve">
+    <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages} · {2} excluded</value>
   </data>
   <data name="Gallery.Compare" xml:space="preserve"><value>Compare</value></data>
   <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>Side by side</value></data>
@@ -5235,6 +5283,7 @@ Turn off: {0}</value></data>
   <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
+  <data name="Source.AppOnly" xml:space="preserve"><value>App only, no document or page</value></data>
   <data name="About_DiagnosticsBundle" xml:space="preserve"><value>Save diagnostics bundle</value></data>
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>Saves recent logs and diagnostics in one ZIP file. Captures, clipboard contents, window titles and file paths are not included, and nothing is sent automatically.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>Diagnostics bundle saved</value></data>
@@ -5268,6 +5317,7 @@ Turn off: {0}</value></data>
   <data name="Translate_ErrorDiskFull" xml:space="preserve"><value>Not enough disk space. Free up at least {0} MB and try again.</value></data>
   <data name="Translate_ErrorCorrupt" xml:space="preserve"><value>A downloaded file is damaged. Try again.</value></data>
   <data name="Translate_ErrorDisk" xml:space="preserve"><value>Can't save the translation model. Check the free space and permissions.</value></data>
+  <data name="Translate_ErrorStalled" xml:space="preserve"><value>The translation model download stopped. Check your network and try again.</value></data>
   <data name="Translate_SourceName" xml:space="preserve"><value>Original {0}</value></data>
   <data name="Translate_TranslationName" xml:space="preserve"><value>Translation {0}</value></data>
   <data name="Translate_BlockName" xml:space="preserve"><value>Block {0}</value></data>
@@ -5294,6 +5344,14 @@ Turn off: {0}</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>View source</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>View rendered</value></data>
+  <data name="Pin_MarkdownContinued" xml:space="preserve"><value>The rest of the content is available with F2.</value></data>
+  <data name="Pin_MarkdownDrawing" xml:space="preserve"><value>Drawing</value></data>
+  <data name="Pin_MarkdownDiagramFallback" xml:space="preserve"><value>The diagram could not be shown, so its source is displayed.</value></data>
+  <data name="Pin_MermaidSyntaxLength" xml:space="preserve"><value>Check the Mermaid syntax and length.</value></data>
+  <data name="Pin_MermaidSyntax" xml:space="preserve"><value>Check the Mermaid syntax.</value></data>
+  <data name="Pin_MermaidTooLarge" xml:space="preserve"><value>The Mermaid diagram is too large.</value></data>
+  <data name="Pin_MermaidNoWebView" xml:space="preserve"><value>The diagram cannot be shown because the WebView2 runtime is missing.</value></data>
+  <data name="Pin_MermaidUnavailable" xml:space="preserve"><value>The Mermaid diagram cannot be shown.</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>Install</value></data>
   <data name="Pin_TranslationConsent" xml:space="preserve"><value>The {1} translation model is a {0} MB download.
 Your text stays on this PC.
@@ -5320,6 +5378,13 @@ Install the model?</value></data>
   <data name="Pin_TranslationFailed" xml:space="preserve">
     <value>Translation failed. The original text is retained.</value>
   </data>
+  <data name="Pin_TranslationFailedReading" xml:space="preserve"><value>Couldn't read the text in the image. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedModelCheck" xml:space="preserve"><value>Couldn't check the translation model. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedInstall" xml:space="preserve"><value>Couldn't install the translation model. Try again.</value></data>
+  <data name="Pin_TranslationFailedLoad" xml:space="preserve"><value>Couldn't open the translation model. Select Retry translation to install it again.</value></data>
+  <data name="Pin_TranslationFailedInference" xml:space="preserve"><value>An error occurred while translating. The original text is retained.</value></data>
+  <data name="Pin_TranslationFailedShowing" xml:space="preserve"><value>Couldn't show the translation. The original text is retained.</value></data>
+  <data name="Pin_TranslationKeptOriginal" xml:space="preserve"><value>The translation didn't keep the original numbers and symbols, so the original text is retained.</value></data>
   <data name="Pin_TranslationRetry" xml:space="preserve">
     <value>Retry translation</value>
   </data>
@@ -5342,6 +5407,12 @@ Install the model?</value></data>
   <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>Only Korean and English can be translated.</value></data>
   <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>Translation model is being prepared</value></data>
   <data name="Pin_TranslationNoText" xml:space="preserve"><value>No text was found in the image.</value></data>
+  <data name="Pin_TranslationDownloadProgress" xml:space="preserve"><value>Installing translation model · {0} / {1} MB</value></data>
+  <data name="Pin_TranslationReading" xml:space="preserve"><value>Reading text</value></data>
+  <data name="Pin_TranslationCancel" xml:space="preserve"><value>Cancel translation</value></data>
+  <data name="Pin_TranslationCancelled" xml:space="preserve"><value>Translation cancelled.</value></data>
+  <data name="Pin_TranslationNothing" xml:space="preserve"><value>There is nothing to translate.</value></data>
+  <data name="Pin_TranslationErrorNetwork" xml:space="preserve"><value>Can't download the translation model. Check your internet connection and try again.</value></data>
   <data name="Pin_CopyTranslation" xml:space="preserve"><value>Copy translation</value></data>
   <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
@@ -5416,7 +5487,7 @@ Install the model?</value></data>
   <data name="Onboarding.TableStorage" xml:space="preserve"><value>Storage</value></data>
   <data name="Onboarding.TrayLocation" xml:space="preserve"><value>The MyCapture icon is inside the ^ button.</value></data>
   <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture icon</value></data>
-  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Three steps to try capture, pin and the library.</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Fifteen steps in three topics to try capture, pin and the library.</value></data>
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
   <data name="Pin.ClickThroughOff" xml:space="preserve"><value>Turn off click-through</value></data>
   <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>Click here to turn it off</value></data>
@@ -5448,12 +5519,20 @@ Install the model?</value></data>
   <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
   <data name="Stamp_Remove" xml:space="preserve"><value>Remove registered image</value></data>
   <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose watermark image</value></data>
+  <data name="ImagePicker_Title" xml:space="preserve"><value>Insert image</value></data>
+  <data name="ImagePicker_Insert" xml:space="preserve"><value>Insert</value></data>
+  <data name="ImagePicker_Browse" xml:space="preserve"><value>Browse files…</value></data>
+  <data name="ImagePicker_Empty" xml:space="preserve"><value>The library has no images.</value></data>
+  <data name="ImagePicker_ListName" xml:space="preserve"><value>Library images</value></data>
   <data name="Stamp_Changed" xml:space="preserve"><value>Watermark image changed</value></data>
   <data name="Stamp_OpacitySet" xml:space="preserve"><value>Watermark opacity {0}%</value></data>
   <data name="Stamp_Removed" xml:space="preserve"><value>Registered image removed · Placed watermarks stay</value></data>
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>The watermark image could not be saved.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>The watermark image cannot be read. Please register it again.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>The watermark is not available here.</value></data>
+  <data name="Stamp_Blend" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Stamp_BlendIntoPage" xml:space="preserve"><value>Blend into page</value></data>
+  <data name="Stamp_BlendOver" xml:space="preserve"><value>Lay on top</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>Quick access</value>
   </data>
@@ -5604,6 +5683,8 @@ Install the model?</value></data>
   <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
+  <data name="GifExport_SavedAdjusted" xml:space="preserve"><value>Saved · {0} · {1} · Lowered to {3} px wide at {4} fps to stay under the {2} share limit.</value></data>
+  <data name="GifExport_ShareLimitUnmet" xml:space="preserve"><value>Even the smallest GIF setting cannot stay under the {0} share limit (result {1}). Export MP4, or trim the range.</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1} s</value></data>
   <data name="Pin_TranslationDocumentView" xml:space="preserve">
     <value>Show translation as text</value>
@@ -5611,4 +5692,93 @@ Install the model?</value></data>
   <data name="Pin_TranslationPictureView" xml:space="preserve">
     <value>Show translation on picture</value>
   </data>
+  <data name="Pin_Collapse" xml:space="preserve"><value>Collapse</value></data>
+  <data name="Pin_Expand" xml:space="preserve"><value>Expand</value></data>
+  <data name="Pin_CollapseGesture" xml:space="preserve"><value>Shift+Double-click</value></data>
+  <data name="Pin_CollapsedTip" xml:space="preserve"><value>Double-click to expand the pin.</value></data>
+  <data name="Tray_PinCollapsed" xml:space="preserve"><value>Collapsed</value></data>
+  <data name="Pin_SnapWhileDragging" xml:space="preserve"><value>Snap to edges and other pins while dragging</value></data>
+  <data name="Pin_LightweightLabel" xml:space="preserve"><value>Show picture pins with less memory</value></data>
+  <data name="Pin_LightweightDescription" xml:space="preserve"><value>Picture pins use less memory, and a pin that starts text selection or translation becomes a standard pin.</value></data>
+  <data name="Pin_CollapseToggle" xml:space="preserve"><value>Collapse or expand pin</value></data>
+  <data name="Pin_ExpandCollapsed" xml:space="preserve"><value>Expand collapsed pin</value></data>
+  <data name="Pin_DoubleClickGesture" xml:space="preserve"><value>Double-click</value></data>
+  <data name="Pin_SnapBypass" xml:space="preserve"><value>Move without snapping</value></data>
+  <data name="Pin_ShiftDragGesture" xml:space="preserve"><value>Shift+Drag</value></data>
+  <data name="Pin_ZoomStopHelp" xml:space="preserve"><value>Zoom · stop at 100%</value></data>
+  <data name="Pin_ZoomGesture" xml:space="preserve"><value>Wheel / + / -</value></data>
+  <data name="Pin_OrganizeHelp" xml:space="preserve"><value>Shift+double-click collapses or expands the pin. Hold Shift while dragging to bypass snapping. Wheel and + or - zoom steps stop once at 100%.</value></data>
+  <data name="CaptureKeyPanel.ElementKeys" xml:space="preserve"><value>Wheel</value></data>
+  <data name="CaptureKeyPanel.ElementDepth" xml:space="preserve"><value>Select an element in the window (PgDn · PgUp)</value></data>
+  <data name="CaptureGuide2_ClickElement" xml:space="preserve"><value>Click: Capture element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ClickElementText" xml:space="preserve"><value>Click: Copy text from element · Wheel: Widen or narrow</value></data>
+  <data name="CaptureGuide2_ElementWheelHint" xml:space="preserve"><value> · Wheel: Select element</value></data>
+  <data name="CaptureFreeform_Name" xml:space="preserve">
+    <value>Freeform</value>
+  </data>
+  <data name="CaptureFreeform_Help" xml:space="preserve">
+    <value>Draw an area with the pointer to capture it.</value>
+  </data>
+  <data name="CaptureFreeform_Drawing" xml:space="preserve">
+    <value>Draw a freeform area · Release to capture</value>
+  </data>
+  <data name="CaptureFreeform_KeyHelp" xml:space="preserve">
+    <value>Toggle freeform · Draw with the pointer</value>
+  </data>
+  <data name="CaptureFreeform_Unavailable" xml:space="preserve">
+    <value>Freeform is unavailable for this selection.</value>
+  </data>
+  <data name="CaptureFreeform_Text" xml:space="preserve">
+    <value>Freeform is unavailable for text copy.</value>
+  </data>
+  <data name="CaptureFreeform_Color" xml:space="preserve">
+    <value>Freeform is unavailable for colour copy.</value>
+  </data>
+  <data name="CaptureFreeform_Recording" xml:space="preserve">
+    <value>Recording regions use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Scrolling" xml:space="preserve">
+    <value>Scrolling capture uses rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Delay" xml:space="preserve">
+    <value>Delayed capture uses a rectangular selection.</value>
+  </data>
+  <data name="CaptureFreeform_Editor" xml:space="preserve">
+    <value>Additional captures while editing use rectangular selections.</value>
+  </data>
+  <data name="CaptureFreeform_Discard" xml:space="preserve"><value>Discard the stroke</value></data>
+  <data name="OpenWith.Menu" xml:space="preserve"><value>Open with</value></data>
+  <data name="OpenWith.Choose" xml:space="preserve"><value>Choose another app…</value></data>
+  <data name="OpenWith.Loading" xml:space="preserve"><value>Loading</value></data>
+  <data name="OpenWith.Preparing" xml:space="preserve"><value>Preparing file</value></data>
+  <data name="OpenWith.Opened" xml:space="preserve"><value>Sent to app</value></data>
+  <data name="OpenWith.Failed" xml:space="preserve"><value>Could not open the app. {0}</value></data>
+  <data name="OpenWith.Unavailable" xml:space="preserve"><value>The selected app is unavailable.</value></data>
+  <data name="OpenWith.AccessDenied" xml:space="preserve"><value>Access to the file was denied.</value></data>
+  <data name="Pin_CopyTextImageBusy" xml:space="preserve"><value>Copying text and image…</value></data>
+  <data name="Pin_CopyTextImageDone" xml:space="preserve"><value>Text and image copied</value></data>
+  <data name="Pin_CopyTextImageFailed" xml:space="preserve"><value>Text and image copy failed</value></data>
+  <data name="Pin_CopyImageName" xml:space="preserve"><value>Copy image</value></data>
+  <data name="Pin_CopyTextImageName" xml:space="preserve"><value>Copy text and image</value></data>
+  <data name="Pin_CopySelectedText" xml:space="preserve"><value>Copy selected text</value></data>
+  <data name="Pin_CopyImageOnly" xml:space="preserve"><value>Copy image only</value></data>
+  <data name="Pin_CopyImageOnlyHelp" xml:space="preserve"><value>Copy only the image shown now, without its text.</value></data>
+  <data name="FirstRun.WindowTitle" xml:space="preserve"><value>Get started</value></data>
+  <data name="FirstRun.PracticeWindowTitle" xml:space="preserve"><value>Practice</value></data>
+  <data name="FirstRun.PinTitle" xml:space="preserve"><value>Keep something in view</value></data>
+  <data name="FirstRun.PinBody" xml:space="preserve"><value>Copy text or an image, then press {0}. If you have nothing to copy, use the sample below.</value></data>
+  <data name="FirstRun.PinBodyNoKey" xml:space="preserve"><value>Copy text or an image, then choose ‘Pin copied content’. If you have nothing to copy, use the sample below.</value></data>
+  <data name="FirstRun.SampleText" xml:space="preserve"><value>Things to check today
+Keep this in view while working in another window.</value></data>
+  <data name="FirstRun.CopySample" xml:space="preserve"><value>Copy sample text</value></data>
+  <data name="FirstRun.SampleCopied" xml:space="preserve"><value>Sample text copied. You can now pin it.</value></data>
+  <data name="FirstRun.PinClipboard" xml:space="preserve"><value>Pin copied content</value></data>
+  <data name="FirstRun.PinnedTitle" xml:space="preserve"><value>Your pin is on screen</value></data>
+  <data name="FirstRun.PinnedBody" xml:space="preserve"><value>The pin stays when you close this window. Continue to the full practice to try capturing, editing and working with pins.</value></data>
+  <data name="FirstRun.SkippedTitle" xml:space="preserve"><value>First pin skipped</value></data>
+  <data name="FirstRun.SkippedBody" xml:space="preserve"><value>You can pin copied content whenever you need it. The full practice is also available from Help.</value></data>
+  <data name="FirstRun.FullPractice" xml:space="preserve"><value>Full practice</value></data>
+  <data name="FirstRun.Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="FirstRun.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="FirstRun.WatchExample" xml:space="preserve"><value>Watch example video</value></data>
 </root>

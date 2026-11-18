@@ -85,7 +85,7 @@ public sealed class CaptureOcrService : IOcrService
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!AppArchitecture.SupportsNeuralOcr)
-            return await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+            return await ReadWindowsAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (_enableDualEngine && request.UseNeuralModel)
         {
@@ -126,7 +126,7 @@ public sealed class CaptureOcrService : IOcrService
             }
         }
 
-        OcrResult windows = await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        OcrResult windows = await ReadWindowsAsync(request, cancellationToken).ConfigureAwait(false);
         // Fast is the default, so these requests never reach the dual-engine merge above.
         // The Korean Windows pack can read English function words as Hangul. When the caller
         // asks for it (image translation), consult the installed Latin-capable model only for
@@ -154,6 +154,43 @@ public sealed class CaptureOcrService : IOcrService
         // text/geometry, but include all attempted work in the result's elapsed metadata.
         return OcrResult.Success(recovered.Text, recovered.LanguageTag ?? string.Empty, recovered.Lines,
             elapsed, recovered.ReadingOrientation, recovered.TextAngle);
+    }
+
+    /// <summary>
+    /// The Windows reading, and for image translation the pixel-evidence repairs that need no model: a Latin line
+    /// read as one word is read again in pieces, and letters whose case or identity the ink settles are corrected.
+    /// Plain recognition, encoded or file requests and rotated readings keep the Windows reading as it is.
+    /// </summary>
+    private async Task<OcrResult> ReadWindowsAsync(OcrRequest request, CancellationToken cancellationToken)
+    {
+        OcrResult windows = await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!request.RecoverLatinIntrusions || request.Bitmap is not { } picture || !windows.HasText
+            || windows.ReadingOrientation.IsRotated) return windows;
+        bool joined = OcrLatinLineSplit.HasJoinedWords(windows);
+        if (!joined && !OcrLatinGlyphRepair.HasCandidates(windows)) return windows;
+        var watch = Stopwatch.StartNew();
+        OcrResult repaired = windows;
+        try
+        {
+            if (OcrGrayImage.From(picture) is not { } image) return windows;
+            if (joined)
+                repaired = await OcrLatinLineSplit.SplitAsync(repaired, image, (piece, token) => _windows.RecognizeAsync(
+                    OcrRequest.FromBitmap(piece, request.UpscaleFactor, request.PreferredLanguages, searchRotatedOrientations: false),
+                    token), cancellationToken).ConfigureAwait(false);
+            repaired = OcrLatinGlyphRepair.Repair(repaired, image);
+        }
+        catch (OperationCanceledException)
+        {
+            return OcrResult.Cancelled();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Latin pixel repair failed; keeping the Windows reading");
+            return windows;
+        }
+        if (ReferenceEquals(repaired, windows)) return windows;
+        return OcrResult.Success(repaired.Text, repaired.LanguageTag ?? string.Empty, repaired.Lines,
+            windows.Elapsed + watch.Elapsed, repaired.ReadingOrientation, repaired.TextAngle);
     }
 
     private async Task<OcrResult> RecognizeDualAsync(OcrRequest request, CancellationToken cancellationToken)

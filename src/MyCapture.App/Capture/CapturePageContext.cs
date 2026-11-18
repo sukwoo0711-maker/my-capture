@@ -34,12 +34,19 @@ internal static class CapturePageContext
     /// still describe the snapshotted windows.
     /// </summary>
     /// <param name="pixelsNotBefore">Optional wait before the grab (a just-dismissed surface settling); the reads do not wait.</param>
+    /// <param name="readEditorDocuments">
+    /// Optional late read of a code editor's document (<see cref="WindowSourceService.ReadEditorDocumentsAsync"/>).
+    /// It runs after both reads have confirmed the editor, so <c>Windows</c> can complete up to about a second
+    /// later for an editor window; nothing on screen waits for it, and a capture saved first gets the path
+    /// through the late source backfill.
+    /// </param>
     internal static async Task<(FrozenFrame Frame, Task<IReadOnlyList<WindowCandidate>> Windows)> AcquireFrameAsync(
         IReadOnlyList<WindowCandidate> candidates, Func<FrozenFrame> acquireFrame,
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
         Func<IReadOnlyList<WindowCandidate>>? refreshCandidates = null,
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources = null,
-        Task? pixelsNotBefore = null)
+        Task? pixelsNotBefore = null,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, string>>>? readEditorDocuments = null)
     {
         WindowCandidate[] original = candidates.ToArray();
         WindowCandidate[] probeCandidates = GetUrlCandidates(original);
@@ -63,7 +70,7 @@ internal static class CapturePageContext
             return (acquired, stable);
         }).ConfigureAwait(false);
         return (frame, ConfirmAfterPixelsAsync(original, probeCandidates, stableWindows, beforePages, beforeSourcesRead,
-            read, readSources));
+            read, readSources, readEditorDocuments));
     }
 
     private static async Task<IReadOnlyList<WindowCandidate>> ConfirmAfterPixelsAsync(
@@ -71,7 +78,8 @@ internal static class CapturePageContext
         Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>> beforePages,
         Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>> beforeSourcesRead,
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> read,
-        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources)
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readSources,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, string>>>? readEditorDocuments = null)
     {
         // The confirming read must start after the first one: each reader runs one native probe at
         // a time, and a read that overlapped the first could not show that nothing changed after it.
@@ -95,13 +103,51 @@ internal static class CapturePageContext
         await Task.WhenAll(afterPages, afterSourcesRead).ConfigureAwait(false);
         IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after = await afterPages.ConfigureAwait(false);
         IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> afterSources = await afterSourcesRead.ConfigureAwait(false);
-        return original.Select(candidate => candidate with
+        WindowCandidate[] confirmed = original.Select(candidate =>
         {
-            SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty,
-            Source = readSources is null ? candidate.Source
-                : stableWindows ? StableSource(candidate, beforeSources, afterSources) : null,
+            CaptureSourceDetails? source = readSources is null ? candidate.Source
+                : stableWindows ? StableSource(candidate, beforeSources, afterSources) : null;
+            // A local file both page reads agree on (a PDF opened from disk) is the window's document.
+            if (stableWindows)
+                source = CaptureSourceDetails.WithDocument(source, StableLocalFile(candidate, before, after),
+                    CaptureDocumentOrigin.Browser);
+            return candidate with
+            {
+                SourcePageUrl = stableWindows ? StableUrl(candidate, before, after) : string.Empty,
+                Source = source,
+            };
         }).ToArray();
+        return readEditorDocuments is null || !stableWindows
+            ? confirmed
+            : await AddEditorDocumentsAsync(confirmed, beforeSources, readEditorDocuments).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Adds the document a code editor's selected tab names, read after both reads confirmed the editor.
+    /// The reader is given each window's confirmed process; it keeps a path only for that same process.
+    /// </summary>
+    internal static async Task<WindowCandidate[]> AddEditorDocumentsAsync(WindowCandidate[] confirmed,
+        IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> sources,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, string>>> readEditorDocuments)
+    {
+        WindowCandidate[] editors = confirmed
+            .Where(candidate => candidate.Source is { DocumentPath.Length: 0 } source
+                && EditorDocumentMatch.IsEditor(source.AppPath) && sources.ContainsKey(candidate.Handle))
+            .Select(candidate => candidate with { ProcessId = sources[candidate.Handle].ProcessId })
+            .ToArray();
+        if (editors.Length == 0) return confirmed;
+        IReadOnlyDictionary<IntPtr, string> documents = await ReadSafeAsync(readEditorDocuments, editors).ConfigureAwait(false);
+        if (documents.Count == 0) return confirmed;
+        return confirmed.Select(candidate => documents.TryGetValue(candidate.Handle, out string? path)
+            ? candidate with { Source = CaptureSourceDetails.WithDocument(candidate.Source, path, CaptureDocumentOrigin.Editor) }
+            : candidate).ToArray();
+    }
+
+    /// <summary>The local file a browser window showed in both reads; same checks as <see cref="StableUrl"/>.</summary>
+    internal static string StableLocalFile(WindowCandidate candidate,
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before,
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after) =>
+        StableDocument(candidate, before, after)?.LocalFilePath ?? string.Empty;
 
     private static readonly IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> NoSources =
         new Dictionary<IntPtr, WindowSourceSnapshot>();
@@ -171,13 +217,18 @@ internal static class CapturePageContext
 
     internal static string StableUrl(WindowCandidate candidate,
         IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before,
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after) =>
+        StableDocument(candidate, before, after)?.PageUrl ?? string.Empty;
+
+    private static BrowserDocumentSnapshot? StableDocument(WindowCandidate candidate,
+        IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> before,
         IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot> after)
     {
         if (!before.TryGetValue(candidate.Handle, out BrowserDocumentSnapshot? first)
             || !after.TryGetValue(candidate.Handle, out BrowserDocumentSnapshot? last)
             || first != last || first.ProcessId == 0 || string.IsNullOrEmpty(first.DocumentId)
             || (candidate.ProcessId != 0 && first.ProcessId != candidate.ProcessId)
-            || first.WindowTitle != candidate.Title) return string.Empty;
-        return SourcePageUrl.Normalize(first.Url);
+            || first.WindowTitle != candidate.Title) return null;
+        return first;
     }
 }

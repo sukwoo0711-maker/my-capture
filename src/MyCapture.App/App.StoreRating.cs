@@ -166,7 +166,7 @@ public partial class App
     private bool IsStoreRatingDeferredOnCard() =>
         _storeInstallationPending || _preparingExit
         || _overlay?.IsSelecting == true || _overlay?.CurrentEditor is not null
-        || _recorder?.IsActive == true || _activeCountdown is not null
+        || _recorder?.IsActive == true || _overlay?.IsCountingDown == true
         || _scrollCancellation is not null || _preparingAdvancedCapture
         || _pasteToScreenInFlight || HotkeyRecorder.Active is not null
         || Windows.OfType<Window>().Any(window => window.IsVisible

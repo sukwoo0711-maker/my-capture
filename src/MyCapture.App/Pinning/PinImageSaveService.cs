@@ -83,7 +83,8 @@ internal sealed class PinImageSaveService
     /// </summary>
     internal Func<Window?, string, string?>? SaveAsPrompt { get; set; }
 
-    internal async Task<PinSaveResult> SaveAsAsync(BitmapSource image, Window? owner, string sourcePageUrl = "")
+    /// <param name="ownerHandle">The native window that owns the dialogs when there is no WPF owner (a native-hosted pin).</param>
+    internal async Task<PinSaveResult> SaveAsAsync(BitmapSource image, Window? owner, string sourcePageUrl = "", IntPtr ownerHandle = default)
     {
         ArgumentNullException.ThrowIfNull(image);
 
@@ -100,12 +101,12 @@ internal sealed class PinImageSaveService
                 suggested = BuildSuggestedPath();
                 if (SaveAsPrompt is null)
                 {
-                    ImageExportOptions? selected = ImageExportOptionsPanel.ShowCopyOptions(owner, options);
+                    ImageExportOptions? selected = ImageExportOptionsPanel.ShowCopyOptions(owner, options, ownerHandle);
                     if (selected is null) return new PinSaveResult(PinSaveStatus.Cancelled);
                     options = selected;
                 }
                 chosen = SaveAsPrompt is null
-                    ? ShowSaveDialog(owner, suggested)
+                    ? ShowSaveDialog(owner, suggested, ownerHandle)
                     : SaveAsPrompt(owner, suggested);
             }
             catch (Exception ex) when (IsExpectedSaveFailure(ex))
@@ -211,7 +212,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         return QuickSaveNaming.ResolvePath(directory, stem, ".png");
     }
 
-    private static string? ShowSaveDialog(Window? owner, string suggested)
+    private static string? ShowSaveDialog(Window? owner, string suggested, IntPtr ownerHandle)
     {
         string? directory = Path.GetDirectoryName(suggested);
         var dialog = new SaveFileDialog
@@ -236,10 +237,12 @@ string message = UiText.Get("Text_932DB1A4ED7F");
             e.Cancel = true;
             _ = owner is null
                 ? MyCapture.App.Themes.ThemedDialog.Show(
+                    null,
                     UiText.Get("Text_932DB1A4ED7F"),
                     UiText.Get("Text_A97A3B71F038"),
                     MessageBoxButton.OK,
-                    MessageBoxImage.Information)
+                    MessageBoxImage.Information,
+                    ownerHandle: ownerHandle)
                 : MyCapture.App.Themes.ThemedDialog.Show(
                     owner,
                     UiText.Get("Text_932DB1A4ED7F"),
@@ -248,6 +251,9 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                     MessageBoxImage.Information);
         };
 
+        // Without a WPF owner the common dialog takes the thread's active window as its owner;
+        // a native pin that asks for the dialog is made that window first.
+        if (owner is null && ownerHandle != IntPtr.Zero) _ = NativePinWindowInterop.SetActiveWindow(ownerHandle);
         bool? accepted = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
         return accepted == true ? dialog.FileName : null;
     }

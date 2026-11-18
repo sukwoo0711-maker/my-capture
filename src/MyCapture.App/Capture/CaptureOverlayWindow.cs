@@ -156,13 +156,31 @@ internal sealed class CaptureOverlayWindow : Window
         _pendingSelection = null;
         _pendingSelectionDetails = null;
         CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
-            details?.WholeMonitor == true, details?.PinRequested == true);
+            details?.WholeMonitor == true, details?.PinRequested == true, details?.FreeformMask);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
 
     internal void ConfirmSelectionAsPin() => _view.ConfirmSelectionAsPin();
+
+    /// <summary>Switches the selector's mode as the bar would.</summary>
+    internal void SelectMode(CaptureSelectorMode mode) => _view.SelectMode(mode);
+
+    internal CaptureSelectorMode Mode => _view.Mode;
+
+    /// <summary>The delay armed in the bar (0 for none).</summary>
+    internal int ArmedDelaySeconds
+    {
+        get => _view.ArmedDelaySeconds;
+        set => _view.ArmedDelaySeconds = value;
+    }
+
+    internal string? FreeformUnavailableReason
+    {
+        get => _view.FreeformUnavailableReason;
+        set => _view.FreeformUnavailableReason = value;
+    }
 
     internal event EventHandler? SelectionCancelled;
 
@@ -443,13 +461,13 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor, e.PinRequested);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor, e.PinRequested, e.FreeformMask);
     }
 
     internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
 
     internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture,
-        bool wholeMonitor = false, bool pinRequested = false)
+        bool wholeMonitor = false, bool pinRequested = false, FreeformMask? freeformMask = null)
     {
         if (_completed)
         {
@@ -469,7 +487,8 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
         FrozenFrame frame = _frame ?? throw new InvalidOperationException("A frozen capture frame is required.");
-        System.Windows.Media.Imaging.BitmapSource crop = ScreenCaptureEngine.Crop(frame, bitmapRegion);
+        System.Windows.Media.Imaging.BitmapSource crop = freeformMask is null
+            ? ScreenCaptureEngine.Crop(frame, bitmapRegion) : FreeformCapture.Crop(frame, freeformMask);
         var selectedScreenRegion = new RectD(_screenBounds.Left + bitmapRegion.Left, _screenBounds.Top + bitmapRegion.Top,
             bitmapRegion.Width, bitmapRegion.Height);
         // The window is chosen from the hotkey-time geometry, z-order and titles, which the confirmed
@@ -493,12 +512,14 @@ internal sealed class CaptureOverlayWindow : Window
             SelectionCompleted?.Invoke(
                 this,
                 new CaptureSelectionCompletedEventArgs(frame, bitmapRegion, crop, source.Title,
-                    sourcePageUrl: source.PageUrl)
+                    sourcePageUrl: source.PageUrl, recordForRepeat: freeformMask is null)
                 {
                     TextCapture = textCapture,
                     PinRequested = pinRequested,
                     SourceDetails = source.Details,
                     PendingSource = pendingSource,
+                    Freeform = freeformMask,
+                    DelaySeconds = textCapture || pinRequested ? 0 : _view.DelaySeconds,
                 });
         }
         finally
@@ -646,7 +667,8 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
         get => _sourceDetails;
         init => _sourceDetails = value is null
             ? CaptureSourceDetails.Empty
-            : CaptureSourceDetails.Create(value.AppName, value.AppPath, value.DocumentPath);
+            : CaptureSourceDetails.Create(value.AppName, value.AppPath, value.DocumentPath, value.AppUserModelId,
+                value.DocumentOrigin);
     }
 
     private readonly CaptureSourceDetails _sourceDetails = CaptureSourceDetails.Empty;
@@ -665,6 +687,23 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     /// </summary>
     internal bool TextCapture { get; init; }
     internal bool PinRequested { get; init; }
+
+    /// <summary>The freeform outline the selection was cut with; null for a rectangle.</summary>
+    internal MyCapture.Core.Capture.FreeformMask? Freeform { get; init; }
+
+    /// <summary>
+    /// Seconds armed in the selector: the region is captured again from the screen when they have
+    /// passed, and that capture is what is kept. Zero captures the frozen frame at once.
+    /// </summary>
+    internal int DelaySeconds { get; init; }
+
+    /// <summary>The same selection over <paramref name="frame"/>, a later picture of the same desktop.</summary>
+    internal CaptureSelectionCompletedEventArgs Retaken(FrozenFrame frame, System.Windows.Media.Imaging.BitmapSource selectedBitmap) =>
+        new(frame, BitmapRegion, selectedBitmap, SourceTitle, RecordForRepeat, SourcePageUrl)
+        {
+            SourceDetails = SourceDetails, PendingSource = PendingSource, TextCapture = TextCapture,
+            PinRequested = PinRequested, Freeform = Freeform, PracticeTarget = PracticeTarget,
+        };
 }
 
 /// <summary>The window a selection captured: its title, page and application, each possibly empty.</summary>

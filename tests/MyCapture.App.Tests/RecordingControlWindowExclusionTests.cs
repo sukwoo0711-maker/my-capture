@@ -491,6 +491,11 @@ public sealed class RecordingControlWindowExclusionTests
         IntPtr expected = CreateRectRgn(0, 0, 0, 0);
         try
         {
+            // GetWindowRgn/CombineRgn also return ERROR when a region handle below is null, which
+            // a long run can hit on the process-wide GDI limit. Separate that from a window that
+            // genuinely carries no region, so a failure here names its own cause.
+            Assert.NotEqual(IntPtr.Zero, actual);
+            Assert.NotEqual(IntPtr.Zero, expected);
             Assert.NotEqual(0, GetWindowRgn(hwnd, actual));
             // Build the expectation from the four rendered border strips (independently of
             // production's outer-minus-inner construction) and the rendered palette bounds.
@@ -553,22 +558,8 @@ public sealed class RecordingControlWindowExclusionTests
 
     private static void LoadTheme(Window window)
     {
-        XElement? combined = null;
-        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(RecordingControlWindowExclusionTests).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            XElement dictionary = XDocument.Load(source).Root!;
-            combined ??= new XElement(dictionary.Name);
-            foreach (XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-            {
-                string value = declaration.Value;
-                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
-                    && !value.Contains(";assembly=", StringComparison.Ordinal)) value += ";assembly=MyCapture";
-                combined.SetAttributeValue(declaration.Name, value);
-            }
-            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
-        }
-        window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+        // Use compiled product templates so custom named parts keep their namescope.
+        window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
     }
 
     private static void SavePalette(Border strip, bool supported)

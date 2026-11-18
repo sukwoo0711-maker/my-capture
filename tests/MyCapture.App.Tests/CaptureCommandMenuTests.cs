@@ -59,7 +59,7 @@ public sealed class CaptureCommandMenuTests
                 Assert.True(icon.IsVisible && icon.ActualWidth > 0 && icon.ActualHeight > 0);
                 Assert.Same(menu.FindResource(key), icon.Data);
             }
-            menu.IsOpen = false;
+            CloseAndWaitForClosed(menu);
             settings.CaptureFullScreen = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
             menu.IsOpen = true;
             Assert.Equal(settings.CaptureFullScreen.ToString(), items[1].InputGestureText);
@@ -157,4 +157,39 @@ public sealed class CaptureCommandMenuTests
         }
         finally { menu.IsOpen = false; window.Close(); }
     });
+
+    /// <summary>
+    /// Closes <paramref name="menu"/> and runs the dispatcher until its Closed event, after which the
+    /// same instance can open again.
+    /// </summary>
+    /// <remarks>
+    /// Right after IsOpen turns off, the menu still holds the mouse capture on its popup's window, and
+    /// the popup destroys that window only on a timer (its close animation); Closed follows. Reopening
+    /// before then makes the per-monitor-DPI Popup destroy the window at once: the menu loses capture
+    /// and turns IsOpen off, yet its new popup stays on screen holding capture. On a PC with a pen or
+    /// touch screen, releasing that capture during dispatcher shutdown left the test thread waiting
+    /// forever on WPF's pen thread.
+    /// </remarks>
+    private static void CloseAndWaitForClosed(ContextMenu menu)
+    {
+        TimeSpan limit = TimeSpan.FromSeconds(10);
+        var closing = new DispatcherFrame();
+        bool closed = false;
+        RoutedEventHandler onClosed = (_, _) => { closed = true; closing.Continue = false; };
+        menu.Closed += onClosed;
+        var timeout = new DispatcherTimer(limit, DispatcherPriority.Send, (_, _) => closing.Continue = false, menu.Dispatcher);
+        try
+        {
+            menu.IsOpen = false;
+            if (!closed) Dispatcher.PushFrame(closing);
+        }
+        finally
+        {
+            timeout.Stop();
+            menu.Closed -= onClosed;
+        }
+
+        Assert.True(closed, $"The capture menu raised no Closed event within {limit.TotalSeconds:0} s of IsOpen=false; " +
+            "the test reopens the same menu only after that event.");
+    }
 }

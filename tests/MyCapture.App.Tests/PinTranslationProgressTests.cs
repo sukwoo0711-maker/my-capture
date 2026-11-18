@@ -18,8 +18,9 @@ namespace MyCapture.App.Tests;
 // No user clipboard, model, network or profile: pins open off screen and every translator is a fake.
 public sealed class PinTranslationProgressTests : KoreanCaptionTest
 {
+    // Three lines, so each sentence stays a unit of its own: a short paragraph on one line is translated whole.
     private const string ThreeSentences =
-        "Save the document before closing the window. Open the report after the meeting. Send the summary to the team.";
+        "Save the document before closing the window.\nOpen the report after the meeting.\nSend the summary to the team.";
 
     [Fact]
     public void TimeLeftWaitsForTwoSentencesThenSmoothsRoundsAndLeavesAtTheEnd()

@@ -59,6 +59,12 @@ internal sealed class RecordingWatermarkWindow : Window
     internal RectD PhysicalBounds { get; private set; }
     internal Image ImageForTest => _image;
 
+    /// <summary>The first placement that missed its bounds; null when none did.</summary>
+    internal Exception? PlacementMiss { get; private set; }
+
+    /// <summary>Told once per watermark about <see cref="PlacementMiss"/>; the recording controls write it to the log.</summary>
+    internal Action<Exception>? PlacementMissed { get; set; }
+
     internal void UpdateRecordingRegion(RectD region, double dpiScale)
     {
         _region = region.Normalized().ToPixelBounds();
@@ -79,7 +85,19 @@ internal sealed class RecordingWatermarkWindow : Window
         Height = height / _scale;
         Left = PhysicalBounds.Left / _scale;
         Top = PhysicalBounds.Top / _scale;
-        if (_hwnd != IntPtr.Zero) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(_hwnd, PhysicalBounds);
+        if (_hwnd == IntPtr.Zero) return;
+        try { PhysicalWindowPositioner.PlaceTopmostWithoutActivation(_hwnd, PhysicalBounds); }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // The placement reads the bounds back and throws when Windows put the window somewhere else,
+            // as it does while a display's scale is changing. This runs from the recording controls' layout
+            // and from a queued DPI change, where the exception would reach the application's error window
+            // in the middle of a recording. The watermark stays where Windows put it, and the first miss
+            // is kept and reported.
+            if (PlacementMiss is not null) return;
+            PlacementMiss = error;
+            PlacementMissed?.Invoke(error);
+        }
     }
 
     private static double ValidScale(double value) => double.IsFinite(value) && value > 0 ? value : 1;

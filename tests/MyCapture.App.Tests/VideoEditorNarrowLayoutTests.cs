@@ -50,11 +50,11 @@ public sealed class VideoEditorNarrowLayoutTests
             double Left(FrameworkElement element) => element.TranslatePoint(default, bar).X;
             double Right(FrameworkElement element) => element.TranslatePoint(new Point(element.ActualWidth, 0), bar).X;
 
-            // Each numeric input has a full row in the narrow inspector; reset and
-            // summary follow without squeezing the old horizontal toolbar group.
+            // Read the kept result first, then change its exact start and end. Each input
+            // keeps a full row and reset follows without squeezing the narrow inspector.
+            Assert.True(Middle(summary) < Middle(start));
             Assert.True(Middle(end) > Middle(start));
             Assert.True(Middle(reset) > Middle(end));
-            Assert.True(Middle(summary) > Middle(reset));
             Assert.Equal(Left(start), Left(end), precision: 0);
 
             foreach (FrameworkElement control in new FrameworkElement[] { summary, reset, start, end })

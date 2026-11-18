@@ -102,7 +102,7 @@ internal sealed partial class AnnotationEditorControl
             },
             Value = true,
         };
-        on.Setters.Add(new Setter(TextBlock.ForegroundProperty, new DynamicResourceExtension("Text.SelectionBackground")));
+        on.Setters.Add(new Setter(TextBlock.ForegroundProperty, new DynamicResourceExtension("Toggle.CheckedFill")));
         style.Triggers.Add(on);
         return style;
     }

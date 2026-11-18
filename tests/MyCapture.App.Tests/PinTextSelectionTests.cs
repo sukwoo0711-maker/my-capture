@@ -29,7 +29,9 @@ public sealed class PinTextSelectionTests
             pin.Show();
             var item = Assert.Single(pin.ContextMenu!.Items.OfType<MenuItem>(), item => item.InputGestureText == "F2");
             var items = pin.ContextMenu.Items.OfType<MenuItem>().ToList();
-            Assert.Equal(UiText.Get("Text_976A6C92B870"), items[items.IndexOf(item) - 1].Header);
+            // Original-text copy, then the image-only copy that rides with it, then the selection item.
+            Assert.Equal(UiText.Get("Pin_CopyImageOnly"), items[items.IndexOf(item) - 1].Header);
+            Assert.Equal(UiText.Get("Text_976A6C92B870"), items[items.IndexOf(item) - 2].Header);
             Assert.True(item.IsCheckable);
             Assert.False(item.IsChecked);
             Press(pin, Key.F2);

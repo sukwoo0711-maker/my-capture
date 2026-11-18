@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -27,18 +28,42 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private bool _placing;
     private DispatcherOperation? _dpiRefresh;
     private readonly HashSet<Window> _pendingFrames = [];
-    private readonly TextBlock _size, _guideText;
+    private readonly TextBlock _size;
+    private readonly NativeSelectorHint _hint;
     private readonly NativeSelectorReadoutBorder _sizePanel;
     private readonly NativeSelectorAnchor _anchorChip;
+    // Advances of the read-out's characters at the Caption size. Tabular figures give every digit
+    // one advance, so the chip's width depends only on how many digits the size has.
     private readonly double[] _readoutAdvances = new double[256];
-    private readonly double _readoutTextHeight;
+    private readonly double _digitAdvance, _thinSpaceAdvance;
+    private readonly int _dwmBorder;
     private bool _readoutVisible;
+
+    /// <summary>The size read-out's height, DIPs: the hover tab's, so the chip keeps its height between them.</summary>
+    internal const double ReadoutHeight = NativeSelectorHoverTab.Height;
+    /// <summary>Space between the read-out's edges and its text, DIPs.</summary>
+    internal const double ReadoutPaddingX = 8;
+    /// <summary>Space between the frame's outer edge and the read-out placed outside it, DIPs.</summary>
+    internal const double ReadoutGap = 6;
+    /// <summary>Space between the mode bar and the hint chip below it, DIPs.</summary>
+    internal const double HintGap = 6;
+    /// <summary>The mode bar's distance from the top of the work area, DIPs.</summary>
+    internal const double BarTop = 12;
     private readonly NativeSelectorHoverTab _hoverTab;
     private const nuint HoverTabTimerId = 0x5a02;
-    private bool _hoverTabPending;
+    private const nuint ReadoutChipTimerId = 0x5a03;
+    private const int MaxChipDeferrals = 8;
+    private bool _hoverTabPending, _readoutChipPending;
+    private int _chipDeferrals;
+    private PointD _chipPointer;
+    private Int32Rect _chipSelection;
     private RectD? _tabRequestedTarget, _tabRequestedShown;
     private double _tabRequestedScale;
-    private bool _tabRequestedMonitor, _tabRequestedText;
+    private bool _tabRequestedMonitor, _tabRequestedText, _tabRequestedElement, _tabRequestedElementHint;
+    private CaptureSelectorMode _tabRequestedMode;
+    private int _tabRequestedDelay;
+    private string? _colorGuide, _scrollGuide;
+    private bool _magnifierParked;
     private int _guideRevision, _tabGuideRevision = -1;
     private readonly Rect[] _tabAvoid = new Rect[2];
     private readonly CaptureModeBar _bar;
@@ -50,9 +75,10 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     private readonly Border? _magnifierPanel;
     private BitmapSource? _magnifierSource;
     private readonly string _defaultGuide = DefaultGuide;
+    private readonly string _windowGuide = UiText.Get("CaptureGuide2_ClickWindow") + "  ·  " + DefaultGuide;
     private readonly string _precisionGuide = UiText.Get("CapturePrecisionActive");
-    private readonly Size _precisionGuideSize;
-    private bool _precisionGuideShown;
+    private string? _freeformGuide;
+    private Size _hintSize = new(1, NativeSelectorHint.ChipHeight);
     private bool _guideLayoutDirty = true;
     private int _readoutWidth = -1, _readoutHeight = -1;
     private SelectionRatio _readoutRatio;
@@ -70,37 +96,58 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         _workArea = area.WorkArea;
         IReadOnlyDictionary<string, Brush> palette = CaptureGuidePalette.Resolve();
         _paletteKey = PaletteKey(palette);
+        // DWM paints the chips' one-pixel edge on Windows 11, in the chip border colour (a system
+        // colour in high contrast, where the palette maps it to WindowText).
+        Color border = (palette["CaptureGuide.ChipBorder"] as SolidColorBrush)?.Color ?? Colors.Gray;
+        _dwmBorder = DwmWindowAttributes.ToColorRef(border.R, border.G, border.B);
         try
         {
             _bar = owner.ModeBar;
             _bar.ConstrainWidth(_workArea.Width / _scale - 24);
             _bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            _barWindow = Create(_bar, _bar.DesiredSize.Width, _bar.DesiredSize.Height, interactive: true);
-            _size = Text("", palette, monospaced: true);
-            _size.HorizontalAlignment = HorizontalAlignment.Left;
-            _size.VerticalAlignment = VerticalAlignment.Top;
-            _sizePanel = new NativeSelectorReadoutBorder(palette["CaptureGuide.ChipBorder"]) { Child = _size, Padding = new Thickness(9, 5, 9, 5),
-                Background = palette["CaptureGuide.ChipSurface"], CornerRadius = new CornerRadius(7),
+            _barWindow = Create(_bar, _bar.DesiredSize.Width, _bar.DesiredSize.Height, interactive: true, DwmCornerPreference.Round,
+                rounded => _bar.UseFrame(rounded ? CaptureModeBarFrame.Window : CaptureModeBarFrame.Square, 1 / _scale));
+            _size = new TextBlock
+            {
+                Foreground = palette["CaptureGuide.Text"], FontSize = TypeScale.Caption, FontWeight = FontWeights.SemiBold,
+                FontFamily = Application.Current?.TryFindResource("Font.Ui") as FontFamily ?? new FontFamily("Segoe UI"),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+            System.Windows.Documents.Typography.SetNumeralAlignment(_size, FontNumeralAlignment.Tabular);
+            _sizePanel = new NativeSelectorReadoutBorder(palette["CaptureGuide.ChipBorder"]) { Child = _size,
+                Padding = new Thickness(ReadoutPaddingX, 0, ReadoutPaddingX, 0), Height = ReadoutHeight,
+                Background = palette["CaptureGuide.ChipSurface"],
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             _anchorChip = new NativeSelectorAnchor(palette);
             _hoverTab = new NativeSelectorHoverTab(palette);
             var readoutTypeface = new Typeface(_size.FontFamily, _size.FontStyle, _size.FontWeight, _size.FontStretch);
-            _readoutTextHeight = new FormattedText("0", UiText.Culture, FlowDirection.LeftToRight,
-                readoutTypeface, TypeScale.Caption, _size.Foreground, 1).Height;
             if (readoutTypeface.TryGetGlyphTypeface(out GlyphTypeface readoutGlyphs))
                 for (int character = 0; character < _readoutAdvances.Length; character++)
                     if (readoutGlyphs.CharacterToGlyphMap.TryGetValue(character, out ushort glyph))
                         _readoutAdvances[character] = readoutGlyphs.AdvanceWidths[glyph] * TypeScale.Caption;
-            _guideText = Text(_defaultGuide, palette);
-            TextBlock precisionMeasure = Text(_precisionGuide, palette);
-            precisionMeasure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            _precisionGuideSize = new Size(precisionMeasure.DesiredSize.Width + 20, precisionMeasure.DesiredSize.Height + 12);
+            // Measured through the text formatter, so these are the advances the read-out draws with.
+            using (var digits = new NativeSelectorTabularText("0123456789", readoutTypeface, TypeScale.Caption, _size.Foreground, 1))
+                _digitAdvance = digits.Width / 10;
+            using (var thin = new NativeSelectorTabularText(" ", readoutTypeface, TypeScale.Caption, _size.Foreground, 1))
+                _thinSpaceAdvance = thin.Width;
+            _hint = new NativeSelectorHint(palette);
+            _hint.SetScale(_scale);
+            _hint.Show(_defaultGuide);
             if (owner.ChromeStrategy == NativeSelectorChromeStrategy.Dib)
-                _static = new NativeSelectorStaticChrome(_sizePanel, Chip(_guideText, palette));
+            {
+                // Stamped into the selector's own bitmap, where no DWM border reaches: the chips keep
+                // their drawn edges.
+                _sizePanel.SetScale(_scale);
+                _static = new NativeSelectorStaticChrome(_sizePanel, _hint);
+            }
             else
             {
-                _sizeWindow = Create(_sizePanel, 18, _readoutTextHeight + 10, interactive: false);
-                _guideWindow = Create(Chip(_guideText, palette), 320, 38, interactive: false);
+                _sizeWindow = Create(_sizePanel, 18, ReadoutHeight, interactive: false, DwmCornerPreference.RoundSmall,
+                    rounded => _sizePanel.Outlined = !rounded);
+                // The hint is measured on its own, outside the window's scale transform.
+                var hintHost = new Border { Child = _hint, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+                _guideWindow = Create(hintHost, 1, NativeSelectorHint.ChipHeight, interactive: false, DwmCornerPreference.Round,
+                    rounded => _hint.Outlined = !rounded);
             }
             if (magnifier)
             {
@@ -110,9 +157,10 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                     HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                 _magnifierAdornment = new NativeSelectorMagnifier(image, palette);
-                _magnifierPanel = new Border { Child = image, Padding = new Thickness(3, 3, 3, 41),
-                    Background = palette["CaptureGuide.ChipSurface"], CornerRadius = new CornerRadius(9) };
-                _magnifierWindow = Create(_magnifierPanel, 156, 194, interactive: false);
+                _magnifierPanel = new Border { Child = image, Padding = new Thickness(3, 3, 3, 3 + _magnifierAdornment.FooterHeightForTest),
+                    Background = palette["CaptureGuide.ChipSurface"] };
+                _magnifierWindow = Create(_magnifierPanel, 156, 156 + _magnifierAdornment.FooterHeightForTest, interactive: false,
+                    DwmCornerPreference.Round, rounded => _magnifierAdornment.WindowRounded = rounded);
             }
             Bind(owner, requireExclusion);
         }
@@ -132,12 +180,20 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     internal Size LogicalSizeForTest(Window window) => _geometry[window].Size;
     internal bool ContainsModeBar(PointD pointer) => _geometry[_barWindow].Bounds.Contains(pointer);
     internal NativeSelectorMagnifier? MagnifierForTest => _magnifierAdornment;
+    internal NativeSelectorHint HintForTest => _hint;
+    internal NativeSelectorReadoutBorder ReadoutPanelForTest => _sizePanel;
+    /// <summary>The stamped read-out's bounds in the selector's own pixels (bitmap-only strategy).</summary>
+    internal Rect? StaticReadoutBoundsForTest => _staticReadoutBounds;
     internal DrawingGroup? AnchorDrawingForTest => _anchorChip.Drawing;
     internal Rect? AnchorChipBoundsForTest => _anchorChip.Bounds;
     internal double AnchorScaleForTest => _anchorChip.Scale;
     internal NativeSelectorStamp? AnchorStampForTest => _anchorChip.Stamp;
     internal int AnchorBuildCountForTest => _anchorChip.BuildCount;
     internal bool IsReadoutVisibleForTest => _readoutVisible;
+    internal string GuideTextForTest => _hint.Text;
+    internal double GuideWidthForTest => Math.Ceiling(_hint.DesiredSize.Width * _scale - 0.0001) / _scale;
+    internal Window? GuideWindowForTest => _guideWindow;
+    internal bool IsMagnifierParkedForTest => _magnifierParked;
     internal Rect? TargetTabForTest => _hoverTab.Bounds is not null && _sizeWindow is { } size && _owner is { } owner
         ? new Rect((_geometry[size].Bounds.Left - owner.ScreenBounds.Left) / _geometry[size].Scale,
             (_geometry[size].Bounds.Top - owner.ScreenBounds.Top) / _geometry[size].Scale,
@@ -148,7 +204,12 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     internal int HoverTabRenderCountForTest => _hoverTab.RenderCount;
     internal int HoverTabLayoutCountForTest => _hoverTab.LayoutCount;
     internal bool HasPendingHoverTabForTest => _hoverTabPending;
-    internal void FlushHoverTabForTest() { if (_hoverTabPending) RenderHoverTab(); }
+    internal bool HasPendingReadoutChipForTest => _readoutChipPending;
+    internal void FlushHoverTabForTest()
+    {
+        if (_hoverTabPending) RenderHoverTab();
+        if (_readoutChipPending) RenderReadoutChip();
+    }
     internal DrawingGroup? ReadoutDrawingForTest => VisualTreeHelper.GetDrawing(_sizePanel);
     internal RectD SizeChipBoundsForTest => _sizeWindow is { } size && _readoutVisible
         ? new RectD(_geometry[size].Bounds.Left, _geometry[size].Bounds.Top,
@@ -174,6 +235,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-start");
         _owner = owner;
         if (owner.ChromeStrategy != NativeSelectorChromeStrategy.Parallel) owner.PrepareVisualFeedback();
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-feedback-ready");
         CachePointerAreas(owner);
         if (_magnifierAdornment is { } magnifier && owner.Frame is { } frame)
         {
@@ -181,7 +243,9 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 : new FormatConvertedBitmap(frame.Bitmap, PixelFormats.Bgr32, null, 0);
             magnifier.Bind(frame.PixelWidth, frame.PixelHeight, _pointerAreas, _scale);
         }
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-magnifier-ready");
         _rendered = false;
+        _magnifierParked = false;
         _showingWindows = false;
         _guideVisible = true;
         ResetGuides();
@@ -192,22 +256,28 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         Size barSize = MeasureBar();
         _barWindow.Width = barSize.Width;
         _barWindow.Height = barSize.Height;
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-bar-measured");
         _pendingFrames.Clear();
         AllCaptureExcluded = true;
         foreach (Window window in _windows)
         {
+            MarkWindow(window, "bind-start");
             new WindowInteropHelper(window).Owner = owner.Handle;
+            MarkWindow(window, "owner-set");
             if (window.Content is null) window.Content = _content[window];
+            MarkWindow(window, "content-attached");
             // Exclusion is re-applied on every lease, before any of these HWNDs can be shown.
             bool excluded = CaptureWindowExclusion.TryApply(window);
+            MarkWindow(window, "exclusion-applied");
             AllCaptureExcluded &= excluded;
             if (requireExclusion && !excluded) throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
             CaptureWindowExclusion.DisableTransitions(window);
             if (!_deferredWindows.Contains(window)) _pendingFrames.Add(window);
+            MarkWindow(window, "bind-complete");
         }
-        Place(_barWindow, _workArea.Left + (_workArea.Width - barSize.Width * _scale) / 2, _workArea.Top + 12 * _scale, Placement.Layout);
-        if (_guideWindow is { } guide)
-            Place(guide, _workArea.Left + (_workArea.Width - 320 * _scale) / 2, _workArea.Top + 68 * _scale, Placement.Layout);
+        Place(_barWindow, _workArea.Left + (_workArea.Width - barSize.Width * _scale) / 2, _workArea.Top + BarTop * _scale, Placement.Layout);
+        LayoutHint();
+        SelectorTimeline.Mark?.Invoke("native-chrome-bind-layout-complete");
         Update(owner.ReadCursor(), Int32Rect.Empty);
         SelectorTimeline.Mark?.Invoke("native-chrome-bind-complete");
     }
@@ -229,8 +299,43 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         return geometry.Size;
     }
 
-    private Window Create(FrameworkElement content, double width, double height, bool interactive)
+    /// <summary>
+    /// Centres the hint chip <see cref="HintGap"/> below the mode bar, at the width its words and key
+    /// caps take. A retained, hidden window can suspend measuring; the chip then keeps its last size
+    /// until <see cref="Show"/> lays it out again.
+    /// </summary>
+    private void LayoutHint()
     {
+        if (_guideWindow is not { } guide) return;
+        _hint.InvalidateMeasure();
+        _hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        if (_hint.IsMeasureValid && _hint.DesiredSize.Width > 0)
+            _hintSize = new Size(Math.Ceiling(_hint.DesiredSize.Width * _scale - 0.0001) / _scale, NativeSelectorHint.ChipHeight);
+        _geometry[guide].Size = _hintSize;
+        Place(guide, _workArea.Left + (_workArea.Width - _hintSize.Width * _scale) / 2, HintTop(), Follow(guide));
+    }
+
+    /// <summary>The hint chip's top edge, physical pixels: <see cref="HintGap"/> below the mode bar.</summary>
+    private double HintTop() => _workArea.Top + (BarTop + _geometry[_barWindow].Size.Height + HintGap) * _scale;
+
+    /// <summary>
+    /// Test hook: true pretends DWM rounded every chip window, false keeps them square as on Windows 10.
+    /// Read when a chrome window gets its handle.
+    /// </summary>
+    internal static bool? DwmRoundingOverrideForTest { get => s_dwmRoundingOverride; set => s_dwmRoundingOverride = value; }
+
+    [ThreadStatic] private static bool? s_dwmRoundingOverride;
+
+    internal bool IsRoundedForTest(Window window) => _geometry[window].Rounded;
+
+    /// <summary>The corners asked of DWM for a chrome window, or null when it stays square everywhere.</summary>
+    internal DwmCornerPreference? CornersForTest(Window window) => _geometry[window].Corners;
+
+    private Window Create(FrameworkElement content, double width, double height, bool interactive,
+        DwmCornerPreference? corners = null, Action<bool>? frame = null)
+    {
+        // A plain Window, not a derived class: WPF applies the implicit Window style (UI font and
+        // text rendering, Themes/Controls.xaml) only to Window itself.
         var window = new Window
         {
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
@@ -244,6 +349,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         var geometry = new ChromeGeometry(new Size(width, height), _scale)
         {
             Bounds = new RectD(_workArea.Left, _workArea.Top, width * _scale, height * _scale).ToPixelBounds(),
+            Corners = corners,
         };
         _geometry.Add(window, geometry);
         content.LayoutTransform = geometry.Transform;
@@ -256,6 +362,13 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             geometry.Source = HwndSource.FromHwnd(handle);
             if (!interactive) WindowStyleFacade.SetClickThrough(handle, true);
             HwndSource.FromHwnd(handle)?.AddHook(OnMessage);
+            if (corners is { } preference)
+            {
+                // Windows 11 rounds the window and paints its edge; elsewhere the content draws a
+                // square one-pixel edge in the same colour.
+                geometry.Rounded = DwmRoundingOverrideForTest ?? DwmWindowAttributes.TryRound(handle, preference, _dwmBorder);
+                frame?.Invoke(geometry.Rounded);
+            }
         };
         window.Deactivated += (_, _) => _owner?.CheckFocusLater();
         window.ContentRendered += OnRendered;
@@ -325,14 +438,21 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     {
         _dpiRefresh = null;
         if (_closed || _owner is null) return;
-        for (int index = 0; index < _windows.Count; index++)
+        _repairingPlacement = true;
+        try
         {
-            Window window = _windows[index];
-            // Key panel and start guide windows are placed from their own layout by PlaceGuideWindow.
-            if (_deferredWindows.Contains(window)) continue;
-            ApplyPhysicalBounds(window, _geometry[window], Follow(window));
+            for (int index = 0; index < _windows.Count; index++)
+            {
+                Window window = _windows[index];
+                // Key panel and start guide windows are placed from their own layout by PlaceGuideWindow.
+                if (_deferredWindows.Contains(window)) continue;
+                ApplyPhysicalBounds(window, _geometry[window], Follow(window));
+            }
         }
+        finally { _repairingPlacement = false; }
     }
+
+    private bool _repairingPlacement;
 
     private IntPtr OnMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -342,6 +462,13 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             handled = true;
             return IntPtr.Zero;
         }
+        if (message == 0x0113 && (nuint)wParam == ReadoutChipTimerId)
+        {
+            RenderReadoutChip();
+            handled = true;
+            return IntPtr.Zero;
+        }
+        if (message == 0x02E0) KeepOwnPlacementOnDpiChange(hwnd, lParam); // WM_DPICHANGED, before WPF applies it
         if (message == 0x007E) // Hidden top-level chrome receives display broadcasts too.
         {
             _invalid = true;
@@ -380,7 +507,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
                 e.Handled = true;
                 return;
             }
-            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space) return;
+            if (key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Enter or Key.Space or Key.PageUp or Key.PageDown) return;
         }
         e.Handled = owner.HandleKey(key, Keyboard.Modifiers);
     }
@@ -393,22 +520,6 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         owner.RefreshPrecisionPointer();
         Update(owner.EffectivePointer, owner.SelectionRectangle);
     }
-
-    private static TextBlock Text(string text, IReadOnlyDictionary<string, Brush> palette,
-        bool monospaced = false, double fontSize = TypeScale.Caption) => new()
-    {
-        Text = text, Foreground = palette["CaptureGuide.Text"], FontSize = fontSize,
-        FontFamily = Application.Current?.TryFindResource(monospaced ? "Font.Mono" : "Font.Ui") as FontFamily
-            ?? new FontFamily(monospaced ? "Consolas" : "Segoe UI"),
-        FontWeight = monospaced ? FontWeights.Medium : FontWeights.SemiBold,
-        VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
-    };
-
-    private static Border Chip(UIElement child, IReadOnlyDictionary<string, Brush> palette) => new()
-    {
-        Child = child, Padding = new Thickness(7), Background = palette["CaptureGuide.ChipSurface"],
-        BorderBrush = palette["CaptureGuide.ChipBorder"], BorderThickness = new Thickness(1),
-    };
 
     internal void Show()
     {
@@ -425,7 +536,9 @@ internal sealed partial class NativeSelectorChrome : IDisposable
             {
                 Size barSize = MeasureBar();
                 Place(window, _workArea.Left + (_workArea.Width - barSize.Width * _scale) / 2,
-                    _workArea.Top + 12 * _scale, Placement.Show);
+                    _workArea.Top + BarTop * _scale, Placement.Show);
+                // The bar's height can change once layout resumes; the hint, shown after it, follows.
+                LayoutHint();
             }
             else ApplyPhysicalBounds(window, _geometry[window], Placement.Show);
             if (ReferenceEquals(window, _magnifierWindow)) _magnifierAdornment?.Attach();
@@ -462,7 +575,9 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         if (SelectorTimeline.Mark is not { } mark) return;
         string name = ReferenceEquals(window, _barWindow) ? "bar"
             : ReferenceEquals(window, _sizeWindow) ? "size"
-            : ReferenceEquals(window, _guideWindow) ? "guide" : "magnifier";
+            : ReferenceEquals(window, _guideWindow) ? "guide"
+            : ReferenceEquals(window, _magnifierWindow) ? "magnifier"
+            : ReferenceEquals(window, _keyPanelWindow) ? "key-panel" : "start-guide";
         mark($"native-chrome-{name}-{phase}");
     }
 
@@ -474,91 +589,86 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         if (!hover && (_readoutWidth != selection.Width || _readoutHeight != selection.Height || _readoutRatio != owner.ActiveRatio))
         {
             _readoutWidth = selection.Width; _readoutHeight = selection.Height; _readoutRatio = owner.ActiveRatio;
-            _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.ActiveRatio);
+            // Thin spaces around the sign, as the hover tab draws its size; the shared format keeps plain ones.
+            _size.Text = CaptureOverlayView.FormatReadout(selection.Width, selection.Height, owner.ActiveRatio)
+                .Replace(" × ", " × ", StringComparison.Ordinal);
         }
         bool precision = owner.PrecisionActive && owner.ToastMessage is null;
-        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide : _defaultGuide);
-        if (_guideText.Text != guideText) _guideText.Text = guideText;
-        if (_guideLayoutDirty || precision != _precisionGuideShown)
+        string guideText = owner.ToastMessage ?? (precision ? _precisionGuide : owner.Mode switch
+        {
+            CaptureSelectorMode.Freeform => _freeformGuide ??= UiText.Get("CaptureFreeform_Drawing"),
+            CaptureSelectorMode.Color => _colorGuide ??= UiText.Get("CaptureGuide2_ClickColor") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            CaptureSelectorMode.Scroll => _scrollGuide ??= UiText.Get("CaptureGuide2_ClickScroll") + "  ·  " + UiText.Get("CaptureGuide2_Esc"),
+            _ when owner.GuidesWindowClick => _windowGuide,
+            _ => _defaultGuide,
+        });
+        // A toast is a sentence, never key caps.
+        if (_hint.Show(guideText, plain: owner.ToastMessage is not null)) _guideLayoutDirty = true;
+        if (_guideLayoutDirty)
         {
             _guideLayoutDirty = false;
             _guideRevision++;
-            _precisionGuideShown = precision;
-            if (_guideWindow is { } guide && _content[guide] is Border panel)
-            {
-                panel.CornerRadius = new CornerRadius(precision ? 6 : 0);
-                panel.Padding = precision ? new Thickness(9, 5, 9, 5) : new Thickness(7);
-                _geometry[guide].Size = precision ? _precisionGuideSize : new Size(320, 38);
-                double top = precision ? 12 + _geometry[_barWindow].Size.Height + 8 : 68;
-                Place(guide, _workArea.Left + (_workArea.Width - _geometry[guide].Size.Width * _scale) / 2,
-                    _workArea.Top + top * _scale, Follow(guide));
-            }
+            LayoutHint();
         }
         CaptureGuideArea area = PointerArea(pointer);
         PointD? anchor = owner.SelectionAnchor;
         double anchorScale = anchor is { } start
             ? PointerArea(new PointD(start.X + owner.ScreenBounds.Left, start.Y + owner.ScreenBounds.Top)).Scale : _scale;
-        if (_anchorChip.Update(anchor, owner.ScreenBounds, anchorScale)) owner.SetAnchorChromeStamp(_anchorChip.Stamp);
+        var anchorPointer = new PointD(pointer.X - owner.ScreenBounds.Left, pointer.Y - owner.ScreenBounds.Top);
+        // The chip takes the read-out's corners: DWM's small radius where it rounds the read-out,
+        // square beside a square read-out (Windows 10, or the stamped one).
+        bool roundedChips = _sizeWindow is { } readoutWindow && _geometry[readoutWindow].Rounded;
+        if (_anchorChip.Update(anchor, owner.ScreenBounds, anchorScale, anchorPointer, roundedChips))
+            owner.SetAnchorChromeStamp(_anchorChip.Stamp);
         if (_sizeWindow is { } size)
         {
             _readoutVisible = hover || (selection.Width > 0 && selection.Height > 0);
+            _chipPointer = pointer;
+            _chipSelection = selection;
             if (hover)
             {
                 // Only schedule retained frame work here. Text and tab geometry are built by the frame callback.
                 RequestHoverTab(owner, area);
             }
-            else
-            {
-            StopHoverTabFrame();
-            _tabRequestedTarget = _tabRequestedShown = null;
-            _hoverTab.Clear();
-            if (_sizePanel.ShowsHoverTab)
-            {
-                _sizePanel.ShowsHoverTab = false;
-                _sizePanel.Child = _size;
-                _sizePanel.Padding = new Thickness(9, 5, 9, 5);
-                _sizePanel.InvalidateVisual();
-            }
-            ChromeGeometry geometry = _geometry[size];
-            double textWidth = 0;
-            for (int index = 0; index < _size.Text.Length; index++)
-            {
-                char character = _size.Text[index];
-                textWidth += character < _readoutAdvances.Length && _readoutAdvances[character] > 0
-                    ? _readoutAdvances[character] : _readoutAdvances['0'];
-            }
-            geometry.Size = new Size(textWidth + 18, _readoutTextHeight + 10);
-            if (_sizePanel.Width != geometry.Size.Width) _sizePanel.Width = geometry.Size.Width;
-            if (_sizePanel.Height != geometry.Size.Height) _sizePanel.Height = geometry.Size.Height;
-            geometry.Scale = area.Scale;
-            _sizePanel.SetScale(area.Scale);
-            if (_readoutVisible)
-            {
-                double edge = 8 * area.Scale, width = geometry.Size.Width * area.Scale, height = geometry.Size.Height * area.Scale;
-                double left = owner.ScreenBounds.Left + selection.X, top = owner.ScreenBounds.Top + selection.Y;
-                double x = Math.Clamp(left, area.WorkArea.Left + edge, Math.Max(area.WorkArea.Left + edge, area.WorkArea.Right - width - edge));
-                double y = top - height - edge;
-                if (y < area.WorkArea.Top + edge) y = Math.Min(area.WorkArea.Bottom - height - edge, top + selection.Height + edge);
-                Place(size, x, y, Follow(size), area);
-            }
-            else
-            {
-                // Keep the already shown HWND out of the desktop; following input never shows/hides or restacks it.
-                geometry.Bounds = new RectD(owner.ScreenBounds.Left - geometry.Size.Width * area.Scale - 32,
-                    owner.ScreenBounds.Top, geometry.Size.Width * area.Scale, geometry.Size.Height * area.Scale).ToPixelBounds();
-                ApplyPhysicalBounds(size, geometry, Follow(size));
-            }
-            }
+            // Leaving the tab rebuilds the chip and resizes its HWND: frame work as well, not pointer
+            // work. Only a drag leaves it under the pointer, and only then is the chip's own frame worth
+            // a sample's delay; the layout pass of a bind reaches here too and has to place it at once.
+            // WM_TIMER yields to input, so a few samples may pass before the frame runs; after that the
+            // chip would be visibly stale and this sample does the work itself.
+            else if (!_sizePanel.ShowsHoverTab || anchor is null
+                || _chipDeferrals >= MaxChipDeferrals || !RequestReadoutChip(size))
+                ApplyReadoutChip(owner, size, selection, area);
+            else _chipDeferrals++;
         }
         if (_static is not null)
         {
-            IReadOnlyList<NativeSelectorStamp> stamps = _static.Update(_size.Text, _guideText.Text, pointer, _workArea, owner.ScreenBounds, _scale, _guideVisible);
+            IReadOnlyList<NativeSelectorStamp> stamps = _static.Update(_size.Text, _hint.Text, pointer, _workArea, owner.ScreenBounds,
+                _scale, _guideVisible, HintTop());
             Int32Rect readout = stamps[^1].Bounds;
             _staticReadoutBounds = new Rect(readout.X, readout.Y, readout.Width, readout.Height);
             owner.SetChromeStamps(stamps);
         }
-        if (_magnifier is not null && _magnifierWindow is not null && _magnifierSource is { } source && owner.Frame is { } frame)
+        if (_magnifierWindow is { } parked && !owner.MagnifierShown)
         {
+            if (!_magnifierParked)
+            {
+                // Keep the shown HWND out of the desktop, like the readout: no show, hide or restack.
+                ChromeGeometry geometry = _geometry[parked];
+                geometry.Bounds = new RectD(owner.ScreenBounds.Left - geometry.Size.Width * area.Scale - 64,
+                    owner.ScreenBounds.Top, geometry.Size.Width * area.Scale, geometry.Size.Height * area.Scale).ToPixelBounds();
+                ApplyPhysicalBounds(parked, geometry, Follow(parked));
+                _magnifierParked = true;
+            }
+        }
+        else if (_magnifier is not null && _magnifierWindow is not null && _magnifierSource is { } source && owner.Frame is { } frame)
+        {
+            _magnifierParked = false;
+            bool colorMode = owner.Mode == CaptureSelectorMode.Color;
+            if (_magnifierAdornment!.ColorMode != colorMode)
+            {
+                if (colorMode) _magnifierAdornment.Format = owner.ReadColorFormat();
+                _magnifierAdornment.ColorMode = colorMode;
+            }
             int width = Math.Min(15, source.PixelWidth), height = Math.Min(15, source.PixelHeight);
             int x = Math.Clamp((int)(pointer.X - frame.ScreenBounds.Left) - width / 2, 0, source.PixelWidth - width);
             int y = Math.Clamp((int)(pointer.Y - frame.ScreenBounds.Top) - height / 2, 0, source.PixelHeight - height);
@@ -590,14 +700,162 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         owner.UpdateDeferredGuides();
     }
 
+    private void ApplyReadoutChip(NativeCaptureOverlay owner, Window size, Int32Rect selection, CaptureGuideArea area)
+    {
+        StopHoverTabFrame();
+        StopReadoutChipFrame();
+        _chipDeferrals = 0;
+        _tabRequestedTarget = _tabRequestedShown = null;
+        _hoverTab.Clear();
+        if (_sizePanel.ShowsHoverTab)
+        {
+            _sizePanel.ShowsHoverTab = false;
+            _sizePanel.Child = _size;
+            _sizePanel.Padding = new Thickness(ReadoutPaddingX, 0, ReadoutPaddingX, 0);
+            _sizePanel.InvalidateVisual();
+        }
+        ChromeGeometry geometry = _geometry[size];
+        double scale = area.Scale;
+        // Whole physical pixels, from fixed advances: the chip never changes width while its digits do.
+        geometry.Size = new Size(Math.Ceiling((ReadoutTextWidth(_size.Text) + 2 * ReadoutPaddingX) * scale - 0.0001) / scale, ReadoutHeight);
+        if (_sizePanel.Width != geometry.Size.Width) _sizePanel.Width = geometry.Size.Width;
+        if (_sizePanel.Height != geometry.Size.Height) _sizePanel.Height = geometry.Size.Height;
+        geometry.Scale = scale;
+        _sizePanel.SetScale(scale);
+        if (_readoutVisible)
+        {
+            Rect chip = PlaceReadout(new Rect(owner.ScreenBounds.Left + selection.X, owner.ScreenBounds.Top + selection.Y,
+                selection.Width, selection.Height), geometry.Size, area, AnchorChipOnScreen(owner), TopChromeOnScreen());
+            Place(size, chip.X, chip.Y, Follow(size), area);
+        }
+        else
+        {
+            // Keep the already shown HWND out of the desktop; following input never shows/hides or restacks it.
+            geometry.Bounds = new RectD(owner.ScreenBounds.Left - geometry.Size.Width * area.Scale - 32,
+                owner.ScreenBounds.Top, geometry.Size.Width * area.Scale, geometry.Size.Height * area.Scale).ToPixelBounds();
+            ApplyPhysicalBounds(size, geometry, Follow(size));
+        }
+    }
+
+    /// <summary>The read-out text's width from the fixed advances, DIPs; it allocates nothing.</summary>
+    private double ReadoutTextWidth(string text)
+    {
+        double width = 0;
+        for (int index = 0; index < text.Length; index++)
+        {
+            char character = text[index];
+            width += character is >= '0' and <= '9' ? _digitAdvance
+                : character == ' ' ? _thinSpaceAdvance
+                : character < _readoutAdvances.Length && _readoutAdvances[character] > 0 ? _readoutAdvances[character]
+                : _digitAdvance;
+        }
+        return width;
+    }
+
+    /// <summary>
+    /// Where the size read-out goes for a <paramref name="selection"/> (physical pixels): just above
+    /// the frame, its left edge on the frame's outer edge. Near the top of the work area, or where it
+    /// would cover the mode bar or hint (<paramref name="topChrome"/>), it moves inside the
+    /// selection's top-left corner when the selection holds it there, else below the frame. It
+    /// steps clear of the start-point chip (<paramref name="anchorChip"/>) and stays on screen.
+    /// </summary>
+    internal static Rect PlaceReadout(Rect selection, Size chip, CaptureGuideArea area, Rect anchorChip, Rect topChrome)
+    {
+        double scale = area.Scale > 0 ? area.Scale : 1;
+        double outset = CaptureFrameStyle.Outset, gap = ReadoutGap * scale, edge = 8 * scale, inset = 8 * scale;
+        double width = chip.Width * scale, height = chip.Height * scale;
+        RectD work = area.WorkArea;
+        double x = OnRow(selection.Left - outset), y = selection.Top - outset - gap - height;
+        if (y < work.Top + edge || Covers(x, y))
+        {
+            double insideX = OnRow(selection.Left + inset), insideY = selection.Top + inset;
+            if (width + 2 * inset <= selection.Width && height + 2 * inset <= selection.Height && !Covers(insideX, insideY))
+            {
+                x = insideX;
+                y = insideY;
+            }
+            else y = Math.Min(work.Bottom - height - edge, selection.Bottom + outset + gap);
+        }
+        var placed = new Rect(x, y, width, height);
+        if (!anchorChip.IsEmpty && placed.IntersectsWith(anchorChip))
+        {
+            // Beside the chip on its row when there is room on the left, else just below it.
+            double before = anchorChip.Left - gap - width;
+            placed = before >= work.Left + edge ? new Rect(before, y, width, height)
+                : new Rect(x, anchorChip.Bottom + gap, width, height);
+        }
+        return placed;
+
+        double OnRow(double left) => Math.Clamp(left, work.Left + edge, Math.Max(work.Left + edge, work.Right - width - edge));
+        bool Covers(double left, double top) => !topChrome.IsEmpty && new Rect(left, top, width, height).IntersectsWith(topChrome);
+    }
+
+    // The mode bar and the hint below it, physical screen pixels: the read-out never covers them.
+    private Rect TopChromeOnScreen()
+    {
+        RectD bar = _geometry[_barWindow].Bounds;
+        var top = new Rect(bar.Left, bar.Top, bar.Width, bar.Height);
+        if (_guideWindow is { } guide && _guideVisible)
+        {
+            RectD hint = _geometry[guide].Bounds;
+            top.Union(new Rect(hint.Left, hint.Top, hint.Width, hint.Height));
+        }
+        return top;
+    }
+
+    // The start-point chip in physical screen pixels, or empty while there is none.
+    private Rect AnchorChipOnScreen(NativeCaptureOverlay owner) => _anchorChip.Bounds is { } chip && owner.SelectionAnchor is not null
+        ? new Rect(owner.ScreenBounds.Left + chip.X * _anchorChip.Scale, owner.ScreenBounds.Top + chip.Y * _anchorChip.Scale,
+            chip.Width * _anchorChip.Scale, chip.Height * _anchorChip.Scale)
+        : Rect.Empty;
+
+    /// <summary>
+    /// The first pointer sample of a drag leaves the hover tab: the chip's child swaps back to the size
+    /// text and its HWND resizes, and WPF lays out and renders inside that <c>SetWindowPos</c>. Measured
+    /// at about six milliseconds, a whole 120 Hz frame, in the very sample that also dims the window
+    /// highlight. The swap needs no pointer state beyond the sample already recorded, so it runs on the
+    /// same one-shot frame timer the hover tab uses, leaving the sample itself to move the selection.
+    /// Returns false when the timer cannot be set, so the caller keeps the direct path.
+    /// </summary>
+    private bool RequestReadoutChip(Window size)
+    {
+        if (_readoutChipPending) return true;
+        IntPtr handle = _geometry[size].Handle;
+        if (handle == IntPtr.Zero) return false;
+        _readoutChipPending = NativeSelectorInterop.SetTimer(handle, ReadoutChipTimerId, 1, IntPtr.Zero) != 0;
+        return _readoutChipPending;
+    }
+
+    private void StopReadoutChipFrame()
+    {
+        if (!_readoutChipPending) return;
+        _readoutChipPending = false;
+        if (_sizeWindow is { } size && _geometry[size].Handle != IntPtr.Zero)
+            _ = NativeSelectorInterop.KillTimer(_geometry[size].Handle, ReadoutChipTimerId);
+    }
+
+    private void RenderReadoutChip()
+    {
+        StopReadoutChipFrame();
+        if (_closed || _owner is not { } owner || _sizeWindow is not { } size) return;
+        // Hover came back before the frame ran, so the tab is right where it should be: its own
+        // callback owns the chip again.
+        if (_static is null && owner.Selection is null && owner.HoverRegion.HasValue) return;
+        ApplyReadoutChip(owner, size, _chipSelection, PointerArea(_chipPointer));
+    }
+
     private void RequestHoverTab(NativeCaptureOverlay owner, CaptureGuideArea area)
     {
         RectD? target = owner.HoverRegion, shown = owner.ShownHoverForTest ?? target;
         if (_tabRequestedTarget == target && _tabRequestedShown == shown && _tabRequestedScale == area.Scale
             && _tabRequestedMonitor == owner.HoverWholeMonitor && _tabRequestedText == owner.TextCaptureMode
+            && _tabRequestedElement == owner.HoverElement && _tabRequestedElementHint == owner.ElementWheelHint
+            && _tabRequestedMode == owner.Mode && _tabRequestedDelay == owner.DelaySeconds
             && _tabGuideRevision == _guideRevision) return;
         _tabRequestedTarget = target; _tabRequestedShown = shown; _tabRequestedScale = area.Scale;
         _tabRequestedMonitor = owner.HoverWholeMonitor; _tabRequestedText = owner.TextCaptureMode;
+        _tabRequestedElement = owner.HoverElement; _tabRequestedElementHint = owner.ElementWheelHint;
+        _tabRequestedMode = owner.Mode; _tabRequestedDelay = owner.DelaySeconds;
         _tabGuideRevision = _guideRevision;
         if (_hoverTabPending || _sizeWindow is not { } size) return;
         _hoverTabPending = NativeSelectorInterop.SetTimer(_geometry[size].Handle, HoverTabTimerId, 1, IntPtr.Zero) != 0;
@@ -629,7 +887,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         }
         else _tabAvoid[1] = Rect.Empty;
         Rect tab = _hoverTab.Render(owner.ShownHoverForTest ?? target, target, owner.HoverWholeMonitor,
-            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid);
+            owner.TextCaptureMode, scale, new Size(screen.Width / scale, screen.Height / scale), _tabAvoid, owner.HoverElement, owner.ElementWheelHint,
+            owner.Mode == CaptureSelectorMode.Scroll, owner.DelaySeconds);
         if (!_sizePanel.ShowsHoverTab)
         {
             _sizePanel.ShowsHoverTab = true;
@@ -665,6 +924,7 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     {
         if (_placing) return;
         _placing = true;
+        BeginOwnPlacement(geometry.Handle, geometry.Bounds);
         try
         {
             ApplyContentScale(window, geometry);
@@ -680,14 +940,64 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         // moves (about 110 a second), WPF's input queue never emptied and Input-priority work such as
         // ContentRendered starved. Owned chrome already stays above the background, so after the one
         // topmost placement in Show, following the pointer only moves, and not at all when unchanged.
-            if (placement == Placement.Show) PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
+            if (placement == Placement.Show && _owner?.SkipChromeShowRestackForProbe != true)
+                PhysicalWindowPositioner.PlaceTopmostWithoutActivation(geometry.Handle, geometry.Bounds);
             else PhysicalWindowPositioner.MoveAndResize(geometry.Handle, geometry.Bounds);
             // Crossing the seam can change the HWND's composition DPI inside SetWindowPos. Its content
             // compensation must use that final DPI, including when test monitor geometry is injected.
             if (ApplyContentScale(window, geometry))
                 PhysicalWindowPositioner.MoveAndResize(geometry.Handle, geometry.Bounds);
         }
-        finally { _placing = false; }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Across a seam between monitors of different DPI, Windows sends WM_DPICHANGED inside
+            // SetWindowPos and WPF moves the HWND to the suggested rectangle, so the strict read-back
+            // misses (measured: the first attempt, on every crossing). Should it miss on all three, this
+            // is still chrome following the pointer, never a reason to end the selection: it is placed
+            // again, at the final DPI, once that change has settled.
+            RequestPlacementRepair();
+            _owner?.ReportChromePlacementMiss(error);
+        }
+        finally { EndOwnPlacement(); _placing = false; }
+    }
+
+    private IntPtr _ownPlacementHandle;
+    private RectD _ownPlacementBounds;
+
+    private void BeginOwnPlacement(IntPtr handle, RectD bounds)
+    {
+        _ownPlacementHandle = handle;
+        _ownPlacementBounds = bounds;
+    }
+
+    private void EndOwnPlacement() => _ownPlacementHandle = IntPtr.Zero;
+
+    /// <summary>
+    /// Moving onto a monitor with another DPI, Windows sends WM_DPICHANGED inside our SetWindowPos and WPF
+    /// then moves the HWND to the suggested rectangle: the size scaled by the DPI ratio from the same
+    /// top-left. That is not where the placement asked to be, so its read-back missed and it was placed a
+    /// second time; a guide placed through Left and Top was thrown onto the other monitor and back, and
+    /// came out with the ratio applied twice. The placement already has its bounds for the new DPI: they
+    /// replace the suggestion before WPF reads it, and the HWND stays where it was placed.
+    /// </summary>
+    private void KeepOwnPlacementOnDpiChange(IntPtr hwnd, IntPtr suggested)
+    {
+        if (_ownPlacementHandle == IntPtr.Zero || hwnd != _ownPlacementHandle || suggested == IntPtr.Zero) return;
+        RectD bounds = _ownPlacementBounds.ToPixelBounds();
+        Marshal.WriteInt32(suggested, 0, checked((int)bounds.Left));
+        Marshal.WriteInt32(suggested, 4, checked((int)bounds.Top));
+        Marshal.WriteInt32(suggested, 8, checked((int)bounds.Right));
+        Marshal.WriteInt32(suggested, 12, checked((int)bounds.Bottom));
+    }
+
+    internal int PlacementRepairsForTest { get; private set; }
+
+    private void RequestPlacementRepair()
+    {
+        PlacementRepairsForTest++;
+        if (_closed || _owner is null || _repairingPlacement || _dpiRefresh is { Status: DispatcherOperationStatus.Pending }) return;
+        // Below input priority, and once per failure: a seam that keeps failing waits for the next pointer sample.
+        _dpiRefresh = Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RefreshDpiBounds));
     }
 
     private bool ApplyContentScale(Window window, ChromeGeometry geometry)
@@ -710,6 +1020,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         internal readonly ScaleTransform Transform = new();
         internal IntPtr Handle;
         internal HwndSource? Source;
+        internal bool Rounded;
+        internal DwmCornerPreference? Corners;
     }
 
     internal void Hide()
@@ -722,6 +1034,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
     internal void Detach()
     {
         StopHoverTabFrame();
+        StopReadoutChipFrame();
+        _chipDeferrals = 0;
         _tabRequestedTarget = _tabRequestedShown = null;
         _hoverTab?.Clear();
         _dpiRefresh?.Abort();
@@ -751,7 +1065,8 @@ internal sealed partial class NativeSelectorChrome : IDisposable
         Array.Clear(_sample);
         if (_magnifier is { } magnifier) magnifier.WritePixels(new Int32Rect(0, 0, magnifier.PixelWidth, magnifier.PixelHeight), _sample, 15 * 4, 0);
         if (_size is { } size) size.Text = string.Empty;
-        if (_guideText is { } guide) guide.Text = _defaultGuide;
+        // The hint keeps its words. The next bind sets them in Update before any chrome window is
+        // shown, and a selector with the same guide as the last one then rebuilds no key caps.
     }
 
     public void Dispose()

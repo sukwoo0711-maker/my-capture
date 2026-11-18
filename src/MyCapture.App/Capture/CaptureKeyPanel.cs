@@ -10,7 +10,9 @@ using MyCapture.Core.Settings;
 namespace MyCapture.App.Capture;
 
 internal readonly record struct CaptureKeyPanelContext(bool Expanded, bool CanDrag, bool WindowDetection,
-    bool HasSelection, bool Ratio, bool Color, bool Text, bool TextMode, bool PinAvailable, Hotkey PinKey);
+    bool HasSelection, bool Ratio, bool Color, bool Text, bool TextMode, bool PinAvailable, Hotkey PinKey,
+    bool Freeform = false, bool FreeformMode = false, bool Scroll = false, bool ScrollMode = false, bool Delay = false,
+    bool ColorMode = false);
 
 /// <summary>Input-transparent key rows. A collapsed panel retains only the F1 discovery chip.</summary>
 internal sealed class CaptureKeyPanel : Border
@@ -61,19 +63,33 @@ internal sealed class CaptureKeyPanel : Border
         var keyColumns = new List<(ColumnDefinition Column, Border Cap)>();
         if (context.Expanded)
         {
-            if (context.CanDrag) Add(UiText.Get("CaptureKeyPanel.Drag"), "CaptureKeyPanel.Region");
+            if (context.Freeform) Add("F", "CaptureFreeform_KeyHelp");
+            if (context.CanDrag && !context.FreeformMode) Add(UiText.Get("CaptureKeyPanel.Drag"), "CaptureKeyPanel.Region");
             if (context.WindowDetection) Add(UiText.Get("CaptureKeyPanel.Click"), "CaptureKeyPanel.Window");
-            if (context.HasSelection)
+            if (context.ScrollMode) Add(UiText.Get("CaptureKeyPanel.Click") + " · Enter", "CaptureKeyPanel.ScrollWindow");
+            if (context.ColorMode)
+            {
+                Add(UiText.Get("CaptureKeyPanel.Click") + " · Enter", "CaptureKeyPanel.ColorCopy");
+                Add("← ↑ → ↓", "CaptureKeyPanel.Move");
+            }
+            if (context.WindowDetection && !context.HasSelection)
+                Add(UiText.Get("CaptureKeyPanel.ElementKeys"), "CaptureKeyPanel.ElementDepth");
+            if (context.HasSelection && !context.FreeformMode && !context.ColorMode)
             {
                 Add("← ↑ → ↓", "CaptureKeyPanel.Move");
                 Add("Shift + ← ↑ → ↓", "CaptureKeyPanel.Resize");
             }
-            Add("Ctrl + A", "CaptureKeyPanel.All");
+            if (!context.FreeformMode && !context.ScrollMode && !context.ColorMode) Add("Ctrl + A", "CaptureKeyPanel.All");
             if (context.Ratio) Add("R", "CaptureKeyPanel.Ratio");
-            if (context.Color) Add("C", "CaptureKeyPanel.Color");
+            if (context.Color) Add("C", context.ColorMode ? "CaptureKeyPanel.Image" : "CaptureKeyPanel.Color");
+            // One row for both, like "Enter · Esc", so the panel still fits short work areas.
+            if (context.Scroll && context.Delay) Add("S · D", "CaptureKeyPanel.ScrollDelay");
+            else if (context.Scroll) Add("S", context.ScrollMode ? "CaptureKeyPanel.Image" : "CaptureKeyPanel.Scroll");
+            else if (context.Delay) Add("D", "CaptureKeyPanel.Delay");
             if (context.Text) Add("T", context.TextMode ? "CaptureKeyPanel.Image" : "CaptureKeyPanel.Text");
             if (context.HasSelection && context.PinAvailable && context.PinKey.IsAssigned) Add(context.PinKey.ToString(), "CaptureKeyPanel.Pin");
-            Add(context.HasSelection ? "Enter · Esc" : "Esc",
+            if (context.FreeformMode && context.HasSelection) Add("Esc", "CaptureFreeform_Discard");
+            else Add(context.HasSelection ? "Enter · Esc" : "Esc",
                 context.HasSelection ? "CaptureKeyPanel.ConfirmCancel" : "CaptureKeyPanel.Cancel");
         }
         Add("F1", context.Expanded ? "CaptureKeyPanel.Hide" : "CaptureKeyPanel.Show");

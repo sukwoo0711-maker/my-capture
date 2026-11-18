@@ -70,9 +70,9 @@ public sealed class PinTranslationOverlayR7DiagnosticTests(ITestOutputHelper out
         byte[] pixels = new byte[stride * height];
         converted.CopyPixels(pixels, stride, 0);
         Type overlay = typeof(PinTranslationOverlay);
-        double ink = (double)overlay.GetMethod("SourceInkHeight", Static)!.Invoke(null, [block, pixels, width, height, stride])!;
+        double ink = PinTranslationOverlay.SourceInkEm(block, pixels, width, height, stride);
         double estimate = PinTranslationOverlay.EstimateFontSizes(blocks)[Array.IndexOf(blocks, block)];
-        double cap = ink > 0 ? Math.Min(estimate, ink * 1.1) : estimate;
+        double cap = PinTranslationOverlay.EstimateFontSizes(blocks, pixels, width, height, stride)[Array.IndexOf(blocks, block)];
         double pitch = PinTranslationOverlay.SourceLinePitch(block.Lines), scale = pitch / cap;
         Color[] colors = block.Lines.Select(line => PinTranslationOverlay.EstimateBackground(pixels, width, height, stride, line.Bounds).Color).ToArray();
         Color background = (Color)overlay.GetMethod("MedianColor", Static)!.Invoke(null, [colors])!;

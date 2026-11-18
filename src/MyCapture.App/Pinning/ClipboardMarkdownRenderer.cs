@@ -1,4 +1,5 @@
 using MyCapture.App.Themes;
+using MyCapture.Core.Localization;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -294,8 +295,8 @@ internal static class ClipboardMarkdownRenderer
                 drawing.Pop();
                 if (continued)
                 {
-                    var note = new FormattedText("나머지 내용은 F2에서 확인합니다.", CultureInfo.GetCultureInfo("ko-KR"),
-                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), TypeScale.Content.MarkdownFallback, Brushes.DimGray, rasterScale);
+                    var note = new FormattedText(UiText.Get("Pin_MarkdownContinued"), UiText.Culture,
+                        FlowDirection.LeftToRight, new Typeface(NoteFont(), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), TypeScale.Content.MarkdownFallback, Brushes.DimGray, rasterScale);
                     drawing.DrawText(note, new Point(24, contentHeight + 8));
                 }
             }
@@ -469,6 +470,11 @@ internal static class ClipboardMarkdownRenderer
         return document;
     }
 
+    /// <summary>The product UI font for the page note, falling back to Segoe UI when no theme is loaded or off the UI thread.</summary>
+    private static FontFamily NoteFont() =>
+        Application.Current is { } app && app.Dispatcher.CheckAccess() && app.TryFindResource("Font.Ui") is FontFamily family
+            ? family : new FontFamily("Segoe UI");
+
     private static Paragraph MakeCodeBlock(string code) => new(new Run(code))
     {
         Tag = code,
@@ -485,7 +491,7 @@ internal static class ClipboardMarkdownRenderer
     {
         if (results is null || !results.TryGetValue(block.Index, out MermaidRenderResult? result))
         {
-            blocks.Add(new Paragraph(new Run("그리는 중"))
+            blocks.Add(new Paragraph(new Run(UiText.Get("Pin_MarkdownDrawing")))
             {
                 Tag = block,
                 Foreground = Brushes.DimGray,
@@ -512,7 +518,7 @@ internal static class ClipboardMarkdownRenderer
             return;
         }
         blocks.Add(MakeCodeBlock(block.Source));
-        blocks.Add(new Paragraph(new Run("그림을 표시할 수 없어 원문을 보여줍니다."))
+        blocks.Add(new Paragraph(new Run(UiText.Get("Pin_MarkdownDiagramFallback")))
         {
             Foreground = Brushes.DimGray,
             FontSize = TypeScale.Content.MarkdownFallback,

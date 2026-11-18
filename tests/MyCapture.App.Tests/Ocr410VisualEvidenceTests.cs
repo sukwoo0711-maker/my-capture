@@ -23,7 +23,12 @@ public sealed class Ocr410VisualEvidenceTests
     {
         using var culture = UiText.UseLanguage(language);
         var (image, result) = Ocr410Fixture.Table();
-        var window = new Ocr410BaselineWindow { ShowInTaskbar = false, Width = 1040, Height = 720 };
+        var window = new Ocr410BaselineWindow
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, ShowActivated = false,
+            ShowInTaskbar = false, Width = 1040, Height = 720,
+        };
         try
         {
             Ocr410Fixture.LoadTheme(window);
@@ -49,7 +54,12 @@ public sealed class Ocr410VisualEvidenceTests
     {
         using var culture = UiText.UseLanguage(language);
         var (image, result) = Ocr410Fixture.Table();
-        var window = new OcrResultWindow { ShowInTaskbar = false, Width = 1040, Height = 720 };
+        var window = new OcrResultWindow
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, ShowActivated = false,
+            ShowInTaskbar = false, Width = 1040, Height = 720,
+        };
         try
         {
             Ocr410Fixture.LoadTheme(window);
@@ -124,24 +134,8 @@ internal static class Ocr410Fixture
 
     internal static void LoadTheme(Window window)
     {
-        XElement? combined = null;
-        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
-        {
-            using Stream source = typeof(Ocr410Fixture).Assembly.GetManifestResourceStream($"ThemeFixture.{name}.xaml")!;
-            XElement dictionary = XDocument.Load(source).Root!;
-            combined ??= new XElement(dictionary.Name);
-            foreach (XAttribute declaration in dictionary.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
-            {
-                string value = declaration.Value;
-                if (value.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
-                    && !value.Contains(";assembly=", StringComparison.Ordinal))
-                    value += ";assembly=MyCapture";
-                combined.SetAttributeValue(declaration.Name, value);
-            }
-            foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
-        }
-        window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(
-            combined!.ToString(SaveOptions.DisableFormatting)));
+        // Use compiled product templates so custom named parts keep their namescope.
+        window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
     }
 
     internal static void Save(BitmapSource image, string path)

@@ -226,7 +226,8 @@ public sealed class VideoMulticutEditorTests
         // the test output directory, and readiness uses the editor's fallback directly.
         string root = Path.Combine(AppContext.BaseDirectory, "multicut-in-memory");
         var recording = new RecordingResult(Path.Combine(root, "missing.mp4"), 10000, 30, 300, 640, 360);
-        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+        var editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         Invoke(editor, "CompleteOpen", 10000d, true);
         return editor;
     }

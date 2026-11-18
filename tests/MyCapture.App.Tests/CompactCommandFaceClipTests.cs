@@ -56,8 +56,8 @@ public sealed class CompactCommandFaceClipTests
             ThemeService.ApplyResources(AppTheme.Midnight, cardContent.Resources, systemHighContrast: contrast);
             // The app's Application resources exist when its constructor resolves these icons.
             // This detached fixture loads the same resources afterward, without an Application.
-            // Every action, including the library, shows an icon above its name.
-            Assert.All(card.ActionButtonsForTest.Append(card.LibraryButtonForTest),
+            // The three direct actions show an icon beside their name.
+            Assert.All(card.ActionButtonsForTest,
                 action => Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(action)));
             QuickAccessLabelFixture.RealIcons(card, cardContent);
             Button close = Assert.Single(QuickAccessDetachedFixture.Descendants(cardContent).OfType<Button>(),
@@ -84,7 +84,7 @@ public sealed class CompactCommandFaceClipTests
             Assert.Equal(2, rating.Length);
             Assert.All(rating, button => Assert.Equal(0, button.ActualHeight));
             ButtonBase[] buttons = all.Except(rating).ToArray();
-            Assert.Equal(21, buttons.Length); // Thirteen capture commands and eight receipt commands.
+            Assert.Equal(20, buttons.Length); // Fourteen capture commands and six receipt controls.
             foreach (ButtonBase button in buttons) CommandButtonPresentation.RefreshHint(button);
 
             var failures = new List<string>();
@@ -105,11 +105,14 @@ public sealed class CompactCommandFaceClipTests
                     var caption = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                     ShortcutMotionTestScope.AssertState(caption, revealed);
                     string name = $"{(bar.Holds(button) ? "capture" : "receipt")}:{AutomationProperties.GetName(button)}";
-                    // Capture commands are 36 tall; a receipt action that shows its name is taller by the name,
-                    // and every one of them keeps that height whether or not Alt shows its key.
-                    if (button is Button action && QuickAccessActionPanel.LabelOf(action) is { Visibility: Visibility.Visible })
+                    // Capture commands are 32 × 32 (their 34-DIP face reaches one DIP into the bar's
+                    // padding above and below, unclipped); receipt commands are 36 tall, and one that
+                    // shows its name reserves the adjacent label height. Every one keeps its height whether or not
+                    // Alt shows its key.
+                    if (bar.Holds(button)) Assert.Equal(CaptureModeBar.ButtonSize, button.ActualHeight, 2);
+                    else if (button is Button action && QuickAccessActionPanel.LabelOf(action) is { Visibility: Visibility.Visible })
                     {
-                        Assert.True(button.ActualHeight > 36, name);
+                        Assert.True(button.ActualHeight >= 36, name);
                         Assert.Equal(namedHeight ??= button.ActualHeight, button.ActualHeight, 2);
                         Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(action), button.ActualHeight, 2);
                     }

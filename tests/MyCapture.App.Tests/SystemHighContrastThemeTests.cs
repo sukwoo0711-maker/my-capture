@@ -128,8 +128,8 @@ public sealed class SystemHighContrastThemeTests
         WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Workspace, systemHighContrast: false);
         Color inline = (Color)ColorConverter.ConvertFromString(WorkspaceTheme.WorkspaceOverrides(WorkspaceRole.Gallery)["Surface.Base"]);
         Assert.Equal(inline, Brush(gallery, "Surface.Base").Color);
-        Assert.Equal((Color)ColorConverter.ConvertFromString("#7a8d86"), Brush(gallery, "Border.Control").Color);
-        // The workspace's own Surface.Hover replaces the palette's; the folder card's wash follows it.
+        Assert.Equal((Color)ColorConverter.ConvertFromString("#7B828C"), Brush(gallery, "Border.Control").Color);
+        // The workspace uses the canonical light palette; the folder card's wash follows it.
         Assert.Same(gallery["Surface.Hover"], gallery["Surface.FolderHoverWash"]);
 
         WorkspaceTheme.Apply(gallery, WorkspaceRole.Gallery, AppTheme.Workspace, systemHighContrast: true);

@@ -18,25 +18,153 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// A pinned image shows copy, save, opacity and close in its corner while the pointer is over it;
+/// A pinned image shows copy, text copy, save and close in its corner while the pointer is over it;
 /// that bar never reaches a screenshot or a recording, and the right-click menu keeps its keys in
 /// the right-hand column.
 /// </summary>
 public sealed class PinHoverBarTests
 {
+    // The named width of copy · text copy · save · close (and source), measured with the app theme.
+    private const double KoBudget = 342, KoSourceBudget = 408, EnBudget = 355, EnSourceBudget = 421;
+
     [Fact]
-    public void BarSitsInsideALargePinAndAboveOrBelowASmallOne()
+    public void BarSitsAboveEveryPinThenBelowAndInsideOnlyWithoutRoomOnEitherSide()
     {
         var work = new RectD(0, 0, 1920, 1040);
-        // Large pin: inside its top-right corner, one gap from both edges.
-        Assert.Equal(new RectD(1000 + 600 - 6 - 200, 300 + 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 200, 36, work, 1));
-        // Small pin: just above it, right-aligned, so the bar never hides the image.
+        // Large pin: just above it like a small one, right-aligned, so the bar never covers the content.
+        Assert.Equal(new RectD(1000 + 600 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 200, 36, work, 1));
+        // Small pin: the same.
         Assert.Equal(new RectD(1000 + 120 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1000, 300, 120, 90), 200, 36, work, 1));
-        // A small pin at the top of the work area takes the bar below it.
+        // A pin at the top of the work area takes the bar below it, large or small.
         Assert.Equal(new RectD(100 + 120 - 200, 10 + 90 + 6, 200, 36), PinHoverBar.Place(new RectD(100, 10, 120, 90), 200, 36, work, 1));
+        Assert.Equal(new RectD(1000 + 600 - 200, 0 + 700 + 6, 200, 36), PinHoverBar.Place(new RectD(1000, 0, 600, 700), 200, 36, work, 1));
         // Kept on the work area, and the gap follows the display scale.
         Assert.Equal(new RectD(0, 300 + 9, 200, 36), PinHoverBar.Place(new RectD(-50, 0, 150, 300), 200, 36, work, 1.5));
+        Assert.Equal(new RectD(1000 + 600 - 400, 300 - 72 - 12, 400, 72), PinHoverBar.Place(new RectD(1000, 300, 600, 400), 400, 72, work, 2));
+        // A pin past the right edge keeps the bar above it, pulled back onto the work area.
+        Assert.Equal(new RectD(1920 - 200, 400 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(1700, 400, 600, 300), 200, 36, work, 1));
     }
+
+    [Fact]
+    public void ABarWithoutRoomAboveOrBelowGoesInsideTheVisibleTopRightCorner()
+    {
+        var work = new RectD(0, 0, 1920, 1040);
+        // A pin as tall as the work area: one gap inside its top-right corner.
+        Assert.Equal(new RectD(1920 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(0, 0, 1920, 1040), 200, 36, work, 1));
+        Assert.Equal(new RectD(1100 - 6 - 200, 20 + 6, 200, 36), PinHoverBar.Place(new RectD(500, 20, 600, 1000), 200, 36, work, 1));
+        // A pin taller than the work area and partly off it: the corner that can be seen, not the one off screen.
+        Assert.Equal(new RectD(1100 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(500, -200, 600, 1300), 200, 36, work, 1));
+        Assert.Equal(new RectD(1920 - 6 - 200, 0 + 6, 200, 36), PinHoverBar.Place(new RectD(1500, -200, 900, 1300), 200, 36, work, 1));
+        // The gap follows the display scale inside too.
+        Assert.Equal(new RectD(1920 - 12 - 400, 0 + 12, 400, 72), PinHoverBar.Place(new RectD(0, 0, 1920, 1040), 400, 72, work, 2));
+    }
+
+    [Fact]
+    public void BarStaysOnThePinsOwnMonitorWorkAreaWhereverThatMonitorSits()
+    {
+        // A monitor to the left of the primary one (negative coordinates) and one above it.
+        var left = new RectD(-1920, 0, 1920, 1040);
+        Assert.Equal(new RectD(-1000 + 600 - 200, 300 - 36 - 6, 200, 36), PinHoverBar.Place(new RectD(-1000, 300, 600, 400), 200, 36, left, 1));
+        Assert.Equal(new RectD(-1000 + 600 - 200, 20 + 400 + 6, 200, 36), PinHoverBar.Place(new RectD(-1000, 20, 600, 400), 200, 36, left, 1));
+        var above = new RectD(0, -1440, 2560, 1400);
+        RectD placed = PinHoverBar.Place(new RectD(100, -1440, 2560, 1400), 300, 54, above, 1.5);
+        Assert.Equal(new RectD(2560 - 9 - 300, -1440 + 9, 300, 54), placed);
+        // Never on the next monitor: the whole bar lies inside the pin's work area in every case above.
+        Assert.True(placed.Left >= above.Left && placed.Right <= above.Right && placed.Top >= above.Top && placed.Bottom <= above.Bottom);
+    }
+
+    [Fact]
+    public void ThePinMovesItsBarWherePlaceSaysOnTheWorkAreaOfItsMonitor() => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        PinWindow pin = Pin(out _, 600, 400);
+        try
+        {
+            pin.Show();
+            RectD anchor = pin.AnchorBounds;
+            foreach ((string side, RectD work) in new[]
+            {
+                ("above", anchor.Inflate(200)),
+                ("below", new RectD(anchor.Left - 200, anchor.Top, anchor.Width + 400, anchor.Height + 200)),
+                ("inside", anchor),
+            })
+            {
+                pin.ReadWorkArea = _ => work;
+                Enter(pin);
+                PinHoverBar bar = pin.HoverBarForTest!;
+                Assert.True(NativePinWindowInterop.GetWindowRect(new System.Windows.Interop.WindowInteropHelper(bar).Handle, out var rect));
+                var placed = new RectD(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+                RectD expected = PinHoverBar.Place(anchor, placed.Width, placed.Height, work, pin.AnchorScale);
+                // Within a pixel: the pin measures the bar in DIP, the window rectangle is whole pixels.
+                Assert.InRange(Math.Abs(placed.Left - expected.Left), 0, 1);
+                Assert.InRange(Math.Abs(placed.Top - expected.Top), 0, 1);
+                // Outside the content above or below; inside only when the work area leaves no room for either.
+                if (side == "above") Assert.True(placed.Bottom <= anchor.Top, $"{side}: {placed} over {anchor}");
+                if (side == "below") Assert.True(placed.Top >= anchor.Bottom, $"{side}: {placed} over {anchor}");
+                if (side == "inside") Assert.True(placed.Top > anchor.Top && placed.Right < anchor.Right, $"{side}: {placed} in {anchor}");
+                Leave(pin);
+                pin.ForceHoverBarHideForTest();
+            }
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Fact]
+    public void PointerCrossingTheGapToTheBarKeepsItAndLeavingTheBarHidesItAfterTheGrace() => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        PinWindow pin = Pin(out _);
+        try
+        {
+            // The gap is a few pixels; the grace is long enough to cross it at any ordinary pointer speed.
+            Assert.Equal(6, PinHoverBar.EdgeGap);
+            Assert.Equal(TimeSpan.FromMilliseconds(300), PinWindow.HoverBarHideDelay);
+            pin.Show();
+            Enter(pin);
+            PinHoverBar bar = pin.HoverBarForTest!;
+            Assert.Equal(PinWindow.HoverBarHideDelay, pin.HoverBarHideIntervalForTest);
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+
+            // Leaving the pin for the gap starts the grace; the bar is still there.
+            Leave(pin);
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+            // Reaching the bar cancels it.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+            // Back over the pin through the gap: the bar stays.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            Enter(pin);
+            Assert.False(pin.IsHoverBarHidePendingForTest);
+            Assert.True(pin.IsHoverBarShown);
+
+            // Leaving the bar for somewhere else hides it when the grace runs out.
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseEnterEvent });
+            bar.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.True(pin.IsHoverBarHidePendingForTest);
+            pin.ForceHoverBarHideForTest();
+            Assert.False(pin.IsHoverBarShown);
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
 
     [Fact]
     public void HoverShowsTheCaptureExcludedBarAndLeavingOrClickThroughHidesIt() => StaTestHost.Run(() =>
@@ -63,9 +191,12 @@ public sealed class PinHoverBarTests
             Assert.True(bar.IsCaptureExcluded);
             // Reduced motion: no fade, fully visible at once.
             Assert.Equal(1, bar.Opacity);
-            Assert.Equal(["복사", "저장", "투명도", "닫기"],
-                new[] { bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton }.Select(AutomationProperties.GetName));
+            Assert.Equal(["이미지 복사", "텍스트 복사", "저장", "닫기"],
+                new[] { bar.CopyButton, bar.TextCopyButton, bar.SaveButton, bar.CloseButton }.Select(AutomationProperties.GetName));
             Assert.Equal("Ctrl+C", AutomationProperties.GetAcceleratorKey(bar.CopyButton));
+            // The menu's own name and gesture; a mouse gesture is named in the tooltip, not as a key caption.
+            Assert.Equal("텍스트 복사 (Ctrl+더블클릭)", bar.TextCopyButton.ToolTip);
+            Assert.Empty(AutomationProperties.GetAcceleratorKey(bar.TextCopyButton));
             Assert.Equal("닫기 (Esc)", bar.CloseButton.ToolTip);
             Assert.Equal(1.0, pin.State.Opacity);
 
@@ -107,7 +238,7 @@ public sealed class PinHoverBarTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BarButtonsRunThePinsOwnCopySaveOpacityAndClose(bool supported) => StaTestHost.Run(() =>
+    public void BarButtonsRunThePinsOwnCopyTextCopySaveAndClose(bool supported) => StaTestHost.Run(() =>
     {
         using var mode = new ExclusionMode(supported);
         using var language = UiText.UseLanguage("ko-KR");
@@ -118,7 +249,9 @@ public sealed class PinHoverBarTests
         PinWindow pin = Pin(out BitmapSource image);
         int copies = 0;
         var saves = new List<PinSaveMode>();
+        var recognized = new List<BitmapSource>();
         pin.CopyRequested += (_, request) => { copies++; Assert.Same(image, request.Image); };
+        pin.OcrRequested += (_, source) => recognized.Add(source);
         pin.SaveRequested += (_, e) => saves.Add(e.Mode);
         try
         {
@@ -134,6 +267,12 @@ public sealed class PinHoverBarTests
             Click(bar.SaveButton);
             Assert.Equal(1, copies);
             Assert.Equal([PinSaveMode.QuickSave], saves);
+            // A picture pin's text copy reads the picture's text, as Ctrl+double-click does.
+            Click(bar.TextCopyButton);
+            Assert.Same(image, Assert.Single(recognized));
+            Assert.Equal(1, copies);
+
+            // The opacity menu stays on the pin's O key; the bar no longer has an opacity button.
 
             ContextMenu opacity = bar.CreateOpacityMenu();
             Assert.Equal(supported ? typeof(ContextMenu) : typeof(OpaqueCaptureContextMenu), opacity.GetType());
@@ -145,6 +284,58 @@ public sealed class PinHoverBarTests
 
             Click(bar.CloseButton);
             Assert.True(pin.IsClosed);
+        }
+        finally
+        {
+            pin.Close();
+            PinHoverBar.ApplyCaptureExclusion = exclusion;
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("table")]
+    [InlineData("markdown")]
+    public void TextCopyOnATextPinCopiesItsOriginalTextWithoutReadingThePicture(string kind) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
+        PinHoverBar.ApplyCaptureExclusion = _ => true;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        byte[] pixels = new byte[360 * 220 * 4];
+        BitmapSource picture = BitmapSource.Create(360, 220, 96, 96, PixelFormats.Bgra32, null, pixels, 360 * 4);
+        picture.Freeze();
+        const string original = "| a | b |\n| 1 | 2 |";
+        PinContent content = kind switch
+        {
+            "table" => PinContent.FromText(picture, original, isTable: true),
+            "markdown" => PinContent.FromMarkdown(picture, original),
+            _ => PinContent.FromText(picture, original, isTable: false),
+        };
+        var pin = new PinWindow(content, new PinViewState(360, 220, 1, 1, 0.1), -10000, -10000, () => new PinSettings())
+        {
+            ShowActivated = false,
+            ReadWorkArea = _ => new RectD(-12000, -12000, 4000, 4000),
+        };
+        var texts = new List<string>();
+        int recognized = 0, copies = 0;
+        pin.OriginalTextCopyRequested += (_, text) => texts.Add(text);
+        pin.OcrRequested += (_, _) => recognized++;
+        pin.CopyRequested += (_, _) => copies++;
+        try
+        {
+            pin.Show();
+            Enter(pin);
+            PinHoverBar bar = pin.HoverBarForTest!;
+            Click(bar.TextCopyButton);
+            // The same route as the menu's copy-text item and Ctrl+double-click: the kept original.
+            Assert.Equal([original], texts);
+            Assert.Equal(0, recognized);
+            Assert.Equal(0, copies);
+            pin.SimulateCtrlDoubleClickForTest();
+            Assert.Equal([original, original], texts);
         }
         finally
         {
@@ -231,7 +422,9 @@ public sealed class PinHoverBarTests
                     Assert.Equal("Ctrl+C", shortcut.Text);
                     ShortcutMotionTestScope.AssertState(shortcut, false);
                     // The names stay in the tooltips and automation names.
-                    Assert.Equal("복사", AutomationProperties.GetName(bar.CopyButton));
+                    // The copy button names what it copies; the visible name and the bar's width stay as they were.
+                    Assert.Equal("이미지 복사", AutomationProperties.GetName(bar.CopyButton));
+                    Assert.Equal("이미지 복사 (Ctrl+C)", bar.CopyButton.ToolTip);
                     if (compact) Assert.True(bar.ActualWidth < labeled, $"compact {bar.ActualWidth} vs {labeled}");
                     else Assert.InRange(bar.ActualWidth, labeled - 2, labeled + 2);
                 }
@@ -287,10 +480,10 @@ public sealed class PinHoverBarTests
     });
 
     [Theory]
-    [InlineData("ko-KR", false, 336)]
-    [InlineData("ko-KR", true, 382)]
-    [InlineData("en-US", false, 353)]
-    [InlineData("en-US", true, 399)]
+    [InlineData("ko-KR", false, KoBudget)]
+    [InlineData("ko-KR", true, KoSourceBudget)]
+    [InlineData("en-US", false, EnBudget)]
+    [InlineData("en-US", true, EnSourceBudget)]
     public void TranslationSharesTheAllNamesOrAllIconsRuleAndWidthBudget(string language, bool source, double budget) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
@@ -298,8 +491,8 @@ public sealed class PinHoverBarTests
         try
         {
             bar.SetTranslationAction(true, true, UiText.Get("Pin_Translate"), "Translate on this PC");
-            Assert.Equal(budget, bar.LabeledWidthBudget);
-            var actions = new[] { bar.TranslationButton, bar.CopyButton, bar.SaveButton, bar.OpacityButton };
+            Assert.Equal(budget, bar.BaseLabeledWidthBudget);
+            var actions = new[] { bar.CopyButton, bar.TextCopyButton, bar.SaveButton, bar.TranslationButton };
             TextBlock Caption(Button button) => Assert.Single(
                 Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<TextBlock>());
             foreach (Button button in actions)
@@ -308,10 +501,13 @@ public sealed class PinHoverBarTests
                 Assert.Single(Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<SymbolIcon>());
             }
             double labeled = bar.MeasureLabeledWidth();
+            // Offering translation adds the translation button's own named width to the budget,
+            // so it never turns this pin kind's names into icons.
+            Assert.True(bar.LabeledWidthBudget > budget, $"{bar.LabeledWidthBudget} vs {budget}");
             bar.Compact = bar.NeedsCompact(600, labeled);
             var surface = Assert.IsType<Border>(bar.Content);
             surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Assert.InRange(surface.DesiredSize.Width, 1, budget);
+            Assert.InRange(surface.DesiredSize.Width, 1, bar.LabeledWidthBudget);
             Assert.All(actions, button => Assert.Equal(bar.Compact ? Visibility.Collapsed : Visibility.Visible, Caption(button).Visibility));
             bar.Compact = true;
             bar.SetTranslationAction(true, true, UiText.Get("Pin_TranslationOriginal"), "View original");

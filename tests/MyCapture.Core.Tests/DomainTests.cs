@@ -512,11 +512,14 @@ public sealed class CaptureQueueTests
     }
 
     [Fact]
-    public void Eviction_EnforcesTheByteCapIndependentlyOfItemCount()
+    public void Eviction_IgnoresTotalBytesWithinTheItemCap()
     {
         using var workspace = new TempWorkspace();
+        // A byte cap saved by an earlier version stays in the settings, but total bytes remove nothing.
         var limits = new QueueSettings { MaxItems = 1000, MaxBytes = 500 };
         CaptureQueue queue = CreateQueue(workspace, limits);
+        var evicted = new List<Guid>();
+        queue.Evicted += (_, e) => evicted.Add(e.Record.Id);
 
         DateTimeOffset t0 = DateTimeOffset.Now.AddHours(-1);
         for (int i = 0; i < 10; i++)
@@ -524,8 +527,57 @@ public sealed class CaptureQueueTests
             AddCapture(queue, workspace, t0.AddMinutes(i), 100);
         }
 
-        Assert.True(queue.TotalBytes <= 500);
-        Assert.Equal(5, queue.Count);
+        Assert.Equal(1000, queue.TotalBytes);
+        Assert.Equal(10, queue.Count);
+        Assert.Empty(evicted);
+        Assert.False(queue.IsOverCapacityDueToPins);
+    }
+
+    [Theory]
+    [InlineData(2L * 1024 * 1024 * 1024)]
+    [InlineData(5L * 1024 * 1024 * 1024)]
+    public void Eviction_TotalBytesOverTheFormerDefaultCapsRemoveNothingWithinTheItemCap(long formerCap)
+    {
+        using var workspace = new TempWorkspace();
+        // 2 GiB and 5 GiB were the byte caps existing and new installations saved before.
+        var limits = new QueueSettings { MaxItems = 8, MaxBytes = formerCap };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+        var evicted = new List<Guid>();
+        queue.Evicted += (_, e) => evicted.Add(e.Record.Id);
+
+        DateTimeOffset t0 = DateTimeOffset.Now.AddHours(-1);
+        for (int i = 0; i < 8; i++)
+        {
+            AddCapture(queue, workspace, t0.AddMinutes(i), 1L << 30);
+        }
+
+        Assert.Equal(8, queue.Count);
+        Assert.Equal(8L << 30, queue.TotalBytes);
+        Assert.True(queue.TotalBytes > formerCap);
+        Assert.Empty(evicted);
+        Assert.False(queue.IsOverCapacityDueToPins);
+    }
+
+    [Fact]
+    public void Eviction_TheItemCapStillRemovesTheOldestFirstAndOnlyDownToTheCap()
+    {
+        using var workspace = new TempWorkspace();
+        var limits = new QueueSettings { MaxItems = 3, MaxBytes = 2L * 1024 * 1024 * 1024 };
+        CaptureQueue queue = CreateQueue(workspace, limits);
+        var evicted = new List<Guid>();
+        queue.Evicted += (_, e) => evicted.Add(e.Record.Id);
+
+        DateTimeOffset t0 = DateTimeOffset.Now.AddHours(-1);
+        var all = new List<CaptureRecord>();
+        for (int i = 0; i < 6; i++)
+        {
+            all.Add(AddCapture(queue, workspace, t0.AddMinutes(i), 1L << 30));
+        }
+
+        // The three oldest go, in age order. The three newest stay although they still hold 3 GiB.
+        Assert.Equal(new[] { all[0].Id, all[1].Id, all[2].Id }, evicted);
+        Assert.Equal(new[] { all[5].Id, all[4].Id, all[3].Id }, queue.Records.Select(record => record.Id));
+        Assert.Equal(3L << 30, queue.TotalBytes);
     }
 
     [Fact]
@@ -653,9 +705,10 @@ public sealed class CaptureQueueTests
     }
 
     [Fact]
-    public void EvictionLease_ProtectsRecordAcrossByteCountEnforcement()
+    public void EvictionLease_ByteCountGrowthRemovesNothingBeforeOrAfterRelease()
     {
         using var workspace = new TempWorkspace();
+        // The saved byte cap of earlier versions is far below the edit; only the item cap removes captures.
         var limits = new QueueSettings { MaxItems = 100, MaxBytes = 250 };
         CaptureQueue queue = CreateQueue(workspace, limits);
         DateTimeOffset now = DateTimeOffset.Now;
@@ -674,11 +727,13 @@ public sealed class CaptureQueueTests
             Assert.Empty(evicted);
         }
 
-        // Releasing the edit makes both records eligible. The recent edited generation survives,
-        // while the older disposable capture is evicted; an oversized last capture is retained.
-        Assert.Single(queue.Records);
-        Assert.Same(edited, queue.Records[0]);
-        Assert.Equal([other.Id], evicted);
+        // Releasing the edit re-checks the limits. Both captures are within the item cap, so both stay
+        // however many bytes the edit added.
+        Assert.Equal(2, queue.Count);
+        Assert.Contains(edited, queue.Records);
+        Assert.Contains(other, queue.Records);
+        Assert.Equal(400, queue.TotalBytes);
+        Assert.Empty(evicted);
     }
 
     [Fact]

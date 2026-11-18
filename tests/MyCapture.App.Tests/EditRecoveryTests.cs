@@ -19,7 +19,8 @@ public sealed class EditRecoveryTests
     {
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
         var bitmap = Solid(64, 48, 0x30); var rect = new RectD(0, 0, 64, 48);
-        return new AnnotationEditorWindow(new FrozenFrame(bitmap, rect, null, 0), rect, bitmap);
+        return new AnnotationEditorWindow(new FrozenFrame(bitmap, rect, null, 0), rect, bitmap,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
     }
     private static void Edit(AnnotationEditorWindow window)
     {
@@ -114,13 +115,15 @@ public sealed class EditRecoveryTests
     public void RecoveredCropAndRotation_KeepTheirOriginalPixelCoordinateSpace() => StaTestHost.Run(() =>
     {
         var original = Solid(64, 48, 0x30); var region = new RectD(0, 0, 64, 48);
-        var first = new AnnotationEditorWindow(new FrozenFrame(original, region, null, 0), region, original);
+        var first = new AnnotationEditorWindow(new FrozenFrame(original, region, null, 0), region, original,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         Assert.True(first.Editor.HandleShortcut(System.Windows.Input.Key.W, System.Windows.Input.ModifierKeys.None));
         first.Editor.ApplyCrop(new RectD(10, 8, 20, 16));
         var snapshot = Await(first.Editor.CaptureDraftAsync())!;
         var document = AnnotationDocument.TryFromJson(snapshot.Document)!;
         var current = first.Editor.DisplayedBitmap;
-        var restored = new AnnotationEditorWindow(new FrozenFrame(current, region, null, 0), region, original, initialDocument: document);
+        var restored = new AnnotationEditorWindow(new FrozenFrame(current, region, null, 0), region, original, initialDocument: document,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         restored.Editor.RestoreDraftGeometry(current, int.Parse(snapshot.Metadata["turns"]), snapshot.Metadata["origin"]);
         Assert.Equal(Controller(first.Editor).CropOrigin, Controller(restored.Editor).CropOrigin);
         Assert.Equal(Controller(first.Editor).RotationTurns, Controller(restored.Editor).RotationTurns);
@@ -143,7 +146,8 @@ public sealed class EditRecoveryTests
         var store = new EditDraftStore(System.IO.Path.Combine(root, "drafts"), _ => { }); Guid id = Guid.NewGuid();
         store.WriteAsync(id, 9, "video", "document", [], new Dictionary<string, byte[]>(), () => true).GetAwaiter().GetResult();
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         video.AdoptRecoveredDraft(store, id, 9);
         int prompts = 0; video.UnsavedEditsPromptForTest = () => { prompts++; return choice; };
         Assert.True(video.HasUnsavedEditsForTest);
@@ -167,7 +171,8 @@ public sealed class EditRecoveryTests
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
         var service = new DelayedRedaction(); var bitmap = Solid(64, 48, 0x30); var region = new RectD(0, 0, 64, 48);
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap,
-            privacyRedactionService: service);
+            privacyRedactionService: service,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         window.ConfirmClose = () => EditorCloseChoice.Cancel;
         Task detection = window.Editor.ApplyPrivacyRedactionsAsync(); Task<bool> exit = window.PrepareForAppExitAsync();
         Assert.False(exit.IsCompleted);
@@ -182,7 +187,8 @@ public sealed class EditRecoveryTests
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
         string root = TestRecycleBin.CreateTempSubdirectory("MyCapture-video-finalize-").FullName;
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         typeof(VideoEditorWindow).GetField("_mediaReady", flags)!.SetValue(video, true);
         var current = typeof(VideoEditorWindow).GetMethod("BuildCurrentDocument", flags)!.Invoke(video, null);
@@ -371,7 +377,8 @@ public sealed class EditRecoveryTests
         string drafts = System.IO.Path.Combine(root, "drafts");
         var store = new EditDraftStore(drafts); Guid id = Guid.NewGuid();
         var editor = new VideoEditorWindow(new RecordingResult(source, 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(root), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         typeof(VideoEditorWindow).GetField("_mediaReady", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .SetValue(editor, true);
         editor.AdoptRecoveredDraft(store, id, 1);

@@ -196,7 +196,7 @@ internal sealed class CapturePersistenceService
         MyCapture.Core.Capture.CaptureSourceDetails details = sourceDetails is null
             ? MyCapture.Core.Capture.CaptureSourceDetails.Empty
             : MyCapture.Core.Capture.CaptureSourceDetails.Create(sourceDetails.AppName, sourceDetails.AppPath,
-                sourceDetails.DocumentPath);
+                sourceDetails.DocumentPath, sourceDetails.AppUserModelId, sourceDetails.DocumentOrigin);
         if (url.Length == 0 && details.IsEmpty) return false;
 
         // An original still being written, or an editor save in flight, finishes first.

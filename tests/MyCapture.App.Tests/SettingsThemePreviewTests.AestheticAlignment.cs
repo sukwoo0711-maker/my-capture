@@ -56,6 +56,25 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Fail($"Guide buttons off their row's line (DIP below): {string.Join("; ", misaligned)}");
         });
 
+    /// <summary>
+    /// The same rows where layout rounds to the pixels of a 125% and a 150% display. Pinned to its row's
+    /// top, the storage tab's guide button sat above the middle of its two-line English checkbox by half
+    /// the difference of their heights: 0.5 DIP at 100%, inside the limit, and 0.8 DIP at 125% (issue 280).
+    /// </summary>
+    [Fact]
+    public Task AestheticAlignment_GuideButtonsSitOnTheirRowLineAtOtherScales() =>
+        RunIsolated(nameof(AestheticAlignment_GuideButtonsSitOnTheirRowLineAtOtherScales), () =>
+        {
+            var misaligned = new List<string>();
+            InSettingsWindows((window, tabs, locale) =>
+            {
+                foreach (double scale in new[] { 1.25, 1.5 })
+                    misaligned.AddRange(MisalignedGuideRows(window, tabs, locale, scale));
+            });
+            if (misaligned.Count > 0)
+                Assert.Fail($"Guide buttons off their row's line (DIP below): {string.Join("; ", misaligned)}");
+        });
+
     [Fact]
     public Task AestheticAlignment_HelpResultsKeepTheCategoryUnderTheName() =>
         RunIsolated(nameof(AestheticAlignment_HelpResultsKeepTheCategoryUnderTheName), VerifyHelpResultRows);
@@ -285,10 +304,12 @@ public sealed partial class SettingsThemePreviewTests
 
     // A guide or compare button at the end of a row centres on the checkbox, label, list or field
     // it explains, not on that row's spacing below. Every tab is measured with its folds open.
-    private static List<string> MisalignedGuideRows(SettingsWindow window, TabControl tabs, string locale)
+    // With layoutScale, each tab is laid out again as a display at that scale would lay it out.
+    private static List<string> MisalignedGuideRows(SettingsWindow window, TabControl tabs, string locale, double? layoutScale = null)
     {
         var guideStyle = (Style)window.FindResource("Settings.GuideButton");
-        var table = new List<string> { "tab\tguide\tpartner\ttext\tline\tbutton\toffset" };
+        string evidenceSuffix = layoutScale is { } percent ? $"-{percent * 100:0}" : string.Empty;
+        var table = new List<string> { "tab\tguide\tpartner\ttext\tline\tbutton\toffset\tpartnerHeight\tbuttonHeight\tscale" };
         var misaligned = new List<string>();
         var recordingTags = new List<string>();
         foreach (TabItem tab in tabs.Items.OfType<TabItem>())
@@ -297,6 +318,7 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
             foreach (Expander fold in Descendants(window).OfType<Expander>()) fold.IsExpanded = true;
             Drain(window);
+            if (layoutScale is { } rounding) LayOutAtScale(window, rounding);
             Button[] buttons = Descendants(window).OfType<Button>()
                 .Where(button => button.IsVisible && IsBasedOn(button.Style, guideStyle)).ToArray();
             if (buttons.Length == 0) continue;
@@ -312,18 +334,40 @@ public sealed partial class SettingsThemePreviewTests
                 Rect buttonBounds = BoundsIn(button, window);
                 double line = LineCentre(partner, window), centre = VerticalCentre(buttonBounds), offset = centre - line;
                 string text = RowText(partner);
-                table.Add($"{tab.Name}\t{button.Tag}\t{partner.GetType().Name}\t{text}\t{line:0.##}\t{centre:0.##}\t{offset:0.##}");
-                if (Math.Abs(offset) > 0.501) misaligned.Add($"{locale} {tab.Name} {button.Tag} '{text}' {offset:0.##}");
+                // The scale the row is laid out at, and both heights: a button pinned to its row's top is
+                // off its partner's centre by half their difference.
+                double scale = VisualTreeHelper.GetDpi(button).DpiScaleY;
+                table.Add($"{tab.Name}\t{button.Tag}\t{partner.GetType().Name}\t{text}\t{line:0.##}\t{centre:0.##}\t{offset:0.##}"
+                    + $"\t{partner.ActualHeight:0.##}\t{button.ActualHeight:0.##}\t{scale:0.##}");
+                if (Math.Abs(offset) > 0.501)
+                    misaligned.Add($"{locale} {tab.Name} {button.Tag} '{text}' {offset:0.##}"
+                        + $" (partner {partner.ActualHeight:0.##} high, button {button.ActualHeight:0.##} high, at {scale:0.##}x)");
                 if (tab.Name == "RecordingTab" && button.Tag is string tag) recordingTags.Add(tag);
                 Rect area = Rect.Union(buttonBounds, BoundsIn(partner, window));
                 if (viewport.Contains(area)) evidence.Union(area);
             }
-            if (!evidence.IsEmpty) SaveAlignmentEvidence(window, $"guide-rows-{tab.Name}-{locale}", evidence);
+            if (!evidence.IsEmpty) SaveAlignmentEvidence(window, $"guide-rows-{tab.Name}-{locale}{evidenceSuffix}", evidence);
         }
-        SaveAlignmentTable($"guide-rows-{locale}", table);
+        SaveAlignmentTable($"guide-rows-{locale}{evidenceSuffix}", table);
         // The rows the 11-06 review found: both pointer checkboxes and the recording size label.
         Assert.Equal(new[] { "G05", "G05", "G04" }, recordingTags.Where(tag => tag is "G05" or "G04").ToArray());
         return misaligned;
+    }
+
+    // Lays the window out as a display at this scale lays it out: sizes and offsets round to that
+    // display's pixels. The window stays on its own display; only WPF's layout scale changes. Every
+    // element is laid out again, because one that kept its size would keep an offset rounded at the
+    // previous scale (see CaptureFlowPolishTests.AtScale).
+    private static void LayOutAtScale(Window window, double scale)
+    {
+        VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));
+        foreach (UIElement element in Descendants(window).OfType<UIElement>().Prepend(window))
+        {
+            element.InvalidateMeasure();
+            element.InvalidateArrange();
+        }
+        Drain(window);
+        Assert.Equal(scale, VisualTreeHelper.GetDpi(window).DpiScaleY);
     }
 
     // The middle of the line a row button belongs to: a checkbox or list by its box, a label or a

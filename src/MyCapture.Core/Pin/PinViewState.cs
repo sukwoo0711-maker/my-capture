@@ -31,7 +31,9 @@ public sealed class PinViewState
     {
         ImageWidthDip = Math.Max(1.0, imageWidthDip);
         ImageHeightDip = Math.Max(1.0, imageHeightDip);
+        // The initial fit may go below the user's floor (a long strip fitted to the work area).
         Zoom = PinGeometry.ClampZoom(initialZoom);
+        _fittedZoom = Zoom;
         Opacity = PinGeometry.ClampOpacity(initialOpacity);
         _zoomStep = zoomStep <= 0 ? 0.1 : zoomStep;
     }
@@ -51,6 +53,18 @@ public sealed class PinViewState
 
     public double Zoom { get; private set; }
 
+    /// <summary>The smallest zoom this pin's image allows (<see cref="PinGeometry.MinimumZoom"/>).</summary>
+    public double MinimumZoom => PinGeometry.MinimumZoom(ImageWidthDip, ImageHeightDip);
+
+    // The lowest zoom the pin itself chose: the initial fit and any later fit to the work area.
+    private double _fittedZoom;
+
+    /// <summary>
+    /// Where a user zoom-out or edge drag stops: <see cref="MinimumZoom"/>, or the pin's own fit when that
+    /// went lower, so zooming in from such a fit works and zooming out never shrinks the pin past it.
+    /// </summary>
+    public double UserMinimumZoom => Math.Min(MinimumZoom, _fittedZoom);
+
     public double Opacity { get; private set; }
 
     /// <summary>Whether the pin currently passes mouse input through to windows below.</summary>
@@ -59,29 +73,59 @@ public sealed class PinViewState
     /// <summary>Whether the pin is currently hidden by a global hide-all toggle.</summary>
     public bool IsHidden { get; set; }
 
+    public bool IsCollapsed { get; private set; }
+    private double _expandedOpacity;
+    public double ExpandedOpacity => IsCollapsed ? _expandedOpacity : Opacity;
+
+    /// <summary>Collapse changes only the viewport. Expansion restores its original presentation.</summary>
+    public void SetCollapsed(bool collapsed)
+    {
+        if (IsCollapsed == collapsed) return;
+        if (collapsed) _expandedOpacity = Opacity;
+        else Opacity = _expandedOpacity;
+        IsCollapsed = collapsed;
+    }
+
+    public (double Width, double Height) ThumbnailSize
+    {
+        get
+        {
+            double scale = Math.Max(96 / Math.Max(ImageWidthDip, ImageHeightDip),
+                32 / Math.Min(ImageWidthDip, ImageHeightDip));
+            return (Math.Min(160, ImageWidthDip * scale), Math.Min(160, ImageHeightDip * scale));
+        }
+    }
+
     /// <summary>Current window width in DIP at the active zoom.</summary>
-    public double WidthDip => Math.Max(1.0, ImageWidthDip * Zoom);
+    public double WidthDip => IsCollapsed ? ThumbnailSize.Width : Math.Max(1.0, ImageWidthDip * Zoom);
 
     /// <summary>Current window height in DIP at the active zoom.</summary>
-    public double HeightDip => Math.Max(1.0, ImageHeightDip * Zoom);
+    public double HeightDip => IsCollapsed ? ThumbnailSize.Height : Math.Max(1.0, ImageHeightDip * Zoom);
 
     /// <summary>Applies a wheel/keyboard zoom step and returns the resulting zoom.</summary>
     public double ApplyZoomStep(int notches)
     {
-        Zoom = PinGeometry.StepZoom(Zoom, notches, _zoomStep);
+        if (IsCollapsed) return Zoom;
+        Zoom = Math.Clamp(PinGeometry.StepZoom(Zoom, notches, _zoomStep), UserMinimumZoom, PinGeometry.MaxZoom);
         return Zoom;
     }
 
-    /// <summary>Sets an absolute zoom, clamped.</summary>
+    /// <summary>
+    /// Sets an absolute zoom, clamped to the supported range only: a fit to the work area may go below
+    /// <see cref="MinimumZoom"/>. User edge drags reach it already held to <see cref="UserMinimumZoom"/>.
+    /// </summary>
     public double SetZoom(double zoom)
     {
+        if (IsCollapsed) return Zoom;
         Zoom = PinGeometry.ClampZoom(zoom);
+        _fittedZoom = Math.Min(_fittedZoom, Zoom);
         return Zoom;
     }
 
     /// <summary>Resets to 1:1 (100%).</summary>
     public double ResetZoom()
     {
+        if (IsCollapsed) return Zoom;
         Zoom = 1.0;
         return Zoom;
     }

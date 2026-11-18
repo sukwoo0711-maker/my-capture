@@ -158,7 +158,8 @@ public sealed class VideoEditorSimplifiedViewTests
             };
             document.TextOverlays.Add(text);
             editor = new VideoEditorWindow(new RecordingResult(clip, duration, 30, 30, 640, 360),
-                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document)
+                AppPaths.CreateForRoot(root), NullLoggerFactory.Instance, document,
+                pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,

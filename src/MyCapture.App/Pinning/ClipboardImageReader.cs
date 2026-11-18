@@ -697,7 +697,10 @@ internal static class ClipboardImageReader
             throw new InvalidDataException("The clipboard PNG contains no frames.");
         }
 
-        return Freeze(decoder.Frames[0]);
+        BitmapSource picture = Freeze(decoder.Frames[0]);
+        // The pin made from this picture is copied and saved on other threads than this one.
+        ImageCodec.KeepFrameMetadata(picture);
+        return picture;
     }
 
     /// <summary>

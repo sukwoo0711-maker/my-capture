@@ -155,6 +155,85 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal bool IsDrawingStroke => _gesture == Gesture.PenDraw;
 
+    // ---- Eraser ----------------------------------------------------------------------
+
+    /// <summary>
+    /// The eraser's reach around the pointer, in DIP: an annotation within it is touched. It is a
+    /// screen distance, like the selection tolerance, so the reach looks the same at every zoom.
+    /// </summary>
+    internal const double EraserRadiusDip = 8;
+
+    /// <summary>The eraser's reach in image pixels at the current zoom.</summary>
+    internal double EraserReach => EraserRadiusDip / Math.Max(0.0001, DipPerPixel);
+
+    /// <summary>True while an eraser press or drag is under way, between the press and the release.</summary>
+    internal bool IsErasing => _gesture == Gesture.Erase;
+
+    /// <summary>How many annotations the last finished eraser gesture removed.</summary>
+    internal int LastEraseCount { get; private set; }
+
+    // The removals of the eraser gesture under way, each already applied, in the order they happened.
+    private readonly List<RemoveAnnotationCommand> _erased = [];
+    private PointD _eraseLast;
+
+    /// <summary>The annotation the eraser would remove at <paramref name="point"/>, or null.</summary>
+    /// <remarks>
+    /// The same pick as the selection tool's (visible ink first, then the nearest item), within the
+    /// eraser's reach. A mosaic still being computed holds no picture yet and is not offered.
+    /// </remarks>
+    internal AnnotationItem? EraserTargetAt(PointD point)
+    {
+        AnnotationItem? item = _document.HitTest(point, EraserReach);
+        return item is PendingMosaicAnnotation ? null : item;
+    }
+
+    private void BeginErase(PointD point)
+    {
+        _gesture = Gesture.Erase;
+        _erased.Clear();
+        LastEraseCount = 0;
+        _eraseLast = point;
+        EraseAlong(point, point);
+    }
+
+    /// <summary>
+    /// Removes every annotation the eraser touches between two pointer positions. The path is
+    /// sampled at half the reach so a fast drag does not skip a thin stroke between two moves.
+    /// </summary>
+    private void EraseAlong(PointD from, PointD to)
+    {
+        double dx = to.X - from.X, dy = to.Y - from.Y;
+        double step = Math.Max(EraserReach / 2, 0.5);
+        int samples = Math.Clamp((int)Math.Ceiling(Math.Sqrt((dx * dx) + (dy * dy)) / step), 0, 4096);
+        int before = _erased.Count;
+        for (int i = 0; i <= samples; i++)
+        {
+            double t = samples == 0 ? 1 : (double)i / samples;
+            var point = new PointD(from.X + (dx * t), from.Y + (dy * t));
+            while (EraserTargetAt(point) is { } item)
+            {
+                var removal = new RemoveAnnotationCommand(_document, item);
+                removal.Execute();
+                _erased.Add(removal);
+            }
+        }
+
+        if (_erased.Count == before) return;
+        EnsureSelectionValid();
+        RaiseVisual();
+    }
+
+    private void CommitErase(PointD point)
+    {
+        EraseAlong(_eraseLast, point);
+        LastEraseCount = _erased.Count;
+        if (_erased.Count == 0) return;
+        // Already applied while the pointer moved; one drag is one undo step.
+        _undo.Push(_erased.Count == 1
+            ? _erased[0]
+            : new CompositeCommand(UiText.Get("Tools.EraserErase"), [.. _erased]));
+    }
+
     /// <summary>The widths [ and ] step through, thinnest to thickest.</summary>
     internal static readonly IReadOnlyList<double> BrushWidthSteps = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64];
 
@@ -695,6 +774,9 @@ internal sealed class AnnotationEditorController
                     BeginSelectGesture(point, false, intent);
                 else if (intent.Action == PointerAction.AddStepNumber) TryAddStepNumber(point);
                 break;
+            case EditorTool.Eraser:
+                BeginErase(point);
+                break;
         }
         if (_gesture == Gesture.None) _activePointerIntent = null;
     }
@@ -782,6 +864,10 @@ internal sealed class AnnotationEditorController
                 ShowDraftPen(shift);
                 RaiseVisual();
                 break;
+            case Gesture.Erase:
+                EraseAlong(_eraseLast, point);
+                _eraseLast = point;
+                break;
         }
     }
 
@@ -798,6 +884,9 @@ internal sealed class AnnotationEditorController
                 // Shift pressed or released since the last move still decides the stroke.
                 else if (shift != _draftPenStraight) ShowDraftPen(shift);
                 CommitPen();
+                break;
+            case Gesture.Erase:
+                CommitErase(point);
                 break;
             case Gesture.Resize when _selected is TextAnnotation text:
                 // Box, size and wrapping mode change together; one state command restores all
@@ -862,6 +951,10 @@ internal sealed class AnnotationEditorController
             case Gesture.Marquee:
                 SetSelection(_gestureSelection);
                 break;
+            case Gesture.Erase:
+                // Puts back what the gesture removed, last removal first, at the same positions.
+                for (int i = _erased.Count - 1; i >= 0; i--) _erased[i].Undo();
+                break;
             case Gesture.None:
                 return;
         }
@@ -888,6 +981,7 @@ internal sealed class AnnotationEditorController
         _draftPoints = null;
         _draftPenPoints = null;
         _draftPenStraight = false;
+        _erased.Clear();
     }
 
     /// <summary>
@@ -1037,7 +1131,9 @@ internal sealed class AnnotationEditorController
     /// annotation's own <see cref="AnnotationItem.Opacity"/> is used: it is already saved with the
     /// layer and drawn by the renderer, so no format change is involved.
     /// </param>
-    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0)
+    /// <param name="blend">How the image combines with the capture, also part of the same step.</param>
+    internal ImageAnnotation AddImageAnnotation(
+        string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0, ImageBlend blend = ImageBlend.Normal)
     {
         var image = new ImageAnnotation
         {
@@ -1046,6 +1142,7 @@ internal sealed class AnnotationEditorController
             SourceHeight = sourceHeight,
             Rect = rect.Normalized(),
             Opacity = opacity,
+            Blend = blend,
         };
 
         _undo.Execute(new AddAnnotationCommand(_document, image));
@@ -1319,6 +1416,7 @@ internal sealed class AnnotationEditorController
         // before the click, and the status line explains why after it.
         EditorCursorKind cursor = step && !CanAddStepNumber
             ? EditorCursorKind.Unavailable : EditorCursorPolicy.Resolve(_tool, default);
+        if (_tool == EditorTool.Eraser) return new(PointerAction.Erase, EraserTargetAt(point), Cursor: cursor);
         return new(_tool switch
         {
             EditorTool.StepNumber => CanAddStepNumber ? PointerAction.AddStepNumber : PointerAction.None,
@@ -1938,6 +2036,7 @@ internal sealed class AnnotationEditorController
         PenDraw,
         Marquee,
         ModifiedSelect,
+        Erase,
     }
 }
 

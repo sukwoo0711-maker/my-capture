@@ -56,7 +56,7 @@ public sealed class CaptureModeBarTests
             Render(view);
             // No status chip repeats the mode under the bar; the label beside the window says it.
             Assert.Empty(view.StatusTextsForTest);
-            Assert.Equal("클릭: 창 텍스트 복사  620 × 420", view.TargetLabelForTest);
+            Assert.Equal("클릭: 창 텍스트 복사 · 휠: 요소 선택  620 × 420", view.TargetLabelForTest);
 
             // T from the keyboard goes back, and the bar shows it.
             view.RaiseEvent(Overlay.KeyArgs(Key.T));
@@ -262,7 +262,7 @@ public sealed class CaptureModeBarTests
             Render(window);
             Render(drag);
             Assert.Equal("클릭: 모니터 캡처  1280 × 720", desktop.TargetLabelForTest);
-            Assert.Equal("클릭: 창 캡처  620 × 420", window.TargetLabelForTest);
+            Assert.Equal("클릭: 창 캡처 · 휠: 요소 선택  620 × 420", window.TargetLabelForTest);
             Assert.Equal(CaptureCueState.Drag, drag.CueState);
             Assert.Null(drag.TargetLabelForTest);
 

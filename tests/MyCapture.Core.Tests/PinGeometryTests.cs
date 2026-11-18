@@ -16,22 +16,115 @@ public sealed class PinGeometryTests
     }
 
     [Fact]
-    public void InitialZoom_ImageLargerThanWork_ShrinksToEightyPercentFit()
+    public void InitialZoom_ImageLargerThanWork_ShrinksJustEnoughToFit()
     {
-        // A 4000px-wide image on a 1920px-wide work area must fit within 80% => 1536px.
+        // A 4000px-wide image on a 1920px-wide work area fits the whole work area width => 1920px.
+        // (Until 11-12 the pin shrank to 80% of the work area, 1536px, even when it would fit.)
+        Assert.Equal(1.0, PinGeometry.InitialFitFraction);
         double zoom = PinGeometry.InitialZoom(4000, 1000, 1920, 1080);
 
         double fittedWidth = 4000 * zoom;
-        Assert.True(fittedWidth <= 1920 * PinGeometry.InitialFitFraction + 0.001);
+        Assert.True(fittedWidth <= 1920 + 0.001);
         // Width is the binding constraint here.
-        Assert.Equal((1920 * PinGeometry.InitialFitFraction) / 4000, zoom, 6);
+        Assert.Equal(1920.0 / 4000, zoom, 6);
     }
 
     [Fact]
     public void InitialZoom_ConstrainedByHeight_UsesHeightRatio()
     {
         double zoom = PinGeometry.InitialZoom(1000, 4000, 1920, 1080);
-        Assert.Equal((1080 * PinGeometry.InitialFitFraction) / 4000, zoom, 6);
+        Assert.Equal(1080.0 / 4000, zoom, 6);
+    }
+
+    [Theory]
+    [InlineData(1540, 870)]   // 80.2% x 80.6% of the work area
+    [InlineData(1800, 1000)]  // 93.8% x 92.6%
+    [InlineData(1920, 1080)]  // exactly the work area
+    public void InitialZoom_ImageThatFitsTheWorkArea_StaysOneToOne(double width, double height)
+    {
+        // Pins show what the user was looking at at its own size; these shrank to 80% before.
+        Assert.Equal(1.0, PinGeometry.InitialZoom(width, height, 1920, 1080), 6);
+        PinGeometry.Placement placement = PinGeometry.CascadedPlacement(width, height, 0, 0, 1920, 1080, 960, 540, 3);
+        Assert.Equal((width, height, 1.0), (placement.Width, placement.Height, placement.Zoom));
+        Assert.InRange(placement.Left, 0, 1920 - width);
+        Assert.InRange(placement.Top, 0, 1080 - height);
+    }
+
+    [Fact]
+    public void InitialZoom_PreferredZoom_IsKeptUnlessItWouldNotFit()
+    {
+        Assert.Equal(1.5, PinGeometry.InitialZoom(400, 300, 1920, 1080, preferredZoom: 1.5), 6);
+        Assert.Equal(0.8, PinGeometry.InitialZoom(400, 300, 1920, 1080, preferredZoom: 0.8), 6);
+        // 1000 x 1.5 = 1500 DIP tall does not fit 1080: shrink to the work area, not to the preferred size.
+        Assert.Equal(1080.0 / 1000, PinGeometry.InitialZoom(800, 1000, 1920, 1080, preferredZoom: 1.5), 6);
+        Assert.Equal(1.0, PinGeometry.InitialZoom(400, 300, 1920, 1080, preferredZoom: double.NaN), 6);
+        Assert.Equal(1.0, PinGeometry.InitialZoom(400, 300, 1920, 1080, preferredZoom: 0), 6);
+
+        PinGeometry.Placement placement = PinGeometry.CascadedPlacement(400, 300, 0, 0, 1920, 1080, 960, 540, 0, 1.5);
+        Assert.Equal((600.0, 450.0, 1.5), (placement.Width, placement.Height, placement.Zoom));
+    }
+
+    // A 10 x 20 cell range at default widths: 480 pt x 300 pt (640 x 400 DIP at 100% sheet zoom).
+    private const double RangeWidthPt = 480, RangeHeightPt = 300;
+
+    [Theory]
+    // The picture holds the cells at 100% sheet zoom in the monitor's pixels (what pins assume today).
+    [InlineData(80, 1.0, 640, 400, 0.8)]
+    [InlineData(100, 1.0, 640, 400, 1.0)]
+    [InlineData(150, 1.0, 640, 400, 1.5)]
+    [InlineData(80, 1.5, 960, 600, 0.8)]
+    [InlineData(100, 1.5, 960, 600, 1.0)]
+    [InlineData(150, 1.5, 960, 600, 1.5)]
+    // The picture holds the cells at 96 DPI whatever the monitor's scale: the ratio also corrects that.
+    [InlineData(100, 1.5, 640, 400, 1.5)]
+    [InlineData(80, 1.5, 640, 400, 1.2)]
+    // The picture already holds the cells at the window's zoom: it stays at 100%.
+    [InlineData(150, 1.0, 960, 600, 1.0)]
+    public void SpreadsheetViewZoom_ShowsTheCellsAtTheirOnScreenSize(
+        double sheetZoom, double monitorScale, int pictureWidth, int pictureHeight, double expected)
+    {
+        double? zoom = PinGeometry.SpreadsheetViewZoom(pictureWidth, pictureHeight, monitorScale,
+            new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, sheetZoom));
+        Assert.NotNull(zoom);
+        Assert.Equal(expected, zoom.Value, 6);
+        // On screen the pin is as large as the cells were: 640 x 400 DIP times the sheet zoom.
+        Assert.Equal(640 * sheetZoom / 100, pictureWidth / monitorScale * zoom.Value, 6);
+    }
+
+    [Fact]
+    public void SpreadsheetViewZoom_ToleratesBorderPixelsAndSnapsNearOneToExactlyOne()
+    {
+        // One extra border pixel on each axis of a one-cell picture (64 x 20 DIP).
+        Assert.Equal(1.0, PinGeometry.SpreadsheetViewZoom(65, 21, 1.0, new SpreadsheetSelectionView(48, 15, 100)));
+        // 2% off on both axes is resampling noise, not a size difference.
+        Assert.Equal(1.0, PinGeometry.SpreadsheetViewZoom(653, 408, 1.0, new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, 100)));
+    }
+
+    [Theory]
+    [InlineData(640, 200)]   // the selection grew taller after the copy
+    [InlineData(320, 400)]   // the selection lost half of its columns
+    [InlineData(400, 640)]   // a different range of the transposed shape
+    public void SpreadsheetViewZoom_SelectionOfAnotherShape_IsIgnored(int pictureWidth, int pictureHeight) =>
+        Assert.Null(PinGeometry.SpreadsheetViewZoom(pictureWidth, pictureHeight, 1.0,
+            new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, 100)));
+
+    [Theory]
+    [InlineData(double.NaN, 300, 100)]
+    [InlineData(480, 0, 100)]
+    [InlineData(480, 300, 5)]      // below the sheet's 10% minimum
+    [InlineData(480, 300, 500)]    // above the sheet's 400% maximum
+    [InlineData(480, 300, double.PositiveInfinity)]
+    [InlineData(200_000, 300, 100)]
+    public void SpreadsheetViewZoom_ImplausibleView_IsIgnored(double width, double height, double zoom) =>
+        Assert.Null(PinGeometry.SpreadsheetViewZoom(640, 400, 1.0, new SpreadsheetSelectionView(width, height, zoom)));
+
+    [Fact]
+    public void SpreadsheetViewZoom_RatioOutsideTheSupportedRange_IsIgnored()
+    {
+        // 400% of a picture already rendered at a quarter of the cells' size would be 16x.
+        Assert.Null(PinGeometry.SpreadsheetViewZoom(160, 100, 1.0, new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, 400)));
+        Assert.Null(PinGeometry.SpreadsheetViewZoom(0, 400, 1.0, new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, 100)));
+        Assert.Null(PinGeometry.SpreadsheetViewZoom(640, 400, double.NaN, new SpreadsheetSelectionView(RangeWidthPt, RangeHeightPt, 100)));
     }
 
     [Fact]
@@ -107,6 +200,37 @@ public sealed class PinGeometryTests
     }
 
     [Fact]
+    public void MinShortSide_IsWhereTheEdgeZonesStopShrinkingAndLeavesTheGrabMarginBetweenThem()
+    {
+        Assert.Equal(40, PinGeometry.MinShortSideDip, 6);
+        Assert.Equal(PinResize.HitZoneDip, PinGeometry.MinShortSideDip * PinResize.MaxHitZoneFraction, 6);
+        // Both edges keep their full zone and the middle keeps 24 DIP to move the pin by.
+        Assert.Equal(24, PinGeometry.MinShortSideDip - (2 * PinResize.HitZoneDip), 6);
+    }
+
+    [Theory]
+    [InlineData(400, 300, 40.0 / 300)]
+    [InlineData(1920, 64, 40.0 / 64)]
+    [InlineData(64, 1920, 40.0 / 64)]
+    [InlineData(4000, 4000, PinGeometry.MinZoom)]
+    [InlineData(400, 40, 1.0)]
+    [InlineData(400, 24, 1.0)]
+    [InlineData(0, 300, PinGeometry.MinZoom)]
+    [InlineData(double.NaN, 300, PinGeometry.MinZoom)]
+    public void MinimumZoom_KeepsTheShortSideAtLeastFortyDipButNeverEnlargesTheImage(double width, double height, double expected) =>
+        Assert.Equal(expected, PinGeometry.MinimumZoom(width, height), 9);
+
+    [Fact]
+    public void ClampZoomForAnImage_RaisesOnlyTheLowerBound()
+    {
+        Assert.Equal(40.0 / 300, PinGeometry.ClampZoom(0.01, 400, 300), 9);
+        Assert.Equal(0.5, PinGeometry.ClampZoom(0.5, 400, 300), 9);
+        Assert.Equal(PinGeometry.MaxZoom, PinGeometry.ClampZoom(100, 400, 300), 9);
+        // A short strip: 40 DIP tall at the least, whatever its length.
+        Assert.Equal(40, 64 * PinGeometry.ClampZoom(0.1, 1920, 64), 9);
+    }
+
+    [Fact]
     public void ClampOpacity_NeverFullyInvisible()
     {
         Assert.Equal(PinGeometry.MinOpacity, PinGeometry.ClampOpacity(0.0), 6);
@@ -133,6 +257,28 @@ public sealed class PinGeometryTests
         Assert.Equal(PinGeometry.MaxZoom, PinGeometry.StepZoom(PinGeometry.MaxZoom, 5, 0.1), 6);
         Assert.Equal(PinGeometry.MinZoom, PinGeometry.StepZoom(PinGeometry.MinZoom, -5, 0.1), 6);
     }
+
+    [Theory]
+    [InlineData(.95, 1, .1)]
+    [InlineData(1.05, -1, .1)]
+    [InlineData(.5, 12, .1)]
+    [InlineData(2, -12, .1)]
+    [InlineData(.9, 1, .25)]
+    [InlineData(1.1, -1, .25)]
+    public void StepZoom_StopsExactlyAtOneWhenCrossing(double start, int notches, double step)
+    {
+        Assert.Equal(1, PinGeometry.StepZoom(start, notches, step));
+        Assert.Equal(Math.Pow(1 + step, Math.Sign(notches)), PinGeometry.StepZoom(1, Math.Sign(notches), step));
+    }
+
+    [Theory]
+    [InlineData(1, 3, .1)]
+    [InlineData(1, -3, .1)]
+    [InlineData(.5, 2, .25)]
+    [InlineData(2, -1, .25)]
+    [InlineData(.9, 0, .1)]
+    public void StepZoom_LeavesNonCrossingStepsUnchanged(double start, int notches, double step) =>
+        Assert.Equal(PinGeometry.ClampZoom(start * Math.Pow(1 + step, notches)), PinGeometry.StepZoom(start, notches, step));
 
     [Fact]
     public void AnchorTopLeftForZoom_KeepsPointerPixelFixed()

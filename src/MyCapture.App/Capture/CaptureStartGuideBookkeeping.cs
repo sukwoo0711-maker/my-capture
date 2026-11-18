@@ -5,8 +5,8 @@ namespace MyCapture.App.Capture;
 
 /// <summary>
 /// Decides, once per capture selector, whether it opens with the start guide, and persists the count
-/// the way the Store rating bookkeeping is persisted: later, when the shell is idle, and never before
-/// a first run's welcome card has created the settings file.
+/// later, through the shell's selector-aware idle scheduler, and never before a first run's welcome
+/// card has created the settings file. Claims themselves remain synchronous and in memory.
 /// </summary>
 internal sealed class CaptureStartGuideBookkeeping(
     Func<AppSettings?> current,

@@ -7,6 +7,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Diagnostics;
+using MyCapture.Core.Localization;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -42,9 +43,7 @@ public sealed class LaunchVisibilityEvidenceTests(ITestOutputHelper output)
             Assert.NotEqual(IntPtr.Zero, label);
             var text = new StringBuilder(256);
             Assert.True(GetWindowText(label, text, text.Capacity) > 0);
-            Assert.Equal(secondary
-                ? "MyCapture가 시작하는 중입니다.\r\n잠시 뒤 라이브러리가 열립니다."
-                : "MyCapture 시작 중", text.ToString());
+            Assert.Equal(NativeLaunchSurface.MessageFor(secondary, UiText.Culture), text.ToString());
             IntPtr fontHandle = SendMessage(label, 0x0031, IntPtr.Zero, IntPtr.Zero); // WM_GETFONT
             Assert.NotEqual(IntPtr.Zero, fontHandle);
             Assert.True(GetObject(fontHandle, Marshal.SizeOf<LogFont>(), out LogFont font) > 0);

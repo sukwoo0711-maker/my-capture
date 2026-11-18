@@ -26,6 +26,8 @@ internal sealed partial class PinTranslationService
             : ([], null);
         if (blocks.Count == 0)
         {
+            if (recognized.Lines.Any(line => line.IsCodePayload))
+                return await TranslatePayloadDocumentAsync(recognized, picture, cancellationToken).ConfigureAwait(false);
             string text = OcrExtractionAnalyzer.Analyze(recognized).Text(joinLines: false);
             PinContent snapshot = PinContent.FromImage(image, picture.SourcePageUrl, picture.Provenance)
                 with { PendingProvenance = picture.PendingProvenance };
@@ -68,10 +70,14 @@ internal sealed partial class PinTranslationService
         CancellationToken preparingToken = preparing.Token;
         Task<PinOverlayPreparation> preparation = StaThreadTask.RunAsync(() => PinTranslationOverlay.Prepare(image, blocks,
             index => counts[index] > 0, preparingToken, pixels), "MyCapture translated picture layout");
+        // With a pin to show the change, blocks are placed as soon as their sentences are in; the final placement below
+        // does not depend on it.
+        RevealFeed? feed = Reveal is { } reveal ? new RevealFeed(this, reveal, blocks, counts, units, originalUnits, preparation, cancellationToken) : null;
         bool prepared = false;
         try
         {
-            IReadOnlyList<TranslatedText> translated = await TranslateUnitsAsync(units, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<TranslatedText> translated = await TranslateUnitsAsync(units, cancellationToken, feed).ConfigureAwait(false);
+            if (feed is not null) await feed.StopAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (translated.Count != units.Count)
                 throw new InvalidOperationException("The translator returned an incomplete pin result.");
@@ -107,26 +113,49 @@ internal sealed partial class PinTranslationService
             prepared = true;
             // Placement measures text away from the UI thread. It records a frozen layer, not a bitmap: the pin
             // draws it over the source picture, and the document view renders when it is first opened.
+            List<PinOverlayBlockLayer>? blockLayers = feed is null ? null : [];
             PinOverlayComposition composed = await StaThreadTask.RunAsync(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return PinTranslationOverlay.Compose(layout, overlays,
                     observeDecision: (block, decision) => observeDecision?.Invoke(block,
-                        decision == "all-rejected" && ineligible.Contains(block) ? "not-eligible" : decision));
+                        decision == "all-rejected" && ineligible.Contains(block) ? "not-eligible" : decision),
+                    observeBlockLayer: blockLayers is null ? null : blockLayers.Add);
             }, "MyCapture translated picture render").ConfigureAwait(false);
             var document = new Lazy<PinContent>(() => PinContent.FromText(ClipboardTextRenderer.RenderTranslation(output), output,
                 false, picture.Provenance) with { BorderlessText = true, PendingProvenance = picture.PendingProvenance });
             return new PinTranslationResult(PinContent.FromTranslationOverlay(composed, output, picture),
-                needsReview || composed.NeedsReview, document);
+                needsReview || composed.NeedsReview, document) { BlockLayers = blockLayers };
         }
         finally
         {
+            feed?.Abandon();
             if (!prepared)
             {
                 preparing.Cancel();
                 ReleaseWhenPrepared(preparation);
             }
         }
+    }
+
+    private Task<PinTranslationResult?> TranslatePayloadDocumentAsync(OcrResult recognized, PinContent picture,
+        CancellationToken token)
+    {
+        var pieces = new List<PlanPiece>();
+        foreach (OcrLine line in recognized.Lines)
+        {
+            if (pieces.Count > 0) pieces.Add(new("\n"));
+            if (line.IsCodePayload) pieces.Add(new(line.Text));
+            else
+            {
+                string repaired = OcrLatinTextRepair.Repair(line.Text);
+                pieces.Add(new(line.Text, PlanKind.Prose, PinScript.IsTranslatable(repaired, Direction), repaired));
+            }
+        }
+        var plan = new PinTranslationPlan(PinTextFormat.Prose, pieces);
+        PinContent template = PinContent.FromText(picture.Image, plan.Original, false, picture.Provenance)
+            with { PendingProvenance = picture.PendingProvenance };
+        return plan.HasTranslatable ? TranslatePlanAsync(plan, template, token) : Task.FromResult<PinTranslationResult?>(null);
     }
 
     /// <summary>A preparation abandoned by a failed or cancelled translation releases its pixels when it ends.</summary>

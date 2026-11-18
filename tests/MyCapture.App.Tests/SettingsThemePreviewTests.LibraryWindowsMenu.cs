@@ -75,11 +75,14 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(string.Empty, statuses.Last());
                     Assert.False(window.IsDetailsPaneOpen);
                     Assert.Equal(other.Id, Assert.Single(fixture.ViewModel.Selection.SelectedIds));
-                    Assert.Equal(UiText.Format("Source.BadgeOpen", source.BadgeText), AutomationProperties.GetName(badge));
+                    Assert.Equal(UiText.Format("Source.BadgeOpen", source.BadgeText)
+                        + (source.IsAppOnly ? Environment.NewLine + UiText.Get("Source.AppOnly") : string.Empty),
+                        AutomationProperties.GetName(badge));
                     Assert.NotNull(GallerySourceBadge.EnsureMenu(badge));
                 }
-                Assert.Equal("출처 열기: Notepad", AutomationProperties.GetName(badge));
-                Assert.Equal("출처 열기: Notepad", ((TextBlock)((ToolTip)badge.ToolTip).Content).Text);
+                string appOnlyText = "출처 열기: Notepad" + Environment.NewLine + "앱만 기록됨, 문서·주소 없음";
+                Assert.Equal(appOnlyText, AutomationProperties.GetName(badge));
+                Assert.Equal(appOnlyText, ((TextBlock)((ToolTip)badge.ToolTip).Content).Text);
 
                 // Enter/Space remain the standard Button activation path: neither the badge's
                 // preview handler nor the library's card shortcut handler consumes these keys.
@@ -122,7 +125,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(before, launched.Count);
                 Assert.True(window.IsDetailsPaneOpen);
                 Assert.Equal(tile.Id, Assert.Single(fixture.ViewModel.Selection.SelectedIds));
-                Assert.Equal("출처 상세: Notepad", AutomationProperties.GetName(badge));
+                Assert.Equal("출처 상세: Notepad" + Environment.NewLine + "앱만 기록됨, 문서·주소 없음", AutomationProperties.GetName(badge));
 
                 // A missing document reports the failure and reveals details, without launching a file.
                 window.SetDetailsPaneOpen(false);
@@ -141,7 +144,9 @@ public sealed partial class SettingsThemePreviewTests
 
                 // A double-click on the actual glyph is inside the badge. Neither the preview
                 // handler nor the card's handler may begin a re-edit.
-                var glyph = Assert.IsType<TextBlock>(badge.Content);
+                // The badge content holds the glyph and the app icon that replaces it once read.
+                var glyph = Assert.IsType<TextBlock>(Assert.IsType<Grid>(badge.Content).Children.OfType<TextBlock>()
+                    .Single(child => child.Name == SourceAppIcon.GlyphName));
                 badge.ApplyTemplate();
                 LayoutEvidence(card);
                 Assert.Same(card, ItemsControl.ContainerFromElement(rows, glyph));

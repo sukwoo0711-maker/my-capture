@@ -348,7 +348,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         }
 
         dc.DrawRoundedRectangle(_background, _gridPen, new Rect(0, 0, width, height), 6, 6);
-        if (IsKeyboardFocused)
+        if (IsKeyboardFocused && KeyboardFocusCue.GetIsVisible(this))
         {
             dc.DrawRoundedRectangle(null, _playheadPen, new Rect(1, 1, width - 2, height - 2), 6, 6);
         }

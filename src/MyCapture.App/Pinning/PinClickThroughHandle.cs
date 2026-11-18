@@ -23,13 +23,16 @@ internal sealed class PinClickThroughHandle : Window
     private readonly DispatcherTimer _hoverTimer;
     private readonly PinClickThroughHint _hint;
     private readonly Func<string> _readShortcut;
+    private readonly IPinAnchor _pin;
     private bool _placing;
     private bool _introVisible;
     private bool _hintClosed;
 
-    internal PinClickThroughHandle(PinWindow owner, Func<string> readShortcut)
+    internal PinClickThroughHandle(IPinAnchor owner, Func<string> readShortcut)
     {
-        Owner = owner;
+        _pin = owner;
+        // The window that presents the pin owns the handle: the WPF window, or a native pin's HWND.
+        owner.AttachOwned(this);
         _readShortcut = readShortcut;
         Configure(this);
         Width = Height = Diameter;
@@ -60,7 +63,8 @@ internal sealed class PinClickThroughHandle : Window
         AutomationProperties.SetName(RecoveryButton, Title);
         RecoveryButton.Click += (_, _) => DisableRequested?.Invoke();
         // Owned by the pin as well: WPF rejects an owner that has not been shown yet.
-        _hint = new PinClickThroughHint(owner);
+        _hint = new PinClickThroughHint(null);
+        owner.AttachOwned(_hint);
         _hintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         _hintTimer.Tick += (_, _) => { _hintTimer.Stop(); _introVisible = false; _hint.Hide(); };
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
@@ -77,6 +81,7 @@ internal sealed class PinClickThroughHandle : Window
         SourceInitialized += (_, _) =>
         {
             ConfigureHandle(this, clickThrough: false);
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             IsCaptureExcluded = ApplyCaptureExclusion(this);
             ApplyRoundRegion();
         };
@@ -183,18 +188,19 @@ internal sealed class PinClickThroughHandle : Window
 
     internal void Place()
     {
-        if (_placing || Owner is not PinWindow pin || pin.IsClosed) return;
+        IPinAnchor pin = _pin;
+        if (_placing || pin.IsClosed) return;
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero) return;
-        var (left, top, right, bottom) = pin.PhysicalBounds;
-        if (right <= left || bottom <= top) return;
+        RectD bounds = pin.AnchorBounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return;
         _placing = true;
         try
         {
-            double scale = VisualTreeHelper.GetDpi(pin).DpiScaleX;
+            double scale = pin.AnchorScale;
             // MonitorFromWindow selects the intersecting monitor (largest overlap when spanning).
-            RectD work = pin.ReadWorkArea(new WindowInteropHelper(pin).Handle);
-            RectD target = Placement(new RectD(left, top, right - left, bottom - top), work, scale);
+            RectD work = pin.ReadAnchorWorkArea();
+            RectD target = Placement(bounds, work, scale);
             // Move preserves hidden state and never activates. WPF owns DIP sizing across monitors.
             PhysicalWindowPositioner.Move(hwnd, target);
             if (_hint.IsVisible)
@@ -257,9 +263,9 @@ internal sealed class PinClickThroughHandle : Window
 /// <summary>Shared capture-excluded first-use/hover text, with cross-process click-through in layered mode.</summary>
 internal sealed class PinClickThroughHint : Window
 {
-    internal PinClickThroughHint(Window owner)
+    internal PinClickThroughHint(Window? owner)
     {
-        Owner = owner;
+        if (owner is not null) Owner = owner;
         PinClickThroughHandle.Configure(this);
         SizeToContent = SizeToContent.WidthAndHeight;
         Text = new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, MaxWidth = 240 };
@@ -272,6 +278,7 @@ internal sealed class PinClickThroughHint : Window
         SourceInitialized += (_, _) =>
         {
             PinClickThroughHandle.ConfigureHandle(this, clickThrough: true);
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
             IsCaptureExcluded = PinClickThroughHandle.ApplyCaptureExclusion(this);
             if (!AllowsTransparency)
                 HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(PassiveHitTest);

@@ -155,7 +155,7 @@ public sealed class BrowserPageUrlServiceTests
 
     [Theory]
     [InlineData("javascript:alert(1)")]
-    [InlineData("file:///C:/private.txt")]
+    [InlineData("file://user@server/share/private.txt")]
     [InlineData("data:text/html,page")]
     [InlineData("ms-settings:display")]
     [InlineData("https://user:password@example.com/")]
@@ -163,6 +163,20 @@ public sealed class BrowserPageUrlServiceTests
     [InlineData("https://")]
     public void UnsafeOrIncompleteDocumentUrlsAreNotReturned(string value) =>
         Assert.Null(Find(new Node(children: [Document(value, "document")])));
+
+    /// <summary>
+    /// A local file the browser shows (a PDF opened from disk) is the window's document: it is kept as a
+    /// canonical file address, and becomes the source's document path, never its page address.
+    /// </summary>
+    [Fact]
+    public void ALocalFileDocumentIsReturnedAsADocumentNotAPage()
+    {
+        BrowserDocumentValue found = Find(new Node(children: [Document("file:///C:/Work/My%20Report.pdf", "document")]))!;
+        Assert.Equal("file:///C:/Work/My%20Report.pdf", found.Url);
+        var snapshot = new BrowserDocumentSnapshot(1, "My Report.pdf", "document", found.Url);
+        Assert.Empty(snapshot.PageUrl);
+        Assert.Equal(@"C:\Work\My Report.pdf", snapshot.LocalFilePath);
+    }
 
     [Fact]
     public void UnsupportedOuterDocument_DoesNotFallBackToAnIframe()

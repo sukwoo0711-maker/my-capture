@@ -96,8 +96,10 @@ public sealed class SettingsStore
 
             // A missing file is a new installation and starts from the new-install defaults.
             // An unreadable existing file belongs to an existing user, whose legacy defaults
-            // (and so whose global shortcuts) stay exactly as before.
+            // (and so whose global shortcuts) stay as before, except the library limits: a damaged
+            // file must not turn on the earlier seven-day expiry over captures the user was keeping.
             settings = existed ? new AppSettings() : NewInstallDefaults.Create();
+            if (existed) NewInstallDefaults.ApplyLibraryRetention(settings.Queue);
             settings.General.IsFirstRun = !existed;
         }
         else if (TryDeserialize(text, out AppSettings? parsed) && parsed is not null)
@@ -111,6 +113,7 @@ public sealed class SettingsStore
             warnings.Add(UiText.Get("Text_1E94B43DC922"));
             _log.LogWarning("Settings text passed validation but failed to deserialize; using defaults");
             settings = new AppSettings();
+            NewInstallDefaults.ApplyLibraryRetention(settings.Queue);
         }
 
         LastLoadMigratedUnsafeHotkeys = Sanitize(settings, warnings);
@@ -343,11 +346,9 @@ public sealed class SettingsStore
         s.Queue.MaxItems = ClampWithWarning(
             s.Queue.MaxItems, 10, 5000, nameof(QueueSettings.MaxItems), warnings);
 
-        // 128 MiB floor: a single 4K PNG can exceed 10 MiB, so a smaller cap would
-        // evict almost immediately and make the queue useless.
-        s.Queue.MaxBytes = ClampWithWarning(
-            s.Queue.MaxBytes, 128L * 1024 * 1024, 512L * 1024 * 1024 * 1024,
-            nameof(QueueSettings.MaxBytes), warnings);
+        // Unused by this version and absent from the settings window, so no warning names it. The clamp only
+        // keeps the value that is written back inside the range earlier versions accept after a rollback.
+        s.Queue.MaxBytes = Math.Clamp(s.Queue.MaxBytes, SettingsRanges.MaxBytes.Min, SettingsRanges.MaxBytes.Max);
 
         s.Queue.ThumbnailLongEdge = ClampWithWarning(
             s.Queue.ThumbnailLongEdge, 96, 1024, nameof(QueueSettings.ThumbnailLongEdge), warnings);
@@ -415,6 +416,14 @@ public sealed class SettingsStore
 
         s.Pin.ClosedWindowRestoreLimit = ClampWithWarning(
             s.Pin.ClosedWindowRestoreLimit, 0, 100, nameof(PinSettings.ClosedWindowRestoreLimit), warnings);
+
+        if (s.Pin.RestoreOpenPinsRevision < 1)
+        {
+            // Open-pin restore became the default for existing users too. It was off for files
+            // written before that, so turn it on once; Settings writes the marker with any later choice.
+            s.Pin.RestoreOpenPinsOnLaunch = true;
+            s.Pin.RestoreOpenPinsRevision = 1;
+        }
 
         s.Pin.ZoomStep = ClampWithWarning(
             s.Pin.ZoomStep, 0.02, 0.5, nameof(PinSettings.ZoomStep), warnings);
@@ -561,17 +570,6 @@ public sealed class SettingsStore
     private static int ClampWithWarning(int value, int min, int max, string name, List<string> warnings)
     {
         int clamped = Math.Clamp(value, min, max);
-        if (clamped != value)
-        {
-            warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));
-        }
-
-        return clamped;
-    }
-
-    private static long ClampWithWarning(long value, long min, long max, string name, List<string> warnings)
-    {
-        long clamped = Math.Clamp(value, min, max);
         if (clamped != value)
         {
             warnings.Add(UiText.Format("Text_4FC883F8F1CA", name, value, clamped));

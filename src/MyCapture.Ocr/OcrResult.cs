@@ -41,7 +41,11 @@ public sealed record OcrWord(string Text, OcrRect Bounds);
 /// <summary>
 /// A recognised line: its text and bounding box (the union of its words) plus the words.
 /// </summary>
-public sealed record OcrLine(string Text, OcrRect Bounds, IReadOnlyList<OcrWord> Words);
+public sealed record OcrLine(string Text, OcrRect Bounds, IReadOnlyList<OcrWord> Words)
+{
+    /// <summary>Exact decoded barcode content; never language-corrected or translated.</summary>
+    public bool IsCodePayload { get; init; }
+}
 
 /// <summary>
 /// An axis-aligned rectangle in image-pixel coordinates.

@@ -201,6 +201,8 @@ public sealed class PinTranslationOverlayFitSearchTests
 
     // Frozen reference from 16fc3590. This deliberately retains the sequential size and width
     // searches so the optimized search is checked against the previous selection order.
+    // 11-13: every stage that wraps at the widest allowed width then takes the narrowest width
+    // that keeps its line limit (one-pixel bisection), instead of filling the free space.
     private static PinOverlayFit? RoundTwoFit(string text, OcrRect block, double estimatedEm, int imageWidth, int imageHeight,
         IReadOnlyList<OcrRect> blockers, int sourceLineCount = 1, double? sourceLineHeight = null,
         Func<string, double, double, Size>? measureOverride = null)
@@ -232,32 +234,54 @@ public sealed class PinTranslationOverlayFitSearchTests
             return new(fitted, size, text, fitted.Width > bounds.Width + .01 || fitted.Height > bounds.Height + .01, wrapped);
         }
 
-        PinOverlayFit? fit = Attempt(initial, bounds.Width, lineAreaHeight, Math.Max(1, sourceLineCount))
-            ?? Attempt(initial, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
+        PinOverlayFit? Narrow(PinOverlayFit? wide, int lineLimit, Func<double, int, PinOverlayFit?> attempt)
+        {
+            if (wide is null || wide.Bounds.Width <= bounds.Width + .01) return wide;
+            int lines = lineLimit == int.MaxValue ? wide.RenderText.Split('\n').Length : lineLimit;
+            if (lines <= 1) return wide;
+            double low = bounds.Width, high = wide.Bounds.Width;
+            PinOverlayFit best = wide;
+            while (high - low > 1)
+            {
+                double middle = (low + high) / 2;
+                PinOverlayFit? narrower = attempt(middle, lines);
+                if (narrower is null) { low = middle; continue; }
+                best = narrower;
+                high = Math.Min(middle, narrower.Bounds.Width);
+            }
+            return best;
+        }
+
+        int sourceLimit = Math.Max(1, sourceLineCount);
+        PinOverlayFit? fit = Attempt(initial, bounds.Width, lineAreaHeight, sourceLimit)
+            ?? Narrow(Attempt(initial, maxWidth, lineAreaHeight, sourceLimit), sourceLimit,
+                (width, lines) => Attempt(initial, width, lineAreaHeight, lines));
         if (fit is not null) return fit;
         double comfortableMinimum = Math.Max(minimum, initial * .85);
         for (double size = Math.Max(comfortableMinimum, initial * .95); ; size = Math.Max(comfortableMinimum, size * .95))
         {
-            fit = Attempt(size, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
+            fit = Narrow(Attempt(size, maxWidth, lineAreaHeight, sourceLimit), sourceLimit,
+                (width, lines) => Attempt(size, width, lineAreaHeight, lines));
             if (fit is not null) return fit;
             if (size == comfortableMinimum) break;
         }
         for (double size = comfortableMinimum; ; size = Math.Max(minimum, size * .9))
         {
-            fit = Attempt(size, maxWidth, lineAreaHeight, int.MaxValue);
+            fit = Narrow(Attempt(size, maxWidth, lineAreaHeight, int.MaxValue), int.MaxValue,
+                (width, lines) => Attempt(size, width, lineAreaHeight, lines));
             if (fit is not null) return fit;
             if (size == minimum) break;
         }
-        PinOverlayFit? GrowDown(double width)
+        PinOverlayFit? GrowDown(double width, int lineLimit = int.MaxValue)
         {
             double bottom = imageHeight;
             foreach (OcrRect obstacle in blockers)
                 if (obstacle.X < bounds.X + width + padding && obstacle.Right > bounds.X - padding
                     && obstacle.Bottom > bounds.Y && obstacle.Y >= bounds.Bottom - .01)
                     bottom = Math.Min(bottom, obstacle.Y - padding * 2);
-            return Attempt(minimum, width, Math.Max(bounds.Height, bottom - bounds.Y), int.MaxValue);
+            return Attempt(minimum, width, Math.Max(bounds.Height, bottom - bounds.Y), lineLimit);
         }
-        fit = GrowDown(maxWidth);
+        fit = Narrow(GrowDown(maxWidth), int.MaxValue, GrowDown);
         if (fit is not null) return fit;
         for (double width = bounds.Width; width < maxWidth; width += 8)
         {

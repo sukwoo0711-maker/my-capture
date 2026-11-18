@@ -33,7 +33,8 @@ public sealed class HotkeyRecorder : StackPanel
 
     public HotkeyRecorder()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var row = new WrapPanel { Orientation = Orientation.Horizontal };
+        _record.SetResourceReference(FrameworkElement.StyleProperty, "Button.InputField");
         _record.ToolTip = UiText.Get("SettingsUx_RecordHotkeyTip");
         row.Children.Add(_record);
         foreach ((string key, Action action) in new[]
@@ -147,6 +148,7 @@ public sealed class HotkeyRecorder : StackPanel
     {
         KoreanWordWrap.Show(_conflict, message);
         bool problem = message.Length > 0;
+        InputFieldBorder.SetIsInvalid(_record, problem);
         _conflict.Visibility = problem ? Visibility.Visible : Visibility.Collapsed;
         // As an invalid number field in the same window does, the recorder's outline turns State.Danger.
         if (problem) _record.SetResourceReference(Control.BorderBrushProperty, "State.Danger");

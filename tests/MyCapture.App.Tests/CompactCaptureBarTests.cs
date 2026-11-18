@@ -128,13 +128,18 @@ public sealed class CompactCaptureBarTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void ModesExposeOnlyAvailableCommandsWithinCompactWidthAndUseNeutralSelection(string culture) => StaTestHost.Run(() =>
+    public void ModesExposeOnlyAvailableCommandsWithinCompactWidthAndFillOnlyTheChosenModeWithTheAccent(string culture) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage(culture);
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
         {
             var bar = new CaptureModeBar();
             bar.ApplyPalette(CaptureGuidePalette.Create(theme, null, false));
+            // The runtime accent and its ink, as the application's theme provides them.
+            var accent = new SolidColorBrush(Color.FromRgb(0xC9, 0x35, 0x2C));
+            var onAccent = new SolidColorBrush(Colors.White);
+            bar.Resources["Accent.Default"] = accent;
+            bar.Resources["Text.OnAccent"] = onAccent;
             bar.Configure(true, true, true, otherActions: true);
             bar.ShowMode(CaptureSelectorMode.Capture);
             bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -154,30 +159,37 @@ public sealed class CompactCaptureBarTests
                 Assert.Equal(UiText.Get(nameKey), AutomationProperties.GetName(command));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(command)));
                 Assert.NotNull(command.ToolTip);
-                Assert.Equal(36, command.ActualWidth);
-                Assert.Equal(36, command.ActualHeight);
+                Assert.Equal(CaptureModeBar.ButtonSize, command.ActualWidth);
+                Assert.Equal(CaptureModeBar.ButtonSize, command.ActualHeight);
             }
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(bar.TextButton));
             Assert.Equal("C", AutomationProperties.GetAcceleratorKey(bar.ColorButton));
-            foreach (ButtonBase command in new ButtonBase[] { bar.TextButton, bar.ColorButton, bar.CancelButton })
+            Assert.Equal("S", AutomationProperties.GetAcceleratorKey(bar.ScrollButton));
+            Assert.Equal("D", AutomationProperties.GetAcceleratorKey(bar.DelayButton));
+            foreach (ButtonBase command in new ButtonBase[] { bar.TextButton, bar.ColorButton, bar.ScrollButton, bar.DelayButton, bar.CancelButton })
             {
                 string key = AutomationProperties.GetAcceleratorKey(command);
                 Assert.EndsWith($"({key})", AutomationProperties.GetHelpText(command), StringComparison.Ordinal);
                 Assert.EndsWith($"({key})", Assert.IsType<string>(command.ToolTip), StringComparison.Ordinal);
             }
             Assert.Equal(string.Empty, AutomationProperties.GetAcceleratorKey(bar.CaptureButton));
-            foreach (RadioButton selected in new[] { bar.CaptureKindButton, bar.CaptureButton })
-            {
-                selected.ApplyTemplate();
-                var wash = Assert.IsType<Border>(selected.Template.FindName("CheckedLayer", selected));
-                var underline = Assert.IsType<Border>(selected.Template.FindName("SelectedUnderline", selected));
-                Assert.Same(bar.Resources[CaptureModeBar.HoverKey], wash.Background);
-                Assert.NotSame(bar.Resources[CaptureModeBar.AccentKey], wash.Background);
-                Assert.Same(bar.Resources["Text.Primary"], underline.Background);
-                Assert.Equal(2, underline.Height);
-                Assert.Equal(1, underline.Opacity);
-                Assert.Same(bar.Resources[CaptureModeBar.TextKey], selected.Foreground);
-            }
+            // The chosen mode is the one accent fill, with on-accent ink and no underline.
+            bar.CaptureButton.ApplyTemplate();
+            var chosen = Assert.IsType<Border>(bar.CaptureButton.Template.FindName("CheckedLayer", bar.CaptureButton));
+            Assert.Same(accent, chosen.Background);
+            Assert.Equal(1, chosen.Opacity);
+            Assert.Same(onAccent, bar.CaptureButton.Foreground);
+            Assert.Null(bar.CaptureButton.Template.FindName("SelectedUnderline", bar.CaptureButton));
+            // The capture/record switch is a state, not the mode: a neutral key-cap wash and hairline.
+            bar.CaptureKindButton.ApplyTemplate();
+            var kind = Assert.IsType<Border>(bar.CaptureKindButton.Template.FindName("CheckedLayer", bar.CaptureKindButton));
+            Assert.Same(bar.Resources[CaptureModeBar.HoverKey], kind.Background);
+            Assert.Same(bar.Resources[CaptureModeBar.HairlineKey], kind.BorderBrush);
+            Assert.NotSame(accent, kind.Background);
+            Assert.Same(bar.Resources[CaptureModeBar.TextKey], bar.CaptureKindButton.Foreground);
+            Assert.Null(bar.CaptureKindButton.Template.FindName("SelectedUnderline", bar.CaptureKindButton));
+            // Unchosen modes keep the guide text colour on the bar's surface.
+            Assert.Same(bar.Resources[CaptureModeBar.TextKey], bar.WindowButton.Foreground);
 
             bar.Configure(false, false, false, otherActions: true, recording: true);
             bar.ShowMode(CaptureSelectorMode.Capture);
@@ -276,15 +288,20 @@ public sealed class CompactCaptureBarTests
             if (compact)
             {
                 var requests = new List<CaptureSelectorRequest>();
+                var modes = new List<CaptureSelectorMode>();
+                var delays = new List<int>();
                 bar.ActionRequested += requests.Add;
+                bar.ModeRequested += modes.Add;
+                bar.DelayRequested += delays.Add;
                 ContextMenu menu = bar.CreateMoreMenu();
                 MenuItem scroll = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("Text_4DBA30197C0A"));
                 MenuItem delay = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("CaptureBar_Delay"));
                 scroll.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                ((MenuItem)delay.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                Assert.Equal(CaptureSelectorAction.ScrollingCapture, requests[0].Action);
-                Assert.Equal(CaptureSelectorAction.DelayedCapture, requests[1].Action);
-                Assert.Equal(CaptureModeBar.DelayChoices[0], requests[1].DelaySeconds);
+                ((MenuItem)delay.Items[1]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                // The compact menu switches to scroll mode and arms the delay like the direct buttons.
+                Assert.Empty(requests);
+                Assert.Equal([CaptureSelectorMode.Scroll], modes);
+                Assert.Equal([CaptureModeBar.DelayChoices[1]], delays);
 
                 // A wider constraint restores the direct buttons and the original more menu.
                 bar.ConstrainWidth(768);

@@ -111,7 +111,7 @@ internal sealed partial class AnnotationEditorControl
                     _inspectorIntrinsicEnvironment = environment;
                     _inspectorIntrinsicSizes = sizes.All(size => size.Width < width) ? sizes : null;
                 }
-                _desiredInspectorHeight = MeasureInspectorConfigurations(width, sizes) + 9;
+                _desiredInspectorHeight = MeasureInspectorRow(sizes) + 8;
             }
             double cap = double.IsFinite(constraint.Height) ? Math.Max(48, constraint.Height * 0.36) : _inspectorPanel.MaxHeight;
             _stableInspectorHeight = Math.Max(48, Math.Min(cap, _desiredInspectorHeight));
@@ -152,45 +152,13 @@ internal sealed partial class AnnotationEditorControl
         return sizes;
     }
 
-    private static double MeasureInspectorConfigurations(double width, Size[] sizes)
+    private static double MeasureInspectorRow(Size[] sizes)
     {
-        // Reserve space for tool defaults and homogeneous selections only. Selecting
-        // several items of one type exposes the same groups as selecting one item.
-        // Mixed selections retain their full group union, but wrap and scroll inside
-        // this fixed budget so everyday states keep their canvas space.
-        int[][] selections =
-        [
-            [0, 5, 6, 7, 11], // text
-            [0, 4, 11], // number: the badge size is in the step group, not the text font group
-            [0, 1, 11], [0, 1, 12, 11], [0, 1, 2, 3, 11], // pen/line/shape
-            [8, 11], // blur
-            [11], // image
-        ];
-        int[][] defaults = [[], [0, 1], [0, 1, 12], [0, 1, 2, 3], [0, 5, 6, 7], [0, 4], [8], [9]];
-        double maximum = WrappedHeight([10]);
-        foreach (int[] configuration in defaults) maximum = Math.Max(maximum, WrappedHeight(configuration));
-        foreach (int[] configuration in selections) maximum = Math.Max(maximum, WrappedHeight(configuration));
-        // Entering a drawing tool clears the selection. Step can then select its newly
-        // created badge; mosaic switches to Select before selecting its inserted image.
-        maximum = Math.Max(maximum, WrappedHeight([0, 4, 11]));
-        return maximum;
-
-        double WrappedHeight(int[] indices)
-        {
-            double lineWidth = 0, lineHeight = 0, height = 0;
-            foreach (int index in indices)
-            {
-                Size size = sizes[index];
-                if (lineWidth > 0 && lineWidth + size.Width > width)
-                {
-                    height += lineHeight;
-                    lineWidth = lineHeight = 0;
-                }
-                lineWidth += size.Width;
-                lineHeight = Math.Max(lineHeight, size.Height);
-            }
-            return height + lineHeight;
-        }
+        // Reserve one intrinsic row for every tool, including crop validation. At narrow
+        // widths or with a mixed selection, further rows remain reachable inside the same
+        // scroll viewer. Their count never pushes the source down when tools change.
+        // Measuring the row keeps larger inherited typography and DPI changes accessible.
+        return sizes.Max(size => size.Height);
     }
 
     private IDisposable BatchInspectorUpdate()

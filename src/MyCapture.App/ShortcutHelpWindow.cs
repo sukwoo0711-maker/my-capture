@@ -107,8 +107,12 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy")),
-                    ("Text_976A6C92B870", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy") + " / " + UiText.Get("Text_C7011B8D345C")),
+                    ("Text_976A6C92B870", UiText.Get("Text_C7011B8D345C")),
                     ("Pin_SelectText", ShortcutCatalog.Hints(ShortcutScope.Pin, "SelectText")),
+                    ("Pin_CollapseToggle", UiText.Get("Pin_CollapseGesture")),
+                    ("Pin_ExpandCollapsed", UiText.Get("Pin_DoubleClickGesture")),
+                    ("Pin_SnapBypass", UiText.Get("Pin_ShiftDragGesture")),
+                    ("Pin_ZoomStopHelp", UiText.Get("Pin_ZoomGesture")),
                     ("QuickAccess.Save", ShortcutCatalog.Hints(ShortcutScope.Pin, "Save")), ("Dialog.Close", ShortcutCatalog.Hints(ShortcutScope.Pin, "Close"))]),
                 ("Help.QuickAccess", CatalogRows(ShortcutScope.QuickAccess)),
             ];
@@ -179,7 +183,7 @@ internal sealed class ShortcutHelpWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         // Semibold like a tab row, whose text takes the selected tab's weight.
-        var title = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold }, label);
+        var title = KoreanWordWrap.Show(MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { TextWrapping = TextWrapping.Wrap, }), label);
         var tag = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) }, category);
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

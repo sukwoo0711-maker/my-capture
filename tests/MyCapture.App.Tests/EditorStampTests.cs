@@ -50,7 +50,9 @@ public sealed class EditorStampTests
             Assert.Equal(DefaultRect, item.Rect);
             Assert.Equal(400, item.SourceWidth);
             Assert.Equal(200, item.SourceHeight);
-            Assert.Equal(1.0, item.Opacity);
+            // The default blends into the page at the page strength (was: lying on top at 100 %).
+            Assert.Equal(ImageBlend.IntoPage, item.Blend);
+            Assert.Equal(StampSettings.DefaultPageOpacityPercent / 100.0, item.Opacity, 6);
             Assert.Equal(0, item.RotationDegrees);
             Assert.Same(item, controller.Selected);
             Assert.Equal(EditorTool.Select, controller.Tool);
@@ -130,7 +132,7 @@ public sealed class EditorStampTests
             {
                 Stamp = new StampSettings
                 {
-                    Anchor = StampAnchor.TopLeft, MarginX = 28, MarginY = 20, WidthFraction = 0.25, OpacityPercent = 70,
+                    Anchor = StampAnchor.TopLeft, MarginX = 28, MarginY = 20, WidthFraction = 0.25, OpacityPercent = 70, Blend = ImageBlend.Normal,
                 },
             };
             using var stamp = new StampScope(Path.Combine(root, "stamp"), defaults);
@@ -401,7 +403,7 @@ public sealed class EditorStampTests
                 Assert.True(openingRaised);
                 Assert.Same(button, button.ContextMenu.PlacementTarget);
                 Assert.Same(host.Editor.StampMenu, button.ContextMenu);
-                Assert.Equal(4, button.ContextMenu.Items.OfType<MenuItem>().Count());
+                Assert.Equal(5, button.ContextMenu.Items.OfType<MenuItem>().Count());
             }
             finally { button.ContextMenu.IsOpen = false; }
         }
@@ -409,10 +411,11 @@ public sealed class EditorStampTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "워터마크 추가", "워터마크 이미지 변경…", "불투명도", "등록 이미지 해제", "100%", "70%", "50%", "30%")]
-    [InlineData("en-US", "Add watermark", "Change watermark image…", "Opacity", "Remove registered image", "100%", "70%", "50%", "30%")]
-    public void TheMenuOffersPlaceChangeOpacityAndRemoveInBothLanguages(
-        string language, string place, string change, string opacity, string remove, string o100, string o70, string o50, string o30) => StaTestHost.Run(() =>
+    [InlineData("ko-KR", "워터마크 추가", "워터마크 이미지 변경…", "불투명도", "표시 방식", "등록 이미지 해제", "100%", "70%", "50%", "30%", "20%", "바탕에 스밈", "위에 겹침")]
+    [InlineData("en-US", "Add watermark", "Change watermark image…", "Opacity", "Appearance", "Remove registered image", "100%", "70%", "50%", "30%", "20%", "Blend into page", "Lay on top")]
+    public void TheMenuOffersPlaceChangeOpacityAppearanceAndRemoveInBothLanguages(
+        string language, string place, string change, string opacity, string appearance, string remove,
+        string o100, string o70, string o50, string o30, string o20, string intoPage, string over) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
         string root = OwnedTestDirectory.Create("mc-stamp-menu-");
@@ -425,9 +428,10 @@ public sealed class EditorStampTests
             ContextMenu menu = host.Editor.EnsureStampMenu();
 
             MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-            Assert.Equal([place, change, opacity, remove], items.Select(item => item.Header).ToArray());
+            Assert.Equal([place, change, opacity, appearance, remove], items.Select(item => item.Header).ToArray());
             Assert.Equal("S", items[0].InputGestureText);
-            Assert.Equal([o100, o70, o50, o30], items[2].Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
+            Assert.Equal([o100, o70, o50, o30, o20], items[2].Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
+            Assert.Equal([intoPage, over], items[3].Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
             Assert.Same(menu, host.Editor.EnsureStampMenu());
         }
         finally { OwnedTestDirectory.Delete(root); }
@@ -439,7 +443,7 @@ public sealed class EditorStampTests
         string root = OwnedTestDirectory.Create("mc-stamp-menu-state-");
         try
         {
-            var defaults = new AnnotationDefaults { Stamp = new StampSettings { OpacityPercent = 50 } };
+            var defaults = new AnnotationDefaults { Stamp = new StampSettings { OpacityPercent = 50, Blend = ImageBlend.Normal } };
             using var stamp = new StampScope(Path.Combine(root, "stamp"), defaults);
             using var host = EditorWindowHost.Create();
             ContextMenu menu = host.Editor.EnsureStampMenu();
@@ -448,13 +452,13 @@ public sealed class EditorStampTests
 
             menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
             Assert.False(remove.IsEnabled);
-            Assert.Equal([false, false, true, false], opacities.Select(item => item.IsChecked).ToArray());
+            Assert.Equal([false, false, true, false, false], opacities.Select(item => item.IsChecked).ToArray());
 
             stamp.Register(root, 100, 50);
             stamp.Defaults.Stamp.OpacityPercent = 100;
             menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
             Assert.True(remove.IsEnabled);
-            Assert.Equal([true, false, false, false], opacities.Select(item => item.IsChecked).ToArray());
+            Assert.Equal([true, false, false, false, false], opacities.Select(item => item.IsChecked).ToArray());
         }
         finally { OwnedTestDirectory.Delete(root); }
     });
@@ -508,7 +512,7 @@ public sealed class EditorStampTests
             int pickerCalls = 0;
             host.Editor.PickStampImagePath = () => { pickerCalls++; return null; };
 
-            ClickMenu(host.Editor, 3);
+            ClickMenu(host.Editor, 4);
 
             Assert.Null(StampStore.RegisteredPath(stampFolder));
             Assert.Single(controller.Document.Items);
@@ -602,7 +606,7 @@ public sealed class EditorStampTests
             using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 if (unreadable) Run(host.Editor.PlaceStampAsync());
-                else ClickMenu(host.Editor, 3);
+                else ClickMenu(host.Editor, 4);
 
                 Assert.Equal(path, StampStore.RegisteredPath(stamp.Folder));
                 Assert.Equal(before, File.ReadAllBytes(path));
@@ -623,7 +627,7 @@ public sealed class EditorStampTests
         string root = OwnedTestDirectory.Create("mc-stamp-opacity-");
         try
         {
-            using var stamp = new StampScope(Path.Combine(root, "stamp"));
+            using var stamp = new StampScope(Path.Combine(root, "stamp"), OverDefaults());
             stamp.Register(root, 400, 200);
             using var host = EditorWindowHost.Create();
             AnnotationEditorController controller = Controller(host.Editor);
@@ -656,7 +660,7 @@ public sealed class EditorStampTests
         string root = OwnedTestDirectory.Create("mc-stamp-opacity-plain-");
         try
         {
-            using var stamp = new StampScope(Path.Combine(root, "stamp"));
+            using var stamp = new StampScope(Path.Combine(root, "stamp"), OverDefaults());
             stamp.Register(root, 400, 200);
             string plain = Path.Combine(root, "plain.png");
             ImageCodec.SavePng(Solid(100, 100, 0x40), plain);
@@ -680,7 +684,7 @@ public sealed class EditorStampTests
         string root = OwnedTestDirectory.Create("mc-stamp-export-");
         try
         {
-            var defaults = new AnnotationDefaults { Stamp = new StampSettings { OpacityPercent = 50 } };
+            var defaults = new AnnotationDefaults { Stamp = new StampSettings { OpacityPercent = 50, Blend = ImageBlend.Normal } };
             using var stamp = new StampScope(Path.Combine(root, "stamp"), defaults);
             stamp.Register(root, 400, 200, value: 0x00);
             using var host = EditorWindowHost.Create(Solid(640, 360, 0xFF));
@@ -710,6 +714,123 @@ public sealed class EditorStampTests
         }
         finally { OwnedTestDirectory.Delete(root); }
     });
+
+    // ---- Blending into the page --------------------------------------------------------
+
+    [Fact]
+    public void TheDefaultStampBlendsIntoThePageAndTheSavedImageKeepsTheTextUnderIt() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        string root = OwnedTestDirectory.Create("mc-stamp-blend-");
+        try
+        {
+            using var stamp = new StampScope(Path.Combine(root, "stamp"));
+            stamp.Register(root, 400, 200, value: 0x00);
+            // White paper with one black text line through the stamp's place.
+            byte[] pixels = new byte[640 * 360 * 4];
+            Array.Fill(pixels, (byte)0xFF);
+            for (int x = 520; x < 630; x++)
+            {
+                int o = ((320 * 640) + x) * 4;
+                pixels[o] = pixels[o + 1] = pixels[o + 2] = 0;
+            }
+
+            BitmapSource page = BitmapSource.Create(640, 360, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, 640 * 4);
+            page.Freeze();
+            using var host = EditorWindowHost.Create(page);
+            AnnotationEditorControl editor = host.Editor;
+            AnnotationEditingResult? result = null;
+            editor.CommitRequested = r => { result = r; return Task.FromResult(true); };
+            Run(editor.PlaceStampAsync());
+
+            editor.ShortcutActions["Done"]();
+
+            ImageAnnotation saved = Assert.IsType<ImageAnnotation>(Assert.Single(result!.Document.Items));
+            Assert.Equal(ImageBlend.IntoPage, saved.Blend);
+            string json = result.Document.ToJson();
+            Assert.Contains("\"blend\":\"intoPage\"", json, StringComparison.Ordinal);
+            Assert.Equal(ImageBlend.IntoPage, Assert.IsType<ImageAnnotation>(Assert.Single(AnnotationDocument.TryFromJson(json)!.Items)).Blend);
+
+            var renderer = new AnnotationRenderer(AnnotationImageStore.FromDecoded(result.ImageAssetBitmaps));
+            BitmapSource flat = AnnotationFlattener.Flatten(result.SelectedBitmap, result.Document, renderer);
+            byte[] text = new byte[4];
+            flat.CopyPixels(new Int32Rect(576, 320, 1, 1), text, 4, 0);
+            byte[] paper = new byte[4];
+            flat.CopyPixels(new Int32Rect(576, 310, 1, 1), paper, 4, 0);
+            // The black line stays black; the paper around it carries the 20 % ink.
+            Assert.Equal(new byte[] { 0, 0, 0 }, text[..3]);
+            Assert.InRange(paper[0], 202, 206);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Fact]
+    public void SwitchingTheSelectedStampToLieOnTopUsesItsOwnOpacityInOneUndoStep() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        using var language = UiText.UseLanguage("ko-KR");
+        string root = OwnedTestDirectory.Create("mc-stamp-blend-switch-");
+        try
+        {
+            var defaults = new AnnotationDefaults { Stamp = new StampSettings { OpacityPercent = 70, PageOpacityPercent = 30 } };
+            using var stamp = new StampScope(Path.Combine(root, "stamp"), defaults);
+            stamp.Register(root, 400, 200);
+            using var host = EditorWindowHost.Create();
+            AnnotationEditorController controller = Controller(host.Editor);
+            Run(host.Editor.PlaceStampAsync());
+            ImageAnnotation item = Assert.IsType<ImageAnnotation>(controller.Selected);
+            Assert.Equal(ImageBlend.IntoPage, item.Blend);
+            Assert.Equal(0.3, item.Opacity, 6);
+            int undoBefore = controller.Undo.UndoCount;
+
+            ContextMenu menu = host.Editor.EnsureStampMenu();
+            MenuItem[] ways = menu.Items.OfType<MenuItem>().ElementAt(3).Items.OfType<MenuItem>().ToArray();
+            MenuItem[] opacities = menu.Items.OfType<MenuItem>().ElementAt(2).Items.OfType<MenuItem>().ToArray();
+            menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+            Assert.Equal([true, false], ways.Select(way => way.IsChecked).ToArray());
+            Assert.Equal([false, false, false, true, false], opacities.Select(o => o.IsChecked).ToArray());
+
+            ClickMenu(host.Editor, 3, subItem: 1);
+
+            Assert.Equal(ImageBlend.Normal, item.Blend);
+            Assert.Equal(0.7, item.Opacity, 6);
+            Assert.Equal(ImageBlend.Normal, stamp.Defaults.Stamp.Blend);
+            Assert.Equal(undoBefore + 1, controller.Undo.UndoCount);
+            Assert.Equal("위에 겹침", host.Editor.StatusText);
+            menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+            Assert.Equal([false, true], ways.Select(way => way.IsChecked).ToArray());
+            Assert.Equal([false, true, false, false, false], opacities.Select(o => o.IsChecked).ToArray());
+
+            // The opacity menu now changes the lying-on-top opacity only.
+            ClickMenu(host.Editor, 2, subItem: 2);
+            Assert.Equal(50, stamp.Defaults.Stamp.OpacityPercent);
+            Assert.Equal(30, stamp.Defaults.Stamp.PageOpacityPercent);
+
+            Assert.True(controller.PerformUndo());
+            Assert.True(controller.PerformUndo());
+            Assert.Equal(ImageBlend.IntoPage, item.Blend);
+            Assert.Equal(0.3, item.Opacity, 6);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Fact]
+    public void AnImageLyingOnTopIsSavedWithoutTheNewFieldAndReopensLyingOnTop()
+    {
+        var document = AnnotationDocument.CreateFor(640, 360);
+        document.Items.Add(new ImageAnnotation
+        {
+            AssetFileName = "asset-01.png", SourceWidth = 400, SourceHeight = 200, Rect = new RectD(528, 296, 96, 48), Opacity = 0.7,
+        });
+
+        string json = document.ToJson();
+        AnnotationDocument? loaded = AnnotationDocument.TryFromJson(json);
+
+        // The layer has the shape every earlier version wrote and reads.
+        Assert.DoesNotContain("blend", json, StringComparison.Ordinal);
+        Assert.Equal(ImageBlend.Normal, Assert.IsType<ImageAnnotation>(Assert.Single(loaded!.Items)).Blend);
+        Assert.Equal(ImageBlend.IntoPage, ((ImageAnnotation)new ImageAnnotation { Blend = ImageBlend.IntoPage }.Clone()).Blend);
+    }
 
     // ---- Remembering -----------------------------------------------------------------
 
@@ -958,12 +1079,15 @@ public sealed class EditorStampTests
 
     // ---- Helpers ---------------------------------------------------------------------
 
+    /// <summary>Defaults for a stamp that lies over the capture, the way every stamp did before blending.</summary>
+    private static AnnotationDefaults OverDefaults() => new() { Stamp = new StampSettings { Blend = ImageBlend.Normal } };
+
     private static DependencyObject? VisualTreeHelperParent(DependencyObject element) =>
         System.Windows.Media.VisualTreeHelper.GetParent(element);
 
     /// <summary>
-    /// Clicks a stamp menu item by position (0 place, 1 change, 2 opacity, 3 remove), or one
-    /// opacity choice by <paramref name="subItem"/>.
+    /// Clicks a stamp menu item by position (0 place, 1 change, 2 opacity, 3 appearance, 4 remove),
+    /// or one opacity or appearance choice by <paramref name="subItem"/>.
     /// </summary>
     private static void ClickMenu(AnnotationEditorControl editor, int index, int? subItem = null)
     {

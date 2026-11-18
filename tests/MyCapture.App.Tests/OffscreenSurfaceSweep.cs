@@ -223,9 +223,11 @@ internal sealed class OffscreenSurfaceSweep(Application application, Action<Offs
             Window("onboarding-" + (step?.ToString().ToLowerInvariant() ?? "consent"), welcome);
         }
         Window("annotation", new AnnotationEditorWindow(new FrozenFrame(sample, fixtures.Region, null, 0), fixtures.Region, sample,
-            initialDocument: AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight)));
+            initialDocument: AnnotationDocument.CreateFor(sample.PixelWidth, sample.PixelHeight),
+            pointerMonitor: monitor));
         Window("image-export", new ImageReductionExportDialog(sample, Path.Combine(paths.QuickSaveRoot, "review.png")));
-        Window("video", new VideoEditorWindow(fixtures.Recording, paths, fixtures.Logs, fixtures.Document));
+        Window("video", new VideoEditorWindow(fixtures.Recording, paths, fixtures.Logs, fixtures.Document,
+            pointerMonitor: monitor));
         Window("pin-code", fixtures.CodePin());
         PinWindow feedbackPin = fixtures.CodePin();
         feedbackPin.ReportCopyResult(false);

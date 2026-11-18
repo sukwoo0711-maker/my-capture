@@ -51,16 +51,16 @@ public sealed record CaptureBatchRemovalResult(int RemovedCount, int CleanupPend
 /// <para>
 /// Ordering is newest-created-first for gallery display. Eviction uses least-recent activity
 /// (<see cref="CaptureRecord.UpdatedAt"/>) so a capture the user just re-edited is not the one
-/// that disappears when its larger rendered generation crosses the byte cap.
+/// that disappears when the item cap is reached.
 /// </para>
 /// <para>
-/// Eviction is enforced on insert against two independent caps. Item count alone is
-/// not enough — 300 captures of a 4K display is several gigabytes — and a byte cap
-/// alone is not enough either, because a few hundred tiny captures should still be
-/// bounded so the gallery stays navigable.
+/// Eviction is enforced on insert against the item cap only; the image retention period removes
+/// captures by age. Total bytes never select a capture for removal: the library keeps captures by
+/// count and age and removes the oldest first, however much disk they use.
+/// <see cref="QueueSettings.MaxBytes"/> stays in the settings file for older versions and is not read here.
 /// </para>
 /// <para>
-/// Pinned records are never evicted. If pins alone exceed a cap the queue stops
+/// Pinned records are never evicted. If pins alone exceed the item cap the queue stops
 /// evicting rather than breaking the user's explicit instruction, and reports the
 /// condition so the UI can say so.
 /// </para>
@@ -134,11 +134,19 @@ public sealed partial class CaptureQueue
         .Aggregate(0L, (sum, record) => SaturatingAdd(sum, record.TotalBytes));
     public long FolderBytes => _records.Where(record => record.FolderId is not null)
         .Aggregate(0L, (sum, record) => SaturatingAdd(sum, record.TotalBytes));
-    public bool IsFolderStorageLarge => FolderBytes > _limits.MaxBytes;
 
     /// <summary>
-    /// True when pinned records plus the protected current capture exceed a configured cap,
-    /// so eviction can no longer bring the queue back within limits without data loss.
+    /// Folder size above which the library notes that folder items are never removed automatically:
+    /// 5 GiB, the storage figure new installations were shown before the byte cap was removed.
+    /// </summary>
+    public const long LargeFolderStorageBytes = 5L * 1024 * 1024 * 1024;
+
+    /// <summary>Information only: removal never looks at bytes, and folder items are never removed automatically.</summary>
+    public bool IsFolderStorageLarge => FolderBytes > LargeFolderStorageBytes;
+
+    /// <summary>
+    /// True when pinned records plus the protected current capture exceed the item cap,
+    /// so eviction can no longer bring the queue back within it without data loss.
     /// </summary>
     public bool IsOverCapacityDueToPins { get; private set; }
 
@@ -873,15 +881,13 @@ public sealed partial class CaptureQueue
         if (PrepareRemoval is not null && ScheduleAutomaticRemoval is not null)
         {
             var excluded = new HashSet<Guid>();
-            long bytes = HistoryBytes;
             int count = HistoryCount;
-            while ((count > _limits.MaxItems || bytes > _limits.MaxBytes) && excluded.Count < 10_000)
+            while (count > _limits.MaxItems && excluded.Count < 10_000)
             {
                 CaptureRecord? candidate = FindOldestUnpinned(excluded);
                 if (candidate is null) break;
                 excluded.Add(candidate.Id);
                 count--;
-                bytes = Math.Max(0, bytes - candidate.TotalBytes);
             }
             if (excluded.Count > 0) ScheduleAutomaticRemoval(excluded.ToArray(), "capacity");
             UpdatePinPressureFlag();
@@ -901,7 +907,7 @@ public sealed partial class CaptureQueue
                 break;
             }
 
-            string reason = HistoryCount > _limits.MaxItems ? "item-limit" : "byte-limit";
+            const string reason = "item-limit";
 
             if (PrepareRemoval is not null)
             {
@@ -928,31 +934,25 @@ public sealed partial class CaptureQueue
         UpdatePinPressureFlag();
     }
 
-    private bool IsOverCapacity() =>
-        HistoryCount > _limits.MaxItems || HistoryBytes > _limits.MaxBytes;
+    // Only the item count: bytes never make the library over capacity.
+    private bool IsOverCapacity() => HistoryCount > _limits.MaxItems;
 
     private void UpdatePinPressureFlag()
     {
         int pinnedCount = 0;
-        long pinnedBytes = 0;
         foreach (CaptureRecord record in _records)
         {
-            if (!record.IsPinned || record.FolderId is not null)
+            if (record.IsPinned && record.FolderId is null)
             {
-                continue;
+                pinnedCount++;
             }
-
-            pinnedCount++;
-            pinnedBytes = SaturatingAdd(pinnedBytes, record.TotalBytes);
         }
 
         int retainedCount = pinnedCount;
-        long retainedBytes = pinnedBytes;
         CaptureRecord? current = _records.FirstOrDefault(record => record.FolderId is null);
         if (current is not null && !current.IsPinned)
         {
             retainedCount++;
-            retainedBytes = SaturatingAdd(retainedBytes, current.TotalBytes);
         }
 
         // A short edit/recovery lease can defer eviction too, but it is intentionally absent
@@ -961,8 +961,7 @@ public sealed partial class CaptureQueue
         // the capture the user just made from vanishing behind older pins.
         IsOverCapacityDueToPins = IsOverCapacity()
                                   && pinnedCount > 0
-                                  && (retainedCount > _limits.MaxItems
-                                      || retainedBytes > _limits.MaxBytes);
+                                  && retainedCount > _limits.MaxItems;
     }
 
     private static long SaturatingAdd(long left, long right) =>

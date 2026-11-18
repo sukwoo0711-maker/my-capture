@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Themes;
+using MyCapture.Ocr;
 
 namespace MyCapture.App.Pinning;
 
@@ -21,6 +22,7 @@ internal sealed class PinTextSelectionView : Grid
 {
     private readonly string _original;
     private readonly bool _isCode;
+    private readonly PinCodeDocument? _code;
     private readonly int[] _characterStarts = [];
     private readonly int[] _characterEnds = [];
     private readonly PinTableSelection? _table;
@@ -49,10 +51,26 @@ internal sealed class PinTextSelectionView : Grid
     private double _zoom = 1;
     private long _wheelDelta;
 
+    internal PinTextSelectionView(OcrResult recognized, int pixelWidth, int pixelHeight)
+    {
+        _original = recognized.Text;
+        Background = Brushes.Transparent;
+        ClipToBounds = true;
+        AutomationProperties.SetName(this, UiText.Get("Pin_SelectText"));
+        CommandManager.AddPreviewCanExecuteHandler(this, OnPreviewCanExecute);
+        CommandManager.AddPreviewExecutedHandler(this, OnPreviewExecuted);
+        ImageSelection = new PinImageTextSelectionView(recognized, pixelWidth, pixelHeight);
+        BindPinContextMenu(ImageSelection);
+        Children.Add(ImageSelection);
+    }
+
+    internal PinImageTextSelectionView? ImageSelection { get; }
+
     internal PinTextSelectionView(PinContent content)
     {
         _original = content.OriginalText ?? throw new ArgumentException("The pin has no original text.", nameof(content));
         _isCode = content.TextStyle == PinTextStyle.Code;
+        _code = _isCode ? content.CodeDocument : null;
         Color background = SampleBackground(content.Image);
         _background = background;
         var backgroundBrush = new SolidColorBrush(background);
@@ -205,8 +223,8 @@ internal sealed class PinTextSelectionView : Grid
                 Background = backgroundBrush,
                 Foreground = foreground,
                 BorderThickness = new Thickness(0),
-                FontFamily = new FontFamily(_isCode ? ClipboardCodeRenderer.FontFamilyName
-                    : _original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
+                FontFamily = _isCode ? ClipboardCodeRenderer.FontFamilyFor(_code)
+                    : new FontFamily(_original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 SelectionOpacity = 1,
@@ -232,6 +250,7 @@ internal sealed class PinTextSelectionView : Grid
     {
         get
         {
+            if (ImageSelection is not null) return ImageSelection.Selection.SelectedText;
             if (_table is not null) return _table.SelectedText;
             if (MarkdownBox is { } markdown)
             {
@@ -254,7 +273,8 @@ internal sealed class PinTextSelectionView : Grid
 
     internal void FocusSelection()
     {
-        if (TextBox is not null) TextBox.Focus();
+        if (ImageSelection is not null) ImageSelection.Focus();
+        else if (TextBox is not null) TextBox.Focus();
         else if (MarkdownBox is not null) MarkdownBox.Focus();
         else TableGrid?.Focus();
     }
@@ -267,12 +287,12 @@ internal sealed class PinTextSelectionView : Grid
         {
             double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
             double paddingY = _isCode ? ClipboardCodeRenderer.VerticalPaddingDip : 20;
-            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : TypeScale.Content.PlainText) * _zoom;
+            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeFor(_code) : TypeScale.Content.PlainText) * _zoom;
             // The text padding gives back the TextBox's own inset, so the selectable text lands on
             // the picture's glyphs and a line that fits the picture does not scroll.
             double horizontal = Math.Max(0, (paddingX * _zoom) - TextBoxLayout.ContentInsetDip);
             TextBox.Padding = new Thickness(horizontal, paddingY * _zoom, horizontal, paddingY * _zoom);
-            TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightDip : 24) * _zoom);
+            TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightFor(_code) : 24) * _zoom);
         }
         if (TableGrid is not null)
         {
@@ -340,7 +360,8 @@ internal sealed class PinTextSelectionView : Grid
         if (_scrollBarPalette is { } current && current.Palette == palette && ReferenceEquals(current.Basis, basis)) return;
         var style = new Style(typeof(ScrollBar), basis);
         var colors = ThemeCatalog.ColorsFor(palette);
-        foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary" })
+        foreach (string key in new[] { "Surface.Base", "Border.Strong", "Text.Muted", "Text.Primary",
+            "Fill.ScrollThumb", "Fill.ScrollThumbHover", "Fill.ScrollThumbPressed" })
         {
             ThemeColor color = colors[key];
             var brush = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));
@@ -386,7 +407,8 @@ internal sealed class PinTextSelectionView : Grid
 
     internal void SelectAll()
     {
-        if (_table is not null && TableGrid is not null)
+        if (ImageSelection is not null) ImageSelection.SelectAll();
+        else if (_table is not null && TableGrid is not null)
         {
             SelectCells(0, 0, _table.Rows.Count - 1, _table.ColumnCount - 1);
             _table.SelectAll();

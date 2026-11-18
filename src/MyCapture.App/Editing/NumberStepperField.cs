@@ -146,7 +146,7 @@ internal sealed class NumberStepperField
     /// boundary where it meets 3:1 on both sides; otherwise use the palette's stronger boundary.
     /// Every source is a dynamic semantic resource, so this decision follows live theme changes.
     /// </summary>
-    private sealed class NumericFieldBorder : Border
+    private sealed class NumericFieldBorder : InputFieldBorder
     {
         private static readonly ThemeColor[] ContrastBackdrops = [ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255)];
         private static readonly DependencyProperty ControlBrushProperty = BrushProperty("ControlBrush");
@@ -173,6 +173,7 @@ internal sealed class NumberStepperField
         internal void SetError(bool invalid)
         {
             _invalid = invalid;
+            IsInvalid = invalid;
             RefreshBoundary();
         }
 

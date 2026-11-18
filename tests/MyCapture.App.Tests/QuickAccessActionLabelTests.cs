@@ -18,12 +18,12 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Every quick access action names itself under its icon, or none does: a card too narrow for all
-/// six names shows only icons, never some names and never a clipped or ellipsized one.
+/// three names shows only icons, never some names and never a clipped or ellipsized one.
 /// </summary>
 public sealed class QuickAccessActionLabelTests
 {
-    private static readonly string[] KoreanNames = ["편집", "핀", "저장", "텍스트", "복사", "라이브러리"];
-    private static readonly string[] EnglishNames = ["Edit", "Pin", "Save", "Text", "Copy", "Library"];
+    private static readonly string[] KoreanNames = ["핀", "편집", "복사"];
+    private static readonly string[] EnglishNames = ["Pin", "Edit", "Copy"];
 
     public static IEnumerable<object[]> Cases()
     {
@@ -50,13 +50,13 @@ public sealed class QuickAccessActionLabelTests
             Assert.Equal(card.AllowsTransparency ? 352 : 328, host.ActualWidth);
 
             var panel = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<QuickAccessActionPanel>());
-            double available = ((FrameworkElement)panel.Parent).ActualWidth;
-            Button[] buttons = [.. card.ActionButtonsForTest, card.LibraryButtonForTest];
+            double available = panel.ActualWidth;
+            Button[] buttons = [.. card.ActionButtonsForTest];
             TextBlock[] labels = [.. buttons.Select(button => Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(button)))];
             Assert.Equal(language == "ko" ? KoreanNames : EnglishNames, labels.Select(label => label.Text));
             Assert.Equal(language == "ko"
-                ? ["편집", "핀", "저장", "텍스트 복사", "복사", "라이브러리"]
-                : ["Edit", "Pin", "Save", "Copy text", "Copy", "Library"], buttons.Select(AutomationProperties.GetName));
+                ? ["핀", "편집", "복사"]
+                : ["Pin", "Edit", "Copy"], buttons.Select(AutomationProperties.GetName));
             Assert.All(buttons, button => Assert.False(string.IsNullOrWhiteSpace(button.ToolTip as string)));
 
             // All or none, never a partial set.
@@ -67,8 +67,9 @@ public sealed class QuickAccessActionLabelTests
             Assert.True(labeled <= available == shown, $"{language}: names need {labeled:0.###} of {available:0.###} DIP, shown={shown}");
             if (textScale == 1) Assert.True(shown, $"{language}: the names need {labeled:0.#} of {available:0.#} DIP at normal text size");
             if (textScale == 2) Assert.False(shown);
+            // The pin carries the card's one emphasis; the order and sizes stay as they were.
             Assert.Same(host.FindResource("Button.Primary"), buttons[0].Style);
-            Assert.All(buttons.Skip(1), button => Assert.Same(host.FindResource("Button.Ghost"), button.Style));
+            Assert.All(buttons.Where((_, index) => index != 0), button => Assert.Same(host.FindResource("Button.Ghost"), button.Style));
 
             RenderTargetBitmap image = QuickAccessLabelFixture.Render(host, dpi);
             var measurements = new List<object>();
@@ -163,7 +164,7 @@ public sealed class QuickAccessActionLabelTests
             Assert.Equal(card.MinWidth, card.Width);
             Assert.Equal(QuickAccessActionPanel.MinimumDefaultTextWidth, ((FrameworkElement)panel.Parent).ActualWidth);
             Assert.True(panel.NamesShown);
-            Assert.All(card.ActionButtonsForTest.Append(card.LibraryButtonForTest), button =>
+            Assert.All(card.ActionButtonsForTest, button =>
                 Assert.Equal(Visibility.Visible, QuickAccessActionPanel.LabelOf(button)!.Visibility));
             Assert.InRange(card.PreviewForTest.ActualWidth * dpi, 0.01, 2.00001);
             Assert.True(card.Width * dpi <= monitor.WorkArea.Width);
@@ -186,7 +187,7 @@ public sealed class QuickAccessActionLabelTests
             QuickAccessLabelFixture.RealIcons(card, host);
             QuickAccessLabelFixture.Relayout(host, card.Width, 1);
             var panel = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<QuickAccessActionPanel>());
-            Button[] buttons = [.. card.ActionButtonsForTest, card.LibraryButtonForTest];
+            Button[] buttons = [.. card.ActionButtonsForTest];
             double labeled = LabeledWidth(panel, host, card.Width, 1);
             double iconsOnly = MeasuredWidth(panel, labeled - 0.01);
             Assert.True(iconsOnly < labeled);
@@ -211,14 +212,14 @@ public sealed class QuickAccessActionLabelTests
     public void ActionNamesAreCapitalizedNounsFromTheCardsResources()
     {
         using (UiText.UseLanguage("ko"))
-            Assert.Equal(KoreanNames, new[] { "QuickAccess.Edit", "QuickAccess.Pin", "QuickAccess.Save", "QuickAccess.TextLabel", "QuickAccess.Copy", "QuickAccess.Library" }
+            Assert.Equal(KoreanNames, new[] { "QuickAccess.Pin", "QuickAccess.Edit", "QuickAccess.Copy" }
                 .Select(UiText.Get));
         using (UiText.UseLanguage("en"))
-            Assert.Equal(EnglishNames, new[] { "QuickAccess.Edit", "QuickAccess.Pin", "QuickAccess.Save", "QuickAccess.TextLabel", "QuickAccess.Copy", "QuickAccess.Library" }
+            Assert.Equal(EnglishNames, new[] { "QuickAccess.Pin", "QuickAccess.Edit", "QuickAccess.Copy" }
                 .Select(UiText.Get));
     }
 
-    /// <summary>The width the six actions take with every name shown, at the current text size.</summary>
+    /// <summary>The width the three actions take with every name shown, at the current text size.</summary>
     private static double LabeledWidth(QuickAccessActionPanel panel, Border host, double width, double dpi)
     {
         double labeled = MeasuredWidth(panel, double.PositiveInfinity);
@@ -283,7 +284,7 @@ internal static class QuickAccessLabelFixture
     /// </summary>
     internal static void RealIcons(QuickAccessWindow card, Border host)
     {
-        foreach (Button button in card.ActionButtonsForTest.Append(card.LibraryButtonForTest))
+        foreach (Button button in card.ActionButtonsForTest)
         {
             if (IconOf(button) is not SymbolIcon icon) continue;
             string command = AutomationProperties.GetAutomationId(button)["QuickAccess.".Length..];
@@ -329,9 +330,9 @@ internal static class QuickAccessLabelFixture
     internal static double ExpectedActionHeight(Button button)
     {
         if (QuickAccessActionPanel.LabelOf(button) is not { Visibility: Visibility.Visible } label) return 36;
-        return CommandButtonPresentation.IconSize + label.Margin.Top + label.ActualHeight + label.Margin.Bottom
+        return Math.Max(36, Math.Max(CommandButtonPresentation.IconSize, label.Margin.Top + label.ActualHeight + label.Margin.Bottom)
             + CommandButtonPresentation.HintHeight + button.BorderThickness.Top + button.BorderThickness.Bottom
-            + button.Padding.Top + button.Padding.Bottom;
+            + button.Padding.Top + button.Padding.Bottom);
     }
 
     /// <summary>The first symbol in a button's content, wherever the face keeps it.</summary>

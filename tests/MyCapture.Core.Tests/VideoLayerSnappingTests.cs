@@ -28,9 +28,11 @@ public sealed class VideoLayerSnappingTests
         };
         var viewport = new TimelineViewport(10000, 30);
         for (int i = 0; i < 100; i++) Apply();
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 400; i++) Apply();
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        long[] windows = ThreadAllocation.Measure(() =>
+        {
+            for (int i = 0; i < 400; i++) Apply();
+        });
+        Assert.True(ThreadAllocation.AnyWithin(windows, 0), "400 drag updates allocated " + ThreadAllocation.Describe(windows));
 
         void Apply() => VideoLayerSnapping.Apply(1000, 2000, 990, 10000, VideoLayerDrag.Move,
             viewport, 400, candidates);

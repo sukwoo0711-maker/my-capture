@@ -36,12 +36,12 @@ public sealed class FeatureTutorialTests
             Button replay = buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay")));
             Button close = buttons.Single(button => Equals(button.Content, UiText.Get("Dialog.Close")));
             Assert.Contains(window.SetShortcutButton, buttons);
-            // A compact bordered button is never taller than the 32-DIP plain button.
+            // Compact in-content buttons remain 32 DIP; the standard close action is 36 DIP.
             Assert.Equal(32, window.SetShortcutButton.ActualHeight);
             Assert.Equal(32, play.ActualHeight);
             Assert.Equal(play.ActualHeight, replay.ActualHeight);
             Assert.Equal(play.TranslatePoint(default, root).Y, replay.TranslatePoint(default, root).Y);
-            Assert.Equal(32, close.ActualHeight);
+            Assert.Equal(36, close.ActualHeight);
         }
         finally
         {
@@ -134,7 +134,9 @@ public sealed class FeatureTutorialTests
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
             SaveHelpEvidence(help, tabs, language);
-            Assert.Equal(103, rows.Length);
+            // 112: the eraser (Shift+E) has its own row after the highlighter, and the selector tab gained
+            // the S (scrolling capture) and D (delay) rows.
+            Assert.Equal(112, rows.Length);
             foreach (var (label, shortcut) in new[]
             {
                 ("Shortcuts.Parent", "Alt+↑"),
@@ -170,7 +172,7 @@ public sealed class FeatureTutorialTests
                 if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Text_976A6C92B870"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
-                    Assert.Equal("Ctrl+C / " + UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
+                    Assert.Equal(UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 if (KoreanWordWrap.Strip(label.Text) == UiText.Get("Pin_SelectText"))
@@ -697,8 +699,21 @@ public sealed class FeatureTutorialTests
                 if (frame.PixelWidth != 960 || frame.PixelHeight != 540) problems.Add($"{still.Name} is {frame.PixelWidth}x{frame.PixelHeight}");
             }
         problems.AddRange(Directory.EnumerateFiles(directory, "*.gif").Select(path => $"leftover {Path.GetFileName(path)}"));
+        // The clips are the largest thing the app ships after the runtime, and the release size budget is
+        // checked only when a package is built: on 2026-11-15 a re-render pushed the x86 install over it
+        // and the branch's CI went red at packaging. This says so while the clips are being made.
+        long total = Directory.EnumerateFiles(directory).Sum(file => new FileInfo(file).Length);
+        if (total > TutorialAssetBudgetBytes)
+            problems.Add($"tutorial assets are {total} bytes, over the {TutorialAssetBudgetBytes} budget");
         return problems;
     }
+
+    /// <summary>
+    /// What <c>Assets\Tutorials</c> may weigh in all. It was 16,455,894 bytes with 45 features in two
+    /// languages, which leaves room for more clips before the release size budget is at risk. Raising
+    /// this is a deliberate decision about the installed size, not a formality.
+    /// </summary>
+    internal const long TutorialAssetBudgetBytes = 20_000_000;
 
     private static void AssertFallback(FeatureTutorialWindow window, string statusKey, IEnumerable<string> steps)
     {

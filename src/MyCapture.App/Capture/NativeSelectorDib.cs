@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Diagnostics;
+using MyCapture.Core.Primitives;
 
 namespace MyCapture.App.Capture;
 
@@ -16,6 +17,10 @@ internal sealed class NativeSelectorDib : IDisposable
     private bool _initialized;
     private IReadOnlyList<NativeSelectorStamp> _stamps = [];
     private NativeSelectorStamp? _anchorStamp;
+    // Allocated only after entering freeform. Signed fan-triangle windings let a new point
+    // change only its closing triangle, including when a stroke crosses itself.
+    private int[]? _freeformWinding;
+    private bool _freeform;
     internal IntPtr Bitmap { get; private set; }
     internal IntPtr Dc { get; private set; }
     internal IntPtr Bits { get; private set; }
@@ -26,6 +31,7 @@ internal sealed class NativeSelectorDib : IDisposable
     internal Int32Rect Reveal { get; private set; }
     internal bool IsDisposed { get; private set; }
     internal long PixelsUpdated { get; private set; }
+    internal long PixelsDimmedInPlace { get; private set; }
     internal int InitializeCount => _initialized ? 1 : 0;
 
     internal NativeSelectorDib(BitmapSource source, SolidColorBrush dimmer, bool deferPixels = false)
@@ -69,16 +75,199 @@ internal sealed class NativeSelectorDib : IDisposable
         _initialized = true;
     }
 
+    /// <summary>
+    /// Moves the revealed rectangle and returns the damaged regions. Runs for every pointer sample of a
+    /// drag, so the returned list is reused: it is valid until the next call.
+    /// </summary>
     internal IReadOnlyList<Int32Rect> SetReveal(Int32Rect rectangle)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
+        Int32Rect previous = Reveal;
         Int32Rect next = NativeSelectorDirtyRegions.Clip(rectangle, Width, Height);
-        IReadOnlyList<Int32Rect> dirty = NativeSelectorDirtyRegions.Changed(Reveal, next, Width, Height);
+        NativeSelectorDirtyRegions.Changed(previous, next, Width, Height, _revealDamage);
         Reveal = next;
+        if (_revealDamage.Count == 0) return _revealDamage;
         // Finish reads by the previous BitBlt before writing the DIB directly.
         _ = NativeSelectorInterop.GdiFlush();
-        foreach (Int32Rect region in dirty) { Update(region); CompositeStamps(region); }
-        return dirty;
+        for (int index = 0; index < _revealDamage.Count; index++)
+        {
+            Int32Rect region = _revealDamage[index];
+            if (CanDimInPlace(region, previous, next) && !OverlapsEarlierDamage(index)) DimInPlace(region);
+            else
+            {
+                Update(region);
+                CompositeStamps(region);
+            }
+        }
+        return _revealDamage;
+    }
+
+    private readonly List<Int32Rect> _revealDamage = new(16);
+
+    /// <summary>
+    /// Pixels inside the previous reveal are the source made opaque (stamps aside), and the dimmer reads
+    /// only their colour channels, so a region that only stops being revealed can be dimmed where it is.
+    /// This skips re-reading the frozen frame for it: when a drag starts over a highlighted window, the
+    /// whole window (millions of pixels) goes dark in the first pointer sample. Freeform rewrites pixels
+    /// by its own winding, so a selector that used it always copies from the source.
+    /// </summary>
+    private bool CanDimInPlace(Int32Rect region, Int32Rect previous, Int32Rect next) =>
+        _initialized && !_freeform && _freeformWinding is null
+        && Contains(previous, region) && !Intersects(next, region);
+
+    // Border strips clipped at the desktop edge can repeat pixels of a difference part already dimmed.
+    private bool OverlapsEarlierDamage(int index)
+    {
+        for (int earlier = 0; earlier < index; earlier++)
+            if (Intersects(_revealDamage[earlier], _revealDamage[index])) return true;
+        return false;
+    }
+
+    private unsafe void DimInPlace(Int32Rect region)
+    {
+        long pixels = (long)region.Width * region.Height;
+        if (pixels >= ParallelDimPixels && Environment.ProcessorCount > 2)
+            DimRowsInParallel(region);
+        else
+            for (int y = region.Y; y < region.Y + region.Height; y++)
+                _pixels.Dim(new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width));
+        PixelsUpdated += pixels;
+        PixelsDimmedInPlace += pixels;
+        // Stamp pixels are not the source: refresh just their overlap from the frame and composite again.
+        for (int index = 0; index < _stamps.Count; index++) RestoreStampOverlap(region, _stamps[index].Bounds);
+        if (_anchorStamp is { } anchor) RestoreStampOverlap(region, anchor.Bounds);
+    }
+
+    /// <summary>
+    /// A drag that starts over a maximized window highlight dims three to five million pixels in its
+    /// first pointer sample: twenty megabytes read and written again, which one core cannot do inside a
+    /// frame however wide its vectors are, because it never reaches the memory bandwidth several cores
+    /// do. Bands of whole rows are independent, so above this many pixels they run on the pool. Every
+    /// ordinary pointer sample stays far below it (the moving border strips are a few thousand pixels),
+    /// keeping the frequent path on the calling thread with nothing allocated.
+    /// </summary>
+    private const long ParallelDimPixels = 1 << 18;
+
+    internal long PixelsDimmedInParallel { get; private set; }
+
+    private void DimRowsInParallel(Int32Rect region)
+    {
+        // More bands than cores: the loop's own partitioner hands them out as workers free up, so one
+        // core taken by something else on this machine delays the pass by a band, not by its share.
+        int bands = Math.Min(Environment.ProcessorCount * 4, Math.Max(2, region.Height / 16));
+        int rows = (region.Height + bands - 1) / bands;
+        IntPtr bits = Bits;
+        int stride = Stride, left = region.X * 4, width = region.Width, top = region.Y;
+        int bottom = region.Y + region.Height;
+        NativeSelectorPixels pixels = _pixels;
+        _ = Parallel.For(0, bands, band =>
+            DimBand(bits, stride, left, width, pixels, top + band * rows, Math.Min(bottom, top + band * rows + rows)));
+        PixelsDimmedInParallel += (long)region.Width * region.Height;
+    }
+
+    private static unsafe void DimBand(IntPtr bits, int stride, int left, int width,
+        NativeSelectorPixels pixels, int first, int last)
+    {
+        for (int y = first; y < last; y++) pixels.Dim(new Span<uint>((byte*)bits + y * stride + left, width));
+    }
+
+    private void RestoreStampOverlap(Int32Rect region, Int32Rect stamp)
+    {
+        int left = Math.Max(region.X, stamp.X), top = Math.Max(region.Y, stamp.Y);
+        int right = Math.Min(region.X + region.Width, stamp.X + stamp.Width);
+        int bottom = Math.Min(region.Y + region.Height, stamp.Y + stamp.Height);
+        if (right <= left || bottom <= top) return;
+        var overlap = new Int32Rect(left, top, right - left, bottom - top);
+        Update(overlap);
+        CompositeStamps(overlap);
+    }
+
+    private static bool Contains(Int32Rect outer, Int32Rect inner) =>
+        outer.Width > 0 && outer.Height > 0 && inner.X >= outer.X && inner.Y >= outer.Y
+        && inner.X + inner.Width <= outer.X + outer.Width && inner.Y + inner.Height <= outer.Y + outer.Height;
+
+    private static bool Intersects(Int32Rect a, Int32Rect b) =>
+        a.Width > 0 && a.Height > 0 && b.Width > 0 && b.Height > 0
+        && a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height;
+
+    internal void BeginFreeform()
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _freeformWinding ??= new int[checked(Width * Height)];
+        Array.Clear(_freeformWinding);
+        _freeform = true;
+    }
+
+    internal void EndFreeform(Int32Rect dirty)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _freeform = false;
+        Reveal = Int32Rect.Empty;
+        dirty = NativeSelectorDirtyRegions.Clip(dirty, Width, Height);
+        if (dirty.Width == 0 || dirty.Height == 0) return;
+        _ = NativeSelectorInterop.GdiFlush();
+        Update(dirty);
+        CompositeStamps(dirty);
+    }
+
+    /// <summary>
+    /// Append the signed triangle between the first, previous and new point. Only runs whose
+    /// nonzero membership changed are recopied or invalidated. Half-open centre samples match
+    /// the winding fill; neither point input nor this raster update allocates a geometry/mask.
+    /// </summary>
+    internal void AppendFreeformTriangle(PointD first, PointD previous, PointD next, IntPtr window)
+    {
+        if (!_freeform || _freeformWinding is null) return;
+        double cross = (previous.X - first.X) * (next.Y - first.Y) - (next.X - first.X) * (previous.Y - first.Y);
+        if (cross == 0) return;
+        int direction = cross > 0 ? 1 : -1;
+        int top = Math.Clamp((int)Math.Ceiling(Math.Min(first.Y, Math.Min(previous.Y, next.Y)) - 0.5), 0, Height);
+        int bottom = Math.Clamp((int)Math.Ceiling(Math.Max(first.Y, Math.Max(previous.Y, next.Y)) - 0.5), 0, Height);
+        _ = NativeSelectorInterop.GdiFlush();
+        for (int y = top; y < bottom; y++)
+        {
+            double left = double.PositiveInfinity, right = double.NegativeInfinity;
+            TriangleIntersection(first, previous, y + 0.5, ref left, ref right);
+            TriangleIntersection(previous, next, y + 0.5, ref left, ref right);
+            TriangleIntersection(next, first, y + 0.5, ref left, ref right);
+            if (!(left < right)) continue;
+            int start = Math.Clamp((int)Math.Ceiling(left - 0.5), 0, Width);
+            int end = Math.Clamp((int)Math.Ceiling(right - 0.5), 0, Width);
+            int changedStart = -1;
+            for (int x = start; x < end; x++)
+            {
+                int offset = y * Width + x;
+                int before = _freeformWinding[offset];
+                int after = before + direction;
+                _freeformWinding[offset] = after;
+                bool changed = (before == 0) != (after == 0);
+                if (changed && changedStart < 0) changedStart = x;
+                else if (!changed && changedStart >= 0)
+                {
+                    UpdateFreeformRun(changedStart, y, x - changedStart, window);
+                    changedStart = -1;
+                }
+            }
+            if (changedStart >= 0) UpdateFreeformRun(changedStart, y, end - changedStart, window);
+        }
+    }
+
+    private static void TriangleIntersection(PointD a, PointD b, double y, ref double left, ref double right)
+    {
+        if (!((a.Y <= y && b.Y > y) || (b.Y <= y && a.Y > y))) return;
+        double x = a.X + (y - a.Y) * (b.X - a.X) / (b.Y - a.Y);
+        left = Math.Min(left, x);
+        right = Math.Max(right, x);
+    }
+
+    private void UpdateFreeformRun(int x, int y, int width, IntPtr window)
+    {
+        var dirty = new Int32Rect(x, y, width, 1);
+        Update(dirty);
+        CompositeStamps(dirty);
+        if (window == IntPtr.Zero) return;
+        var native = new NativeSelectorInterop.Rect(x, y, width, 1);
+        _ = NativeSelectorInterop.InvalidateRect(window, ref native, false);
     }
 
     internal IReadOnlyList<Int32Rect> SetStamps(IReadOnlyList<NativeSelectorStamp> stamps)
@@ -146,6 +335,20 @@ internal sealed class NativeSelectorDib : IDisposable
         for (int y = region.Y; y < region.Y + region.Height; y++)
         {
             var row = new Span<uint>((byte*)Bits + y * Stride + region.X * 4, region.Width);
+            if (_freeform && _freeformWinding is { } winding)
+            {
+                int run = 0;
+                while (run < row.Length)
+                {
+                    bool inside = winding[y * Width + region.X + run] != 0;
+                    int end = run + 1;
+                    while (end < row.Length && (winding[y * Width + region.X + end] != 0) == inside) end++;
+                    if (inside) NativeSelectorPixels.MakeOpaque(row[run..end]);
+                    else _pixels.Dim(row[run..end]);
+                    run = end;
+                }
+                continue;
+            }
             if (y < Reveal.Y || y >= Reveal.Y + Reveal.Height || Reveal.Width == 0)
             {
                 _pixels.Dim(row);
@@ -174,6 +377,7 @@ internal sealed class NativeSelectorDib : IDisposable
         _ = NativeSelectorInterop.GdiFlush();
         Bitmap = Dc = Bits = _previous = IntPtr.Zero;
         _source = null;
+        _freeformWinding = null;
         _stamps = [];
         _anchorStamp = null;
     }

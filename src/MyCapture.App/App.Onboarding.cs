@@ -18,12 +18,13 @@ public partial class App
 {
     private WelcomeWindow? _onboardingWindow;
     private DispatcherTimer? _practiceOfferTimer;
+    internal Func<MyCapture.Platform.Display.MonitorInfo>? PracticeMonitorProviderForTest { get; set; }
 
 
-    private WelcomeWindow CreateOnboardingWindow(bool replay) => CreatePracticeWindow(replay);
+    private WelcomeWindow CreateOnboardingWindow(bool replay) => CreatePracticeWindow(replay, firstPinExperience: !replay);
 
     private WelcomeWindow CreatePracticeWindow(bool replay, bool consent = false, bool featurePractice = false,
-        bool coreShortcutsNotice = false)
+        bool coreShortcutsNotice = false, bool firstPinExperience = false)
     {
         var settings = _settings!;
         var welcome = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
@@ -33,6 +34,9 @@ public partial class App
                 ShowCoreShortcutsConsent = consent,
                 CoreShortcutsNotice = coreShortcutsNotice,
                 FeaturePractice = featurePractice,
+                FirstPinExperience = firstPinExperience,
+                StartAtGroups = replay && !featurePractice,
+                MonitorProvider = PracticeMonitorProviderForTest,
                 StartAtSignIn = replay ? settings.General.LaunchAtLogin : null,
                 UseAccurateOcr = replay ? OcrQualityProfile.UseNeuralModel(settings.Ocr.Quality) : null,
             });
@@ -157,6 +161,11 @@ public partial class App
             if (existing.IsFeaturePractice) existing.Close();
             else
             {
+                if (existing.IsFirstPinExperience && existing.CurrentStep != WelcomeStep.Consent)
+                {
+                    existing.FirstPin.Skip();
+                    existing.OpenFullPractice();
+                }
                 if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
                 existing.Show();
                 existing.Activate();
@@ -216,7 +225,7 @@ public partial class App
         if (_shellPresenter is null || _services is null) return;
         bool idle = !_storeInstallationPending && !_coreShortcutsQuestionPending && _onboardingWindow is null
             && !IsWelcomeCaptureInProgress && !_shellPresenter.HasNotification && !_readyNotification.HasPendingResident
-            && _settingsWindow?.IsVisible != true && _pins?.IsInteractionActive != true
+            && _settingsWindow?.IsVisible != true && _pins?.IsInteractionActive != true && _quickAccess?.IsOpen != true
             && !Windows.OfType<AnnotationEditorWindow>().Any(window => window.IsVisible);
         try
         {

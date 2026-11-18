@@ -62,8 +62,10 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(BoundsIn(hint, help).Left, BoundsIn(typed, help).Left, 1.5);
                         Assert.InRange(view.Search.ActualHeight, 40, 41);
 
+                        // Editor, library, the pin and the quick-access alias. The pin's original-text row is
+                        // Ctrl+double-click only, so it no longer answers a search for Ctrl+C.
                         Border[] rows = view.VisibleResults();
-                        Assert.Equal(5, rows.Length);
+                        Assert.Equal(4, rows.Length);
                         Rect list = BoundsIn(view.ResultsView, help);
                         foreach (Border row in rows)
                         {

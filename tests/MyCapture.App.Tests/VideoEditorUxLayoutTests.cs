@@ -77,12 +77,11 @@ public sealed class VideoEditorUxLayoutTests
                 return button.TranslatePoint(new Point(), bar).X;
             }
 
-            // History stays first; capture is beside export and save in the right-hand group.
+            // History stays first; export and save make the right-hand group.
             double[] order =
             [
                 X(UiText.Get("Text_CE706412FA75")), X(UiText.Get("Text_078C44D5A66E")),
                 X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoEditorUx_AddText")),
-                X(UiText.Get("CaptureEntry.NewCapture")), X(UiText.Get("CaptureEntry.MoreOptions")),
                 X(UiText.Get("MediaExport_ExportFormats")), X(UiText.Get("MediaExport_SaveEdits")),
             ];
             Assert.Equal(order.Order().ToArray(), order);
@@ -91,8 +90,25 @@ public sealed class VideoEditorUxLayoutTests
             Assert.Same(Field<Button>(editor, "_undoButton"), editing.Children[0]);
             Assert.Same(Field<Button>(editor, "_redoButton"), editing.Children[1]);
             var output = Assert.IsType<StackPanel>(groups.Children[1]);
-            Assert.Equal("NewCaptureSplit", Assert.IsType<StackPanel>(output.Children[0]).Name);
-            Assert.Equal("VideoExport", Assert.IsType<Button>(output.Children[1]).Name);
+            Assert.Equal("VideoExport", Assert.IsType<Button>(output.Children[0]).Name);
+            Assert.Equal("VideoSave", Assert.IsType<Button>(output.Children[1]).Name);
+            Assert.DoesNotContain(Descendants(bar).OfType<Button>(), b => b.Name is "NewCapture" or "CaptureOptions");
+
+            // New capture is the compact split at the right end of the status bar, as in the image editor.
+            var status = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<DockPanel>(),
+                panel => panel.Name == "VideoEditorStatusBar");
+            var split = Assert.IsType<StackPanel>(status.Children[0]);
+            Assert.Equal("NewCaptureSplit", split.Name);
+            Assert.Equal(Dock.Right, DockPanel.GetDock(split));
+            Button capture = Assert.Single(Descendants(split).OfType<Button>(), b => b.Name == "NewCapture");
+            Button options = Assert.Single(Descendants(split).OfType<Button>(), b => b.Name == "CaptureOptions");
+            Assert.True(capture.IsVisible && options.IsVisible);
+            Assert.Equal(36, capture.ActualHeight);
+            Assert.Equal(36, options.ActualHeight);
+            double statusRight = status.TranslatePoint(new Point(status.ActualWidth, 0), (UIElement)editor.Content).X;
+            double splitRight = split.TranslatePoint(new Point(split.ActualWidth + split.Margin.Right, 0), (UIElement)editor.Content).X;
+            Assert.Equal(statusRight, splitRight, 1);
+            Assert.True(options.TranslatePoint(new Point(), split).X > capture.TranslatePoint(new Point(), split).X);
             // Saving into the library finishes the edit, so it carries the emphasis, as Done does.
             Button saveEdits = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_SaveEdits"));
             Button exportFile = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_ExportFormats"));
@@ -236,7 +252,8 @@ public sealed class VideoEditorUxLayoutTests
             if (editor.ActualWidth >= 1399)
             {
                 // At the full width the editing tools stay inline; only a clamped window may need More.
-                Assert.Equal(9, wide);
+                // New capture and its options are in the status bar, not in this bar.
+                Assert.Equal(7, wide);
             }
 
             int narrowest = wide;
@@ -508,8 +525,8 @@ public sealed class VideoEditorUxLayoutTests
     });
 
     /// <summary>
-    /// The on 자세히 toggle is the selected fill without the 2-DIP edge that read as the focus
-    /// ring, and its chevron turns from down to up and back. The Alt reveal scales the box the
+    /// The on 자세히 toggle uses the neutral disclosure fill and a one-DIP selection edge,
+    /// and its chevron turns from down to up and back. The Alt reveal scales the box the
     /// chevron sits in, so the reveal and the turn never replace each other's transform.
     /// </summary>
     [Fact]
@@ -537,10 +554,11 @@ public sealed class VideoEditorUxLayoutTests
             Assert.False(ReferenceEquals(box.RenderTransform, chevron.RenderTransform));
             var layer = Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle));
             Assert.Equal(1, layer.Opacity);
-            Assert.Equal(new Thickness(0), layer.BorderThickness);
-            Assert.Equal(((SolidColorBrush)editor.FindResource("Text.SelectionBackground")).Color, ((SolidColorBrush)layer.Background).Color);
-            // The chevron and the name take the selection ink with the toggle, so both read on the fill.
-            Color ink = ((SolidColorBrush)editor.FindResource("Text.SelectionForeground")).Color;
+            Assert.Equal(new Thickness(1), layer.BorderThickness);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Surface.Selected")).Color, ((SolidColorBrush)layer.Background).Color);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Selection.Stroke")).Color, ((SolidColorBrush)layer.BorderBrush).Color);
+            // The disclosure keeps primary ink on its neutral selected surface.
+            Color ink = ((SolidColorBrush)editor.FindResource("Text.Primary")).Color;
             Assert.Equal(ink, ((SolidColorBrush)toggle.Foreground).Color);
             Assert.Equal(ink, Assert.IsType<SolidColorBrush>(chevron.Stroke).Color);
             Assert.All(Descendants(toggle).OfType<TextBlock>().Where(text => !string.IsNullOrEmpty(text.Text)),

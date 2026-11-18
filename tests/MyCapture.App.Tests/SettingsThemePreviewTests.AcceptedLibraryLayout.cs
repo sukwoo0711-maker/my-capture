@@ -42,6 +42,9 @@ public sealed partial class SettingsThemePreviewTests
                         window.Show();
                         model.Refresh();
                         model.ClearSelection();
+                        // Open by default; this scenario's geometry (three columns at 1100 DIP) is the folded one.
+                        Assert.True(window.IsDetailsPaneOpen);
+                        window.SetDetailsPaneOpen(false);
                         SettleGalleryLayout(window);
                         var rows = (ListBox)window.FindName("RowsList");
                         PumpLibraryUntil(window, () => FolderCardButtons(rows).Length == 2, "compact folders");
@@ -55,10 +58,11 @@ public sealed partial class SettingsThemePreviewTests
                         }
                         var commands = (FrameworkElement)window.FindName("SelectionCommands");
                         var edit = (Button)window.FindName("EditSelectedButton");
-                        var preview = (Button)window.FindName("PreviewSelectedButton");
-                        var keep = (Button)window.FindName("KeepSelectedButton");
+                        var preview = (MenuItem)window.FindName("PreviewSelectedButton");
+                        var keep = (MenuItem)window.FindName("KeepSelectedButton");
                         double before = rows.TranslatePoint(new Point(), window).Y;
-                        Assert.True(commands.IsVisible);
+                        Assert.False(commands.IsVisible);
+                        Assert.True(((FrameworkElement)window.FindName("BrowseScopeLabel")).IsVisible);
                         Assert.False(edit.IsEnabled);
                         Assert.False(preview.IsEnabled);
                         Assert.False(keep.IsEnabled);
@@ -142,10 +146,24 @@ public sealed partial class SettingsThemePreviewTests
                             window.Width = 980;
                             SettleGalleryLayout(window);
                             var commandBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
+                            var more = (Button)window.FindName("MoreCommandsButton");
+                            double selectedHeight = commandBar.ActualHeight;
+                            double selectedListTop = rows.TranslatePoint(new Point(), window).Y;
                             Rect selectionBounds = commands.TransformToAncestor(commandBar).TransformBounds(new Rect(commands.RenderSize));
-                            Rect sortBounds = sort.TransformToAncestor(commandBar).TransformBounds(new Rect(sort.RenderSize));
-                            Assert.False(selectionBounds.IntersectsWith(sortBounds));
+                            Rect moreBounds = more.TransformToAncestor(commandBar).TransformBounds(new Rect(more.RenderSize));
+                            Assert.False(selectionBounds.IntersectsWith(moreBounds));
+                            Assert.False(sort.IsVisible);
                             AssertInsideClient(commands, commandBar, "narrow English selection");
+                            model.ClearSelection();
+                            SettleGalleryLayout(window);
+                            Assert.False(commands.IsVisible);
+                            Assert.True(sort.IsVisible);
+                            Assert.Equal(selectedHeight, commandBar.ActualHeight);
+                            Assert.Equal(selectedListTop, rows.TranslatePoint(new Point(), window).Y);
+                            var scope = (TextBlock)window.FindName("BrowseScopeLabel");
+                            Rect scopeBounds = scope.TransformToAncestor(commandBar).TransformBounds(new Rect(scope.RenderSize));
+                            Rect sortBounds = sort.TransformToAncestor(commandBar).TransformBounds(new Rect(sort.RenderSize));
+                            Assert.False(scopeBounds.IntersectsWith(sortBounds));
                             AssertInsideClient(sort, commandBar, "narrow English sort");
                         }
                         window.Width = 1100;
@@ -154,12 +172,12 @@ public sealed partial class SettingsThemePreviewTests
                         model.Select(fixture.Records[4].Id);
                         SettleGalleryLayout(window);
                         Assert.False(fixture.Records[4].IsManuallyPinned);
-                        keep.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        keep.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                         PumpLibraryUntil(window, () => fixture.Records[4].IsManuallyPinned && keep.IsEnabled, "kept folder capture");
                         // Keep works like the K key and the menu: when every selected capture is kept, it releases them.
-                        keep.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        keep.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                         PumpLibraryUntil(window, () => !fixture.Records[4].IsManuallyPinned && keep.IsEnabled, "released folder capture");
-                        preview.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        preview.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                         // The image decodes off the UI thread (#221); the preview opens once it is ready.
                         PumpLibraryUntil(window, () => window.OwnedWindows.Count > 0, "image preview");
                         Window imagePreview = Assert.Single(window.OwnedWindows.Cast<Window>());

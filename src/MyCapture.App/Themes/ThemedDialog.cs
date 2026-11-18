@@ -31,7 +31,8 @@ internal sealed class ThemedDialog : Window
     /// <param name="commands">Follow-up commands shown after the recovery action.</param>
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, string? cancelLabel = null)
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, string? cancelLabel = null,
+        MessageBoxResult? cancelResult = null)
     {
         Title = MyCapture.Core.Platform.AppIdentity.WindowLabel;
         Width = 500;
@@ -63,6 +64,7 @@ internal sealed class ThemedDialog : Window
             var expander = new Expander { Header = detailsHeading, IsExpanded = false, Content = content, Margin = new Thickness(0, 0, 0, 16) };
             AutomationProperties.SetName(expander, UiText.Get("Dialog.Details"));
             expander.SetResourceReference(ForegroundProperty, "Text.Primary");
+            expander.SetResourceReference(StyleProperty, "Expander.OptionalStyle");
             panel.Children.Add(expander);
         }
         // A helper command that could not finish says so here, above the buttons.
@@ -97,7 +99,7 @@ internal sealed class ThemedDialog : Window
                 _ => UiText.Get(choice.Key),
             };
             Button button = MakeButton(label, choice.Result,
-                isDefault, choice.Result is MessageBoxResult.Cancel || choices.Length == 1, filled: isDefault && !destructive);
+                isDefault, choice.Result == cancelResult || choice.Result is MessageBoxResult.Cancel || choices.Length == 1, filled: isDefault && !destructive);
             if (destructive && choice.Result == MessageBoxResult.OK && !isDefault) button.SetResourceReference(StyleProperty, "Button.Danger");
             actions.Children.Add(button);
         }
@@ -209,6 +211,17 @@ internal sealed class ThemedDialog : Window
         NotSupportedException => "Dialog.Unsupported",
         _ => "Dialog.Unexpected",
     });
+
+    /// <summary>
+    /// <paramref name="general"/> followed by the specific cause when <paramref name="error"/> has one a person
+    /// can act on (an application message, a full disk, a file in use, no access); the general line alone otherwise,
+    /// so a generic fallback never repeats it.
+    /// </summary>
+    internal static string WithCause(string general, Exception error, string? location = null)
+    {
+        string? cause = UserFacingError.GetMessage(error) ?? StorageMessage(error, location);
+        return cause is null ? general : general + " " + cause;
+    }
 
     /// <summary>
     /// A failed save: the storage case when one applies (full disk, file in use, no access),
@@ -368,15 +381,24 @@ internal sealed class ThemedDialog : Window
     internal static MessageBoxResult Show(Window? owner, string text, string title, MessageBoxButton buttons = MessageBoxButton.OK,
         MessageBoxImage icon = MessageBoxImage.Information, MessageBoxResult defaultResult = MessageBoxResult.None,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null) =>
-        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon);
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, IntPtr ownerHandle = default) =>
+        Present(owner, new ThemedDialog(text, title, buttons, defaultResult, details, recovery, recoveryLabel, okLabel, destructive, commands), icon, ownerHandle);
 
-    /// <summary>Shows a dialog built by one of the Create* factories modally over its owner.</summary>
-    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon)
+    /// <summary>
+    /// Shows a dialog built by one of the Create* factories modally over its owner; <paramref name="ownerHandle"/>
+    /// is a native window (a native-hosted pin) that owns it when no WPF owner is shown.
+    /// </summary>
+    internal static MessageBoxResult Present(Window? owner, ThemedDialog dialog, MessageBoxImage icon, IntPtr ownerHandle = default)
     {
-        owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
+        owner = owner?.IsVisible == true ? owner : ownerHandle != IntPtr.Zero ? null : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
+        else if (ownerHandle != IntPtr.Zero)
+        {
+            new System.Windows.Interop.WindowInteropHelper(dialog).Owner = ownerHandle;
+            dialog.ShowInTaskbar = false;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
         else PlaceOwnerless(dialog, icon);
         dialog.ShowDialog();
         return dialog.Result;

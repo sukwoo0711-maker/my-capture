@@ -15,6 +15,8 @@ internal enum ProtectedTokenChange
     DottedSplit,
     Case,
     Backticks,
+    /// <summary>The same value in another notation, e.g. "nine" and "9", "2:30 PM" and "오후 2시 30분"; see <see cref="ValueEquivalence"/>.</summary>
+    Equivalent,
     MissingOrChanged,
     NotInSource,
 }
@@ -186,14 +188,26 @@ internal static partial class ProtectedTokens
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(output);
         IReadOnlyList<ProtectedSpan> spans = Find(source);
+        IReadOnlyList<ProtectedSpan> outputSpans = Find(output);
         var formatChanged = new List<ProtectedTokenIssue>();
         var altered = new List<ProtectedTokenIssue>();
         var invented = new List<ProtectedTokenIssue>();
         int preserved = 0;
+        // A value written another way on the other side ("nine" and "9시") is taken out of both texts, so the
+        // exact comparison below sees only what is left and one rendering cannot count for two values.
+        ValueEquivalence equivalence = ValueEquivalence.Match(source, output, spans, outputSpans);
+        source = equivalence.MaskSource(source);
+        output = equivalence.MaskOutput(output);
         string squashedOutput = Squash(output);
         var used = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (ProtectedSpan span in spans)
         {
+            if (equivalence.CoversSource(span) || ValueEquivalence.IsPlainAbbreviation(span))
+            {
+                formatChanged.Add(new(span.Kind, span.Text, ProtectedTokenChange.Equivalent));
+                continue;
+            }
+
             used.TryGetValue(span.Text, out int already);
             used[span.Text] = already + 1;
             if (CountOccurrences(output, span.Text) > already)
@@ -248,8 +262,9 @@ internal static partial class ProtectedTokens
         }
 
         string squashedSource = Squash(source);
-        foreach (ProtectedSpan span in Find(output))
+        foreach (ProtectedSpan span in outputSpans)
         {
+            if (equivalence.CoversOutput(span) || ValueEquivalence.IsPlainAbbreviation(span)) continue;
             bool inSource;
             if (span.Kind == "num")
             {
@@ -310,9 +325,13 @@ internal static partial class ProtectedTokens
         }
 
         var missingNumbers = new List<string>();
-        foreach (ProtectedSpan span in Find(source))
+        IReadOnlyList<ProtectedSpan> sourceSpans = Find(source);
+        // A value the output writes another way ("nine" as "9시", "U.S." as "미국") is not a token to put back.
+        ValueEquivalence equivalence = ValueEquivalence.Match(source, text, sourceSpans);
+        foreach (ProtectedSpan span in sourceSpans)
         {
             if (CountOccurrences(text, span.Text) > 0) continue;
+            if (equivalence.CoversSource(span) || ValueEquivalence.IsPlainAbbreviation(span)) continue;
 
             // Same characters with different spacing, micro sign or case.
             var pattern = new StringBuilder();
@@ -390,9 +409,12 @@ internal static partial class ProtectedTokens
         // One number missing and one unknown number of similar shape: treat it as the same value.
         if (missingNumbers.Count == 1)
         {
+            // A number that renders a source word ("nine" as "9") is not a stray.
+            ValueEquivalence rendered = ValueEquivalence.Match(source, text, sourceSpans);
             var strays = StrayNumber().Matches(text)
                 .Where(match => !Regex.IsMatch(source, @"(?<![0-9.,])" + Regex.Escape(match.Value) + @"(?![0-9]|[.,][0-9])",
-                    RegexOptions.CultureInvariant))
+                    RegexOptions.CultureInvariant)
+                    && !rendered.CoversOutput(new ProtectedSpan(match.Index, match.Length, match.Value, "num")))
                 .ToList();
             string wanted = NumberValue().Match(missingNumbers[0]).Value;
             if (strays.Count == 1 && Levenshtein(strays[0].Value, wanted) <= 2)

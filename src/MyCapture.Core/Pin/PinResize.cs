@@ -41,10 +41,13 @@ public static class PinResize
     /// Bounds and pointer deltas share one coordinate plane. DPI ratios allow that plane to
     /// remain physical desktop pixels when the window moves to a differently scaled monitor.
     /// Corner deltas are projected onto the original diagonal, so either pointer axis can resize.
+    /// <paramref name="minimumZoom"/> is the pin's own floor (<see cref="PinViewState.UserMinimumZoom"/>), so the
+    /// fixed edge stays where it is when the pointer drags past it.
     /// </summary>
     public static PinGeometry.Placement Calculate(RectD start, double startZoom, PinResizeEdge edge,
         double deltaX, double deltaY, double dpiRatioX = 1, double dpiRatioY = 1,
-        double? imageWidth = null, double? imageHeight = null, double minimumWidth = 1, double minimumHeight = 1)
+        double? imageWidth = null, double? imageHeight = null, double minimumWidth = 1, double minimumHeight = 1,
+        double minimumZoom = PinGeometry.MinZoom)
     {
         int horizontal = edge.HasFlag(PinResizeEdge.Left) ? -1 : edge.HasFlag(PinResizeEdge.Right) ? 1 : 0;
         int vertical = edge.HasFlag(PinResizeEdge.Top) ? -1 : edge.HasFlag(PinResizeEdge.Bottom) ? 1 : 0;
@@ -60,7 +63,7 @@ public static class PinResize
             : vertical == 0 ? targetWidth / naturalWidth
             : (targetWidth * naturalWidth + targetHeight * naturalHeight)
                 / (naturalWidth * naturalWidth + naturalHeight * naturalHeight);
-        zoom = PinGeometry.ClampZoom(zoom);
+        zoom = Math.Clamp(zoom, PinGeometry.ClampZoom(minimumZoom), PinGeometry.MaxZoom);
         double width = Math.Max(minimumWidth, naturalWidth * zoom);
         double height = Math.Max(minimumHeight, naturalHeight * zoom);
         double anchorX = horizontal < 0 ? 1 : horizontal > 0 ? 0 : 0.5;

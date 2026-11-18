@@ -13,7 +13,7 @@ public partial class App
     private bool CanAutomaticallyRemoveCapture(Guid id) => _libraryRecoveryReady
         && !_preparingExit && !_storeInstallationPending
         && _initialEditRecoveryTask.IsCompleted && _capturePersistenceTask.IsCompleted
-        && _overlay?.IsSelecting != true && _activeCountdown is null && _scrollCancellation is null
+        && _overlay?.IsSelecting != true && _overlay?.IsCountingDown != true && _scrollCancellation is null
         && !_preparingAdvancedCapture && !_pasteToScreenInFlight && !_gitHubUploadInFlight
         && _currentRecord?.Id != id && _pendingRecord?.Id != id
         && _persistence?.IsBusy(id) != true;

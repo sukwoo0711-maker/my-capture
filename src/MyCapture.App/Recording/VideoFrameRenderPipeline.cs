@@ -663,8 +663,22 @@ internal static class VideoFrameRenderPipeline
 
     internal static VideoMediaInfo Probe(
         string sourcePath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        Probe(sourcePath, ignoreReaderDuration: false, OpenContainerForDuration, cancellationToken);
+
+    /// <summary>
+    /// <see cref="Probe(string, CancellationToken)"/> with its container-duration fallback exposed:
+    /// <paramref name="ignoreReaderDuration"/> stands in for a reader that reports no duration, and
+    /// <paramref name="openContainer"/> replaces only the media player's open wait, so the
+    /// classification of its outcome still runs.
+    /// </summary>
+    internal static VideoMediaInfo Probe(
+        string sourcePath,
+        bool ignoreReaderDuration,
+        Func<string, CancellationToken, ContainerOpenOutcome> openContainer,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(openContainer);
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
         {
             throw new InvalidOperationException("Video probing requires an STA thread.");
@@ -677,9 +691,9 @@ internal static class VideoFrameRenderPipeline
 
         using var reader = new MediaFoundationVideoFrameReader(sourcePath);
         cancellationToken.ThrowIfCancellationRequested();
-        double duration = reader.DurationMs > 0
+        double duration = !ignoreReaderDuration && reader.DurationMs > 0
             ? reader.DurationMs
-            : ProbeContainerDuration(sourcePath, cancellationToken);
+            : ResolveContainerDuration(openContainer(sourcePath, cancellationToken));
         if (reader.Width <= 0
             || reader.Height <= 0
             || !double.IsFinite(duration)
@@ -877,7 +891,34 @@ internal static class VideoFrameRenderPipeline
         }
     }
 
-    private static double ProbeContainerDuration(string sourcePath, CancellationToken cancellationToken)
+    /// <summary>What the media player reported while opening a container for its duration.</summary>
+    internal readonly record struct ContainerOpenOutcome(bool Opened, Exception? Failure, double? DurationMs);
+
+    /// <summary>
+    /// Only an opened container without a duration reads as invalid media (0, rejected by the
+    /// caller). The Media Foundation reader has already opened the file, so a media-player failure
+    /// or an open that never finished proves nothing about it: those stay a platform failure, which
+    /// recording recovery keeps for a later retry instead of discarding as damage.
+    /// </summary>
+    private static double ResolveContainerDuration(ContainerOpenOutcome outcome)
+    {
+        if (outcome.Failure is not null)
+        {
+            throw new InvalidOperationException(
+                "The media player could not open the video container to read its duration.",
+                outcome.Failure);
+        }
+
+        if (!outcome.Opened)
+        {
+            throw new InvalidOperationException(
+                "The media player did not finish opening the video container to read its duration.");
+        }
+
+        return outcome.DurationMs ?? 0;
+    }
+
+    private static ContainerOpenOutcome OpenContainerForDuration(string sourcePath, CancellationToken cancellationToken)
     {
         var player = new MediaPlayer { Volume = 0, ScrubbingEnabled = true };
         bool opened = false;
@@ -905,17 +946,12 @@ internal static class VideoFrameRenderPipeline
                 Dispatcher.PushFrame(frame);
             }
 
-            if (failure is not null)
-            {
-                throw new InvalidDataException("The video container could not be opened.", failure);
-            }
-
-            if (!opened || !player.NaturalDuration.HasTimeSpan)
-            {
-                return 0;
-            }
-
-            return player.NaturalDuration.TimeSpan.TotalMilliseconds;
+            return new ContainerOpenOutcome(
+                opened,
+                failure,
+                opened && failure is null && player.NaturalDuration.HasTimeSpan
+                    ? player.NaturalDuration.TimeSpan.TotalMilliseconds
+                    : null);
         }
         finally
         {

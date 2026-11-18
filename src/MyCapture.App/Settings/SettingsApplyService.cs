@@ -142,6 +142,8 @@ public sealed class SettingsApplyService
         next.General.PinSizeTipShown = previous.General.PinSizeTipShown;
         next.General.PracticeRevisionOffered = previous.General.PracticeRevisionOffered;
         next.General.SavedLocationTipCount = previous.General.SavedLocationTipCount;
+        // The library's fold button owns this choice; an older draft must not undo it.
+        next.General.LibraryDetailsCollapsed = previous.General.LibraryDetailsCollapsed;
         next.Ocr.AccuracySuggestionDismissed |= previous.Ocr.AccuracySuggestionDismissed;
         next.Pin.ClickThroughHintShownCount = previous.Pin.ClickThroughHintShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
@@ -217,7 +219,7 @@ public sealed class SettingsApplyService
 
         // 7) Queue caps take effect now (except a root move, which waits for restart).
         //    A failure here is non-fatal: the user's settings are already persisted, so it
-        //    must NOT reverse them. Lowering MaxItems/MaxBytes can evict older captures —
+        //    must NOT reverse them. Lowering MaxItems can evict older captures —
         //    that eviction is intentional and stays applied; only the *persistence* of the
         //    trimmed index is what can fail, and that is what we report.
         if (_queue is not null)

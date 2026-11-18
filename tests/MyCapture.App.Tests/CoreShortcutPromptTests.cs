@@ -203,8 +203,8 @@ public sealed class CoreShortcutPromptTests
             AssertCoreShortcutPage(dialog, notice);
             TextBlock instruction = dialog.MotionParts.OfType<TextBlock>()
                 .Single(block => KoreanWordWrap.Strip(block.Text) == dialog.InstructionText);
-            Assert.Equal(TypeScale.BodyLarge * scale, instruction.FontSize);
-            Assert.All(dialog.CoreShortcutKeyList.Children.OfType<TextBlock>(), block => Assert.Equal(instruction.FontSize, block.FontSize));
+            Assert.Equal(TypeScale.Body * scale, instruction.FontSize);
+            Assert.All(dialog.CoreShortcutKeyList.Children.OfType<TextBlock>(), block => Assert.Equal(TypeScale.BodyLarge * scale, block.FontSize));
             Assert.Equal(instruction.FontSize, dialog.CoreShortcutParagraphs.FontSize);
         }
         finally { dialog.Close(); }

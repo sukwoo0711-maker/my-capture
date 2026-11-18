@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Storage;
@@ -35,12 +36,39 @@ public static class ImageCodec
             using var stream = new MemoryStream(bytes, writable: false);
             var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             BitmapSource bitmap = decoder.Frames[0];
+            KeepFrameMetadata(bitmap);
             bitmap.Freeze();
             return bitmap;
         }
         catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException or FormatException)
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Lets every thread encode a decoded frame; call it on the thread that decoded it.
+    /// </summary>
+    /// <remarks>
+    /// A frame reads its metadata from its decoder the first time something asks for it, and the decoder
+    /// belongs to the decoding thread. An encoder asks (<see cref="BitmapFrame.Create(BitmapSource)"/> copies
+    /// the source's metadata), so encoding the frame on any other thread threw
+    /// <see cref="InvalidOperationException"/>: a pin restored at launch, reopened from the closed list or
+    /// made from a clipboard PNG is decoded on one pool thread and copied or saved on another. Once it has
+    /// been read here the frame keeps its metadata and no longer goes back to the decoder.
+    /// </remarks>
+    public static void KeepFrameMetadata(BitmapSource decoded)
+    {
+        ArgumentNullException.ThrowIfNull(decoded);
+        if (decoded is not BitmapFrame frame) return;
+        try
+        {
+            _ = frame.Metadata;
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException
+            or IOException or COMException)
+        {
+            // The picture itself is intact; only an encode on another thread stays as it was.
         }
     }
 

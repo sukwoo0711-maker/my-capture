@@ -8,7 +8,8 @@ namespace MyCapture.Platform.Capture;
 /// <summary>The application that owned a captured window.</summary>
 /// <param name="Name">Friendly name, for example <c>Microsoft Edge</c>.</param>
 /// <param name="Path">Full path of the executable.</param>
-public sealed record SourceAppIdentity(string Name, string Path);
+/// <param name="AppUserModelId">Packaged application ID; empty for a desktop application.</param>
+public sealed record SourceAppIdentity(string Name, string Path, string AppUserModelId = "");
 
 /// <summary>
 /// Resolves a process to its executable and a friendly name. The name comes from the executable's
@@ -23,14 +24,17 @@ public sealed partial class SourceAppResolver
     private const int MaxCachedNames = 256;
     private readonly Func<uint, string?> _imagePath;
     private readonly Func<string, string?> _fileDescription;
+    private readonly Func<uint, string?> _appUserModelId;
     private readonly ConcurrentDictionary<string, string> _names = new(StringComparer.OrdinalIgnoreCase);
 
-    public SourceAppResolver() : this(ReadImagePath, ReadFileDescription) { }
+    public SourceAppResolver() : this(ReadImagePath, ReadFileDescription, ReadAppUserModelId) { }
 
-    internal SourceAppResolver(Func<uint, string?> imagePath, Func<string, string?> fileDescription)
+    internal SourceAppResolver(Func<uint, string?> imagePath, Func<string, string?> fileDescription,
+        Func<uint, string?>? appUserModelId = null)
     {
         _imagePath = imagePath ?? throw new ArgumentNullException(nameof(imagePath));
         _fileDescription = fileDescription ?? throw new ArgumentNullException(nameof(fileDescription));
+        _appUserModelId = appUserModelId ?? (_ => null);
     }
 
     /// <summary>Returns null when the process has exited, is protected, or reports no usable path.</summary>
@@ -53,8 +57,36 @@ public sealed partial class SourceAppResolver
             _names[path] = name;
         }
 
-        return name.Length == 0 ? null : new SourceAppIdentity(name, path);
+        if (name.Length == 0) return null;
+        string? id;
+        try { id = _appUserModelId(processId); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { id = null; }
+        return new SourceAppIdentity(name, path, CaptureSourceText.NormalizeAppUserModelId(id));
     }
+
+    /// <summary>
+    /// The packaged application ID of a process (GetApplicationUserModelId); null for a desktop process,
+    /// which reports APPMODEL_ERROR_NO_APPLICATION.
+    /// </summary>
+    private static string? ReadAppUserModelId(uint processId)
+    {
+        IntPtr process = OpenProcess(ProcessQueryLimitedInformation, false, processId);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            int length = CaptureSourceText.MaxAppUserModelIdLength + 1;
+            char[] buffer = new char[length];
+            return GetApplicationUserModelId(process, ref length, buffer) == 0 && length > 1
+                ? new string(buffer, 0, length - 1) : null;
+        }
+        finally
+        {
+            _ = CloseHandle(process);
+        }
+    }
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int GetApplicationUserModelId(IntPtr process, ref int length, [Out] char[] id);
 
     internal static string FriendlyName(string path, string? description)
     {

@@ -34,8 +34,7 @@ internal sealed record EncodedPinContent(
         content.TextStyle, content.CodeDocument, content.LayoutWidthDip, content.LayoutHeightDip,
         content.RasterDpiX, content.RasterDpiY, content.Provenance,
         content.PendingProvenance,
-        content.EstimatedRetainedBytes - content.MermaidPixelBytes - ClosedPinMemory.EstimatePixelBytes(
-            content.Image.PixelWidth, content.Image.PixelHeight, content.Image.Format.BitsPerPixel))
+        content.EstimatedRetainedBytes - content.MermaidPixelBytes - content.ImagePixelBytes)
     {
         BorderlessText = content.BorderlessText,
     };

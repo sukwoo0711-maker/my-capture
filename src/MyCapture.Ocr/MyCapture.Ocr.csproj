@@ -21,6 +21,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="RapidOcrNet" />
+    <PackageReference Include="ZXing.Net" />
   </ItemGroup>
 
 </Project>

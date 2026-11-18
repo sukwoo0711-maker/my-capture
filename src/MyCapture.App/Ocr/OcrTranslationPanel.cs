@@ -37,7 +37,7 @@ internal sealed class OcrTranslationPanel : Grid
     {
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        SetResourceReference(BackgroundProperty, "Surface.Sunken");
+        SetResourceReference(BackgroundProperty, "Surface.Base");
         AutomationProperties.SetName(this, UiText.Get("Translate_Tab"));
 
         var header = new DockPanel { Margin = new Thickness(16, 12, 12, 6), LastChildFill = true };

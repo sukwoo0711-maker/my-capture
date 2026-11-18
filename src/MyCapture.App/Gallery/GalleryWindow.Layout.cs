@@ -4,12 +4,15 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using MyCapture.App.Themes;
+using MyCapture.Core.Localization;
 
 namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
-    private bool _detailsPaneOpen;
+    // The details pane is part of the library's layout: it stays until the user folds it away.
+    private bool _detailsPaneOpen = true;
+    private Action<bool>? _saveDetailsCollapsed;
 
     /// <summary>How much of the content toolbar's detail is shown (see <see cref="FitContentToolbar"/>).</summary>
     internal enum ToolbarDensity
@@ -50,15 +53,54 @@ internal sealed partial class GalleryWindow
         {
             ApplyToolbarDensity(density);
             needed = MeasureContentToolbar();
+            ContentToolbarShortfall = needed - available;
             if (needed <= available) return;
         }
         // Not even the compact bar fits (English at 150 % text beside the details pane at the minimum width):
         // the sort box gives back the width its longest choice asked for, down to the compact width, rather
         // than slide under the commands.
-        SortBox.Width = Math.Max(CompactSortBoxWidth, Math.Floor(SortBox.Width - (needed - available)));
+        double overflow = needed - available;
+        double sortRoom = Math.Max(0, SortBox.Width - CompactSortBoxWidth);
+        double fromSort = Math.Min(overflow, sortRoom);
+        SortBox.Width = Math.Floor(SortBox.Width - fromSort);
+        // Only when that is not enough does the count give back the rest, down to the width it had before it
+        // followed its text; it then ends in an ellipsis with its tooltip, as the compact bar always allowed.
+        if (overflow - fromSort > 0)
+            SelectionCountLabel.Width = Math.Max(MinimumCompactCountWidth, Math.Floor(SelectionCountLabel.Width - (overflow - fromSort)));
     }
 
     private const double CompactSortBoxWidth = 92;
+    private const double MinimumCompactCountWidth = 40;
+
+    /// <summary>
+    /// The compact bar's selection count is as wide as its longest text ("No selection", or 999 selected), measured in
+    /// the label's own font and DPI, so the count is never cut to an ellipsis and a language or text size change is followed.
+    /// </summary>
+    private double CompactCountWidth()
+    {
+        var probe = new TextBlock
+        {
+            FontFamily = SelectionCountLabel.FontFamily,
+            FontSize = SelectionCountLabel.FontSize,
+            FontWeight = SelectionCountLabel.FontWeight,
+            FontStyle = SelectionCountLabel.FontStyle,
+            FontStretch = SelectionCountLabel.FontStretch,
+            Language = SelectionCountLabel.Language,
+        };
+        TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(SelectionCountLabel));
+        VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(SelectionCountLabel));
+        double widest = 0;
+        foreach (string text in new[] { UiText.Get("LibraryUx_NoSelection"), UiText.Format("LibrarySelection_Count", 999) })
+        {
+            probe.Text = text;
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            widest = Math.Max(widest, probe.DesiredSize.Width);
+        }
+        return Math.Ceiling(widest) + 1;
+    }
+
+    /// <summary>How far the content toolbar still overflows its row after the last fit; zero or less means it fits.</summary>
+    internal double ContentToolbarShortfall { get; private set; }
 
     private double MeasureContentToolbar()
     {
@@ -71,7 +113,8 @@ internal sealed partial class GalleryWindow
         InvalidateToolbarMeasure(SortCommands);
         SelectionCommands.Measure(probe);
         SortCommands.Measure(probe);
-        return SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width;
+        return (SelectionCommands.Visibility == Visibility.Visible ? SelectionCommands.DesiredSize.Width : 0)
+            + SortCommands.DesiredSize.Width;
     }
 
     private static void InvalidateToolbarMeasure(DependencyObject element)
@@ -85,16 +128,16 @@ internal sealed partial class GalleryWindow
     {
         _toolbarDensity = density;
         Visibility label = density == ToolbarDensity.Labelled ? Visibility.Visible : Visibility.Collapsed;
-        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, CreatePdfSelectedLabel, KeepSelectedLabel })
+        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel })
             text.Visibility = label;
-        // A sixth command still fits beside the details pane at the minimum window width.
+        // Three direct actions stay within the same row beside the details pane.
         // Keep each command's hit target; only trim the gaps and the ellipsized count.
         foreach (Button button in SelectionCommands.Children.OfType<Button>())
         {
             if (density == ToolbarDensity.Compact) button.Margin = new Thickness(1, 0, 1, 0);
             else button.ClearValue(MarginProperty);
         }
-        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 40 : 96;
+        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? CompactCountWidth() : 96;
         SelectionCountLabel.ToolTip = density == ToolbarDensity.Compact ? _viewModel.SelectionText : null;
         // No narrower than the longest choice (at 112 DIP English showed "Newest firs") unless the compact bar
         // still does not fit; see FitContentToolbar.
@@ -131,6 +174,7 @@ internal sealed partial class GalleryWindow
 
     private void InitializeCommandBarLayout()
     {
+        MoreCommandsButton.ContextMenu.PlacementTarget = MoreCommandsButton;
         LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
         Loaded += (_, _) => FitSelectionCommands();
         DpiChanged += (_, _) => FitContentToolbar();
@@ -179,31 +223,41 @@ internal sealed partial class GalleryWindow
     /// <summary>
     /// Whether the details pane is shown. Hiding it leaves a narrow rail with the button that
     /// brings it back, and the library takes the width, so a narrow window fits another column.
-    /// The choice lasts while the app runs; the window is reused when it reopens. An empty
-    /// library has nothing to describe, so neither the pane nor its rail is shown then.
+    /// The pane is open by default and only the user's fold/unfold buttons change that, never a selection,
+    /// a search, a folder change or an empty library (it then says nothing is selected). The folded choice is
+    /// saved through <see cref="ConfigureDetailsPanePersistence"/> and restored on the next run.
     /// </summary>
     internal bool IsDetailsPaneOpen => _detailsPaneOpen;
 
-    private void OnHideDetailsClick(object sender, RoutedEventArgs e) => SetDetailsPaneOpen(false);
+    private void OnHideDetailsClick(object sender, RoutedEventArgs e) => UserSetDetailsPaneOpen(false);
 
-    private void OnShowDetailsClick(object sender, RoutedEventArgs e) => SetDetailsPaneOpen(true);
+    private void OnShowDetailsClick(object sender, RoutedEventArgs e) => UserSetDetailsPaneOpen(true);
 
-    /// <summary>Keeps the empty state's shortcut current and the details pane off an empty library.</summary>
+    private void UserSetDetailsPaneOpen(bool open)
+    {
+        SetDetailsPaneOpen(open);
+        _saveDetailsCollapsed?.Invoke(!open);
+    }
+
+    /// <summary>Restores the saved fold state without motion and keeps saving the user's later choices.</summary>
+    internal void ConfigureDetailsPanePersistence(bool collapsed, Action<bool> save)
+    {
+        _saveDetailsCollapsed = save;
+        _detailsPaneOpen = !collapsed;
+        ApplyDetailsPaneVisibility();
+    }
+
+    /// <summary>Keeps the empty state's shortcut current.</summary>
     private void InitializeEmptyLibrary()
     {
         _viewModel.CaptureShortcutText = () => ReadHotkeys().Capture is { IsAssigned: true } capture ? capture.ToString() : string.Empty;
-        _viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is null or "" or nameof(GalleryViewModel.QueueIsEmpty)) ApplyDetailsPaneVisibility();
-        };
         ApplyDetailsPaneVisibility();
     }
 
     private void ApplyDetailsPaneVisibility()
     {
-        bool empty = _viewModel.QueueIsEmpty;
-        GalleryDetailsPanel.Visibility = !empty && _detailsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
-        GalleryDetailsRail.Visibility = !empty && !_detailsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+        GalleryDetailsPanel.Visibility = _detailsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+        GalleryDetailsRail.Visibility = _detailsPaneOpen ? Visibility.Collapsed : Visibility.Visible;
     }
 
     internal void SetDetailsPaneOpen(bool open)

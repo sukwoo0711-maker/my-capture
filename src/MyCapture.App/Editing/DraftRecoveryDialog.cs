@@ -167,7 +167,7 @@ internal sealed class DraftRecoveryDialog : Window
         grid.Children.Add(frame);
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) };
-        text.Children.Add(KoreanWordWrap.Show(new TextBlock { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, item.Heading));
+        text.Children.Add(KoreanWordWrap.Show(MyCapture.App.Themes.ControlLabelTypography.Apply(new TextBlock { TextWrapping = TextWrapping.Wrap }), item.Heading));
         // Parts stay together (no-break spaces); the digits and units inside them stay whole as well.
         var detail = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) },
             KeepPartsTogether(item.Detail));

@@ -66,6 +66,7 @@ internal sealed partial class SettingsWindow : Window
         InitializeInstantSave();
         InitializeSearch();
         InitializeSettingsGuides();
+        InitializeSettingsMotion();
 
         // Preserve Ctrl+S as an immediate flush; Esc and Close flush before returning to the tray.
         CommandBindings.Add(new CommandBinding(ApplyCommand, (_, _) => Apply()));

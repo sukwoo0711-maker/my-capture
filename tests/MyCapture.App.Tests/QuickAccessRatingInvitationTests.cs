@@ -82,6 +82,7 @@ public sealed class QuickAccessRatingInvitationTests
     [Fact]
     public void OfferingTwiceOrAfterShowingCreatingAHandleOrClosingThrows() => StaTestHost.Run(() =>
     {
+        using TestDpiContext dpi = TestDpiContext.At96Dpi();
         var card = Card();
         try
         {
@@ -108,11 +109,52 @@ public sealed class QuickAccessRatingInvitationTests
         finally { withHandle.Close(); }
     });
 
+    /// <summary>
+    /// A card whose window is not at its monitor's scale cannot reach the bounds placement asks for.
+    /// That used to throw out of the card's Loaded handler (at 125% it ended this test host, issue 281).
+    /// </summary>
+    [Fact]
+    public void ACardThatMissesItsBoundsStaysOpenAndReportsItOnce() => StaTestHost.Run(() =>
+    {
+        using TestDpiContext dpi = TestDpiContext.At96Dpi();
+        // At half the window's scale the monitor asks for half the card's minimum width in pixels, as a
+        // display does whose scale rose while the card was on it. Windows keeps the minimum width, so the
+        // read-back misses on every attempt, on any display.
+        QuickAccessWindow card = Card(scale: 0.5);
+        var reported = new List<Exception>();
+        card.PlacementMissed = reported.Add;
+        try
+        {
+            ShowAt96Dpi(card);
+            var miss = Assert.IsType<InvalidOperationException>(card.PlacementMiss);
+            Assert.Contains("did not reach its requested physical-pixel bounds", miss.Message);
+            Assert.Same(miss, Assert.Single(reported));
+            Assert.True(card.IsVisible);
+            Assert.True(card.IsOpen);
+
+            // A size change places the card again and misses again: the first miss stays, told once.
+            int sizeChanges = 0;
+            card.SizeChanged += (_, _) => sizeChanges++;
+            card.MinHeight = card.ActualHeight + 24;
+            card.UpdateLayout();
+            Pump();
+            Assert.True(sizeChanges > 0, "The taller minimum did not change the card's size.");
+            Assert.Same(miss, card.PlacementMiss);
+            Assert.Single(reported);
+
+            // It is still the card: its close button closes it.
+            Click(CloseButton(card));
+            Assert.False(card.IsOpen);
+        }
+        finally { card.Close(); }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void ReviewRunsOnceHoldsCountdownAndReleasesAfterSuccessOrFault(bool fault) => StaTestHost.Run(() =>
     {
+        using TestDpiContext dpi = TestDpiContext.At96Dpi();
         SynchronizationContext? previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
         var completion = new TaskCompletionSource();
@@ -750,7 +792,7 @@ public sealed class QuickAccessRatingInvitationTests
         QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
         Assert.Equal(Visibility.Visible, card.RatingInvitationForTest.Row.Visibility);
         // Saved and bound while the copy still runs: an action fails before the capture has reported.
-        shell.PumpUntil(() => card.LibraryButtonForTest.IsEnabled);
+        shell.PumpUntil(() => card.LibraryMenuItemForTest.IsEnabled);
         shell.Wait(card.RunAsync("Pin", () => Task.FromResult(false), "QuickAccess.Pinning", "QuickAccess.Pinned"));
         Assert.Equal(Visibility.Hidden, card.RatingInvitationForTest.Row.Visibility);
         Assert.Equal(1, shell.Settings.StoreRating.InvitationShownCount);
@@ -1001,6 +1043,7 @@ public sealed class QuickAccessRatingInvitationTests
     [InlineData("replacement")]
     public void ExplicitCloseStillClosesWhileReviewIsPending(string method) => StaTestHost.Run(() =>
     {
+        using TestDpiContext dpi = TestDpiContext.At96Dpi();
         var card = Card();
         var completion = new TaskCompletionSource();
         card.OfferRatingInvitation(() => completion.Task, () => { }, () => { });
@@ -1085,17 +1128,32 @@ public sealed class QuickAccessRatingInvitationTests
 
     private static void ShowWithoutHotkey(QuickAccessWindow card)
     {
+        ShowAt96Dpi(card);
+        // Placement runs as the card loads. A miss there means the fixture's monitor and the card's
+        // window do not share their pixels, and nothing asserted after it could be trusted.
+        Assert.True(card.PlacementMiss is null, "The card missed its bounds on the fixture's monitor: " + card.PlacementMiss?.Message);
+    }
+
+    // The fixture's monitor is a 96 DPI one that no display backs, so the card's window is made at 96 DPI
+    // on any display: the caller holds TestDpiContext.At96Dpi for as long as the card is open. With the
+    // window at the display's scale instead, the card's minimum width in pixels is wider than the width
+    // placement asks for on that monitor (328 against 410 at 125%).
+    private static void ShowAt96Dpi(QuickAccessWindow card)
+    {
         Ocr410Fixture.LoadTheme(card);
         FluidMotion.SetWindowEntrance(card, false);
+        TestDpiContext.Initialize96DpiWindow(card);
         card.Show();
         card.UpdateLayout();
+        TestDpiContext.Assert96Dpi(card);
+        Assert.True(card.IsLoaded);
     }
 
     private static Button CloseButton(QuickAccessWindow card) => QuickAccessDetachedFixture.Descendants(card.SurfaceForTest)
         .OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "Dialog.Close");
 
     private static FrameworkElement[] Controls(QuickAccessWindow card) =>
-        [.. card.ActionButtonsForTest, card.LibraryButtonForTest, card.KeepToggleForTest, CloseButton(card), card.PreviewForTest];
+        [.. card.ActionButtonsForTest, card.MoreButtonForTest, card.KeepToggleForTest, CloseButton(card), card.PreviewForTest];
 
     private static Rect[] ControlBounds(QuickAccessWindow card) => Controls(card).Select(control => Bounds(control, card.SurfaceForTest)).ToArray();
     private static Rect Bounds(FrameworkElement element, Visual ancestor) => element.TransformToAncestor(ancestor).TransformBounds(new Rect(element.RenderSize));

@@ -12,4 +12,8 @@ namespace MyCapture.App.Diagnostics;
 internal static class ResidentProbeWindowHook
 {
     internal static Action<Window>? SourceInitialized { get; set; }
+
+    // One null check in a normal pin constructor. Diagnostic code can configure an opaque
+    // window before its HWND exists and subscribe to SourceInitialized for its first frame.
+    internal static Action<MyCapture.App.Pinning.PinWindow>? PinConstructed { get; set; }
 }

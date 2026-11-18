@@ -276,7 +276,8 @@ public sealed class EditorUxTests
             ShowActivated = false, ShowInTaskbar = false,
         };
         var video = new VideoEditorWindow(new RecordingResult("unused.mp4", 3000, 15, 45, 640, 360),
-            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance);
+            AppPaths.CreateForRoot(ValidatedFilePaths.CreateTemporaryDirectory()), NullLoggerFactory.Instance,
+            pointerMonitor: MyCapture.Platform.Display.MonitorEnumerator.GetAll().First(monitor => monitor.IsPrimary));
         FieldInfo ready = typeof(VideoEditorWindow).GetField("_mediaReady", BindingFlags.Instance | BindingFlags.NonPublic)!;
         try
         {
@@ -443,7 +444,8 @@ public sealed class EditorUxTests
 
     [Theory]
     [InlineData("Select", "Arrow")]
-    [InlineData("Text", "TextBeam")]
+    [InlineData("Text", "TextInk")]
+    [InlineData("Eraser", "Eraser")]
     [InlineData("Rectangle", "Crosshair")]
     [InlineData("Ellipse", "Crosshair")]
     [InlineData("Arrow", "Crosshair")]
@@ -520,18 +522,38 @@ public sealed class EditorUxTests
     {
         EditorCursorKind kind = Enum.Parse<EditorCursorKind>(kindName);
         EditorCursorImage image = EditorCursors.Render(kind, size, 7, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White);
+        // The eraser's frame is as large as its ring needs and its hot spot is the ring's empty
+        // centre (EditorPointerInkAndSizeTests covers it); every other tool cursor fills the frame.
+        bool eraser = kind == EditorCursorKind.Eraser;
+        if (eraser) size = image.Bitmap.PixelWidth;
         Assert.Equal(size, image.Bitmap.PixelWidth);
         Assert.Equal(size, image.Bitmap.PixelHeight);
         byte[] pixels = Pixels(image.Bitmap);
-        Assert.True(Alpha(pixels, size, image.HotSpotX, image.HotSpotY) >= 160,
-            $"{kind} at {size}px: hot spot ({image.HotSpotX},{image.HotSpotY}) is not on the drawn tip.");
-        // The hot spot scales with the cursor (the 32 px design anchor times the scale).
-        EditorCursorImage reference = EditorCursors.Render(kind, 32, 7, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White);
-        Assert.InRange(image.HotSpotX, Math.Floor(reference.HotSpotX * size / 32.0) - 1, Math.Ceiling((reference.HotSpotX + 1) * size / 32.0));
-        Assert.InRange(image.HotSpotY, Math.Floor(reference.HotSpotY * size / 32.0) - 1, Math.Ceiling((reference.HotSpotY + 1) * size / 32.0));
-        // Both a dark outline and a light body, so the cursor reads on any capture.
-        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] < 40 && pixels[(i * 4) + 2] < 40);
-        Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] > 220 && pixels[(i * 4) + 1] > 220);
+        if (!eraser)
+        {
+            Assert.True(Alpha(pixels, size, image.HotSpotX, image.HotSpotY) >= 160,
+                $"{kind} at {size}px: hot spot ({image.HotSpotX},{image.HotSpotY}) is not on the drawn tip.");
+            // The hot spot scales with the cursor (the 32 px design anchor times the scale).
+            EditorCursorImage reference = EditorCursors.Render(kind, 32, 7, ColorRgba.FromRgb(0xEF, 0x44, 0x44), EditorCursorStyle.White);
+            Assert.InRange(image.HotSpotX, Math.Floor(reference.HotSpotX * size / 32.0) - 1, Math.Ceiling((reference.HotSpotX + 1) * size / 32.0));
+            Assert.InRange(image.HotSpotY, Math.Floor(reference.HotSpotY * size / 32.0) - 1, Math.Ceiling((reference.HotSpotY + 1) * size / 32.0));
+        }
+
+        if (EditorCursorPolicy.ShowsInk(kind) && kind != EditorCursorKind.StepNumber)
+        {
+            // The ink (red here) inside the edge chosen for it, so the cursor shows the colour and reads
+            // on any capture; EditorPointerInkAndSizeTests checks the edge's contrast for other inks.
+            Color edge = EditorCursorStyle.ForInk(ColorRgba.FromRgb(0xEF, 0x44, 0x44)).Outline;
+            Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[(i * 4) + 2] > 200 && pixels[(i * 4) + 1] < 90 && pixels[i * 4] < 90);
+            Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200
+                && Math.Abs(pixels[(i * 4) + 2] - edge.R) < 30 && Math.Abs(pixels[(i * 4) + 1] - edge.G) < 30 && Math.Abs(pixels[i * 4] - edge.B) < 30);
+        }
+        else
+        {
+            // Both a dark outline and a light body, so the cursor reads on any capture.
+            Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] < 40 && pixels[(i * 4) + 2] < 40);
+            Assert.Contains(Enumerable.Range(0, size * size), i => pixels[(i * 4) + 3] > 200 && pixels[i * 4] > 220 && pixels[(i * 4) + 1] > 220);
+        }
 
         byte[] file = EditorCursors.BuildCursorFile(image);
         using var reader = new BinaryReader(new MemoryStream(file));
@@ -551,7 +573,7 @@ public sealed class EditorUxTests
         int maskStart = 22 + 40 + (size * size * 4);
         bool Masked(int x, int y) => (file[maskStart + ((size - 1 - y) * maskStride) + (x / 8)] & (0x80 >> (x % 8))) != 0;
         Assert.True(Masked(0, size - 1));
-        Assert.False(Masked(image.HotSpotX, image.HotSpotY));
+        Assert.Equal(eraser, Masked(image.HotSpotX, image.HotSpotY));
 
         using var cursor = new Cursor(new MemoryStream(file), scaleWithDpi: false);
     });
@@ -562,7 +584,11 @@ public sealed class EditorUxTests
         var red = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
         EditorCursorStyle white = EditorCursorStyle.White;
         Cursor pen = EditorCursors.Get(EditorCursorKind.Pen, 32, 0, red, highContrast: false, white);
-        Assert.Same(pen, EditorCursors.Get(EditorCursorKind.Pen, 32, 5, ColorRgba.White, highContrast: false, white));
+        // The step number is no part of the pen's identity; its ink is (the pen shows the colour it draws with).
+        Assert.Same(pen, EditorCursors.Get(EditorCursorKind.Pen, 32, 5, red, highContrast: false, white));
+        Assert.NotSame(pen, EditorCursors.Get(EditorCursorKind.Pen, 32, 0, ColorRgba.White, highContrast: false, white));
+        Cursor crop = EditorCursors.Get(EditorCursorKind.Crop, 32, 0, red, highContrast: false, white);
+        Assert.Same(crop, EditorCursors.Get(EditorCursorKind.Crop, 32, 5, ColorRgba.White, highContrast: false, white));
         Assert.NotSame(pen, EditorCursors.Get(EditorCursorKind.Pen, 48, 0, red, highContrast: false, white));
         Assert.NotSame(pen, EditorCursors.Get(EditorCursorKind.Pen, 32, 0, red, highContrast: false, EditorCursorStyle.FromSettings(1, null)));
         Assert.NotSame(Cursors.Cross, pen);
@@ -597,7 +623,8 @@ public sealed class EditorUxTests
     {
         // This PC's setting when the feature was written: custom colour 262399 (red).
         EditorCursorStyle red = EditorCursorStyle.FromSettings(6, 262399);
-        byte[] pixels = Pixels(EditorCursors.Render(EditorCursorKind.Pen, 64, 0, ColorRgba.White, red).Bitmap);
+        // The crop corners follow the pointer style; the pen shows the ink instead (EditorPointerInkAndSizeTests).
+        byte[] pixels = Pixels(EditorCursors.Render(EditorCursorKind.Crop, 64, 0, ColorRgba.White, red).Bitmap);
         Assert.Contains(Enumerable.Range(0, 64 * 64), i => pixels[(i * 4) + 3] == 255 && pixels[(i * 4) + 2] > 240 && pixels[(i * 4) + 1] < 20);
         Assert.DoesNotContain(Enumerable.Range(0, 64 * 64), i => pixels[(i * 4) + 3] == 255 && pixels[i * 4] > 240 && pixels[(i * 4) + 1] > 240 && pixels[(i * 4) + 2] > 240);
     });
@@ -610,7 +637,7 @@ public sealed class EditorUxTests
         var viewport = (FrameworkElement)editor.PointerInputElement;
         foreach ((Key key, EditorCursorKind kind) in new[]
         {
-            (Key.P, EditorCursorKind.Pen), (Key.H, EditorCursorKind.Highlighter), (Key.T, EditorCursorKind.TextBeam),
+            (Key.P, EditorCursorKind.Pen), (Key.H, EditorCursorKind.Highlighter), (Key.T, EditorCursorKind.TextInk),
             (Key.R, EditorCursorKind.Crosshair), (Key.N, EditorCursorKind.StepNumber), (Key.M, EditorCursorKind.Mosaic),
             (Key.B, EditorCursorKind.Blur), (Key.X, EditorCursorKind.Crop), (Key.V, EditorCursorKind.Arrow),
         })

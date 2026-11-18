@@ -21,6 +21,79 @@ public sealed class NativeSelectorChromeTests
     private static readonly RectD Bounds = new(0, 0, 640, 360);
 
     [Fact]
+    public void PrimaryAndDeferredChromePreserveTheImplicitWindowStyle() => StaTestHost.Run(() =>
+    {
+        using var owner = Owner(NativeSelectorChromeStrategy.Fresh);
+        owner.NotifyFirstFramePresented();
+        owner.ShowStartGuide = true;
+        var chrome = Assert.IsType<NativeSelectorChrome>(owner.Chrome);
+        Assert.Equal(5, chrome.Windows.Count);
+        Assert.False(owner.IsChromeReady);
+        Assert.Equal(4, chrome.PendingFrameCount);
+        Assert.NotNull(chrome.StartGuideCard);
+        owner.ShowStartGuide = false;
+        owner.ShowKeyPanel = true;
+        Assert.NotNull(chrome.KeyPanel);
+        Assert.Equal(6, chrome.Windows.Count);
+        // The shared implicit Window style supplies the UI font and text rendering. A derived
+        // window type silently loses that style, including on guides created after the first frame.
+        Assert.All(chrome.Windows, window => Assert.Equal(typeof(Window), window.GetType()));
+        Assert.All(chrome.Windows, window => Assert.Equal(RenderMode.Default,
+            HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)!.CompositionTarget!.RenderMode));
+        chrome.Show();
+        PumpUntil(() => owner.IsChromeReady);
+        Assert.Equal(0, chrome.PendingFrameCount);
+    });
+
+    [Fact]
+    public void OwnedShowCandidateKeepsFreshFramesHiddenCacheAndStablePointerOrder() => StaTestHost.Run(() =>
+    {
+        try
+        {
+            NativeSelectorChrome? previous = null;
+            for (int lease = 0; lease < 2; lease++)
+            {
+                using var owner = Owner();
+                owner.SkipChromeShowRestackForProbe = true;
+                var chrome = NativeSelectorChromeCache.Acquire(owner, true, false);
+                if (previous is not null) Assert.Same(previous, chrome);
+                Assert.False(owner.IsChromeReady);
+                Assert.Equal(4, chrome.PendingFrameCount);
+                chrome.Show();
+                PumpUntil(() => owner.IsChromeReady);
+                Assert.Equal(0, chrome.PendingFrameCount);
+                Assert.All(chrome.Windows, window =>
+                {
+                    Assert.True(window.IsVisible);
+                    Assert.True(window.Topmost);
+                    Assert.Equal(owner.Handle, new WindowInteropHelper(window).Owner);
+                });
+                int positionChanges = 0;
+                HwndSourceHook hook = (IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+                {
+                    if (message == 0x0046) positionChanges++;
+                    return IntPtr.Zero;
+                };
+                HwndSource[] sources = Handles(chrome).Select(handle => HwndSource.FromHwnd(handle)!).ToArray();
+                foreach (HwndSource source in sources) source.AddHook(hook);
+                try
+                {
+                    for (int i = 0; i < 20; i++) chrome.Update(new PointD(100, 120), Int32Rect.Empty);
+                    Assert.Equal(0, positionChanges);
+                    chrome.Update(new PointD(160, 180), Int32Rect.Empty);
+                    Assert.True(positionChanges > 0);
+                }
+                finally { foreach (HwndSource source in sources) source.RemoveHook(hook); }
+                NativeSelectorChromeCache.Release(chrome);
+                Assert.True(chrome.IsDetached);
+                Assert.All(chrome.Windows, window => Assert.False(window.IsVisible));
+                previous = chrome;
+            }
+        }
+        finally { NativeSelectorChromeCache.Trim(); }
+    });
+
+    [Fact]
     public void RepeatedLeasesReuseHandlesAndDetachOldOwnersAndPixels() => StaTestHost.Run(() =>
     {
         try

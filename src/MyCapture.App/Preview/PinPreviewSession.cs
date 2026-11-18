@@ -83,6 +83,8 @@ internal sealed class PinPreviewSession : IDisposable
             _pins.ConfigureTranslation(_translators.For);
             // A picture pin is read with Windows OCR, on this PC, when the user asks to translate it.
             _ocr = new WindowsOcrService(NullLogger<WindowsOcrService>.Instance);
+            _pins.RecognizeSelection = (image, token) => PinTextCopyService.RecognizeAsync(
+                image, _ocr, _settings.Ocr, token);
             _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
                 _ocr, image, _settings.Ocr, token));
         }

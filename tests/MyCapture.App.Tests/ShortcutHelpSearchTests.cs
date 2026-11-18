@@ -114,20 +114,18 @@ public sealed class ShortcutHelpSearchTests
         Assert.Single(view.VisibleResults());
         Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
 
-        // Copy includes the editor, library, both pin routes and the quick-access alias.
+        // Ctrl+C covers the editor, library, the pin and the quick-access alias; the pin's original-text row
+        // is Ctrl+double-click only, because Ctrl+C also copies the image.
         view.Search.Text = "Ctrl+C";
         Border[] copies = view.VisibleResults();
-        Assert.Equal(5, copies.Length);
+        Assert.Equal(4, copies.Length);
         Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Workspace.Library"), UiText.Get("Text_33EFD44366A7"),
-            UiText.Get("Text_33EFD44366A7"), UiText.Get("Help.QuickAccess") }, copies.Select(row => KoreanWordWrap.Strip(Texts(row)[1].Text)));
+            UiText.Get("Help.QuickAccess") }, copies.Select(row => KoreanWordWrap.Strip(Texts(row)[1].Text)));
         Assert.All(copies.Take(3), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C"));
-        Assert.Equal(UiText.Get("Text_976A6C92B870"), KoreanWordWrap.Strip(Texts(copies[3])[0].Text));
         Assert.Contains(FirstRunWelcomeTests.Descendants(copies[3]).OfType<WrapPanel>(),
-            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
-        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[4]).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "C / Ctrl+C");
-        Assert.Equal(UiText.Format("Help.SearchCount", 5), view.Count.Text);
+        Assert.Equal(UiText.Format("Help.SearchCount", 4), view.Count.Text);
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
@@ -153,7 +151,7 @@ public sealed class ShortcutHelpSearchTests
         Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index - 1]).OfType<TextBlock>(),
             text => KoreanWordWrap.Strip(text.Text) == UiText.Get("QuickAccess.Copy"));
         Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index]).OfType<WrapPanel>(),
-            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+            keys => AutomationProperties.GetName(keys) == UiText.Get("Text_C7011B8D345C"));
         Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")?.Id);
     });
 

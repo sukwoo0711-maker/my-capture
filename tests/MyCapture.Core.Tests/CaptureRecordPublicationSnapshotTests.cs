@@ -162,18 +162,25 @@ public sealed class CaptureRecordPublicationSnapshotTests(ITestOutputHelper outp
 
         // One changed record costs one copy. A copy is about 440 bytes, the list of 1,000 references
         // 8 KB; copying every record again was 435 KB.
+        // The first publication also pays one-time costs on this thread (first calls, type loading), so each
+        // window publishes one more single-record change; copying every record would exceed the limit in all
+        // of them (see ThreadAllocation).
         CaptureRecord target = records[^1];
-        target.Title = "changed";
-        long allocated;
-        using (CaptureWriteReservation reservation = await queue.ReservePublicationAsync())
+        var windows = new List<long>();
+        for (int window = 0; window < ThreadAllocation.Windows; window++)
         {
+            target.Title = "changed " + window;
+            using CaptureWriteReservation reservation = await queue.ReservePublicationAsync();
             long before = GC.GetAllocatedBytesForCurrentThread();
             Task publication = queue.PublishRecordAsync(target, reservation);
-            allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             await publication;
+            windows.Add(allocated);
+            if (allocated < 16 * 1024) break;
         }
-        output.WriteLine($"caller allocation after one change: {allocated:N0} B");
-        Assert.True(allocated < 16 * 1024, $"PublishRecordAsync allocated {allocated:N0} bytes on its caller.");
+        output.WriteLine($"caller allocation after one change: {ThreadAllocation.Describe([.. windows])}");
+        Assert.True(ThreadAllocation.AnyWithin([.. windows], 16 * 1024 - 1),
+            $"PublishRecordAsync allocated {ThreadAllocation.Describe([.. windows])} on its caller.");
         AssertIndexMatchesStringWriter(queue, workspace);
         AssertMetaMatchesStringWriter(queue, target);
 

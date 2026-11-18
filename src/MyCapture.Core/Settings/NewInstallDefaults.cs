@@ -5,7 +5,7 @@ namespace MyCapture.Core.Settings;
 /// <summary>
 /// The settings a new installation starts with. Region capture, screen recording, the library and
 /// pin commands own global shortcuts, the theme follows Windows, key captions appear while Alt is held, and
-/// library images have no time limit within a 1,000-item / 5 GiB capacity budget.
+/// library images have no time limit within a 1,000-item cap.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,8 +19,8 @@ namespace MyCapture.Core.Settings;
 /// values. The four core shortcuts take priority over other programs, and the first launch
 /// explains the assignments; a reset keeps the user's own answer about that priority instead.
 /// Ctrl+Shift+Z opens the library, F3 pins content, Shift+F3 hides or
-/// shows the pins, and the upload shortcut stays unassigned.
-/// Shortcut keys stay visible in every button tooltip, double-click does not close a new pin,
+/// shows the pins, Ctrl+Shift+F3 reopens a closed pin, and the upload shortcut stays unassigned.
+/// Shortcut keys stay visible in every button tooltip, a double-click closes a pin,
 /// and pins left open at exit reopen at the next launch.
 /// </para>
 /// </remarks>
@@ -40,17 +40,34 @@ public static class NewInstallDefaults
         ArgumentNullException.ThrowIfNull(settings);
         settings.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
         settings.Hotkeys.HideAllPins = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
+        settings.Hotkeys.RestoreClosedPin = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkF3);
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
         settings.Pin.CloseOnDoubleClick = true;
         settings.Pin.RestoreOpenPinsOnLaunch = true;
+        settings.Pin.RestoreOpenPinsRevision = 1;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
         settings.General.ShowShortcutHints = false;
         settings.General.AlwaysShowShortcutHints = false;
         settings.General.ShortcutHintsRevision = 1;
-        settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
-        settings.Queue.MaxBytes = 5L * 1024 * 1024 * 1024;
-        settings.Queue.MaxItems = 1000;
+        ApplyLibraryRetention(settings.Queue);
         CoreShortcuts.Accept(settings.Hotkeys);
+    }
+
+    /// <summary>
+    /// The library limits of a new installation: images never expire and the library keeps 1,000 items. A settings
+    /// file that exists but cannot be read also takes these, so a damaged file never turns on the earlier seven-day
+    /// expiry and sends captures to the Recycle Bin.
+    /// </summary>
+    /// <remarks>
+    /// The 5 GiB byte value is saved only for earlier versions, which still evict by bytes after a rollback; this
+    /// version ignores it (see <see cref="QueueSettings.MaxBytes"/>).
+    /// </remarks>
+    public static void ApplyLibraryRetention(QueueSettings queue)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+        queue.ImageRetentionHours = CaptureRetention.NeverHours;
+        queue.MaxBytes = 5L * 1024 * 1024 * 1024;
+        queue.MaxItems = 1000;
     }
 }

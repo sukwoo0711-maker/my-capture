@@ -112,6 +112,48 @@ internal sealed partial class PinTranslationService
         return accepted;
     }
 
+    /// <summary>
+    /// An English paragraph of two or more sentences that surely fits one model segment, so the translator keeps
+    /// it whole. The estimate counts at least one token per two letters of a word and one per any other character;
+    /// the model's own pieces are fewer for everyday English.
+    /// </summary>
+    private bool TranslatesWhole(PlanPiece piece, int sentences) =>
+        Direction == PinTranslationDirection.EnglishToKorean && piece.Kind == PlanKind.Prose && sentences >= 2
+        && EstimateTokens(piece.Source) <= TextTranslationService.MaxSegmentTokens;
+
+    internal static int EstimateTokens(string text)
+    {
+        int tokens = 1, letters = 0;
+        foreach (char c in text)
+        {
+            if (char.IsAsciiLetter(c))
+            {
+                letters++;
+                continue;
+            }
+            tokens += (letters + 1) / 2;
+            letters = 0;
+            if (!char.IsWhiteSpace(c)) tokens++;
+        }
+        return tokens + (letters + 1) / 2;
+    }
+
+    /// <summary>
+    /// The whole translation of a short paragraph, when it passes the same checks as a sentence and keeps a sentence
+    /// end for every source sentence; otherwise null and the paragraph is translated sentence by sentence.
+    /// </summary>
+    private string? AcceptWhole(string source, TranslatedText result, int sentences)
+    {
+        if (!string.Equals(result.Source, source, StringComparison.Ordinal))
+            throw new InvalidOperationException("The translator returned a missing or mismatched pin result.");
+        string text = (result.Text ?? string.Empty).ReplaceLineEndings(" ").Trim();
+        return SentenceEnd().Count(text) >= sentences && ContentLossReason(source, text, Direction).Length == 0
+            && Accepts(source, result, text, false) ? text : null;
+    }
+
+    [GeneratedRegex(@"[.!?。？！](?=[""')\]]*(?:\s|$))", RegexOptions.CultureInvariant)]
+    private static partial Regex SentenceEnd();
+
     private static bool Accepts(string source, TranslatedText result, string text, bool markdown) =>
         text.Length > 0 && !result.NeedsReview && PreservesProtectedValues(source, text)
         && (!markdown || PreservesMarkdown(source, text));

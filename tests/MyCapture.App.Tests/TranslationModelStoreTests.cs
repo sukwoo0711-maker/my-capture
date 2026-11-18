@@ -174,7 +174,7 @@ public sealed class TranslationModelStoreTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Stall_IsANetworkErrorAfterTheStallTimeout(bool duringBody)
+    public async Task Stall_IsAStalledErrorAfterTheStallTimeout(bool duringBody)
     {
         using var workspace = new Workspace();
         TranslationModelFile target = workspace.Files[0];
@@ -190,7 +190,8 @@ public sealed class TranslationModelStoreTests
         TranslationModelException error = await Assert.ThrowsAsync<TranslationModelException>(
             () => store.DownloadAsync(null, CancellationToken.None).WaitAsync(Wait));
 
-        Assert.Equal(TranslationModelError.Network, error.Error);
+        // A stall has its own reason, so the pin and the OCR window can say the transfer stopped.
+        Assert.Equal(TranslationModelError.Stalled, error.Error);
         Assert.IsAssignableFrom<OperationCanceledException>(error.InnerException);
         Assert.False(File.Exists(store.PathFor(target)));
         Assert.Empty(Directory.GetFiles(store.ModelDirectory, "*.download"));
@@ -210,6 +211,43 @@ public sealed class TranslationModelStoreTests
 
         // Eleven reads 100 ms apart outlast the stall timeout, but bytes keep arriving.
         Assert.True(clock.Elapsed > TimeSpan.FromMilliseconds(600), $"{clock.ElapsedMilliseconds} ms");
+        Assert.True(store.IsInstalled);
+    }
+
+    [Fact]
+    public async Task Trickle_BelowTheSlowTransferFloorFailsAsStalledWithinTheWindow()
+    {
+        // 16 bytes every 20 ms never waits the stall timeout for a byte, yet 64 000 bytes would take 80 s.
+        using var workspace = new Workspace(64_000);
+        byte[] payload = workspace.Payloads[workspace.Files[0].FileName];
+        workspace.Server.Respond = (_, _) => Task.FromResult(Ok(new ScriptedContent(payload, payload.Length,
+            chunk: 16, readDelay: TimeSpan.FromMilliseconds(20))));
+        TranslationModelStore store = workspace.CreateStore(slowWindow: TimeSpan.FromMilliseconds(400), slowFloorBytes: 2_000);
+        var clock = Stopwatch.StartNew();
+
+        TranslationModelException error = await Assert.ThrowsAsync<TranslationModelException>(
+            () => store.DownloadAsync(null, CancellationToken.None).WaitAsync(Wait));
+
+        Assert.Equal(TranslationModelError.Stalled, error.Error);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"{clock.ElapsedMilliseconds} ms");
+        Assert.False(store.IsInstalled);
+        Assert.Empty(Directory.GetFiles(store.ModelDirectory, "*.download"));
+    }
+
+    [Fact]
+    public async Task SlowButAboveTheFloorTransfer_OutlastsTheSlowTransferWindow()
+    {
+        // 400 bytes every 20 ms meets 2 000 bytes per 400 ms easily, over a transfer longer than the window.
+        using var workspace = new Workspace(16_000);
+        byte[] payload = workspace.Payloads[workspace.Files[0].FileName];
+        workspace.Server.Respond = (_, _) => Task.FromResult(Ok(new ScriptedContent(payload, payload.Length,
+            chunk: 400, readDelay: TimeSpan.FromMilliseconds(20))));
+        TranslationModelStore store = workspace.CreateStore(slowWindow: TimeSpan.FromMilliseconds(400), slowFloorBytes: 2_000);
+        var clock = Stopwatch.StartNew();
+
+        await store.DownloadAsync(null, CancellationToken.None).WaitAsync(Wait);
+
+        Assert.True(clock.Elapsed > TimeSpan.FromMilliseconds(400), $"{clock.ElapsedMilliseconds} ms");
         Assert.True(store.IsInstalled);
     }
 
@@ -649,9 +687,9 @@ public sealed class TranslationModelStoreTests
 
         // The free-space probe is replaced so no test depends on the real drive.
         internal TranslationModelStore CreateStore(TimeSpan? stallTimeout = null, Func<string, long>? freeSpace = null,
-            IReadOnlyList<TranslationModelFile>? files = null) =>
+            IReadOnlyList<TranslationModelFile>? files = null, TimeSpan? slowWindow = null, long? slowFloorBytes = null) =>
             new(Paths, _http, NullLogger.Instance, files ?? Files, stallTimeout ?? TimeSpan.FromSeconds(30),
-                freeSpace ?? (_ => long.MaxValue));
+                freeSpace ?? (_ => long.MaxValue), slowWindow: slowWindow, slowFloorBytes: slowFloorBytes);
 
         internal void Install(TranslationModelFile file, byte[]? bytes = null)
         {

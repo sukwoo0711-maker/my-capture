@@ -50,6 +50,8 @@ catch {
     exit 1
 }
 
+. (Join-Path $PSScriptRoot 'step-diagnostics.ps1')
+
 function Invoke-Step {
     param([string]$Name, [string[]]$Arguments)
 
@@ -60,32 +62,9 @@ function Invoke-Step {
 
     if ($code -ne 0) {
         Write-Host "FAILED ($code). Diagnostics:" -ForegroundColor Red
-        $logLines = @(Get-Content $log)
-        $hitIndices = @(
-            for ($index = 0; $index -lt $logLines.Count; $index++) {
-                if ($logLines[$index] -match '(?i)(\[FAIL\]|\bFailed\b|\bFailure\b|Error Message:|MSB\d{4}|Test Run Failed)') {
-                    $index
-                }
-            }
-        )
-
-        $diagnosticIndices = @(
-            foreach ($hit in $hitIndices) {
-                $start = [Math]::Max(0, $hit - 3)
-                $end = [Math]::Min($logLines.Count - 1, $hit + 12)
-                $start..$end
-            }
-        ) | Sort-Object -Unique
-
-        if ($diagnosticIndices.Count -eq 0) {
-            $diagnosticIndices = @(
-                [Math]::Max(0, $logLines.Count - 120)..($logLines.Count - 1)
-            )
-        }
-
-        $diagnosticIndices |
-            Select-Object -First 240 |
-            ForEach-Object { Write-Host "  $($logLines[$_])" }
+        # Failure lines first, then context around them (build\step-diagnostics.ps1).
+        Get-StepFailureDiagnostics -Lines @(Get-Content $log) |
+            ForEach-Object { Write-Host "  $_" }
         Write-Host "Full log: $log"
         return $false
     }

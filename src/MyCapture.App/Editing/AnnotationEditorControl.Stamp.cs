@@ -35,6 +35,7 @@ internal sealed partial class AnnotationEditorControl
     private MenuItem? _stampChangeItem;
     private MenuItem? _stampRemoveItem;
     private readonly List<MenuItem> _stampOpacityItems = [];
+    private readonly List<MenuItem> _stampBlendItems = [];
     private bool _stampBusy;
     private readonly List<PlacedStamp> _placedStamps = [];
 
@@ -136,6 +137,17 @@ internal sealed partial class AnnotationEditorControl
             opacity.Items.Add(item);
         }
 
+        var blendMenu = new MenuItem { Header = UiText.Get("Stamp_Blend") };
+        AutomationName(blendMenu, UiText.Get("Stamp_Blend"));
+        foreach ((ImageBlend blend, string key) in new[] { (ImageBlend.IntoPage, "Stamp_BlendIntoPage"), (ImageBlend.Normal, "Stamp_BlendOver") })
+        {
+            var item = new MenuItem { Header = UiText.Get(key), IsCheckable = true, Tag = blend };
+            AutomationName(item, UiText.Get(key));
+            item.Click += (_, _) => SetStampBlend(blend);
+            _stampBlendItems.Add(item);
+            blendMenu.Items.Add(item);
+        }
+
         _stampRemoveItem = new MenuItem { Header = UiText.Get("Stamp_Remove") };
         _stampRemoveItem.Click += (_, _) => RemoveStampImage();
         AutomationName(_stampRemoveItem, UiText.Get("Stamp_Remove"));
@@ -143,6 +155,7 @@ internal sealed partial class AnnotationEditorControl
         menu.Items.Add(place);
         menu.Items.Add(_stampChangeItem);
         menu.Items.Add(opacity);
+        menu.Items.Add(blendMenu);
         menu.Items.Add(new Separator());
         menu.Items.Add(_stampRemoveItem);
         menu.Opened += (_, _) => RefreshStampMenu();
@@ -159,11 +172,17 @@ internal sealed partial class AnnotationEditorControl
             _stampRemoveItem.IsEnabled = !_stampBusy && folder is not null && StampStore.RegisteredPath(folder) is not null;
         }
 
-        int current = StampSettingsNow().OpacityPercent;
+        StampSettings stamp = StampSettingsNow();
+        int current = stamp.CurrentOpacityPercent;
         int nearest = StampSettings.OpacityChoices.MinBy(choice => Math.Abs(choice - current));
         foreach (MenuItem item in _stampOpacityItems)
         {
             item.IsChecked = item.Tag is int percent && percent == nearest;
+        }
+
+        foreach (MenuItem item in _stampBlendItems)
+        {
+            item.IsChecked = item.Tag is ImageBlend blend && blend == stamp.Blend;
         }
     }
 
@@ -292,7 +311,7 @@ internal sealed partial class AnnotationEditorControl
             stamp.Anchor, stamp.MarginX, stamp.MarginY, stamp.WidthFraction,
             _canvasWidth, _canvasHeight, sourceWidth, sourceHeight);
         ImageAnnotation image = _controller.AddImageAnnotation(
-            assetFileName, sourceWidth, sourceHeight, rect, stamp.OpacityPercent / 100.0);
+            assetFileName, sourceWidth, sourceHeight, rect, stamp.CurrentOpacityPercent / 100.0, stamp.Blend);
         _placedStamps.Add(new PlacedStamp(image.Id, rect, CanvasGeometry()));
         SyncToolButtons();
         SetStatus(UiText.Format("EditorFlow_Added", UiText.Get("Stamp_Name")));
@@ -315,10 +334,10 @@ internal sealed partial class AnnotationEditorControl
     private void SetStampOpacity(int percent)
     {
         StampSettings stamp = StampSettingsNow();
-        stamp.OpacityPercent = percent;
+        stamp.CurrentOpacityPercent = percent;
         RememberPreferences(stamp);
 
-        if (_controller.Selected is ImageAnnotation selected && _placedStamps.Any(placed => placed.Id == selected.Id))
+        if (SelectedPlacedStamp() is { } selected)
         {
             double before = selected.Opacity;
             double after = percent / 100.0;
@@ -331,6 +350,36 @@ internal sealed partial class AnnotationEditorControl
         }
 
         SetStatus(UiText.Format("Stamp_OpacitySet", percent));
+    }
+
+    /// <summary>The selected image if this command placed it.</summary>
+    private ImageAnnotation? SelectedPlacedStamp() =>
+        _controller.Selected is ImageAnnotation selected && _placedStamps.Any(placed => placed.Id == selected.Id) ? selected : null;
+
+    /// <summary>
+    /// Sets how stamps to come combine with the capture, and, if this command placed the selected
+    /// image, switches it too, with the opacity remembered for that way (one undo step).
+    /// </summary>
+    private void SetStampBlend(ImageBlend blend)
+    {
+        StampSettings stamp = StampSettingsNow();
+        stamp.Blend = blend;
+        RememberPreferences(stamp);
+
+        if (SelectedPlacedStamp() is { } selected && selected.Blend != blend)
+        {
+            string description = UiText.Get("Stamp_Blend");
+            _controller.Undo.Execute(new CompositeCommand(description,
+            [
+                new PropertyChangeCommand<ImageAnnotation, ImageBlend>(
+                    selected, description, static (target, value) => target.Blend = value, selected.Blend, blend),
+                new PropertyChangeCommand<ImageAnnotation, double>(
+                    selected, description, static (target, value) => target.Opacity = value, selected.Opacity, stamp.CurrentOpacityPercent / 100.0),
+            ]));
+            _surface.InvalidateVisual();
+        }
+
+        SetStatus(UiText.Get(blend == ImageBlend.IntoPage ? "Stamp_BlendIntoPage" : "Stamp_BlendOver"));
     }
 
     /// <summary>

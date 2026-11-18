@@ -1,0 +1,69 @@
+<Project>
+  <Import Project="ReleaseSizeBudgets.props" />
+
+  <!-- Exclude debugger support from the publish item list, never delete output files.
+       Development/test builds and the framework/application compilation are unchanged. -->
+  <Target Name="ExcludeMyCaptureReleaseDebuggers" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="'%(Filename)%(Extension)' == 'mscordaccore.dll' or $([System.String]::Copy('%(Filename)').StartsWith('mscordaccore_')) or '%(Filename)%(Extension)' == 'mscordbi.dll' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.DiaSymReader.Native.'))" />
+    </ItemGroup>
+  </Target>
+
+  <UsingTask TaskName="CheckMyCapturePublishSize" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <PublishRoot Required="true" />
+      <Runtime Required="true" />
+      <InstalledLimit ParameterType="System.Int64" Required="true" />
+      <ProjectionLimit ParameterType="System.Int64" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        const string advice = "Review the per-file size report and measured ZIP, then deliberately update build/ReleaseSizeBudgets.props for this architecture.";
+        if (InstalledLimit <= 0 || ProjectionLimit <= 0) {
+          Log.LogError("Release size budgets must be positive for {0}. {1}", Runtime, advice);
+          return false;
+        }
+        if (!Directory.Exists(PublishRoot)) {
+          Log.LogError("Release publish folder is missing: {0}", PublishRoot);
+          return false;
+        }
+        var files = Directory.GetFiles(PublishRoot, "*", SearchOption.AllDirectories);
+        long total = files.Sum(path => new FileInfo(path).Length);
+        var projection = new FileInfo(Path.Combine(PublishRoot, "Microsoft.Windows.SDK.NET.dll"));
+        if (!projection.Exists || projection.Length == 0) {
+          Log.LogError("Release publish is missing the Windows projection.");
+          return false;
+        }
+        foreach (var path in files) {
+          string name = Path.GetFileName(path);
+          if (name.Equals("mscordaccore.dll", StringComparison.OrdinalIgnoreCase) ||
+              name.StartsWith("mscordaccore_", StringComparison.OrdinalIgnoreCase) ||
+              name.Equals("mscordbi.dll", StringComparison.OrdinalIgnoreCase) ||
+              name.StartsWith("Microsoft.DiaSymReader.Native.", StringComparison.OrdinalIgnoreCase))
+            Log.LogError("Debugger-only file remains in release publish: {0}. Use a fresh publish directory.", path);
+        }
+        if (total > InstalledLimit)
+          Log.LogError("Release installed-size budget exceeded for {0}: {1} > {2} bytes. {3}", Runtime, total, InstalledLimit, advice);
+        if (projection.Length > ProjectionLimit)
+          Log.LogError("Release Windows projection budget exceeded for {0}: {1} > {2} bytes. An untrimmed projection cannot be packaged. {3}", Runtime, projection.Length, ProjectionLimit, advice);
+        Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
+          "Release size: {0}, installed={1}/{2}, projection={3}/{4} bytes.", Runtime, total, InstalledLimit, projection.Length, ProjectionLimit);
+        if (Log.HasLoggedErrors) return false;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- The single diagnostic trim=false override permits an untrimmed comparison publish.
+       The packaging entry points always recheck the budgets, including that DLL, so such
+       diagnostic output cannot be shipped through them. -->
+  <Target Name="ValidateMyCaptureReleaseSize" AfterTargets="Publish" DependsOnTargets="CopyModelsPublish"
+          Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(MyCaptureTrimWindowsProjection)' == 'true'">
+    <CheckMyCapturePublishSize PublishRoot="$(PublishDir)" Runtime="$(RuntimeIdentifier)"
+      InstalledLimit="$(MyCaptureInstalledSizeBudgetBytes)" ProjectionLimit="$(MyCaptureProjectionSizeBudgetBytes)" />
+  </Target>
+</Project>

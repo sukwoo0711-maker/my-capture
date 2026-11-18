@@ -443,10 +443,29 @@ public sealed class PinSessionStoreTests
         Assert.Equal(1, manifest["schemaVersion"]!.GetValue<int>());
         Assert.Equal("Text", manifest["pins"]![1]!["kind"]!.GetValue<string>());
         Assert.DoesNotContain("isHidden", manifest.ToJsonString(), StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("isClickThrough", manifest.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(manifest["pins"]![1]!["isClickThrough"]!.GetValue<bool>());
         Assert.Equal(3, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
         Assert.All(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"),
             path => Assert.True(Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _)));
+    }
+
+    [Fact]
+    public void SaveThenLoad_RoundTripsClickThrough_AndAnOlderRecordWithoutItIsInteractive()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot through = Snapshot();
+        through = through with { Pin = through.Pin with { IsClickThrough = true, IsCollapsed = true, CollapsedOpacity = 0.4 } };
+        Assert.True(CreateStore(workspace).Save([through]));
+        Assert.Equal(through.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
+        Assert.True(manifest["pins"]![0]!["isClickThrough"]!.GetValue<bool>());
+        manifest["pins"]![0]!.AsObject().Remove("isClickThrough");
+        File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
+
+        PinSessionPin older = Assert.Single(CreateStore(workspace).Load()).Pin;
+        Assert.False(older.IsClickThrough);
+        Assert.Equal(through.Pin with { IsClickThrough = false }, older);
     }
 
     [Fact]
@@ -669,6 +688,38 @@ public sealed class PinSessionStoreTests
         replacement[0] = new PinCodeRun(4, 1, "#FFFFFF");
         Assert.Equal("#123ABC", copied.Runs[0].Color);
         Assert.Throws<NotSupportedException>(() => ((IList<PinCodeRun>)copied.Runs).Clear());
+    }
+
+    [Fact]
+    public void CodeDocument_SourceFontMetricsRoundTripAndAreBounded()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot code = CodeSnapshot();
+        PinCodeDocument metrics = code.Pin.CodeDocument! with
+        {
+            FontSizeDip = 14,
+            LineHeightDip = 19,
+            FontFamily = "Cascadia Code, D2Coding",
+        };
+        Assert.True(metrics.IsValid());
+        PinSessionStore store = CreateStore(workspace);
+        Assert.True(store.Save([code with { Pin = code.Pin with { CodeDocument = metrics } }]));
+
+        PinCodeDocument restored = Assert.IsType<PinCodeDocument>(Assert.Single(CreateStore(workspace).Load()).Pin.CodeDocument);
+        Assert.Equal((14.0, 19.0, "Cascadia Code, D2Coding"), (restored.FontSizeDip, restored.LineHeightDip, restored.FontFamily));
+        Assert.Equal(metrics.DisplayText, restored.DisplayText);
+        Assert.True(restored.IsValid());
+
+        // A manifest written before these fields restores the defaults.
+        Assert.Null(code.Pin.CodeDocument!.FontSizeDip);
+        Assert.False((metrics with { FontSizeDip = 7.9 }).IsValid());
+        Assert.False((metrics with { FontSizeDip = 40.1 }).IsValid());
+        Assert.False((metrics with { FontSizeDip = double.NaN }).IsValid());
+        Assert.False((metrics with { LineHeightDip = 81 }).IsValid());
+        Assert.False((metrics with { FontFamily = "C:\\Windows\\Fonts\\#Evil" }).IsValid());
+        Assert.False((metrics with { FontFamily = "file:///x#Name" }).IsValid());
+        Assert.False((metrics with { FontFamily = "A, , B" }).IsValid());
+        Assert.False((metrics with { FontFamily = new string('a', PinCodeDocument.MaxFontFamilyLength + 1) }).IsValid());
     }
 
     [Fact]

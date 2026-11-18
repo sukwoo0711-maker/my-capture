@@ -25,6 +25,28 @@ internal enum CaptureSelectorMode
 
     /// <summary>A click copies the colour of the frozen pixel under the pointer; nothing is captured.</summary>
     Color,
+
+    /// <summary>A pointer-drawn outline captured with transparency.</summary>
+    Freeform,
+
+    /// <summary>
+    /// A click picks the window to scroll; the selector closes and the app scrolls and stitches that
+    /// window. A drag does nothing.
+    /// </summary>
+    Scroll,
+}
+
+/// <summary>How the mode bar draws its outer edge.</summary>
+internal enum CaptureModeBarFrame
+{
+    /// <summary>Inside the WPF selector: rounded corners and a one-pixel chip-border edge.</summary>
+    Rounded,
+
+    /// <summary>In its own square window without DWM corners (Windows 10): a one-pixel square edge.</summary>
+    Square,
+
+    /// <summary>In its own window that DWM rounds and outlines (Windows 11): no edge of its own.</summary>
+    Window,
 }
 
 /// <summary>Something the selector hands back to the app instead of capturing: it closes and the app runs it.</summary>
@@ -36,25 +58,26 @@ internal enum CaptureSelectorAction
     /// <summary>The record half of the capture/record switch: the recording region selector opens.</summary>
     Record,
 
-    /// <summary>A delayed region capture after <see cref="CaptureSelectorRequest.DelaySeconds"/>.</summary>
-    DelayedCapture,
-
-    /// <summary>Scrolling capture of the window under the pointer.</summary>
+    /// <summary>Scrolling capture of the window at <see cref="CaptureSelectorRequest.ScreenPoint"/>.</summary>
     ScrollingCapture,
 
     /// <summary>The previous region again, without a selector.</summary>
     RepeatLastRegion,
 }
 
-/// <summary>One request from the selector's switch or ⋯ menu; the app runs its existing command for it.</summary>
-internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, int DelaySeconds = 0);
+/// <summary>
+/// One request from the selector's switch, its ⋯ menu or a click in the scroll mode; the app runs its
+/// existing command for it. A scrolling capture carries the clicked point in virtual-desktop pixels.
+/// </summary>
+internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, MyCapture.Core.Primitives.PointD? ScreenPoint = null);
 
 /// <summary>
 /// An icon-first mode bar at the top of the pointer's monitor. A capture/record switch sits beside
-/// the available selection targets, delay and scrolling commands. The previous region stays in ⋯.
-/// A neutral wash and a text-coloured underline identify the selected kind and mode.
-/// The ratio button opens a menu of aspect-ratio locks and fixed sizes; it carries the same wash and
-/// underline while a ratio is locked.
+/// the selection modes (region, window, freeform, scroll, text, colour) and the delay and ratio locks.
+/// The previous region stays in ⋯. The chosen mode is the bar's one accent-filled button; the
+/// capture/record switch and the ratio and delay locks mark their state with a neutral key-cap wash
+/// and hairline. The ratio and delay buttons each open a menu, and the delay button shows its seconds
+/// while a delay is armed.
 /// </summary>
 /// <remarks>
 /// The bar is drawn from the selector's capture-guide palette (all six themes and the guide colour
@@ -74,9 +97,18 @@ internal sealed class CaptureModeBar : Border
     internal const string AccentKey = "CaptureBar.Accent";
     internal const string AccentTextKey = "CaptureBar.AccentText";
     internal const string HoverKey = "CaptureBar.Hover";
+    internal const string HairlineKey = "CaptureBar.Hairline";
 
-    /// <summary>The delays the timer button offers, in seconds.</summary>
-    internal static readonly IReadOnlyList<int> DelayChoices = [3, 5, 10];
+    /// <summary>Button size, DIPs: 32 × 32 with a 6-DIP radius.</summary>
+    internal const double ButtonSize = 32;
+    internal const double ButtonRadius = 6;
+    /// <summary>Space between the bar's edge and its buttons, DIPs, on every side.</summary>
+    internal const double EdgeSpace = 6;
+    /// <summary>Margin on each side of a button, DIPs; two neighbours are 4 DIPs apart.</summary>
+    private const double ButtonGap = 2;
+
+    /// <summary>The delays the timer button offers, in seconds; 0 is no delay.</summary>
+    internal static readonly IReadOnlyList<int> DelayChoices = [0, 3, 5, 10];
 
     // 20x20 outline glyphs on the shared symbol grid, stroked like Icon.Glyph.
     private static readonly Geometry RegionIcon = Geometry.Parse(
@@ -109,19 +141,25 @@ internal sealed class CaptureModeBar : Border
 
     private readonly RadioButton _capture;
     private readonly RadioButton _window;
+    private readonly RadioButton _freeform;
+    private string? _freeformUnavailableReason;
     private readonly RadioButton _text;
     private readonly RadioButton _color;
     private readonly RadioButton _captureKind;
     private readonly RadioButton _recordKind;
     private readonly Button _fullScreen;
-    private readonly Button _scroll;
-    private readonly Button _delay;
+    private readonly RadioButton _scroll;
+    private readonly LockToggle _delay;
+    private readonly FrameworkElement _delayIcon;
+    private readonly TextBlock _delaySeconds;
+    private int _delayChoice;
+    private CaptureSelectorMode _mode;
     private readonly LockToggle _ratio;
     private readonly Button _more;
     private readonly Button _help;
     private readonly Button _cancel;
     private readonly TextBlock _captureLabel;
-    private readonly FrameworkElement _textSeparator;
+    private readonly FrameworkElement _optionsSeparator;
     private readonly FrameworkElement _kindSwitch;
     private readonly FrameworkElement _kindSeparator;
     private readonly FrameworkElement _recordingKindIndicator;
@@ -143,9 +181,7 @@ internal sealed class CaptureModeBar : Border
         Focusable = false;
         Cursor = Cursors.Arrow;
         SnapsToDevicePixels = true;
-        BorderThickness = new Thickness(1);
-        CornerRadius = new CornerRadius(10);
-        Padding = new Thickness(4);
+        UseFrame(CaptureModeBarFrame.Rounded);
         SetResourceReference(BackgroundProperty, SurfaceKey);
         SetResourceReference(BorderBrushProperty, BorderKey);
         AutomationProperties.SetName(this, UiText.Get("CaptureGuide2_BarName"));
@@ -153,6 +189,8 @@ internal sealed class CaptureModeBar : Border
         // ToggleButton so the ratio button, which is no radio, shares the mode buttons' template.
         ControlTemplate modeTemplate = CreateTemplate(typeof(ToggleButton), checkable: true, subtleCheck: false);
         ControlTemplate kindTemplate = CreateTemplate(typeof(RadioButton), checkable: true, subtleCheck: true);
+        // The locks are states, not the chosen mode: they keep the neutral check of the switch.
+        ControlTemplate lockTemplate = CreateTemplate(typeof(ToggleButton), checkable: true, subtleCheck: true);
         ControlTemplate actionTemplate = CreateTemplate(typeof(Button), checkable: false, subtleCheck: false);
 
         // Capture | Record. Capture is where the user already is; Record leaves for the recording selector.
@@ -175,8 +213,11 @@ internal sealed class CaptureModeBar : Border
         kinds.Children.Add(_captureKind);
         kinds.Children.Add(_recordKind);
         AutomationProperties.SetName(kinds, UiText.Get("Onboard_BarKindName"));
-        _kindSwitch = kinds;
-        _kindSeparator = Divider();
+        // Kind is a paired switch; modes remain individual choices on the bar's main plane.
+        var kindSurface = new Border { Child = kinds, CornerRadius = new CornerRadius(ButtonRadius) };
+        kindSurface.SetResourceReference(BackgroundProperty, HoverKey);
+        _kindSwitch = kindSurface;
+        _kindSeparator = Divider(12);
         _recordingKindIndicator = ButtonContent(_recordKind, RecordIcon, null);
         _recordingKindIndicator.Width = 32;
         _recordingKindIndicator.Margin = new Thickness(0, 0, 4, 0);
@@ -190,10 +231,29 @@ internal sealed class CaptureModeBar : Border
         Decorate(_window);
         _window.Content = ButtonContent(_window, WindowIcon, null);
         _window.Checked += (_, _) => { if (!_syncing) WindowRequested?.Invoke(); };
+        _freeform = ModeButton(CaptureSelectorMode.Freeform, Geometry.Parse("M5,3 C0,3 1,12 6,14 C12,19 18,13 16,7 C15,3 10,1 5,3 Z M6,14 L4,18"), new TextBlock(), modeTemplate);
+        ToolTipService.SetShowOnDisabled(_freeform, true);
         _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), actionTemplate);
-        _scroll = ActionButton(ScrollIcon, null, actionTemplate);
-        _delay = ActionButton(DelayIcon, null, actionTemplate);
-        _ratio = new LockToggle { Template = modeTemplate };
+        _scroll = ModeButton(CaptureSelectorMode.Scroll, ScrollIcon, new TextBlock(), modeTemplate);
+        _delay = new LockToggle { Template = lockTemplate };
+        Decorate(_delay);
+        // An armed delay replaces the clock with its seconds, so the button keeps its width and the
+        // bar its layout.
+        _delayIcon = ButtonContent(_delay, DelayIcon, null);
+        _delaySeconds = new TextBlock
+        {
+            FontSize = TypeScale.Caption,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        _delaySeconds.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = _delay });
+        var delayFace = new Grid();
+        delayFace.Children.Add(_delayIcon);
+        delayFace.Children.Add(_delaySeconds);
+        _delay.Content = delayFace;
+        _ratio = new LockToggle { Template = lockTemplate };
         Decorate(_ratio);
         _ratio.Content = ButtonContent(_ratio, RatioIcon, null);
         _text = ModeButton(CaptureSelectorMode.Text, TextIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Text") }, modeTemplate);
@@ -202,7 +262,6 @@ internal sealed class CaptureModeBar : Border
         _help = ActionButton(HelpIcon, label: null, actionTemplate);
         _cancel = ActionButton(CancelIcon, label: null, actionTemplate);
         _fullScreen.Click += (_, _) => FullScreenRequested?.Invoke();
-        _scroll.Click += (_, _) => ActionRequested?.Invoke(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture));
         _delay.Click += (_, _) => OpenDelayMenu();
         _ratio.Click += (_, _) => OpenRatioMenu();
         _more.Click += (_, _) => OpenMoreMenu();
@@ -212,13 +271,13 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(_help, UiText.Get("CaptureGuide2_Help"));
         AutomationProperties.SetName(_cancel, UiText.Get("CaptureGuide2_Cancel"));
 
-        _textSeparator = Divider();
+        _optionsSeparator = Divider(8);
         _items = new WrapPanel { Orientation = Orientation.Horizontal };
         KeyboardNavigation.SetDirectionalNavigation(_items, KeyboardNavigationMode.Cycle);
         foreach (UIElement item in new UIElement[]
                  {
-                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _fullScreen, _scroll, _delay,
-                     _ratio, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
+                     _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _freeform, _fullScreen, _scroll,
+                     _text, _color, _optionsSeparator, _delay, _ratio, Divider(4), _more, _help, _cancel,
                  })
             _items.Children.Add(item);
         Child = _items;
@@ -245,8 +304,12 @@ internal sealed class CaptureModeBar : Border
     /// <summary>A fixed size was chosen in the ratio menu.</summary>
     internal event Action<FixedSelectionSize>? FixedSizeRequested;
 
+    /// <summary>A delay (0 for none) was chosen in the delay menu.</summary>
+    internal event Action<int>? DelayRequested;
+
     internal RadioButton CaptureButton => _capture;
     internal RadioButton WindowButton => _window;
+    internal RadioButton FreeformButton => _freeform;
 
     internal RadioButton TextButton => _text;
 
@@ -257,8 +320,13 @@ internal sealed class CaptureModeBar : Border
     internal RadioButton RecordKindButton => _recordKind;
 
     internal Button FullScreenButton => _fullScreen;
-    internal Button ScrollButton => _scroll;
-    internal Button DelayButton => _delay;
+    internal RadioButton ScrollButton => _scroll;
+
+    /// <summary>Opens the delay menu; checked while a delay is armed.</summary>
+    internal ToggleButton DelayButton => _delay;
+
+    /// <summary>The delay menu while it is open.</summary>
+    internal ContextMenu? DelayMenuForTest => _delayMenu;
 
     /// <summary>Opens the ratio menu; checked while a ratio is locked.</summary>
     internal ToggleButton RatioButton => _ratio;
@@ -282,8 +350,11 @@ internal sealed class CaptureModeBar : Border
     /// by a setting.
     /// </summary>
     internal void Configure(bool detectWindows, bool textAvailable, bool colorAvailable, bool otherActions = false,
-        bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true)
+        bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true,
+        string? freeformUnavailableReason = null)
     {
+        _freeformUnavailableReason = freeformUnavailableReason ?? (recording ? UiText.Get("CaptureFreeform_Recording") : null);
+        _freeform.IsEnabled = _freeformUnavailableReason is null;
         _recording = recording;
         _otherActions = otherActions;
         _compactActions = false;
@@ -293,7 +364,8 @@ internal sealed class CaptureModeBar : Border
         _window.Visibility = detectWindows && !recording ? Visibility.Visible : Visibility.Collapsed;
         _text.Visibility = textAvailable && !recording ? Visibility.Visible : Visibility.Collapsed;
         _color.Visibility = colorAvailable && !recording ? Visibility.Visible : Visibility.Collapsed;
-        _textSeparator.Visibility = (textAvailable || colorAvailable) && !recording ? Visibility.Visible : Visibility.Collapsed;
+        _optionsSeparator.Visibility = ratioAvailable || (otherActions && !recording)
+            ? Visibility.Visible : Visibility.Collapsed;
         Visibility others = otherActions && !recording ? Visibility.Visible : Visibility.Collapsed;
         _kindSwitch.Visibility = _kindSeparator.Visibility = otherActions ? Visibility.Visible : Visibility.Collapsed;
         _more.Visibility = others;
@@ -313,12 +385,15 @@ internal sealed class CaptureModeBar : Border
         double chromeWidth = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
         double fullWidth = chromeWidth;
         bool secondaryActions = _otherActions && !_recording;
+        bool hasOptions = _ratio.Visibility == Visibility.Visible || secondaryActions;
         double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         for (int i = 0; i < _items.Children.Count; i++)
         {
             var item = (FrameworkElement)_items.Children[i];
             bool secondary = ReferenceEquals(item, _scroll) || ReferenceEquals(item, _delay);
-            if (secondary ? !secondaryActions : item.Visibility == Visibility.Collapsed) continue;
+            bool shown = ReferenceEquals(item, _optionsSeparator) ? hasOptions
+                : secondary ? secondaryActions : item.Visibility != Visibility.Collapsed;
+            if (!shown) continue;
             fullWidth += ReferenceEquals(item, _kindSwitch)
                 ? LaidOutWidth(_captureKind, dpi) + LaidOutWidth(_recordKind, dpi)
                 : LaidOutWidth(item, dpi);
@@ -328,9 +403,14 @@ internal sealed class CaptureModeBar : Border
         Visibility visibility = secondaryActions && !_compactActions ? Visibility.Visible : Visibility.Collapsed;
         if (_scroll.Visibility != visibility) _scroll.Visibility = visibility;
         if (_delay.Visibility != visibility) _delay.Visibility = visibility;
+        bool optionsShown = _ratio.Visibility == Visibility.Visible || visibility == Visibility.Visible;
+        _optionsSeparator.Visibility = optionsShown ? Visibility.Visible : Visibility.Collapsed;
         double contentWidth = fullWidth - chromeWidth;
         if (_compactActions)
+        {
             contentWidth -= LaidOutWidth(_scroll, dpi) + LaidOutWidth(_delay, dpi);
+            if (!optionsShown && hasOptions) contentWidth -= LaidOutWidth(_optionsSeparator, dpi);
+        }
         // Keep the wrapping boundary on the layout pixel grid, rounded up. At 150% a natural
         // 527-DIP row otherwise rounds down to 526 2/3 during arrange and wraps its last target
         // below the height measured for one row. Narrower displays still wrap within the bar.
@@ -360,13 +440,39 @@ internal sealed class CaptureModeBar : Border
         {
             _capture.IsChecked = mode == CaptureSelectorMode.Capture && !windowSelected;
             _window.IsChecked = mode == CaptureSelectorMode.Capture && windowSelected;
+            _freeform.IsChecked = mode == CaptureSelectorMode.Freeform;
             _text.IsChecked = mode == CaptureSelectorMode.Text;
             _color.IsChecked = mode == CaptureSelectorMode.Color;
+            _scroll.IsChecked = mode == CaptureSelectorMode.Scroll;
         }
         finally { _syncing = false; }
-        // The colour mode picks a pixel, not a region: nothing for a ratio to apply to.
-        _ratio.IsEnabled = mode != CaptureSelectorMode.Color;
+        _mode = mode;
+        // The colour and scroll modes pick a pixel or a window, not a region: nothing for a ratio to apply to.
+        _ratio.IsEnabled = mode is not (CaptureSelectorMode.Color or CaptureSelectorMode.Freeform or CaptureSelectorMode.Scroll);
+        // A delay waits before an image capture; text, colour and scrolling have their own flows.
+        _delay.IsEnabled = DelayApplies(mode);
     }
+
+    /// <summary>True for the modes an armed delay applies to.</summary>
+    internal static bool DelayApplies(CaptureSelectorMode mode) =>
+        mode is CaptureSelectorMode.Capture or CaptureSelectorMode.Freeform;
+
+    /// <summary>Fills in the armed delay (0 for none), without raising <see cref="DelayRequested"/>.</summary>
+    internal void ShowDelay(int seconds)
+    {
+        _delayChoice = Math.Max(0, seconds);
+        _delay.IsChecked = _delayChoice > 0;
+        _delayIcon.Visibility = _delayChoice > 0 ? Visibility.Collapsed : Visibility.Visible;
+        _delaySeconds.Visibility = _delayChoice > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _delaySeconds.Text = _delayChoice > 0 ? UiText.Format("CaptureBar_DelayArmed", _delayChoice) : string.Empty;
+        AutomationProperties.SetItemStatus(_delay, DelayName(_delayChoice));
+    }
+
+    /// <summary>The armed delay shown by the button, in seconds.</summary>
+    internal int DelayShown => _delayChoice;
+
+    internal static string DelayName(int seconds) =>
+        seconds <= 0 ? UiText.Get("CaptureBar_DelayNone") : UiText.Format("Onboard_DelayCapture", seconds);
 
     /// <summary>Fills in the current lock, without raising <see cref="RatioRequested"/>.</summary>
     internal void ShowRatio(SelectionRatio ratio)
@@ -389,18 +495,50 @@ internal sealed class CaptureModeBar : Border
         ArgumentNullException.ThrowIfNull(palette);
         Resources[SurfaceKey] = palette["CaptureGuide.ChipSurface"];
         Resources[BorderKey] = palette["CaptureGuide.ChipBorder"];
+        Resources[HairlineKey] = palette["CaptureGuide.ChipHairline"];
         Resources[TextKey] = palette["CaptureGuide.Text"];
         Resources[MutedKey] = palette["CaptureGuide.MutedText"];
         Resources[AccentKey] = palette["CaptureGuide.SelectionBorder"];
         Resources[AccentTextKey] = palette["CaptureGuide.AccentText"];
-        Brush neutral = palette["CaptureGuide.Text"].Clone();
-        neutral.Opacity = 0.10;
-        neutral.Freeze();
-        Resources[HoverKey] = neutral;
-        // The overlay has its own readable palette. Resolve the standard foreground token
-        // locally so the 2-DIP underline remains readable with custom capture-guide colours.
+        // Hover lifts a button to the key-cap surface. High contrast maps that surface to the chip's
+        // own Window colour, where a wash would vanish; there the text colour at 10% marks it.
+        Brush hover = palette["CaptureGuide.KeycapSurface"];
+        if (SameColor(hover, palette["CaptureGuide.ChipSurface"]))
+        {
+            hover = palette["CaptureGuide.Text"].Clone();
+            hover.Opacity = 0.10;
+            hover.Freeze();
+        }
+        Resources[HoverKey] = hover;
+        // The overlay has its own readable palette. Resolve the standard foreground token locally
+        // so anything inside the bar that asks for it reads on the bar's surface.
         Resources["Text.Primary"] = palette["CaptureGuide.Text"];
     }
+
+    private static bool SameColor(Brush first, Brush second) =>
+        first is SolidColorBrush a && second is SolidColorBrush b && a.Color == b.Color && a.Opacity == b.Opacity;
+
+    /// <summary>
+    /// Draws the bar's edge for where it is shown (see <see cref="CaptureModeBarFrame"/>).
+    /// <paramref name="pixel"/> is one physical pixel in the bar's DIPs, so a square edge stays one
+    /// pixel wide. Every frame keeps the same outer size: the edge takes its width from the padding.
+    /// </summary>
+    internal void UseFrame(CaptureModeBarFrame frame, double pixel = 1)
+    {
+        Frame = frame;
+        double edge = frame switch
+        {
+            CaptureModeBarFrame.Window => 0,
+            CaptureModeBarFrame.Square => pixel > 0 ? Math.Min(1, pixel) : 1,
+            _ => 1,
+        };
+        CornerRadius = new CornerRadius(frame == CaptureModeBarFrame.Rounded ? 8 : 0);
+        BorderThickness = new Thickness(edge);
+        Padding = new Thickness(EdgeSpace - ButtonGap - edge, EdgeSpace - edge, EdgeSpace - ButtonGap - edge, EdgeSpace - edge);
+    }
+
+    /// <summary>The edge the bar draws now.</summary>
+    internal CaptureModeBarFrame Frame { get; private set; }
 
     /// <summary>True for this bar and anything inside it.</summary>
     internal bool Holds(DependencyObject? element)
@@ -416,7 +554,8 @@ internal sealed class CaptureModeBar : Border
     }
 
     /// <summary>
-    /// The ⋯ menu keeps the previous-region command. Delay and scrolling have direct buttons.
+    /// The ⋯ menu keeps the previous-region command. Delay and scrolling have direct buttons; on a
+    /// narrow monitor the menu takes them too, as the same mode and the same delay choices.
     /// </summary>
     internal ContextMenu CreateMoreMenu()
     {
@@ -424,13 +563,22 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(menu, UiText.Get("Onboard_BarMore"));
         if (_compactActions)
         {
-            menu.Items.Add(MenuItemFor(menu, UiText.Get("Text_4DBA30197C0A"),
-                new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture)));
-            var delay = new MenuItem { Header = UiText.Get("CaptureBar_Delay"), MinHeight = 36 };
+            string scrollName = UiText.Get("Text_4DBA30197C0A");
+            var scroll = new MenuItem
+            {
+                Header = scrollName, MinHeight = 36, IsCheckable = true, IsChecked = _mode == CaptureSelectorMode.Scroll,
+            };
+            if (scroll.IsChecked) scroll.Icon = CheckGlyph();
+            AutomationProperties.SetName(scroll, scrollName);
+            scroll.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                ModeRequested?.Invoke(CaptureSelectorMode.Scroll);
+            };
+            menu.Items.Add(scroll);
+            var delay = new MenuItem { Header = UiText.Get("CaptureBar_Delay"), MinHeight = 36, IsEnabled = DelayApplies(_mode) };
             AutomationProperties.SetName(delay, UiText.Get("CaptureBar_Delay"));
-            foreach (int seconds in DelayChoices)
-                delay.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
-                    new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+            AddDelayItems(delay.Items, menu);
             menu.Items.Add(delay);
             menu.Items.Add(new Separator());
         }
@@ -444,10 +592,27 @@ internal sealed class CaptureModeBar : Border
     {
         var menu = new ContextMenu { PlacementTarget = _delay, Placement = PlacementMode.Bottom, VerticalOffset = 4 };
         AutomationProperties.SetName(menu, UiText.Get("CaptureBar_Delay"));
-        foreach (int seconds in DelayChoices)
-            menu.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
-                new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+        AddDelayItems(menu.Items, menu);
         return menu;
+    }
+
+    /// <summary>No delay and the timed choices, the armed one checked; a choice closes the menu.</summary>
+    private void AddDelayItems(ItemCollection items, ContextMenu menu)
+    {
+        foreach (int seconds in DelayChoices)
+        {
+            string header = DelayName(seconds);
+            var item = new MenuItem { Header = header, MinHeight = 36, IsCheckable = true, IsChecked = seconds == _delayChoice };
+            if (item.IsChecked) item.Icon = CheckGlyph();
+            AutomationProperties.SetName(item, header);
+            int picked = seconds;
+            item.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                DelayRequested?.Invoke(picked);
+            };
+            items.Add(item);
+        }
     }
 
     /// <summary>
@@ -563,12 +728,19 @@ internal sealed class CaptureModeBar : Border
         Describe(_capture, _recording ? "CaptureBar_RecordRegionHelp" : "CaptureGuide2_RegionOnlyHelp", key: null);
         AutomationProperties.SetName(_window, UiText.Get("CaptureBar_Window"));
         Describe(_window, "CaptureBar_WindowHelp", key: null);
+        AutomationProperties.SetName(_freeform, UiText.Get("CaptureFreeform_Name"));
+        Describe(_freeform, "CaptureFreeform_Help", "F");
+        if (_freeformUnavailableReason is { } reason)
+        {
+            _freeform.ToolTip = reason;
+            AutomationProperties.SetHelpText(_freeform, reason);
+        }
         AutomationProperties.SetName(_fullScreen, UiText.Get("CaptureGuide2_FullScreen"));
         Describe(_fullScreen, _recording ? "CaptureBar_RecordFullScreenHelp" : "CaptureGuide2_FullScreenHelp", key: null);
         AutomationProperties.SetName(_scroll, UiText.Get("Text_4DBA30197C0A"));
-        Describe(_scroll, "CaptureBar_ScrollHelp", key: null);
+        Describe(_scroll, "CaptureBar_ScrollHelp", "S");
         AutomationProperties.SetName(_delay, UiText.Get("CaptureBar_Delay"));
-        Describe(_delay, "CaptureBar_DelayHelp", key: null);
+        Describe(_delay, "CaptureBar_DelayHelp", "D");
         AutomationProperties.SetName(_ratio, UiText.Get("Crop.Ratio"));
         Describe(_ratio, "CaptureRatio_Help", "R");
         AutomationProperties.SetName(_text, UiText.Get("CaptureGuide2_Text"));
@@ -597,6 +769,7 @@ internal sealed class CaptureModeBar : Border
     /// <summary>Routes Enter through the same activation as a mouse/Space click.</summary>
     internal void ActivateButton(ButtonBase button)
     {
+        if (!button.IsEnabled) return;
         if (button is RegionModeButton region)
         {
             region.Activate();
@@ -685,11 +858,13 @@ internal sealed class CaptureModeBar : Border
     private static void Decorate(ButtonBase button)
     {
         CommandButtonPresentation.Apply(button, compact: true);
-        button.Width = button.MinWidth = 36;
-        button.Height = button.MinHeight = 36;
-        // The shared face needs all 34 DIPs inside the 36-DIP button's border.
-        button.Padding = new Thickness(2, 0, 2, 0);
-        button.Margin = new Thickness(1, 0, 1, 0);
+        button.Width = button.MinWidth = ButtonSize;
+        button.Height = button.MinHeight = ButtonSize;
+        // The shared face is 34 DIPs tall: the icon row and the shortcut row Alt reveals. It keeps
+        // its whole height, one DIP past the 32-DIP button's top and bottom inside the bar's
+        // padding, so neither row is clipped; at rest the icon sits in the button's centre.
+        button.Padding = new Thickness(1, -1, 1, -1);
+        button.Margin = new Thickness(ButtonGap, 0, ButtonGap, 0);
         button.Cursor = Cursors.Hand;
         button.FocusVisualStyle = null;
         button.Background = Brushes.Transparent;
@@ -714,13 +889,14 @@ internal sealed class CaptureModeBar : Border
         return panel;
     }
 
-    private static FrameworkElement Divider()
+    private static FrameworkElement Divider(double space)
     {
+        // Half the button's height: centred, it starts 8 DIPs down, a whole pixel at 125, 150 and 175 %.
         var line = new Rectangle
         {
             Width = 1,
-            Height = 20,
-            Margin = new Thickness(5, 0, 5, 0),
+            Height = ButtonSize / 2,
+            Margin = new Thickness(space, 0, space, 0),
             Opacity = 0.45,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
@@ -730,33 +906,34 @@ internal sealed class CaptureModeBar : Border
     }
 
     /// <summary>
-    /// Chrome, neutral hover/checked layers, a 2-DIP Text.Primary underline and an inset focus ring.
+    /// Chrome, a key-cap hover wash, the checked layer and an inset focus ring. A mode button's
+    /// check is the accent fill with on-accent icon and text, the bar's one accent; the switch and
+    /// the locks (<paramref name="subtleCheck"/>) keep the key-cap wash with a hairline edge.
     /// Washes follow FluidMotion; state and focus take effect immediately without changing layout.
     /// </summary>
     private static ControlTemplate CreateTemplate(Type type, bool checkable, bool subtleCheck)
     {
         var chrome = new FrameworkElementFactory(typeof(Border), "Chrome");
-        chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+        chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(ButtonRadius));
         chrome.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
-        chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
-        chrome.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
         var hoverLayer = StateLayer("HoverLayer", MotionSpeed.Fast);
         hoverLayer.SetResourceReference(Border.BackgroundProperty, HoverKey);
         FrameworkElementFactory? checkedLayer = null;
         if (checkable)
         {
             checkedLayer = StateLayer("CheckedLayer", MotionSpeed.Normal);
-            checkedLayer.SetResourceReference(Border.BackgroundProperty, HoverKey);
+            if (subtleCheck)
+            {
+                checkedLayer.SetResourceReference(Border.BackgroundProperty, HoverKey);
+                checkedLayer.SetResourceReference(Border.BorderBrushProperty, HairlineKey);
+            }
+            else checkedLayer.SetResourceReference(Border.BackgroundProperty, "Accent.Default");
         }
 
-        // The presenter keeps the one-pixel chrome inset it had as the chrome's child.
-        var content = new FrameworkElementFactory(typeof(Border));
-        content.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
         presenter.SetValue(FrameworkElement.MarginProperty, new TemplateBindingExtension(Control.PaddingProperty));
         presenter.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
         presenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        content.AppendChild(presenter);
         var ring = new FrameworkElementFactory(typeof(Border), "FocusRing");
         ring.SetValue(FrameworkElement.MarginProperty, new Thickness(2));
         ring.SetValue(Border.BorderThicknessProperty, new Thickness(2));
@@ -766,40 +943,38 @@ internal sealed class CaptureModeBar : Border
         ring.SetResourceReference(Border.BorderBrushProperty, TextKey);
         var root = new FrameworkElementFactory(typeof(Grid));
         root.AppendChild(chrome);
-        if (checkedLayer is not null)
-        {
-            root.AppendChild(checkedLayer);
-            var underline = new FrameworkElementFactory(typeof(Border), "SelectedUnderline");
-            underline.SetValue(FrameworkElement.HeightProperty, 2.0);
-            underline.SetValue(FrameworkElement.MarginProperty, new Thickness(6, 0, 6, 1));
-            underline.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Bottom);
-            underline.SetValue(UIElement.IsHitTestVisibleProperty, false);
-            underline.SetValue(UIElement.OpacityProperty, 0.0);
-            underline.SetResourceReference(Border.BackgroundProperty, "Text.Primary");
-            root.AppendChild(underline);
-        }
-
+        // Hover sits under the check, so the chosen mode keeps its fill under the pointer.
         root.AppendChild(hoverLayer);
-        root.AppendChild(content);
+        if (checkedLayer is not null) root.AppendChild(checkedLayer);
+        root.AppendChild(presenter);
         root.AppendChild(ring);
 
         var template = new ControlTemplate(type) { VisualTree = root };
         var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
         hover.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "HoverLayer"));
         template.Triggers.Add(hover);
+        // Pressed is a little quieter than hover, as Windows' own subtle buttons are.
         var pressed = new Trigger { Property = ButtonBase.IsPressedProperty, Value = true };
-        pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "HoverLayer"));
+        pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 0.7, "HoverLayer"));
         template.Triggers.Add(pressed);
         if (checkable)
         {
             var on = new Trigger { Property = ToggleButton.IsCheckedProperty, Value = true };
             on.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1.0, "CheckedLayer"));
-            on.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0, "SelectedUnderline"));
-
-            template.Triggers.Add(on);
+            if (!subtleCheck)
+            {
+                on.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("Text.OnAccent")));
+                template.Triggers.Add(on);
+                // The accent's own hover and pressed steps, which only darken it.
+                template.Triggers.Add(CheckedState(UIElement.IsMouseOverProperty, new DynamicResourceExtension("Accent.Hover")));
+                template.Triggers.Add(CheckedState(ButtonBase.IsPressedProperty, new DynamicResourceExtension("Accent.Pressed")));
+            }
+            else template.Triggers.Add(on);
         }
 
-        var focus = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
+        var focus = new MultiTrigger();
+        focus.Conditions.Add(new System.Windows.Condition(UIElement.IsKeyboardFocusedProperty, true));
+        focus.Conditions.Add(new System.Windows.Condition(KeyboardFocusCue.IsVisibleProperty, true));
         focus.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0, "FocusRing"));
         template.Triggers.Add(focus);
         var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
@@ -807,13 +982,22 @@ internal sealed class CaptureModeBar : Border
         template.Triggers.Add(disabled);
         template.Seal();
         return template;
+
+        static MultiTrigger CheckedState(DependencyProperty state, DynamicResourceExtension fill)
+        {
+            var trigger = new MultiTrigger();
+            trigger.Conditions.Add(new System.Windows.Condition(ToggleButton.IsCheckedProperty, true));
+            trigger.Conditions.Add(new System.Windows.Condition(state, true));
+            trigger.Setters.Add(new Setter(Border.BackgroundProperty, fill, "CheckedLayer"));
+            return trigger;
+        }
     }
 
     /// <summary>A hidden, hit-test-transparent wash with the chrome's shape that fades in on a state.</summary>
     private static FrameworkElementFactory StateLayer(string name, MotionSpeed speed)
     {
         var layer = new FrameworkElementFactory(typeof(Border), name);
-        layer.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+        layer.SetValue(Border.CornerRadiusProperty, new CornerRadius(ButtonRadius));
         layer.SetValue(Border.BorderThicknessProperty, new Thickness(1));
         layer.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
         layer.SetValue(UIElement.OpacityProperty, 0.0);

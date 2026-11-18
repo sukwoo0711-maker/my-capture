@@ -328,7 +328,10 @@ public sealed class OnboardingGuideTests
             // No shortcut is registered in this shell (hotkeys never started), so the guide offers the buttons only.
             Assert.False(replay.KeyShown);
             Assert.False(first.KeyShown);
-            Assert.Equal(UiText.Get("Journey.A1.Body"), first.InstructionText);
+            Assert.True(first.IsFirstPinExperience);
+            Assert.Equal(UiText.Get("FirstRun.PinBodyNoKey"), first.InstructionText);
+            Assert.False(replay.IsFirstPinExperience);
+            Assert.Equal(PracticeStep.Groups, replay.Session.Step);
         }
         finally { replay.Close(); first.Close(); }
     });
@@ -401,8 +404,12 @@ public sealed class OnboardingGuideTests
         WelcomeWindow animated = Show(new FakeClipboard(), new WelcomeOptions { ReducedMotion = false, MediaFactory = () => motion });
         try
         {
+            Assert.Empty(motion.OpenedPaths);
+            Click(animated.ReplayButton);
             Assert.EndsWith("capture-region.ko.mp4", Assert.Single(motion.OpenedPaths), StringComparison.Ordinal);
             PracticeJourneyDriver.AdvanceTo(animated.Session, PracticeStep.A4);
+            Assert.Single(motion.OpenedPaths);
+            Click(animated.ReplayButton);
             Assert.EndsWith("image-arrow.ko.mp4", motion.OpenedPaths.Last(), StringComparison.Ordinal);
         }
         finally { animated.Close(); }
@@ -598,13 +605,15 @@ public sealed class OnboardingGuideTests
 
     internal static WelcomeWindow Create(FakeClipboard clipboard, WelcomeOptions? options = null, HotkeySettings? keys = null) =>
         new(keys ?? Keys, AfterCaptureAction.Editor, ocrEnvironment: null, options: options is null
-            ? new WelcomeOptions { Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = true, MediaFactory = () => new FakeMedia() }
+            ? new WelcomeOptions { Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = true, MediaFactory = () => new FakeMedia(), MonitorProvider = MonitorEnumerator.GetPrimary }
             : new WelcomeOptions
             {
                 Clipboard = clipboard, CopyPracticePicture = () => clipboard.TryCopyText("practice image") ? 42u : 0, ReducedMotion = options.ReducedMotion ?? true, MediaFactory = options.MediaFactory ?? (() => new FakeMedia()),
                 Replay = options.Replay, ShowCoreShortcutsConsent = options.ShowCoreShortcutsConsent, CoreShortcutsNotice = options.CoreShortcutsNotice,
+                FirstPinExperience = options.FirstPinExperience, StartAtGroups = options.StartAtGroups,
+                ClipboardSequenceProvider = options.ClipboardSequenceProvider,
                 FeaturePractice = options.FeaturePractice, StartAtSignIn = options.StartAtSignIn, UseAccurateOcr = options.UseAccurateOcr, TextScale = options.TextScale,
-                MonitorProvider = options.MonitorProvider, HintDelay = options.HintDelay,
+                MonitorProvider = options.MonitorProvider ?? MonitorEnumerator.GetPrimary, HintDelay = options.HintDelay,
             }) { WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
 
     private static WelcomeWindow Show(FakeClipboard clipboard, WelcomeOptions options)

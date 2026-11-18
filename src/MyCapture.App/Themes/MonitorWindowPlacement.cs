@@ -97,6 +97,56 @@ internal static class MonitorWindowPlacement
     }
 
     /// <summary>
+    /// Physical bounds for <paramref name="desired"/> (DIPs at <paramref name="scale"/>) inside
+    /// <paramref name="workArea"/> that stay clear of <paramref name="avoid"/>: centred when that is
+    /// clear, else above, below, left or right of the region, else in a corner of the work area. When
+    /// nothing is clear (the region fills the monitor) it is centred.
+    /// </summary>
+    internal static RectD ClearOf(RectD workArea, double scale, Size desired, RectD avoid, double gapDip = 16)
+    {
+        double factor = double.IsFinite(scale) && scale > 0 ? scale : 1.0;
+        RectD work = workArea.Normalized();
+        RectD region = avoid.Normalized();
+        double width = Math.Min(Math.Floor(work.Width), Math.Round(Finite(desired.Width) * factor));
+        double height = Math.Min(Math.Floor(work.Height), Math.Round(Finite(desired.Height) * factor));
+        double gap = Math.Round(Math.Max(0, gapDip) * factor);
+        double centreX = Math.Floor(work.Left + (work.Width - width) / 2), centreY = Math.Floor(work.Top + (work.Height - height) / 2);
+        double besideX = Math.Floor(region.Left + (region.Width - width) / 2), besideY = Math.Floor(region.Top + (region.Height - height) / 2);
+        (double X, double Y)[] candidates =
+        [
+            (centreX, centreY),
+            (besideX, region.Top - gap - height), (besideX, region.Bottom + gap),
+            (region.Left - gap - width, besideY), (region.Right + gap, besideY),
+            (work.Left + gap, work.Top + gap), (work.Right - gap - width, work.Top + gap),
+            (work.Left + gap, work.Bottom - gap - height), (work.Right - gap - width, work.Bottom - gap - height),
+        ];
+        foreach ((double x, double y) in candidates)
+        {
+            double left = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - width));
+            double top = Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - height));
+            var bounds = new RectD(left, top, width, height);
+            if (region.IsEmpty || !Overlaps(bounds, region)) return bounds;
+        }
+        return new RectD(centreX, centreY, width, height);
+    }
+
+    /// <summary>Opens <paramref name="window"/> on <paramref name="monitor"/> clear of <paramref name="avoid"/> (see <see cref="ClearOf"/>).</summary>
+    internal static void PlaceClearOf(Window window, MonitorInfo monitor, Size desired, RectD avoid)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(monitor);
+        double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1.0;
+        RectD bounds = ClearOf(monitor.WorkArea, scale, desired, avoid);
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Left = bounds.Left / scale;
+        window.Top = bounds.Top / scale;
+        Placement.For(window).Target = bounds;
+    }
+
+    private static bool Overlaps(RectD first, RectD second) =>
+        first.Left < second.Right && second.Left < first.Right && first.Top < second.Bottom && second.Top < first.Bottom;
+
+    /// <summary>
     /// Keeps a window that opens centred on the pointer's monitor (CenterScreen without an owner)
     /// inside that monitor: its current size and minimum are fitted to the monitor's work area when the
     /// window is created. Call once, from the window's constructor.

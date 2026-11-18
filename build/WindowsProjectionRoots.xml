@@ -1,0 +1,45 @@
+<linker>
+  <!-- COM activation, RCW factories, and generic ABI marshalling are not all static IL calls.
+       Preserve only the product's boundary types and corresponding ABI helpers; never the
+       complete projection. WinRT.Runtime/application assemblies use action=copy; framework
+       assemblies use action=skip. None of those linker outputs enter the published folder. -->
+  <assembly fullname="Microsoft.Windows.SDK.NET">
+    <type fullname="Windows.Graphics.Capture.GraphicsCaptureItem" preserve="all" />
+    <type fullname="Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice" preserve="all" />
+    <type fullname="Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface" preserve="all" />
+    <type fullname="Windows.Foundation.IMemoryBufferReference" preserve="all" />
+    <!-- Store-signed activation/consent paths cannot be covered by the unpackaged gate.
+         Keep every member of the product's Store/package/startup boundary types. -->
+    <type fullname="Windows.Services.Store.StoreContext" preserve="all" />
+    <type fullname="Windows.Services.Store.StorePackageUpdate" preserve="all" />
+    <type fullname="Windows.Services.Store.StorePackageUpdateResult" preserve="all" />
+    <type fullname="Windows.Services.Store.StorePackageUpdateStatus" preserve="all" />
+    <type fullname="Windows.Services.Store.StorePackageUpdateState" preserve="all" />
+    <type fullname="Windows.Services.Store.StoreRateAndReviewResult" preserve="all" />
+    <type fullname="Windows.Services.Store.StoreRateAndReviewStatus" preserve="all" />
+    <type fullname="Windows.ApplicationModel.Package" preserve="all" />
+    <type fullname="Windows.ApplicationModel.PackageId" preserve="all" />
+    <type fullname="Windows.ApplicationModel.AppInstance" preserve="all" />
+    <type fullname="Windows.ApplicationModel.StartupTask" preserve="all" />
+    <type fullname="Windows.ApplicationModel.StartupTaskState" preserve="all" />
+    <type fullname="Windows.ApplicationModel.Activation.IActivatedEventArgs" preserve="all" />
+    <type fullname="Windows.ApplicationModel.Activation.ActivationKind" preserve="all" />
+    <!-- Product notifications use Win32, not Windows.UI.Notifications or XML DOM.
+         IInitializeWithWindow and native COM cast interfaces are in copied assemblies;
+         GraphicsCaptureItem, IDirect3DDevice/Surface and IMemoryBufferReference above
+         cover the projection types reached through native/WinRT casts. -->
+    <type fullname="ABI.Windows.Graphics.Capture.*" preserve="all" />
+    <type fullname="ABI.Windows.Graphics.DirectX.Direct3D11.*" preserve="all" />
+    <type fullname="ABI.Windows.Media.Ocr.*" preserve="all" />
+    <type fullname="ABI.Windows.Graphics.Imaging.*" preserve="all" />
+    <type fullname="ABI.Windows.Storage.Streams.*" preserve="all" />
+    <type fullname="ABI.Windows.Globalization.ILanguage*" preserve="all" />
+    <type fullname="ABI.Windows.Services.Store.IStoreContext*" preserve="all" />
+    <type fullname="ABI.Windows.Services.Store.IStorePackageUpdate*" preserve="all" />
+    <type fullname="ABI.Windows.Services.Store.IStoreRateAndReviewResult*" preserve="all" />
+    <type fullname="ABI.Windows.ApplicationModel.IStartupTask*" preserve="all" />
+    <type fullname="ABI.Windows.ApplicationModel.IAppInstance*" preserve="all" />
+    <type fullname="ABI.Windows.ApplicationModel.IPackage*" preserve="all" />
+    <type fullname="ABI.Windows.ApplicationModel.Activation.IActivatedEventArgs*" preserve="all" />
+  </assembly>
+</linker>

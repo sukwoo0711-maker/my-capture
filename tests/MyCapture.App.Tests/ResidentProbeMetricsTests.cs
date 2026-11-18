@@ -9,6 +9,44 @@ namespace MyCapture.App.Tests;
 public sealed class ResidentProbeMetricsTests
 {
     [Fact]
+    public void NativeDispatcherTraceRecordsPriorityAndDetachesAtEnd() => StaTestHost.Run(() =>
+    {
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        var marks = new List<string>();
+        Action<string>? previous = SelectorTimeline.Mark;
+        SelectorTimeline.Mark = marks.Add;
+        try
+        {
+            using (var trace = new SelectorDispatcherTrace(dispatcher, Stopwatch.GetTimestamp())) RunTurn();
+            Assert.Contains(marks, mark => mark.StartsWith("op ") && mark.Contains("[Normal]"));
+            int count = marks.Count;
+            RunTurn();
+            Assert.Equal(count, marks.Count);
+        }
+        finally { SelectorTimeline.Mark = previous; }
+
+        void RunTurn()
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal,
+                new Action(() => Thread.Sleep(10)));
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                new Action(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+    });
+
+    [Fact]
+    public void ElementStepIsOptInForEitherRenderer()
+    {
+        Assert.DoesNotContain("selector-elements", ResidentProbeOptions.ReadVariants([]));
+        Assert.Contains("selector-elements", ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-elements"]));
+        var wpf = ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf,selector-elements"]);
+        Assert.Contains("selector-elements", wpf);
+        Assert.False(ResidentProbeOptions.UsesNativeSelector(wpf));
+    }
+
+    [Fact]
     public void ReleaseMeasurementsDoNotEnableDiagnosticWorkByDefault()
     {
         Assert.Empty(ResidentProbeOptions.ReadVariants(["--selftest-resident", "unused"]));
@@ -24,6 +62,8 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("receipt-breakdown")]
     [InlineData("no-key-panel")]
     [InlineData("selector-wpf")]
+    [InlineData("legacy-guide-write")]
+    [InlineData("selector-show-owned")]
     public void AttributionVariantsAreExplicitAndIndependentlySelectable(string variant)
     {
         IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variant.ToUpperInvariant()]);
@@ -38,6 +78,7 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("no-flight,selector-native-dib,selector-chrome-parallel")]
     [InlineData("no-flight,selector-native-dib,selector-chrome-dib")]
     [InlineData("no-flight,selector-breakdown")]
+    [InlineData("no-flight,legacy-guide-write,selector-show-owned")]
     public void StageOneSelectorMeasurementVariantsAreAccepted(string variants)
     {
         IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variants]);
@@ -63,10 +104,22 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("selector-chrome-parallel")]
     [InlineData("selector-chrome-dib")]
     [InlineData("selector-native-dib,selector-chrome-fresh")]
+    [InlineData("selector-show-owned")]
+    [InlineData("SELECTOR-SHOW-OWNED")]
     public void WpfVariantRejectsContradictoryNativeRequests(string native)
     {
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", "selector-wpf," + native]));
         Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", native + ",SELECTOR-WPF"]));
+    }
+
+    [Theory]
+    [InlineData("selector-prejit")]
+    [InlineData("selector-warm-bind")]
+    [InlineData("sw-chrome")]
+    [InlineData("SW-CHROME")]
+    public void RejectedSelectorExperimentsAreNoLongerAccepted(string variant)
+    {
+        Assert.Throws<ArgumentException>(() => ResidentProbeOptions.ReadVariants(["--resident-variant", variant]));
     }
 
     [Fact]

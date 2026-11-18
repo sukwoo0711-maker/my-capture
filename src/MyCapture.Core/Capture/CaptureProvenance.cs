@@ -7,13 +7,15 @@ public enum CaptureProvenanceKind { Web, Document, App, None }
 /// <summary>A validated, immutable source identity prepared once for every capture surface.</summary>
 public sealed record CaptureProvenance
 {
-    private CaptureProvenance(string url, string documentPath, string appName, string appExecutablePath, string windowTitle)
+    private CaptureProvenance(string url, string documentPath, string appName, string appExecutablePath, string windowTitle,
+        string appUserModelId = "")
     {
         Url = url;
         DocumentPath = documentPath;
         AppName = appName;
         AppExecutablePath = appExecutablePath;
         WindowTitle = windowTitle;
+        AppUserModelId = appUserModelId;
         Kind = url.Length > 0 ? CaptureProvenanceKind.Web
             : documentPath.Length > 0 ? CaptureProvenanceKind.Document
             : appName.Length > 0 || appExecutablePath.Length > 0 ? CaptureProvenanceKind.App
@@ -58,30 +60,41 @@ public sealed record CaptureProvenance
     public string AppName { get; }
     public string AppExecutablePath { get; }
     public string WindowTitle { get; }
+
+    /// <summary>Packaged application ID; empty for desktop applications.</summary>
+    public string AppUserModelId { get; }
     public CaptureProvenanceKind Kind { get; }
     public bool HasSource => Kind != CaptureProvenanceKind.None;
     public bool CanOpen => Kind is CaptureProvenanceKind.Web or CaptureProvenanceKind.Document
-        || Kind == CaptureProvenanceKind.App && AppExecutablePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        || Kind == CaptureProvenanceKind.App && (AppExecutablePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            || AppUserModelId.Length > 0);
+
+    /// <summary>Only the application is known: opening it starts the application, not a page or file.</summary>
+    public bool IsAppOnly => Kind == CaptureProvenanceKind.App;
+
+    /// <summary>Whether an application is known whose icon can stand for this source.</summary>
+    public bool HasAppIdentity => AppExecutablePath.Length > 0 || AppUserModelId.Length > 0;
     public string DisplayText { get; }
     public string BadgeText { get; }
     public string Tooltip { get; }
     public string SearchQuery { get; }
 
     public static CaptureProvenance Create(string? url = null, string? documentPath = null,
-        string? appName = null, string? appExecutablePath = null, string? windowTitle = null)
+        string? appName = null, string? appExecutablePath = null, string? windowTitle = null,
+        string? appUserModelId = null)
     {
         string page = SourcePageUrl.Normalize(url);
-        CaptureSourceDetails source = CaptureSourceDetails.Create(appName, appExecutablePath, documentPath);
+        CaptureSourceDetails source = CaptureSourceDetails.Create(appName, appExecutablePath, documentPath, appUserModelId);
         string title = windowTitle ?? string.Empty;
         if (page.Length == 0 && source.IsEmpty && title.Length == 0) return None;
-        return new(page, source.DocumentPath, source.AppName, source.AppPath, title);
+        return new(page, source.DocumentPath, source.AppName, source.AppPath, title, source.AppUserModelId);
     }
 
     public static CaptureProvenance FromRecord(CaptureRecord? record) => record is null ? None
         : FromSource(record.SourceDetails, record.SourcePageUrl, record.SourceWindowTitle);
 
     public static CaptureProvenance FromSource(CaptureSourceDetails? source, string? url = null, string? windowTitle = null) =>
-        Create(url, source?.DocumentPath, source?.AppName, source?.AppPath, windowTitle);
+        Create(url, source?.DocumentPath, source?.AppName, source?.AppPath, windowTitle, source?.AppUserModelId);
 
     internal static string NormalizeHost(Uri uri)
     {

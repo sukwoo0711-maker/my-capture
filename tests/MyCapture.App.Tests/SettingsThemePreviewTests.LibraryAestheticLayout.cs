@@ -103,12 +103,14 @@ public sealed partial class SettingsThemePreviewTests
                 window.Height = height;
                 WaitForAestheticCards(window, 1);
                 AssertSortChoicesFit(window, $"{label}, {width:0} DIP window");
-                // With a selection the bar shows its commands; the box still fits and More stays inside.
+                // Selection replaces browsing controls without changing the row; sort returns unchanged.
                 f.ViewModel.Select(f.Records[0].Id);
                 SettleGalleryLayout(window);
-                AssertSortChoicesFit(window, $"{label}, {width:0} DIP window with a selection");
+                Assert.False(((ComboBox)window.FindName("SortBox")).IsVisible);
+                AssertInsideClient((Button)window.FindName("MoreCommandsButton"), (FrameworkElement)window.FindName("LibraryContentCommandBar"), label);
                 f.ViewModel.ClearSelection();
                 SettleGalleryLayout(window);
+                AssertSortChoicesFit(window, $"{label}, {width:0} DIP window after clearing the selection");
             }
 
             window.Width = 1280;

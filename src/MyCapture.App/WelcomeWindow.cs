@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -38,6 +38,9 @@ internal enum WelcomeOutcome
 
     /// <summary>The last screen's start button: the person did the steps and confirmed the choices.</summary>
     Completed,
+
+    /// <summary>The first real pin is open; no unshown preference choices are applied.</summary>
+    FirstPinCompleted,
 }
 
 /// <summary>
@@ -45,7 +48,7 @@ internal enum WelcomeOutcome
 /// start-at-sign-in and accurate-OCR choices. One task per screen; the next screen follows the
 /// real event, so nothing here is a description of something the person has not done.
 /// </summary>
-internal sealed class WelcomeWindow : Window
+internal sealed partial class WelcomeWindow : Window
 {
     private const double PreviewHeight = 188;
     private const double RoomyPreviewHeight = 236;
@@ -96,6 +99,8 @@ internal sealed class WelcomeWindow : Window
     private readonly ScrollViewer _scroll;
     private bool _captureAvailable, _pinAvailable, _libraryAvailable;
     private bool _closed, _consentAnswered, _keyPressed;
+    private MonitorInfo? _placementMonitor;
+    private bool _placementCompleted, _placingWindow, _automaticPlacement;
     internal PracticeSession Session { get; }
     private bool _showingConsent;
     private readonly System.Windows.Controls.Primitives.UniformGrid _groups = new() { Columns = 1 };
@@ -116,11 +121,14 @@ internal sealed class WelcomeWindow : Window
         _segmentMotions = PracticeSession.Steps.Select(_ => new WelcomeMotion(Dispatcher)).ToArray();
         _showingConsent = _options.ShowCoreShortcutsConsent || _options.CoreShortcutsNotice;
         Session = new PracticeSession(_options.FeaturePractice);
+        FirstPin = new FirstPinSession(Session.Id);
+        _firstPinExperience = _options.FirstPinExperience;
+        if (_options.StartAtGroups && !_firstPinExperience) Session.ShowGroups();
         _textScale = double.IsFinite(_options.TextScale) ? Math.Clamp(_options.TextScale, 1, 3) : 1;
         _captureAvailable = keys.Capture.IsAssigned;
         _pinAvailable = keys.PasteToScreen.IsAssigned;
         _libraryAvailable = keys.OpenLibrary.IsAssigned;
-        Title = UiText.Get("Help.Welcome");
+        Title = UiText.Get(_firstPinExperience || _showingConsent ? "FirstRun.WindowTitle" : "FirstRun.PracticeWindowTitle");
         Width = DefaultWidth;
         Height = DefaultHeight;
         MinWidth = 420;
@@ -130,16 +138,23 @@ internal sealed class WelcomeWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         UseLayoutRounding = true;
         StandardWindowTheme.Apply(this);
-        ContentRendered += (_, _) => { if (ShowActivated) WindowForeground.BringForward(this); };
+        ContentRendered += (_, _) => { PlaceSizedWindow(); if (ShowActivated) WindowForeground.BringForward(this); };
         FontSize = TypeScale.Body * _textScale;
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
+        FontWeight = FontWeights.Normal;
         SourceInitialized += (_, _) =>
         {
             CaptureWindowExclusion.DisableTransitions(this);
             // Only the default placement follows the pointer; a caller that positions the window itself keeps its place.
             MonitorInfo monitor = (_options.MonitorProvider ?? MonitorEnumerator.GetFromCursor)();
-            if (WindowStartupLocation == WindowStartupLocation.CenterScreen) PlaceOnPointerMonitor(monitor);
+            if (WindowStartupLocation == WindowStartupLocation.CenterScreen)
+            {
+                _automaticPlacement = true;
+                // WPF would otherwise recenter the measured SizeToContent window on its own monitor after Loaded.
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                PlaceOnPointerMonitor(monitor);
+            }
             else LimitToWorkArea(monitor);
         };
 
@@ -155,29 +170,31 @@ internal sealed class WelcomeWindow : Window
         _progress.TextTrimming = TextTrimming.CharacterEllipsis;
         _progress.VerticalAlignment = VerticalAlignment.Center;
         ConfigureText(_status, TypeScale.BodyLarge);
-        _status.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(_status);
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         _statusRow.Children.Add(_status);
         _statusRow.Margin = new Thickness(0, 0, 0, 12);
         _statusRow.Visibility = Visibility.Collapsed;
         ConfigureSuccessChip();
-        ConfigureText(_title, TypeScale.Title);
+        ConfigureText(_title, TypeScale.Subtitle);
         _title.FontWeight = FontWeights.SemiBold;
         _title.Margin = new Thickness(0, 16, 0, 8);
         AutomationProperties.SetLiveSetting(_title, AutomationLiveSetting.Polite);
         ConfigureText(_instruction, TypeScale.BodyLarge);
+        _instruction.FontWeight = FontWeights.Normal;
         _instruction.Margin = new Thickness(0, 0, 0, 14);
         _instruction.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         // Only a window that opens on the shortcut page lists the core keys: any other window names
         // no key the user has not assigned, not even in collapsed text.
         _coreShortcutKeyListText = _showingConsent ? BuildCoreShortcutKeyList() : string.Empty;
-        ConfigureText(CoreShortcutParagraphs, TypeScale.BodyLarge, secondary: true);
+        ConfigureText(CoreShortcutParagraphs, TypeScale.Body, secondary: true);
+        CoreShortcutParagraphs.FontWeight = FontWeights.Normal;
         _keyDisplay.HorizontalAlignment = HorizontalAlignment.Left;
         _keyDisplay.Margin = new Thickness(0, 0, 0, 14);
 
         ConfigureText(_hint, TypeScale.BodyLarge);
-        _hint.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(_hint);
         AutomationProperties.SetLiveSetting(_hint, AutomationLiveSetting.Polite);
         _notice = new Border
         {
@@ -188,7 +205,7 @@ internal sealed class WelcomeWindow : Window
         _notice.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
         DockPanel.SetDock(_notice, Dock.Bottom);
 
-        _preview = new WelcomeTutorialPreview(_options);
+        _preview = new WelcomeTutorialPreview(_options, startWithInstructions: true);
         _previewFrame = new Border
         {
             MinHeight = PreviewHeight, Width = PreviewHeight * 16 / 9, HorizontalAlignment = HorizontalAlignment.Center,
@@ -221,11 +238,17 @@ internal sealed class WelcomeWindow : Window
                 if (_options.CoreShortcutsNotice) AcknowledgeCoreShortcutsNotice(openSettings: true);
                 else AnswerCoreShortcuts(false);
             }
+            else if (_firstPinExperience && FirstPin.State == FirstPinState.Ready)
+            {
+                FirstPin.Skip();
+                RenderFirstPin();
+            }
             else CloseWith(WelcomeOutcome.Closed);
         };
         var actions = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         actions.Children.Add(TryNowButton);
         actions.Children.Add(SkipButton);
+        ConfigureFirstPin(actions);
         var footer = new Border
         {
             Child = actions, Padding = new Thickness(28, 16, 28, 18), BorderThickness = new Thickness(0, 1, 0, 0),
@@ -327,7 +350,7 @@ internal sealed class WelcomeWindow : Window
         SkipStepButton.SetResourceReference(StyleProperty, "Button.Ghost");
         actions.Children.Insert(0, SkipStepButton);
         actions.Children.Insert(0, BackButton);
-        ReplayButton.Click += (_, _) => _preview.Replay();
+        ReplayButton.Click += (_, _) => { _preview.Replay(); UpdatePreviewControls(); };
         PauseButton.Click += (_, _) => _preview.Pause();
         ConfigurePreviewControls();
         foreach (var (step, name) in new[] { (PracticeStep.A1, "Journey.CaptureGroup"), (PracticeStep.B0, "Journey.PinGroup"), (PracticeStep.C1, "Journey.FindGroup") })
@@ -356,13 +379,13 @@ internal sealed class WelcomeWindow : Window
             Grid.SetColumn(segment, index * 2);
             progressRow.Children.Add(segment);
         }
-        var progress = new StackPanel();
+        var progress = _practiceProgress;
         progress.Children.Add(progressRow);
         progress.Children.Add(_captionRow);
 
         var body = new StackPanel { Margin = new Thickness(28, 18, 28, 14) };
         body.Children.Add(progress);
-        _motionParts = [_title, _instruction, CoreShortcutKeyList, CoreShortcutParagraphs, _statusRow, _practiceTable, _keyDisplay, _changeKeyRow,
+        _motionParts = [_title, _instruction, CoreShortcutKeyList, CoreShortcutParagraphs, _statusRow, _practiceTable, _keyDisplay, _firstPinContent, _changeKeyRow,
             _conflict, _previewFrame, _groups, _trayDiagram, _recap, _preferences];
         foreach (FrameworkElement part in _motionParts) _stepBody.Children.Add(part);
         body.Children.Add(_stepBody);
@@ -390,10 +413,13 @@ internal sealed class WelcomeWindow : Window
         {
             MeasurePrimarySlot();
             ApplyPrimarySlot();
+            PlaceSizedWindow();
             BringToFront();
             if (ShowActivated) TryNowButton.Focus();
             StartHintTimer();
         };
+        SizeChanged += (_, _) => PlaceSizedWindow();
+        DpiChanged += (_, _) => PlaceSizedWindow();
         StateChanged += (_, _) => _preview.Suspend(WindowState == WindowState.Minimized);
         IsVisibleChanged += (_, _) => _preview.Suspend(!IsVisible || WindowState == WindowState.Minimized);
         Closed += (_, _) =>
@@ -403,7 +429,7 @@ internal sealed class WelcomeWindow : Window
                 _consentAnswered = true;
                 CoreShortcutsAnswered?.Invoke(false);
             }
-            _closed = true; Session.Changed -= OnSessionChanged; Session.End(); _hintTimer.Stop(); _preview.Dispose();
+            _closed = true; FirstPin.End(); Session.Changed -= OnSessionChanged; Session.End(); _hintTimer.Stop(); _preview.Dispose();
             CancelStepMotion(); _chipMotion.Stop(); _keyMotion.Stop(); _labelMotion.Stop();
             foreach (WelcomeMotion motion in _segmentMotions) motion.Stop();
         };
@@ -422,7 +448,7 @@ internal sealed class WelcomeWindow : Window
     internal event Action<bool>? CoreShortcutsNoticeAcknowledged;
     internal event Action<GlobalHotkeyCommand>? ShortcutChangeRequested;
 
-    internal WelcomeStep CurrentStep => _showingConsent ? WelcomeStep.Consent : Session.Step switch
+    internal WelcomeStep CurrentStep => _showingConsent ? WelcomeStep.Consent : _firstPinExperience ? WelcomeStep.Pin : Session.Step switch
     {
         PracticeStep.A1 or PracticeStep.A2 => WelcomeStep.Capture,
         >= PracticeStep.A3 and <= PracticeStep.A6 => WelcomeStep.Draw,
@@ -502,13 +528,26 @@ internal sealed class WelcomeWindow : Window
 
     internal void NotifyHotkeyFired(GlobalHotkeyCommand command)
     {
+        if (_firstPinExperience)
+        {
+            if (!_closed && !_showingConsent && FirstPin.State == FirstPinState.Ready && command == GlobalHotkeyCommand.PasteToScreen)
+                BeginFirstPinAttempt();
+            return;
+        }
         if (_closed || CurrentCommand() != command || !CurrentKey().IsAssigned) return;
         _pressKeycaps = !_keyPressed;
         _keyPressed = true;
         RenderStep();
     }
 
-    internal bool Notify(PracticeEvent signal) => Session.Accept(signal);
+    internal bool Notify(PracticeEvent signal)
+    {
+        if (!_firstPinExperience) return Session.Accept(signal);
+        if (_closed || _showingConsent || !FirstPin.Accept(signal)) return false;
+        RenderFirstPin();
+        Announce(_title);
+        return true;
+    }
 
     // Untagged historical notifications cannot prove which practice object produced a result.
     internal void NotifyArrowShortcutFired() { }
@@ -525,7 +564,7 @@ internal sealed class WelcomeWindow : Window
 
     internal void DismissForCapture()
     {
-        if (_closed || Session.Step is not (PracticeStep.A1 or PracticeStep.A2) || Session.CapturePending) return;
+        if (_closed || _firstPinExperience || Session.Step is not (PracticeStep.A1 or PracticeStep.A2) || Session.CapturePending) return;
         Session.BeginCapture();
         _preview.Pause();
         UpdateLayout();
@@ -538,6 +577,16 @@ internal sealed class WelcomeWindow : Window
         {
             if (_options.CoreShortcutsNotice) AcknowledgeCoreShortcutsNotice(openSettings: false);
             else AnswerCoreShortcuts(true);
+            return;
+        }
+        if (_firstPinExperience)
+        {
+            if (FirstPin.State == FirstPinState.Ready)
+            {
+                BeginFirstPinAttempt();
+                PinRequested?.Invoke(this, EventArgs.Empty);
+            }
+            else CloseWith(FirstPin.State == FirstPinState.Pinned ? WelcomeOutcome.FirstPinCompleted : WelcomeOutcome.Closed);
             return;
         }
         Session.ClearFeedback();
@@ -634,7 +683,7 @@ internal sealed class WelcomeWindow : Window
     }
     private void RequestShortcutChange()
     { if (CurrentCommand() is { } command) ShortcutChangeRequested?.Invoke(command); }
-    private void SkipCurrentStep() { if (!_closed && !_showingConsent) Session.Skip(); }
+    private void SkipCurrentStep() { if (!_closed && !_showingConsent && !_firstPinExperience) Session.Skip(); }
     internal string PracticeText() => string.Join("\r\n", Enumerable.Range(0, _practiceCells.GetLength(0)).Select(row => _practiceCells[row, 0] + "\t" + _practiceCells[row, 1]));
 
     private void OnSessionChanged()
@@ -647,19 +696,19 @@ internal sealed class WelcomeWindow : Window
         _scroll.ScrollToTop();
         if (message.Length > 0) Announce(_successShown ? _successText : _status); else Announce(_title);
     }
-    private Hotkey CurrentKey() => Session.Step switch
+    private Hotkey CurrentKey() => _firstPinExperience ? _pinAvailable ? _keys.PasteToScreen : Hotkey.None : Session.Step switch
     {
         PracticeStep.A1 when _captureAvailable => _keys.Capture,
         PracticeStep.B1 when _pinAvailable => _keys.PasteToScreen,
         _ => Hotkey.None,
     };
-    private GlobalHotkeyCommand? CurrentCommand() => Session.Step switch
+    private GlobalHotkeyCommand? CurrentCommand() => _firstPinExperience ? GlobalHotkeyCommand.PasteToScreen : Session.Step switch
     {
         PracticeStep.A1 or PracticeStep.A2 => GlobalHotkeyCommand.CaptureRegion,
         PracticeStep.B1 => GlobalHotkeyCommand.PasteToScreen,
         _ => null,
     };
-    private bool CurrentKeyConflicts() => Session.Step switch
+    private bool CurrentKeyConflicts() => _firstPinExperience ? _keys.PasteToScreen.IsAssigned && !_pinAvailable : Session.Step switch
     {
         PracticeStep.A1 or PracticeStep.A2 => _keys.Capture.IsAssigned && !_captureAvailable,
         PracticeStep.B1 => _keys.PasteToScreen.IsAssigned && !_pinAvailable,
@@ -675,6 +724,12 @@ internal sealed class WelcomeWindow : Window
     };
     private void RenderStep(string? feedback = null, bool success = false)
     {
+        if (_firstPinExperience && !_showingConsent) { RenderFirstPin(); return; }
+        _firstPinContent.Visibility = FullPracticeButton.Visibility = Visibility.Collapsed;
+        _practiceProgress.Visibility = _showingConsent ? Visibility.Collapsed : Visibility.Visible;
+        _title.FontSize = TypeScale.Subtitle * _textScale;
+        _instruction.FontSize = (_showingConsent ? TypeScale.Body : TypeScale.BodyLarge) * _textScale;
+        UpdateContentSizing();
         PracticeStep step = Session.Step;
         bool pageChanged = _renderedStep != step || _renderedConsent != _showingConsent;
         int direction = step == PracticeStep.Groups || PageOrder(step, _showingConsent) < PageOrder(_renderedStep ?? step, _renderedConsent) ? -1 : 1;
@@ -731,9 +786,11 @@ internal sealed class WelcomeWindow : Window
         if (finish) _recap.Content = MakeRecap();
         string? feature = _showingConsent ? null : FeatureFor(step);
         bool showPreview = feature is not null && !(step == PracticeStep.A2 && Session.CapturePending);
-        _previewFrame.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
-        ReplayButton.Visibility = PauseButton.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
+        // Reset the old video's opt-in before visibility can reopen it for the next lesson.
         if (_preview.AssetPath is not { } existing || feature is null || !System.IO.Path.GetFileName(existing).StartsWith(feature + ".", StringComparison.Ordinal)) _preview.SelectFeature(feature);
+        _previewFrame.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
+        ReplayButton.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePreviewControls();
         string action = UiText.Get(shortcutNotice ? "Dialog.OK" : _showingConsent ? "Practice.Start" : step switch
         {
             PracticeStep.A1 or PracticeStep.A2 => "Onboarding.StartCapture",
@@ -779,7 +836,7 @@ internal sealed class WelcomeWindow : Window
     internal void ShowRetryHint()
     {
         _hintTimer.Stop();
-        if (_closed || _showingConsent || Session.CapturePending || Session.Step is PracticeStep.Groups or PracticeStep.Results) return;
+        if (_closed || _showingConsent || _firstPinExperience || Session.CapturePending || Session.Step is PracticeStep.Groups or PracticeStep.Results) return;
         SetText(_hint, Session.Step == PracticeStep.B2 ? UiText.Get("Journey.ResizeHelp") : InstructionText);
         _notice.Visibility = Visibility.Visible;
         Announce(_hint);
@@ -788,7 +845,7 @@ internal sealed class WelcomeWindow : Window
     private void StartHintTimer()
     {
         _hintTimer.Stop();
-        if (IsLoaded && !_closed && !Session.CapturePending && CurrentStep is not (WelcomeStep.Finish or WelcomeStep.Consent)) _hintTimer.Start();
+        if (IsLoaded && !_closed && !_firstPinExperience && !Session.CapturePending && CurrentStep is not (WelcomeStep.Finish or WelcomeStep.Consent)) _hintTimer.Start();
     }
 
     private void SetStatus(string message, bool success)
@@ -866,70 +923,34 @@ internal sealed class WelcomeWindow : Window
         _captionRow.SizeChanged += (_, args) => _successChip.MaxWidth = Math.Max(0, args.NewSize.Width * .62);
     }
 
+    private const string ReplayGeometry = "M4.25,9.75 A6,6 0 1 0 6.1,5.4 M5.75,2.75 L5.75,6.5 L9.5,6.5";
+
     private void ConfigurePreviewControls()
     {
         var playback = new StackPanel { Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8) };
+            HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 4, 8, 8) };
         foreach (var (button, key, geometry) in new[]
         {
-            (ReplayButton, "Journey.Replay", "M4.25,9.75 A6,6 0 1 0 6.1,5.4 M5.75,2.75 L5.75,6.5 L9.5,6.5"),
+            (ReplayButton, "Journey.Replay", ReplayGeometry),
             (PauseButton, "Journey.Pause", "M7,4 L7,16 M13,4 L13,16"),
         })
         {
-            button.Width = button.Height = 30;
-            button.MinWidth = button.MinHeight = 30;
-            button.Padding = new Thickness(0);
-            button.Background = new SolidColorBrush(Color.FromArgb(173, 10, 12, 18));
-            button.BorderBrush = new SolidColorBrush(Color.FromArgb(46, 255, 255, 255));
-            button.BorderThickness = new Thickness(1);
-            button.Foreground = Brushes.White;
-            button.HorizontalContentAlignment = HorizontalAlignment.Center;
-            button.VerticalContentAlignment = VerticalAlignment.Center;
-            button.Content = SymbolIcon.Create(Geometry.Parse(geometry), 15);
+            button.SetResourceReference(StyleProperty, "Button.Ghost");
+            button.MinWidth = button.MinHeight = 36;
+            button.Padding = new Thickness(8, 4, 8, 4);
+            button.Content = SymbolIcon.Create(Geometry.Parse(geometry), 16);
             button.ToolTip = UiText.Get(key);
             AutomationProperties.SetName(button, UiText.Get(key));
-            var stack = new FrameworkElementFactory(typeof(Grid));
-            var border = new FrameworkElementFactory(typeof(Border)) { Name = "Chrome" };
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
-            foreach (DependencyProperty property in new[] { Border.BackgroundProperty, Border.BorderBrushProperty, Border.BorderThicknessProperty })
-                border.SetBinding(property, new System.Windows.Data.Binding(property.Name) { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-            stack.AppendChild(border);
-            // The chrome stays dark over the clip in every theme, so hover and press lighten it
-            // with white washes instead of the theme's opaque state surfaces.
-            foreach ((string name, byte alpha) in new[] { ("HoverLayer", (byte)36), ("PressedLayer", (byte)28) })
-            {
-                var layer = new FrameworkElementFactory(typeof(Border)) { Name = name };
-                layer.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
-                layer.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
-                layer.SetResourceReference(Border.BorderBrushProperty, "Border.Hover");
-                layer.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding(nameof(BorderThickness)) { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
-                layer.SetValue(IsHitTestVisibleProperty, false);
-                layer.SetValue(OpacityProperty, 0d);
-                stack.AppendChild(layer);
-            }
-            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-            presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
-            stack.AppendChild(presenter);
-            var template = new ControlTemplate(typeof(Button)) { VisualTree = stack };
-            var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
-            hover.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "HoverLayer"));
-            var pressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
-            pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "PressedLayer"));
-            var focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
-            focus.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("Border.Focus"), "Chrome"));
-            focus.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(2), "Chrome"));
-            foreach (Trigger trigger in new[] { hover, pressed, focus }) template.Triggers.Add(trigger);
-            button.Template = template;
             playback.Children.Add(button);
         }
         PauseButton.Margin = new Thickness(4, 0, 0, 0);
         _previewFrame.Child = null;
-        var stage = new Grid(); stage.Children.Add(_preview); stage.Children.Add(playback);
+        var stage = new DockPanel();
+        DockPanel.SetDock(playback, Dock.Bottom);
+        stage.Children.Add(playback);
+        stage.Children.Add(_preview);
         _previewFrame.Child = stage;
     }
-
     private void MeasurePrimarySlot()
     {
         string[] keys = ["Practice.Start", "Onboarding.StartCapture", "Journey.A3.Title", "Journey.B0.Title",
@@ -957,8 +978,8 @@ internal sealed class WelcomeWindow : Window
 
     private void ApplyPrimarySlot()
     {
-        TryNowButton.MinWidth = _showingConsent ? 168 : _primarySlotWidth;
-        TryNowButton.MaxWidth = _showingConsent || _textScale > 1 ? double.PositiveInfinity : _primarySlotWidth;
+        TryNowButton.MinWidth = _showingConsent || _firstPinExperience ? 168 : _primarySlotWidth;
+        TryNowButton.MaxWidth = _showingConsent || _firstPinExperience || _textScale > 1 ? double.PositiveInfinity : _primarySlotWidth;
     }
 
     private void FadePrimaryLabel()
@@ -993,7 +1014,9 @@ internal sealed class WelcomeWindow : Window
             int end = display.IndexOf(close, index + 1);
             if (end < 0) continue;
             _instruction.Inlines.Add(new Run(display[start..(index + 1)]));
-            var name = new Run(display[(index + 1)..end]) { FontWeight = FontWeights.SemiBold };
+            // The quoted name is the control the step asks for: running text, not control chrome.
+            var name = new Run(display[(index + 1)..end]);
+            name.SetResourceReference(TextElement.FontWeightProperty, "FontWeight.Emphasis");
             name.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
             _instruction.Inlines.Add(name);
             start = end; index = end;
@@ -1319,7 +1342,7 @@ internal sealed class WelcomeWindow : Window
         layout.Children.Add(grid);
 
         TextBlock location = WrappedLabel(UiText.Get("Onboarding.TrayLocation"), TypeScale.Body);
-        location.FontWeight = FontWeights.SemiBold;
+        ControlLabelTypography.Apply(location);
         layout.Children.Add(location);
         TextBlock actions = WrappedLabel(UiText.Get("Onboard_TrayTipActions"), TypeScale.Body);
         actions.Margin = new Thickness(0, 4, 0, 0);
@@ -1373,13 +1396,36 @@ internal sealed class WelcomeWindow : Window
         _previewFrame.Width = Math.Min(previewHeight * 16 / 9, Math.Max(120, MaxWidth - 72));
         Width = Math.Min(DefaultWidth, MaxWidth);
         Height = Math.Min(roomy ? RoomyHeight : DefaultHeight, MaxHeight);
+        UpdateContentSizing();
     }
 
     /// <summary>Centres on the monitor under the pointer before the window is first shown.</summary>
     private void PlaceOnPointerMonitor(MonitorInfo monitor)
     {
+        _placementMonitor = monitor;
         LimitToWorkArea(monitor);
-        PhysicalWindowPositioner.Move(new WindowInteropHelper(this).Handle, CenterOn(monitor, Width, Height));
+        if (SizeToContent == SizeToContent.Manual)
+            PhysicalWindowPositioner.Move(new WindowInteropHelper(this).Handle, CenterOn(monitor, Width, Height));
+    }
+
+    private void PlaceSizedWindow()
+    {
+        if (!IsLoaded || _closed || _placingWindow || !_automaticPlacement || _placementMonitor is null
+            || ActualWidth <= 0 || ActualHeight <= 0) return;
+        _placingWindow = true;
+        try
+        {
+            IntPtr handle = new WindowInteropHelper(this).Handle;
+            MonitorInfo monitor = _placementCompleted && _options.MonitorProvider is null
+                ? MonitorEnumerator.GetFromWindow(handle) : _placementMonitor;
+            // Resolve from the window after initial placement, so a moved guide uses its current monitor.
+            // A caller's manual placement is never changed, including offscreen rendering fixtures.
+            _placementMonitor = monitor;
+            LimitToWorkArea(monitor);
+            PhysicalWindowPositioner.Move(handle, CenterOn(monitor, Math.Min(ActualWidth, MaxWidth), Math.Min(ActualHeight, MaxHeight)));
+            _placementCompleted = true;
+        }
+        finally { _placingWindow = false; }
     }
 
     /// <summary>Raises the window above the editor, library or card that opened after it, without pinning it on top.</summary>

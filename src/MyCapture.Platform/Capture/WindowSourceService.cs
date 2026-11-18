@@ -9,14 +9,18 @@ namespace MyCapture.Platform.Capture;
 /// its document or current Explorer folder. Two observations around the pixel grab are compared with
 /// <see cref="WindowSourceService.StableDetails"/>; only what stayed the same is kept.
 /// </summary>
-public sealed record WindowSourceSnapshot(uint ProcessId, string AppName, string AppPath, string DocumentPath);
+/// <param name="AppUserModelId">Packaged application ID of the process; empty for a desktop application.</param>
+/// <param name="DocumentOrigin">How <paramref name="DocumentPath"/> was found (CaptureDocumentOrigin).</param>
+public sealed record WindowSourceSnapshot(uint ProcessId, string AppName, string AppPath, string DocumentPath,
+    string AppUserModelId = "", string DocumentOrigin = "");
 
 /// <summary>
 /// Reads where a window's content comes from without blocking capture. The application is resolved
 /// from the window's process (cheap kernel and file-version queries); the Explorer folder needs the
 /// shell's cross-process objects and only runs for Explorer windows. Document apps use a separate,
-/// read-only accessibility probe. Each part has its own deadline
-/// and in-flight limit, and either part failing leaves the other intact.
+/// read-only accessibility probe, and a document app whose window gave only a file name is matched
+/// against the user's Recent Items last. Each part has its own deadline and in-flight limit, and
+/// either part failing leaves the other intact.
 /// </summary>
 public sealed class WindowSourceService
 {
@@ -32,6 +36,8 @@ public sealed class WindowSourceService
     private readonly Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> _readApps;
     private readonly Func<IReadOnlyList<IntPtr>, Task<IReadOnlyDictionary<IntPtr, string>>> _readFolders;
     private readonly DocumentPathService? _documents;
+    private readonly RecentDocumentService? _recent;
+    private readonly EditorDocumentService? _editors;
 
     public WindowSourceService() : this(new SourceAppResolver(), new ExplorerFolderService()) { }
 
@@ -45,16 +51,20 @@ public sealed class WindowSourceService
     internal WindowSourceService(SourceAppResolver apps, ExplorerFolderService folders, bool waitForBusyProbe = false)
         : this(CreateAppReader(apps ?? throw new ArgumentNullException(nameof(apps)), waitForBusyProbe),
             (folders ?? throw new ArgumentNullException(nameof(folders))).ReadAsync,
-            new DocumentPathService(waitForBusyProbe)) { }
+            new DocumentPathService(waitForBusyProbe), new RecentDocumentService(waitForBusyProbe),
+            new EditorDocumentService(waitForBusyProbe)) { }
 
     internal WindowSourceService(
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> readApps,
         Func<IReadOnlyList<IntPtr>, Task<IReadOnlyDictionary<IntPtr, string>>> readFolders,
-        DocumentPathService? documents = null)
+        DocumentPathService? documents = null, RecentDocumentService? recent = null,
+        EditorDocumentService? editors = null)
     {
         _readApps = readApps ?? throw new ArgumentNullException(nameof(readApps));
         _readFolders = readFolders ?? throw new ArgumentNullException(nameof(readFolders));
         _documents = documents;
+        _recent = recent;
+        _editors = editors;
     }
 
     /// <summary>Application observed for one window; ProcessId is the window's own process.</summary>
@@ -85,13 +95,37 @@ public sealed class WindowSourceService
         var explorerFolders = explorers
             .Where(folderPaths.ContainsKey)
             .ToDictionary(handle => handle, handle => folderPaths[handle]);
+        var origins = explorerFolders.Keys.ToDictionary(handle => handle, _ => CaptureDocumentOrigin.Explorer);
         foreach (var document in await documents.ConfigureAwait(false))
-            explorerFolders.TryAdd(document.Key, document.Value);
-        return Combine(targets, appResults, explorerFolders);
+            if (explorerFolders.TryAdd(document.Key, document.Value)) origins[document.Key] = CaptureDocumentOrigin.Window;
+        // Last, and only for document apps whose own window gave no path: the Recent Items shortcut.
+        if (_recent is not null)
+        {
+            WindowCandidate[] unresolved = targets.Where(candidate => !explorerFolders.ContainsKey(candidate.Handle)).ToArray();
+            foreach (var recent in await SafeAsync(() => _recent.ReadAsync(unresolved, appResults),
+                         new Dictionary<IntPtr, string>()).ConfigureAwait(false))
+                if (explorerFolders.TryAdd(recent.Key, recent.Value)) origins[recent.Key] = CaptureDocumentOrigin.Recent;
+        }
+        return Combine(targets, appResults, explorerFolders, origins);
+    }
+
+    /// <summary>
+    /// The document of each code editor window whose confirmed source has none yet, read again after the
+    /// capture (<see cref="EditorDocumentService"/>). Each candidate carries its confirmed
+    /// <see cref="WindowCandidate.Source"/> and process. Up to about a second per window; never throws, and
+    /// nothing a capture shows or saves waits for it.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<IntPtr, string>> ReadEditorDocumentsAsync(IReadOnlyList<WindowCandidate> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (_editors is null || !candidates.Any(EditorDocumentService.IsTarget))
+            return new Dictionary<IntPtr, string>();
+        return await SafeAsync(() => _editors.ReadAsync(candidates), new Dictionary<IntPtr, string>()).ConfigureAwait(false);
     }
 
     internal static IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> Combine(IReadOnlyList<WindowCandidate> candidates,
-        IReadOnlyDictionary<IntPtr, AppObservation> apps, IReadOnlyDictionary<IntPtr, string> folders)
+        IReadOnlyDictionary<IntPtr, AppObservation> apps, IReadOnlyDictionary<IntPtr, string> folders,
+        IReadOnlyDictionary<IntPtr, string>? origins = null)
     {
         var result = new Dictionary<IntPtr, WindowSourceSnapshot>();
         foreach (WindowCandidate candidate in candidates)
@@ -102,9 +136,11 @@ public sealed class WindowSourceService
                 || (candidate.ProcessId != 0 && candidate.ProcessId != app.ProcessId)) continue;
             string folder = folders.TryGetValue(candidate.Handle, out string? path)
                 ? CaptureSourceText.NormalizeLocalPath(path) : string.Empty;
+            string origin = folder.Length > 0 && origins is not null && origins.TryGetValue(candidate.Handle, out string? found)
+                ? CaptureDocumentOrigin.Normalize(found) : string.Empty;
             result[candidate.Handle] = new WindowSourceSnapshot(app.ProcessId,
                 CaptureSourceText.NormalizeAppName(app.App?.Name), CaptureSourceText.NormalizeLocalPath(app.App?.Path),
-                folder);
+                folder, CaptureSourceText.NormalizeAppUserModelId(app.App?.AppUserModelId), origin);
         }
 
         return result;
@@ -121,12 +157,16 @@ public sealed class WindowSourceService
         if (before is null || after is null || before.ProcessId == 0 || before.ProcessId != after.ProcessId
             || (expectedProcessId != 0 && expectedProcessId != before.ProcessId)) return CaptureSourceDetails.Empty;
         bool sameApp = string.Equals(before.AppName, after.AppName, StringComparison.Ordinal)
-            && string.Equals(before.AppPath, after.AppPath, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(before.AppPath, after.AppPath, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(before.AppUserModelId, after.AppUserModelId, StringComparison.Ordinal);
         bool sameDocument = string.Equals(before.DocumentPath, after.DocumentPath, StringComparison.Ordinal);
         return CaptureSourceDetails.Create(
             sameApp ? before.AppName : null,
             sameApp ? before.AppPath : null,
-            sameDocument ? before.DocumentPath : null);
+            sameDocument ? before.DocumentPath : null,
+            sameApp ? before.AppUserModelId : null,
+            sameDocument && string.Equals(before.DocumentOrigin, after.DocumentOrigin, StringComparison.Ordinal)
+                ? before.DocumentOrigin : null);
     }
 
     private static Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> CreateAppReader(

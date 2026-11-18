@@ -176,7 +176,7 @@ internal sealed class AnnotationRenderer
                     DrawText(dc, text, pixelsPerDip, glyphs, glyphs ? null : liveScroll);
                     break;
                 case ImageAnnotation image:
-                    DrawImage(dc, image);
+                    DrawImage(dc, image, blurSource);
                     break;
                 case BlurAnnotation blur:
                     DrawBlur(dc, blur, blurSource);
@@ -600,7 +600,11 @@ internal sealed class AnnotationRenderer
         return freezable;
     }
 
-    private void DrawImage(DrawingContext dc, ImageAnnotation image)
+    /// <param name="page">
+    /// The unannotated capture, whose brightness decides how a watermark blended into the page
+    /// is inked (see <see cref="WatermarkOverlay"/>).
+    /// </param>
+    private void DrawImage(DrawingContext dc, ImageAnnotation image, BitmapSource? page)
     {
         BitmapSource? bitmap = _images.Get(image.AssetFileName);
         Rect box = ToRect(image.Rect);
@@ -614,7 +618,11 @@ internal sealed class AnnotationRenderer
                 box.Top + (box.Height / 2)));
         }
 
-        if (bitmap is not null)
+        if (bitmap is not null && image.Blend == ImageBlend.IntoPage)
+        {
+            dc.DrawImage(CacheFor<ImageCache>(image).Overlay(bitmap, box, image.RotationDegrees, page), box);
+        }
+        else if (bitmap is not null)
         {
             dc.DrawImage(bitmap, box);
         }
@@ -812,6 +820,26 @@ internal sealed class AnnotationRenderer
     private sealed class ImageCache : ItemCache
     {
         internal CachedRotation Rotation;
+
+        private BitmapSource? _overlay;
+        private (BitmapSource Picture, BitmapSource? Page, Rect Box, double Degrees)? _overlayKey;
+
+        /// <summary>The watermark overlay for this place, rebuilt only when an input changes.</summary>
+        internal BitmapSource Overlay(BitmapSource picture, Rect box, double degrees, BitmapSource? page)
+        {
+            if (_overlay is null
+                || _overlayKey is not { } key
+                || !ReferenceEquals(key.Picture, picture)
+                || !ReferenceEquals(key.Page, page)
+                || !key.Box.Equals(box)
+                || !key.Degrees.Equals(degrees))
+            {
+                _overlay = WatermarkOverlay.For(picture, box, degrees, page);
+                _overlayKey = (picture, page, box, degrees);
+            }
+
+            return _overlay;
+        }
     }
 
     private sealed class BlurCache : ItemCache

@@ -18,7 +18,9 @@ internal sealed class PinSessionService : IDisposable
         internal long EncodedLength { get; set; } = -1;
     }
 
-    private sealed record CapturedPin(PinSessionPin Pin, BitmapSource Image, ContentIdentity Identity);
+    // Image is null for a lightweight pin that keeps only its native source: the worker builds the bitmap
+    // from Content only when the PNG has to be written, instead of on the UI thread for every save.
+    private sealed record CapturedPin(PinSessionPin Pin, BitmapSource? Image, PinContent Content, ContentIdentity Identity);
     private sealed record SaveRequest(int Generation, long Sequence, IReadOnlyList<CapturedPin> Pins, bool Save);
     private const int CleanupRetryLimit = 6;
     private readonly PinManager _pins;
@@ -147,24 +149,44 @@ internal sealed class PinSessionService : IDisposable
                 }
                 return (Pins: result, Corrupt: corrupt);
             }).ConfigureAwait(false);
-            await _dispatcher.InvokeAsync(() =>
+            if (decoded.Corrupt.Count > 0)
             {
-                if (!IsGenerationCurrent(generation) || !_enabled) return;
-                var consumed = decoded.Corrupt;
-                foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
+                await _dispatcher.InvokeAsync(() =>
                 {
+                    if (!IsGenerationCurrent(generation) || !_enabled) return;
+                    lock (_stateGate) _unrestored = _unrestored.Where(entry => !decoded.Corrupt.Contains(entry.Pin.Id)).ToArray();
+                }, DispatcherPriority.Background).Task.ConfigureAwait(false);
+            }
+            // One pin per dispatcher turn, bottom of the stack first: input and rendering run between the
+            // windows, so a launch with many saved pins stays responsive while they reappear in their order.
+            // A save in between carries the pins not yet reopened, so an exit mid-restore loses none.
+            var restored = new List<PinWindow>(decoded.Pins.Count);
+            foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
+            {
+                bool stop = await _dispatcher.InvokeAsync(() =>
+                {
+                    if (!IsGenerationCurrent(generation) || !_enabled) return true;
                     try
                     {
                         _identities.Add(content, new ContentIdentity(pin.Id) { EncodedLength = length });
-                        _pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
-                            pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder));
-                        consumed.Add(pin.Id);
+                        restored.Add(_pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
+                            pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
+                            IsCollapsed: pin.IsCollapsed, CollapsedOpacity: pin.CollapsedOpacity,
+                            IsClickThrough: pin.IsClickThrough)));
+                        lock (_stateGate) _unrestored = _unrestored.Where(entry => entry.Pin.Id != pin.Id).ToArray();
                     }
                     catch (Exception ex) { _log.LogWarning("Could not reopen saved pin {PinId} ({FailureType})", pin.Id, ex.GetType().Name); }
-                }
-                lock (_stateGate) _unrestored = _unrestored.Where(entry => !consumed.Contains(entry.Pin.Id)).ToArray();
+                    return false;
+                }, DispatcherPriority.Background).Task.ConfigureAwait(false);
+                if (stop) return;
+            }
+            await _dispatcher.InvokeAsync(() =>
+            {
+                if (!IsGenerationCurrent(generation) || !_enabled) return;
+                try { _pins.RestackSessionPins(restored); }
+                catch (Exception ex) { _log.LogWarning("Could not restore the saved pin stacking order ({FailureType})", ex.GetType().Name); }
                 FinishRestore();
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Background).Task.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -244,16 +266,17 @@ internal sealed class PinSessionService : IDisposable
         {
             foreach (PinManager.ClosedPin pin in _pins.SnapshotOpenPins())
             {
-                BitmapSource image = pin.Content.Image;
-                if (!image.IsFrozen) image = (BitmapSource)image.GetAsFrozen();
+                BitmapSource? image = pin.Content.HasOverlay || !pin.Content.Picture.IsBitmapDropped ? pin.Content.Image : null;
+                if (image is { IsFrozen: false }) image = (BitmapSource)image.GetAsFrozen();
                 ContentIdentity identity = _identities.GetValue(pin.Content, _ => new ContentIdentity(Guid.NewGuid()));
                 var record = new PinSessionPin(identity.Id, ToStoredKind(pin.Content.Kind), pin.Content.OriginalText,
                     pin.Content.SourcePageUrl, pin.Content.UsesDeviceIndependentPixels, pin.ImageWidthDip,
                     pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
                     pin.Content.TextStyle, pin.Content.CodeDocument, pin.Content.Provenance.Url,
                     pin.Content.Provenance.DocumentPath, pin.Content.Provenance.AppName,
-                    pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle);
-                captured.Add(new CapturedPin(record, image, identity));
+                    pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle,
+                    pin.IsCollapsed, pin.CollapsedOpacity, pin.IsClickThrough);
+                captured.Add(new CapturedPin(record, image, pin.Content, identity));
             }
         }
         return new SaveRequest(_generation, sequence, captured, save);
@@ -339,7 +362,7 @@ internal sealed class PinSessionService : IDisposable
                         {
                             length = live.Identity.EncodedLength;
                             if (length > _store.MaxPngBytes - used) { images.Remove(candidate.Pin.Id); overLimit.Add(skipped); continue; }
-                            bytes = _encode(live.Image);
+                            bytes = _encode(live.Image ?? live.Content.Image);
                             length = live.Identity.EncodedLength = bytes.LongLength;
                         }
                         if (length > _store.MaxPngBytes - used) { images.Remove(candidate.Pin.Id); overLimit.Add(skipped); continue; }

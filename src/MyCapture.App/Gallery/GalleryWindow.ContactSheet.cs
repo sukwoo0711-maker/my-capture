@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
@@ -36,16 +37,18 @@ internal sealed partial class GalleryWindow
             foreach (CaptureRecord record in images) leases.Add(_queue.AcquireEvictionLease(record.Id));
             var items = images.Select(record => new GalleryContactSheetItem(
                 _queue.GetFilePath(record, CaptureFileNames.Rendered), record.Title, record.CreatedAt,
-                record.SourceDetails.AppName, record.SourceWindowTitle)).ToArray();
+                record.SourceDetails.AppName, record.SourceWindowTitle,
+                _queue.GetFilePath(record, CaptureFileNames.Thumbnail))).ToArray();
             var dialog = new GalleryContactSheetDialog(items, selected.Length - images.Length,
                 () => images.Select((record, index) => _queue.Find(record.Id) == record
-                    && record.ContentRevision == revisions[index]).All(current => current), _queue.Activities) { Owner = this };
+                    && record.ContentRevision == revisions[index]).All(current => current), _queue.Activities, _log) { Owner = this };
             dialog.ShowDialog();
             await dialog.PendingPreview;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
-            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("ContactSheet.Failed"));
+            _log.LogWarning(ex, "Could not prepare the contact sheet PDF");
+            KoreanWordWrap.Show(LibraryActionStatus, ThemedDialog.WithCause(UiText.Get("ContactSheet.Failed"), ex));
         }
         finally { foreach (IDisposable lease in leases) lease.Dispose(); }
     }
