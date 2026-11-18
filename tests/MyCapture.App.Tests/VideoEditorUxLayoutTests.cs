@@ -525,8 +525,8 @@ public sealed class VideoEditorUxLayoutTests
     });
 
     /// <summary>
-    /// The on 자세히 toggle is the selected fill without the 2-DIP edge that read as the focus
-    /// ring, and its chevron turns from down to up and back. The Alt reveal scales the box the
+    /// The on 자세히 toggle uses the neutral disclosure fill and a one-DIP selection edge,
+    /// and its chevron turns from down to up and back. The Alt reveal scales the box the
     /// chevron sits in, so the reveal and the turn never replace each other's transform.
     /// </summary>
     [Fact]
@@ -554,10 +554,11 @@ public sealed class VideoEditorUxLayoutTests
             Assert.False(ReferenceEquals(box.RenderTransform, chevron.RenderTransform));
             var layer = Assert.IsType<Border>(toggle.Template.FindName("CheckedLayer", toggle));
             Assert.Equal(1, layer.Opacity);
-            Assert.Equal(new Thickness(0), layer.BorderThickness);
-            Assert.Equal(((SolidColorBrush)editor.FindResource("Text.SelectionBackground")).Color, ((SolidColorBrush)layer.Background).Color);
-            // The chevron and the name take the selection ink with the toggle, so both read on the fill.
-            Color ink = ((SolidColorBrush)editor.FindResource("Text.SelectionForeground")).Color;
+            Assert.Equal(new Thickness(1), layer.BorderThickness);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Surface.Selected")).Color, ((SolidColorBrush)layer.Background).Color);
+            Assert.Equal(((SolidColorBrush)editor.FindResource("Selection.Stroke")).Color, ((SolidColorBrush)layer.BorderBrush).Color);
+            // The disclosure keeps primary ink on its neutral selected surface.
+            Color ink = ((SolidColorBrush)editor.FindResource("Text.Primary")).Color;
             Assert.Equal(ink, ((SolidColorBrush)toggle.Foreground).Color);
             Assert.Equal(ink, Assert.IsType<SolidColorBrush>(chevron.Stroke).Color);
             Assert.All(Descendants(toggle).OfType<TextBlock>().Where(text => !string.IsNullOrEmpty(text.Text)),

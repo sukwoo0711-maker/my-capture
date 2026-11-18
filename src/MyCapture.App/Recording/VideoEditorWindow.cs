@@ -682,11 +682,11 @@ internal sealed partial class VideoEditorWindow : Window
         previewStack.Children.Add(_loadingOverlay);
         var preview = new Border
         {
-            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(8, 6, 8, 6), Child = previewStack,
+            Name = "VideoPreviewSurface", Child = previewStack,
         };
         preview.SetResourceReference(Border.BackgroundProperty, "Surface.Canvas");
-        preview.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        preview.SetResourceReference(Border.BorderBrushProperty, "Border.Control");
+        preview.SetResourceReference(Border.BorderThicknessProperty, "Border.ToolThickness");
         var previewArea = new Grid { Name = "VideoPreviewArea" };
         previewArea.Children.Add(preview);
         Grid.SetRow(previewArea, 1);
@@ -897,7 +897,7 @@ internal sealed partial class VideoEditorWindow : Window
         var heading = new TextBlock
         {
             Name = "VideoDetailsHeading",
-            Text = UiText.Get("VideoEditorUx_Details"), FontSize = TypeScale.Body,
+            Text = UiText.Get("VideoEditorUx_FrameNavigation"), FontSize = TypeScale.Body,
             FontWeight = FontWeights.SemiBold, Margin = new Thickness(DetailsTextInset, 0, 0, 8),
         };
         heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
@@ -917,7 +917,7 @@ internal sealed partial class VideoEditorWindow : Window
             Name = "VideoDetailsScroll", Content = content,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Focusable = false, Padding = new Thickness(10),
+            Focusable = false, Padding = new Thickness(12),
         };
         scroll.GotKeyboardFocus += (_, args) =>
         {
@@ -926,9 +926,9 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(scroll, UiText.Get("VideoEditorUx_Details"));
         var panel = new Border
         {
-            Name = "VideoDetailsPanel", Width = 330,
+            Name = "VideoDetailsPanel", Width = 300,
             Margin = new Thickness(8, 0, 0, 0),
-            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1, 0, 0, 0),
             Child = scroll, Visibility = Visibility.Collapsed,
         };
         panel.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
@@ -999,8 +999,16 @@ internal sealed partial class VideoEditorWindow : Window
     /// </remarks>
     private FrameworkElement BuildTrimBar()
     {
-        var bar = new StackPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
+        var bar = new StackPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 16, 0, 0) };
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_TrimBarName"));
+        var heading = new TextBlock
+        {
+            Name = "VideoTrimHeading", Text = UiText.Get("VideoEditorUx_Trim"),
+            FontSize = TypeScale.Body, FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(DetailsTextInset, 0, 0, 8),
+        };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        bar.Children.Add(heading);
         _keptLengthLabel = new TextBlock { FontSize = TypeScale.BodyLarge, FontWeight = FontWeights.SemiBold };
         _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _removedLengthLabel = new TextBlock { FontSize = TypeScale.Caption };
@@ -1011,11 +1019,12 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Name = "VideoTrimSummary",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(DetailsTextInset, 0, 8, 0),
+            Margin = new Thickness(DetailsTextInset, 0, 8, 8),
             MinWidth = 120,
         };
         summary.Children.Add(_keptLengthLabel);
         summary.Children.Add(_removedLengthLabel);
+        bar.Children.Add(summary);
         // The range: the exact start and end, and the way back to the whole recording.
         var range = new StackPanel { Name = "VideoTrimRange" };
         TextBox Input(string name)
@@ -1054,7 +1063,6 @@ internal sealed partial class VideoEditorWindow : Window
         _resetTrimButton.HorizontalAlignment = HorizontalAlignment.Left;
         range.Children.Add(_resetTrimButton);
         bar.Children.Add(range);
-        bar.Children.Add(summary);
         RefreshTrimInputs();
         return bar;
     }
@@ -1133,10 +1141,11 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Name = "VideoLayersHeading",
             Text = UiText.Get("Video.Layers"),
+            FontSize = TypeScale.Body,
             FontWeight = FontWeights.SemiBold,
-            Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         // The heading starts at the panel's text edge. The inset sits on its row, not on the
         // heading, so the heading's measured width stays the width it is arranged in.
         var layerHeader = new Grid { Margin = new Thickness(DetailsTextInset, 0, 0, 0) };
@@ -1234,6 +1243,7 @@ internal sealed partial class VideoEditorWindow : Window
             Name = "VideoDetailsToggle", Content = detailsFace,
             ToolTip = UiText.Get("VideoEditorUx_DetailsHelp"), IsChecked = false,
         };
+        _detailToggle.SetResourceReference(StyleProperty, "ToggleButton.Disclosure");
         CommandButtonPresentation.Apply(_detailToggle);
         AutomationProperties.SetName(_detailToggle, UiText.Get("VideoEditorUx_Details"));
         AutomationProperties.SetHelpText(_detailToggle, UiText.Get("VideoEditorUx_DetailsHelp"));

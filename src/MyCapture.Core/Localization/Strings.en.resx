@@ -4075,6 +4075,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_SaveShort" xml:space="preserve"><value>Save</value></data>
   <data name="VideoEditorUx_ExportShort" xml:space="preserve"><value>Export</value></data>
   <data name="VideoEditorUx_Details" xml:space="preserve"><value>Details</value></data>
+  <data name="VideoEditorUx_FrameNavigation" xml:space="preserve"><value>Frame navigation</value></data>
   <data name="VideoEditorUx_DetailsHelp" xml:space="preserve"><value>Show or hide frame navigation, start and end times, and the layer list. Press Enter to toggle.</value></data>
   <data name="VideoEditorUx_TrimTrackHelp" xml:space="preserve"><value>Drag the handles or press I and O to set the start and end. Press Ctrl+K to split at the playhead.</value></data>
   <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>Double-click a layer or select it and press F2 or Enter to edit. Press Del to delete. Drag a layer to adjust its visible range.</value></data>
