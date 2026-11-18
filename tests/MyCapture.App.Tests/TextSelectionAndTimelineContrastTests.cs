@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -88,6 +89,9 @@ public sealed class TextSelectionAndTimelineContrastTests
         {
             Apply(scenario, fixture.Resources);
             Layout(fixture.Root);
+            // Replacing the content template clears the synthetic active-selection flag.
+            // Restore this HWND-free fixture's selection owner, as real keyboard focus does.
+            ActivateSelectionForFixture(fixture.Box);
             BitmapSource image = Render(fixture.Root, 1);
             SaveEvidence(fixture, image, scenario, 1, "after-live",
                 Environment.GetEnvironmentVariable("MYCAPTURE_FIX_EVIDENCE"));
@@ -96,6 +100,34 @@ public sealed class TextSelectionAndTimelineContrastTests
             Assert.Equal(originalColor, originalSelection.Color);
             Assert.NotSame(originalSelection, fixture.Box.SelectionBrush);
         }
+    });
+
+    [Fact]
+    public void FocusedSelectionSurvivesLiveContrastTemplateChanges() => Run(() =>
+    {
+        using Fixture fixture = CreateFixture("glass-light", 1);
+        var window = new Window
+        {
+            Content = fixture.Root, Left = -32000, Top = -32000, WindowStyle = WindowStyle.None,
+            ShowActivated = false, ShowInTaskbar = false, SizeToContent = SizeToContent.WidthAndHeight,
+        };
+        ModernWindowChrome.SetEnabled(window, false);
+        FluidMotion.SetWindowEntrance(window, false);
+        try
+        {
+            window.Show();
+            Assert.Same(fixture.Box, Keyboard.Focus(fixture.Box));
+            fixture.Box.Select(0, SelectedText.Length);
+            foreach (string scenario in new[] { "windows-dark", "windows-light", "glass-light", "glass" })
+            {
+                Apply(scenario, fixture.Resources);
+                Layout(fixture.Root);
+                Assert.True(fixture.Box.IsKeyboardFocused);
+                Assert.Same(fixture.Box, Keyboard.FocusedElement);
+                AssertSelection(fixture, Render(fixture.Root, 1), 1);
+            }
+        }
+        finally { window.Close(); }
     });
 
     [Fact]
@@ -115,6 +147,18 @@ public sealed class TextSelectionAndTimelineContrastTests
         var markup = new XElement(presentation + "ResourceDictionary",
             new XAttribute(XNamespace.Xmlns + "x", xaml.NamespaceName),
             new XAttribute(XNamespace.Xmlns + "themes", "clr-namespace:MyCapture.App.Themes;assembly=MyCapture"), fontSize, style);
+        // Detached XElement names keep their original CLR namespace even with a new prefix mapping.
+        foreach (XElement element in markup.Descendants())
+        {
+            const string localNamespace = "clr-namespace:MyCapture.App.Themes";
+            if (element.Name.NamespaceName == localNamespace)
+                element.Name = XName.Get(element.Name.LocalName, localNamespace + ";assembly=MyCapture");
+            foreach (XAttribute attribute in element.Attributes().Where(item => item.Name.NamespaceName == localNamespace).ToArray())
+            {
+                element.SetAttributeValue(XName.Get(attribute.Name.LocalName, localNamespace + ";assembly=MyCapture"), attribute.Value);
+                attribute.Remove();
+            }
+        }
         ResourceDictionary resources = LoadTheme();
         resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(markup.ToString()));
         var box = new PasswordBox
@@ -123,6 +167,7 @@ public sealed class TextSelectionAndTimelineContrastTests
             Style = (Style)resources["Settings.PasswordBox"],
         };
         var root = new Border { Width = 340, Height = 70, Child = box, Resources = resources };
+        root.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
         foreach (string scenario in Scenarios)
         {
             Apply(scenario, resources);
@@ -136,7 +181,8 @@ public sealed class TextSelectionAndTimelineContrastTests
             Assert.Equal(255, fill.A);
             Assert.Equal(255, ink.A);
             AssertContrast(ink, fill, $"Settings.PasswordBox {scenario}");
-            Assert.True(ThemeContrast.Ratio(ToTheme(fill), ToTheme(Solid(box.Background).Color)) >= 3);
+            BitmapSource image = Render(root, 1);
+            Assert.True(ThemeContrast.Ratio(ToTheme(fill), ToTheme(InputBackgroundPixel(box, root, image, 1))) >= 3);
         }
         Assert.Null(PresentationSource.FromVisual(root));
     });
@@ -357,6 +403,13 @@ public sealed class TextSelectionAndTimelineContrastTests
         timeline.SelectLayer(null);
         box.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, box));
         box.Select(0, SelectedText.Length);
+        object selection = ActivateSelectionForFixture(box);
+        Layout(root);
+        return new(root, resources, box, timeline, textBar, frameBar, selection);
+    }
+
+    private static object ActivateSelectionForFixture(TextBox box)
+    {
         // TextBoxLine uses IsSelectionActive to draw the selected glyph run. Set only its
         // readonly state in this isolated fixture; no keyboard focus or OS input is acquired.
         FieldInfo keyField = typeof(TextBoxBase).GetField("IsSelectionActivePropertyKey", BindingFlags.Static | BindingFlags.NonPublic)
@@ -372,8 +425,7 @@ public sealed class TextSelectionAndTimelineContrastTests
         MethodInfo ensureCaret = selection.GetType().GetMethod("EnsureCaret", instance)!;
         ensureCaret.Invoke(selection, [false, true, Enum.Parse(ensureCaret.GetParameters()[2].ParameterType, "None")]);
         selection.GetType().GetMethod("Highlight", instance)!.Invoke(selection, null);
-        Layout(root);
-        return new(root, resources, box, timeline, textBar, frameBar, selection);
+        return selection;
     }
 
     private static void AssertSelection(Fixture fixture, BitmapSource image, double scale)
@@ -388,7 +440,9 @@ public sealed class TextSelectionAndTimelineContrastTests
         Assert.Equal(255, fill.A);
         Assert.Equal(255, ink.A);
         AssertContrast(ink, fill, "selected text");
-        Assert.True(ThemeContrast.Ratio(ToTheme(fill), ToTheme(Solid(fixture.Box.Background).Color)) >= 3,
+        // Fill.Input is translucent in dark palettes; compare the actual composited input pixel,
+        // not the uncomposited white RGB channels of its low-alpha brush.
+        Assert.True(ThemeContrast.Ratio(ToTheme(fill), ToTheme(InputBackgroundPixel(fixture.Box, fixture.Root, image, scale))) >= 3,
             "The selected background must remain distinguishable from the input background.");
         Rect bounds = SelectionBounds(fixture);
         Assert.True(bounds.Width > 20 && bounds.Height > 10);
@@ -413,6 +467,16 @@ public sealed class TextSelectionAndTimelineContrastTests
 
     private static bool HasSelectionFill(BitmapSource image, Rect bounds, double scale, Color fill) =>
         CountPixels(image, bounds, scale, fill) >= bounds.Width * bounds.Height * scale * scale * 0.45;
+
+    private static Color InputBackgroundPixel(FrameworkElement input, FrameworkElement root, BitmapSource image, double scale)
+    {
+        // The right-hand interior contains no fixture text, caret, selection or edge stroke.
+        Point point = input.TransformToAncestor(root).Transform(new Point(input.ActualWidth - 10, input.ActualHeight / 2));
+        var pixel = new byte[4];
+        image.CopyPixels(new Int32Rect((int)Math.Floor(point.X * scale), (int)Math.Floor(point.Y * scale), 1, 1), pixel, 4, 0);
+        Assert.Equal(255, pixel[3]);
+        return Color.FromRgb(pixel[2], pixel[1], pixel[0]);
+    }
 
     private static IEnumerable<Visual> Descendants(Visual visual)
     {
