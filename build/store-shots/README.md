@@ -4,6 +4,8 @@ MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 �
 
 2026-10-20 장면을 핀 중심으로 바꿨습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 카드에서 P, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리, 공유 전 주석·가리기, 비교 카드입니다. 핀을 띄우는 키는 F3 하나로 보여 줍니다. 레이어는 `--selftest-store-layers`가 언어별로 만들고, 2026-10-20 렌더는 F3·Shift+F3이 새 설치 기본값인 4.5.0 핀 흐름 브랜치(`feat/pin-core-flow-450`) 위에서 했습니다. 그 결과는 `artifacts/store/screenshots/4.5.0-pin/{ko,en}`에 있습니다. 2026-10-22 UX 개선(#119) 화면으로 다시 렌더한 결과는 `artifacts/store/screenshots/ux453/{ko,en}`입니다. 바뀐 장은 7번 라이브러리(썸네일 시각 배지와 머리글 '새 폴더' 버튼 제거, '검색 저장' 정리)와 8번 편집기(한 줄 명령 막대, 실행 취소·다시 실행·더보기는 아이콘)이고, 나머지 일곱 장은 `4.5.0-pin`과 픽셀까지 같습니다. 2026-10-23 편집기 점검(#132) 화면으로 다시 렌더한 현재 결과는 `artifacts/store/screenshots/ux461/{ko,en}`입니다. 8번 편집기만 바뀌었고(자르기 옆 회전 단추 두 개, 더보기 메뉴 제거, 평소 크게 가운데 둔 명령 아이콘, 한 줄 속성 막대), 나머지 여덟 장은 `ux453`과 픽셀까지 같습니다. 4.4.0 제출(제출 13)에 쓴 이전 장면 구성은 이 문서의 git 기록과 `artifacts/store/screenshots/4.4.0`에 있습니다.
 
+2026-11-19 6.0.0 제출(제출 33)에 올린 현재 결과는 `artifacts/store/screenshots/6.0.0/{ko,en}`이고 입력은 `6.0.0-input/scenes.json`(이 폴더의 `scenes.json`과 같음)입니다. 장면과 순서는 그대로이며, 1번 부제는 앱 표기에 맞춰 '불투명도'로 바꾸고, 7번 라이브러리는 언어마다 검색 막대 폭이 달라 창 위쪽 `[0,0,3720,1600]`을 0.6배로 넣었습니다. 레이어(`artifacts/store/layers/6.0.0/{ko,en}`)는 6.0.0 후보 커밋(75279ee8) 위에 진단 패치를 얹어 만들었습니다. 그 패치 가운데 6.0 화면에 맞춘 수정(카드 크기를 제품 창에서 읽기, OCR 결과 창에 정확도 지정, 편집기 타임라인 썸네일 디코드 대기, 트레이 메뉴 순서, 메뉴 그림자 여백을 뺀 렌더)은 제품 진단에도 옮겼습니다. 쇼릴 전용 패치(녹화 장면, 100% 화면 그림의 실제 OCR로 만든 데이터시트 표)는 옮기지 않았으므로, 지금 진단으로 다시 만들면 5번 데이터시트 핀과 편집기 주석이 6.0.0 결과와 다릅니다.
+
 ## 입력과 실행
 
 Python 3.12, Pillow와 다음 가변 글꼴이 필요합니다.
@@ -29,13 +31,13 @@ Python 3.12, Pillow와 다음 가변 글꼴이 필요합니다.
 
 ```powershell
 $env:TMP='C:\Users\<user>\AppData\Local\Temp\pl5\ko\t'; $env:TEMP=$env:TMP; $env:MYCAPTURE_DATA_ROOT='C:\Users\<user>\AppData\Local\Temp\pl5\ko\d'
-MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture\artifacts\store\layers\ux461\ko ko
+MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture\artifacts\store\layers\6.0.0\ko ko
 ```
 
 합성은 다음 명령입니다. 영어는 경로의 `ko`와 `--lang`을 `en`으로 바꿉니다.
 
 ```powershell
-python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-capture/artifacts/store/layers/ux461/ko" --lang ko --out "C:/GitRepositories/my-capture/artifacts/store/screenshots/ux461/ko" --scenes "<worktree>/build/store-shots/scenes.json"
+python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-capture/artifacts/store/layers/6.0.0/ko" --lang ko --out "C:/GitRepositories/my-capture/artifacts/store/screenshots/6.0.0/ko" --scenes "<worktree>/build/store-shots/scenes.json"
 ```
 
 전체 실행은 `01.png`부터 `09.png`, `contact-sheet.png`, `search-card.png`를 만듭니다. 본 이미지는 RGB·sRGB ICC·알파 없는 최적화 PNG입니다. 연락판은 장당 640×360, 3열로 배치합니다. `search-card.png`에는 현재 등록 이미지, 새 장면 1, 경쟁 앱 두 장을 원본 카드 배율로 나란히 배치합니다. 글꼴 축, 실제 제목 높이, 줄바꿈, 배율과 출력 경로는 표준 출력의 JSON으로 보고합니다.
@@ -44,7 +46,7 @@ python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-c
 
 ## 좌표와 시각 규칙
 
-`crop`은 원본 레이어 픽셀의 `[left, top, right, bottom]`이며 오른쪽·아래 경계는 포함하지 않습니다. `crop`을 생략하면 레이어 전체를 씁니다. 메뉴와 핀처럼 언어마다 크기가 다른 레이어에 씁니다. manifest의 `windowOpacity`는 제품 창의 투명도이며, 합성기가 레이어와 그림자에 그 값을 곱합니다(`RenderTargetBitmap`은 창 투명도를 담지 않기 때문입니다). `placement`는 최종 캔버스의 `[x, y]`입니다. `scale`은 **원본 픽셀에 곱하는 값**이며, 최종 DIP 배율은 `scale × renderScale`입니다. `z`가 작은 레이어부터 합성합니다. 창 아래나 오른쪽이 캔버스 밖으로 이어지는 배치는 의도된 자르기입니다. 상세 값과 최종 원본 조건은 `scenes.json`을 기준으로 합니다.
+`crop`은 원본 레이어 픽셀의 `[left, top, right, bottom]`이며 오른쪽·아래 경계는 포함하지 않습니다. `crop`을 생략하면 레이어 전체를 씁니다. 메뉴와 핀처럼 언어마다 크기가 다른 레이어에 씁니다. manifest의 `windowOpacity`는 제품 창의 불투명도이며, 합성기가 레이어와 그림자에 그 값을 곱합니다(`RenderTargetBitmap`은 창 투명도를 담지 않기 때문입니다). `placement`는 최종 캔버스의 `[x, y]`입니다. `scale`은 **원본 픽셀에 곱하는 값**이며, 최종 DIP 배율은 `scale × renderScale`입니다. `z`가 작은 레이어부터 합성합니다. 창 아래나 오른쪽이 캔버스 밖으로 이어지는 배치는 의도된 자르기입니다. 상세 값과 최종 원본 조건은 `scenes.json`을 기준으로 합니다.
 
 모든 시각 상수는 `compose.py` 상단의 `STYLE`에 둡니다.
 
@@ -64,13 +66,13 @@ python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-c
 
 | 번호 | 한국어 제목 / 영어 제목 | 보조 문구(ko) | 레이어별 배율 |
 | --- | --- | --- | --- |
-| 1 | 사양 표를 띄워 두고 코딩합니다 / Code with the spec table in view | 엑셀에서 Ctrl+C → F3 · Ctrl+휠: 투명도 | `samples/editor-uart.png` 1.00 → 2.0, `pins/table.png` 0.667 → 2.0(창 투명도 0.88) |
+| 1 | 사양 표를 띄워 두고 코딩합니다 / Code with the spec table in view | 엑셀에서 Ctrl+C → F3 · Ctrl+휠: 불투명도 | `samples/editor-uart.png` 1.00 → 2.0, `pins/table.png` 0.667 → 2.0(창 투명도 0.88) |
 | 2 | 구문을 원문 그대로 붙여 넣습니다 / Paste the snippet back as text | 에디터에서 Ctrl+C → F3 · 핀에서 Ctrl+더블클릭 → Ctrl+V | `samples/editor-paste.png` 1.00 → 2.0, `pins/code-define.png` 0.667 → 2.0 |
 | 3 | 핀 아래 창을 그대로 씁니다 / Click through to the window below | 핀 오른쪽 클릭 → 뒤 창 클릭 허용 | `samples/terminal.png` 1.00 → 2.0, `pins/table-clickthrough.png` 0.667 → 2.0(0.72) |
 | 4 | 캡처한 화면도 F3으로 띄웁니다 / Capture, then press F3 to pin | Ctrl+Shift+C로 캡처하면 클립보드에 복사 → F3 | `samples/editor-uart.png` 1.00 → 2.0, `pins/api-doc.png` 0.60 → 1.8 |
 | 5 | 이미지 핀의 글자도 복사합니다 / Copy text from an image pin | 이미지 핀에서 Ctrl+더블클릭 · 한국어·영어 인식 | `samples/editor-ocr.png` 1.00 → 2.0, `pins/datasheet.png` 0.667 → 2.0 |
 | 6 | 필요할 때만 꺼내 봅니다 / Hide pins and bring them back | Shift+F3: 핀 모두 숨기기·보이기 · 트레이 메뉴: 닫은 핀 다시 열기 | `samples/editor-uart.png` 1.00 → 2.0, `film/table-plain.png`·`film/code-plain.png`·`menus/tray-pins.png` 0.667 → 2.0 |
-| 7 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | 없음 | `library/midnight-search.png` 0.75 → 2.25 |
+| 7 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | 없음 | `library/midnight-search.png` 위쪽 `[0,0,3720,1600]` 0.60 → 1.8 |
 | 8 | 공유 전에 주석과 가리기 / Mark up and redact before sharing | Ctrl+Shift+R: 개인정보 가리기 | `share/redact-annotated.png` 0.55 → 1.65 |
 | 9 | Windows 캡처 도구에 더해지는 것 / What it adds to Snipping Tool | 없음 | 창 없이 2열 문자만 배치합니다. |
 
@@ -111,7 +113,7 @@ python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-c
 ## 최종 검수
 
 - [ ] 언어별 manifest의 경로·실제 크기·renderScale과 위 창 크기를 대조합니다. 모든 crop 안에 필요한 기능과 개발 예제가 들어가는지 확인합니다.
-- [ ] 4.5.0 핀 흐름 빌드의 ko/en 레이어로 전체 명령을 실행하고, 종료 코드 0과 언어별 본 이미지 9장·연락판·검색 카드를 확인합니다.
+- [ ] 출시 후보 빌드의 ko/en 레이어로 전체 명령을 실행하고, 종료 코드 0과 언어별 본 이미지 9장·연락판·검색 카드를 확인합니다.
 - [ ] 표준 출력의 제목 높이와 카드 환산값을 기록하고 7px 기준, 제목 잘림·줄바꿈·보조 문구 간격을 확인합니다.
 - [ ] 검색 카드의 현재 이미지와 새 시안을 나란히 열어 제목 가독성을 확인합니다. 연락판과 개별 2560×1440 이미지를 열어 창 크기·그림자·투명 모서리·본문 가독성·필수 정보의 자르기를 확인합니다.
 - [ ] 영어 창의 실제 번역, 개인정보 가리기 결과, 핀·카드 단축키, OCR 일치, 라이브러리 검색 근거, 시간 지정 텍스트, GIF 크기 산정을 확인합니다.
