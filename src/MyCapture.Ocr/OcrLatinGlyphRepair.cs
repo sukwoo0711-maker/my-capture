@@ -115,7 +115,8 @@ internal static class OcrLatinGlyphRepair
                 {
                     '0' => glyph.Height <= lowerLimit ? 'o' : null,
                     '5' => glyph.Height <= lowerLimit ? 's' : null,
-                    '1' => glyph.HasGap && glyph.Height <= lowerLimit ? 'i' : null,
+                    '1' => glyph.HasGap && glyph.Height <= lowerLimit ? 'i'
+                        : IsCrossbarLetter(text, glyphs, index, xHeight, tall, lowerLimit) ? 't' : null,
                     _ when ShapeIdentical.Contains(value, StringComparison.Ordinal) => glyph.Height <= lowerLimit ? char.ToLowerInvariant(value) : null,
                     _ => null,
                 };
@@ -161,6 +162,23 @@ internal static class OcrLatinGlyphRepair
             index = end;
         }
         return new string(output);
+    }
+
+    private static bool IsCrossbarLetter(string text, IReadOnlyList<Glyph> glyphs, int index,
+        double xHeight, double tall, double lowerLimit)
+    {
+        // A two-sided interior crossbar can distinguish t from 1. Use it only in a bare numeric atom with a
+        // neighbouring round glyph at x-height; punctuation, identifiers and cap-height zeroes retain their reading.
+        if (text.Length is < 2 or > 3 || text.Any(value => value is not ('0' or '1'))) return false;
+        Glyph stem = glyphs[index];
+        double stemMinimum = xHeight + Math.Max(1, (tall - xHeight) * .2);
+        if (stem.HasGap || !stem.HasCrossbar || stem.Height <= stemMinimum || stem.Height > tall + Math.Max(1, tall * .1)) return false;
+        double tolerance = Math.Max(1, xHeight * .15);
+        return IsRoundLetter(index - 1) || IsRoundLetter(index + 1);
+
+        bool IsRoundLetter(int neighbour) => neighbour >= 0 && neighbour < text.Length && text[neighbour] == '0'
+            && !glyphs[neighbour].HasGap && glyphs[neighbour].Height >= xHeight - tolerance
+            && glyphs[neighbour].Height <= Math.Min(lowerLimit, xHeight + tolerance);
     }
 
     /// <summary>
@@ -296,19 +314,22 @@ internal static class OcrLatinGlyphRepair
             column[index % width] = Math.Max(column[index % width], coverage[index]);
         }
 
+        bool crossbarCandidate = word.Text.Length is 2 or 3 && word.Text.All(value => value is '0' or '1')
+            && word.Text.Contains('0', StringComparison.Ordinal);
         var glyphs = new List<Glyph>();
         for (int x = 0; x < width;)
         {
             if (column[x] < InkColumn) { x++; continue; }
             int end = x;
             while (end < width && column[end] >= InkColumn) end++;
-            glyphs.Add(Measure(coverage, width, height, x, end));
+            bool measureCrossbar = crossbarCandidate && glyphs.Count < word.Text.Length && word.Text[glyphs.Count] == '1';
+            glyphs.Add(Measure(coverage, width, height, x, end, measureCrossbar));
             x = end;
         }
         return [.. glyphs];
     }
 
-    private static Glyph Measure(double[] coverage, int width, int height, int start, int end)
+    private static Glyph Measure(double[] coverage, int width, int height, int start, int end, bool measureCrossbar)
     {
         var rows = new double[height];
         for (int y = 0; y < height; y++)
@@ -338,11 +359,63 @@ internal static class OcrLatinGlyphRepair
         if (last + 1 < height) extent += Math.Min(rows[last + 1], InkColumn) / InkColumn * .5;
         bool dot = runs.Any(run => run.Last < first && first - run.Last - 1 <= Math.Max(2, body * .6)
             && run.Last - run.First + 1 <= body * .6);
-        return new Glyph(extent, dot);
+        return new Glyph(extent, dot, measureCrossbar && !dot && HasInteriorCrossbar(coverage, width, start, end, first, last));
     }
 
-    /// <summary>One column run of ink: the sub-pixel height of its body and whether a dot stands just above the body.</summary>
-    internal readonly record struct Glyph(double Height, bool HasGap);
+    private static bool HasInteriorCrossbar(double[] coverage, int width, int start, int end, int first, int last)
+    {
+        int body = last - first + 1;
+        // Below this size, a one-pixel top flag or antialias fringe does not supply enough independent rows.
+        // Bound the extra shape work and decline unusually large or wide runs rather than guessing.
+        if (body is < 8 or > 128 || end - start < 3 || end - start > body) return false;
+        var left = new int[body];
+        var right = new int[body];
+        for (int row = 0; row < body; row++)
+        {
+            left[row] = end;
+            right[row] = start - 1;
+            for (int x = start; x < end; x++)
+            {
+                if (coverage[(first + row) * width + x] < InkColumn) continue;
+                left[row] = Math.Min(left[row], x);
+                right[row] = x;
+            }
+            if (right[row] < left[row]) return false;
+        }
+
+        int lowerEnd = (int)Math.Floor((body - 1) * .7);
+        for (int barStart = 2; barStart <= body / 2; barStart++)
+        {
+            for (int barEnd = barStart; barEnd < barStart + Math.Max(1, body / 4) && barEnd + 2 <= lowerEnd; barEnd++)
+            {
+                int stemLeft = end, stemRight = start - 1, commonLeft = start, commonRight = end - 1;
+                for (int row = 0; row <= lowerEnd; row++)
+                {
+                    if (row >= barStart && row <= barEnd) continue;
+                    stemLeft = Math.Min(stemLeft, left[row]);
+                    stemRight = Math.Max(stemRight, right[row]);
+                    commonLeft = Math.Max(commonLeft, left[row]);
+                    commonRight = Math.Min(commonRight, right[row]);
+                }
+                if (commonLeft > commonRight) continue;
+
+                bool crossbar = true;
+                for (int row = barStart; row <= barEnd && crossbar; row++)
+                {
+                    // Every bar row must protrude on both sides of the stem above AND below it. A digit's sloping
+                    // top flag fails this test, and its baseline serif lies below the measured interior band.
+                    crossbar = left[row] < stemLeft && right[row] > stemRight;
+                    for (int x = left[row]; x <= right[row] && crossbar; x++)
+                        crossbar = coverage[(first + row) * width + x] >= InkColumn;
+                }
+                if (crossbar) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>One column run's body height, dot gap and independently measured interior crossbar.</summary>
+    internal readonly record struct Glyph(double Height, bool HasGap, bool HasCrossbar = false);
 }
 
 /// <summary>An 8-bit luminance copy of a picture, read once for pixel evidence.</summary>
