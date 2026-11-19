@@ -223,9 +223,13 @@ internal sealed partial class PinManager
                 // must not ask for a model it will never use. A picture to translate checks the
                 // installation right after the reading, on the same worker, so an installed model
                 // leaves the pin "translating" from the command to the result.
-                step.Stage = PinTranslationStage.Reading;
-                reading ??= StartPictureReading(source, await PinTranslationService.FreezeOverlaySourceAsync(source.Image, token),
-                    translator, direction, korean, progress, token, step, reveal);
+                if (reading is null)
+                {
+                    // A prestarted worker owns its current stage and may already be checking or translating.
+                    step.Stage = PinTranslationStage.Reading;
+                    reading = StartPictureReading(source, await PinTranslationService.FreezeOverlaySourceAsync(source.Image, token),
+                        translator, direction, korean, progress, token, step, reveal);
+                }
                 // The pin stops waiting at once on a cancel; the reading ends on its own (see the finally block).
                 read = await reading.WaitAsync(token);
                 if (!Current()) return;
